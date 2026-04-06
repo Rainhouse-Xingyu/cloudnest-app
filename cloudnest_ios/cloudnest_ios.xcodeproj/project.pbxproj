@@ -7,62 +7,62 @@
 	objects = {
 
 /* Begin PBXContainerItemProxy section */
-		3735BFF32F73B0550087A1CF /* PBXContainerItemProxy */ = {
+		3747447C2F7F6B8100EBDF08 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
-			containerPortal = 3735BFDD2F73B0540087A1CF /* Project object */;
+			containerPortal = 374744662F7F6B7F00EBDF08 /* Project object */;
 			proxyType = 1;
-			remoteGlobalIDString = 3735BFE42F73B0540087A1CF;
-			remoteInfo = cloudnest;
+			remoteGlobalIDString = 3747446D2F7F6B7F00EBDF08;
+			remoteInfo = cloudnest_ios;
 		};
-		3735BFFD2F73B0550087A1CF /* PBXContainerItemProxy */ = {
+		374744862F7F6B8100EBDF08 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
-			containerPortal = 3735BFDD2F73B0540087A1CF /* Project object */;
+			containerPortal = 374744662F7F6B7F00EBDF08 /* Project object */;
 			proxyType = 1;
-			remoteGlobalIDString = 3735BFE42F73B0540087A1CF;
-			remoteInfo = cloudnest;
+			remoteGlobalIDString = 3747446D2F7F6B7F00EBDF08;
+			remoteInfo = cloudnest_ios;
 		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		3735BFE52F73B0540087A1CF /* cloudnest.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = cloudnest.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		3735BFF22F73B0550087A1CF /* cloudnestTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = cloudnestTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		3735BFFC2F73B0550087A1CF /* cloudnestUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = cloudnestUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		3747446E2F7F6B7F00EBDF08 /* cloudnest_ios.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = cloudnest_ios.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3747447B2F7F6B8100EBDF08 /* cloudnest_iosTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = cloudnest_iosTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		374744852F7F6B8100EBDF08 /* cloudnest_iosUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = cloudnest_iosUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		3735BFE72F73B0540087A1CF /* cloudnest */ = {
+		374744702F7F6B7F00EBDF08 /* cloudnest_ios */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = cloudnest;
+			path = cloudnest_ios;
 			sourceTree = "<group>";
 		};
-		3735BFF52F73B0550087A1CF /* cloudnestTests */ = {
+		3747447E2F7F6B8100EBDF08 /* cloudnest_iosTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = cloudnestTests;
+			path = cloudnest_iosTests;
 			sourceTree = "<group>";
 		};
-		3735BFFF2F73B0550087A1CF /* cloudnestUITests */ = {
+		374744882F7F6B8100EBDF08 /* cloudnest_iosUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = cloudnestUITests;
+			path = cloudnest_iosUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		3735BFE22F73B0540087A1CF /* Frameworks */ = {
+		3747446B2F7F6B7F00EBDF08 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		3735BFEF2F73B0550087A1CF /* Frameworks */ = {
+		374744782F7F6B8100EBDF08 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		3735BFF92F73B0550087A1CF /* Frameworks */ = {
+		374744822F7F6B8100EBDF08 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -72,22 +72,22 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		3735BFDC2F73B0540087A1CF = {
+		374744652F7F6B7F00EBDF08 = {
 			isa = PBXGroup;
 			children = (
-				3735BFE72F73B0540087A1CF /* cloudnest */,
-				3735BFF52F73B0550087A1CF /* cloudnestTests */,
-				3735BFFF2F73B0550087A1CF /* cloudnestUITests */,
-				3735BFE62F73B0540087A1CF /* Products */,
+				374744702F7F6B7F00EBDF08 /* cloudnest_ios */,
+				3747447E2F7F6B8100EBDF08 /* cloudnest_iosTests */,
+				374744882F7F6B8100EBDF08 /* cloudnest_iosUITests */,
+				3747446F2F7F6B7F00EBDF08 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		3735BFE62F73B0540087A1CF /* Products */ = {
+		3747446F2F7F6B7F00EBDF08 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				3735BFE52F73B0540087A1CF /* cloudnest.app */,
-				3735BFF22F73B0550087A1CF /* cloudnestTests.xctest */,
-				3735BFFC2F73B0550087A1CF /* cloudnestUITests.xctest */,
+				3747446E2F7F6B7F00EBDF08 /* cloudnest_ios.app */,
+				3747447B2F7F6B8100EBDF08 /* cloudnest_iosTests.xctest */,
+				374744852F7F6B8100EBDF08 /* cloudnest_iosUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -95,134 +95,134 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		3735BFE42F73B0540087A1CF /* cloudnest */ = {
+		3747446D2F7F6B7F00EBDF08 /* cloudnest_ios */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 3735C0062F73B0550087A1CF /* Build configuration list for PBXNativeTarget "cloudnest" */;
+			buildConfigurationList = 3747448F2F7F6B8100EBDF08 /* Build configuration list for PBXNativeTarget "cloudnest_ios" */;
 			buildPhases = (
-				3735BFE12F73B0540087A1CF /* Sources */,
-				3735BFE22F73B0540087A1CF /* Frameworks */,
-				3735BFE32F73B0540087A1CF /* Resources */,
+				3747446A2F7F6B7F00EBDF08 /* Sources */,
+				3747446B2F7F6B7F00EBDF08 /* Frameworks */,
+				3747446C2F7F6B7F00EBDF08 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				3735BFE72F73B0540087A1CF /* cloudnest */,
+				374744702F7F6B7F00EBDF08 /* cloudnest_ios */,
 			);
-			name = cloudnest;
+			name = cloudnest_ios;
 			packageProductDependencies = (
 			);
-			productName = cloudnest;
-			productReference = 3735BFE52F73B0540087A1CF /* cloudnest.app */;
+			productName = cloudnest_ios;
+			productReference = 3747446E2F7F6B7F00EBDF08 /* cloudnest_ios.app */;
 			productType = "com.apple.product-type.application";
 		};
-		3735BFF12F73B0550087A1CF /* cloudnestTests */ = {
+		3747447A2F7F6B8100EBDF08 /* cloudnest_iosTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 3735C0092F73B0550087A1CF /* Build configuration list for PBXNativeTarget "cloudnestTests" */;
+			buildConfigurationList = 374744922F7F6B8100EBDF08 /* Build configuration list for PBXNativeTarget "cloudnest_iosTests" */;
 			buildPhases = (
-				3735BFEE2F73B0550087A1CF /* Sources */,
-				3735BFEF2F73B0550087A1CF /* Frameworks */,
-				3735BFF02F73B0550087A1CF /* Resources */,
+				374744772F7F6B8100EBDF08 /* Sources */,
+				374744782F7F6B8100EBDF08 /* Frameworks */,
+				374744792F7F6B8100EBDF08 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				3735BFF42F73B0550087A1CF /* PBXTargetDependency */,
+				3747447D2F7F6B8100EBDF08 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				3735BFF52F73B0550087A1CF /* cloudnestTests */,
+				3747447E2F7F6B8100EBDF08 /* cloudnest_iosTests */,
 			);
-			name = cloudnestTests;
+			name = cloudnest_iosTests;
 			packageProductDependencies = (
 			);
-			productName = cloudnestTests;
-			productReference = 3735BFF22F73B0550087A1CF /* cloudnestTests.xctest */;
+			productName = cloudnest_iosTests;
+			productReference = 3747447B2F7F6B8100EBDF08 /* cloudnest_iosTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		3735BFFB2F73B0550087A1CF /* cloudnestUITests */ = {
+		374744842F7F6B8100EBDF08 /* cloudnest_iosUITests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 3735C00C2F73B0550087A1CF /* Build configuration list for PBXNativeTarget "cloudnestUITests" */;
+			buildConfigurationList = 374744952F7F6B8100EBDF08 /* Build configuration list for PBXNativeTarget "cloudnest_iosUITests" */;
 			buildPhases = (
-				3735BFF82F73B0550087A1CF /* Sources */,
-				3735BFF92F73B0550087A1CF /* Frameworks */,
-				3735BFFA2F73B0550087A1CF /* Resources */,
+				374744812F7F6B8100EBDF08 /* Sources */,
+				374744822F7F6B8100EBDF08 /* Frameworks */,
+				374744832F7F6B8100EBDF08 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				3735BFFE2F73B0550087A1CF /* PBXTargetDependency */,
+				374744872F7F6B8100EBDF08 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				3735BFFF2F73B0550087A1CF /* cloudnestUITests */,
+				374744882F7F6B8100EBDF08 /* cloudnest_iosUITests */,
 			);
-			name = cloudnestUITests;
+			name = cloudnest_iosUITests;
 			packageProductDependencies = (
 			);
-			productName = cloudnestUITests;
-			productReference = 3735BFFC2F73B0550087A1CF /* cloudnestUITests.xctest */;
+			productName = cloudnest_iosUITests;
+			productReference = 374744852F7F6B8100EBDF08 /* cloudnest_iosUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		3735BFDD2F73B0540087A1CF /* Project object */ = {
+		374744662F7F6B7F00EBDF08 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2630;
 				LastUpgradeCheck = 2630;
 				TargetAttributes = {
-					3735BFE42F73B0540087A1CF = {
+					3747446D2F7F6B7F00EBDF08 = {
 						CreatedOnToolsVersion = 26.3;
 					};
-					3735BFF12F73B0550087A1CF = {
+					3747447A2F7F6B8100EBDF08 = {
 						CreatedOnToolsVersion = 26.3;
-						TestTargetID = 3735BFE42F73B0540087A1CF;
+						TestTargetID = 3747446D2F7F6B7F00EBDF08;
 					};
-					3735BFFB2F73B0550087A1CF = {
+					374744842F7F6B8100EBDF08 = {
 						CreatedOnToolsVersion = 26.3;
-						TestTargetID = 3735BFE42F73B0540087A1CF;
+						TestTargetID = 3747446D2F7F6B7F00EBDF08;
 					};
 				};
 			};
-			buildConfigurationList = 3735BFE02F73B0540087A1CF /* Build configuration list for PBXProject "cloudnest" */;
+			buildConfigurationList = 374744692F7F6B7F00EBDF08 /* Build configuration list for PBXProject "cloudnest_ios" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
 				Base,
 			);
-			mainGroup = 3735BFDC2F73B0540087A1CF;
+			mainGroup = 374744652F7F6B7F00EBDF08;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
-			productRefGroup = 3735BFE62F73B0540087A1CF /* Products */;
+			productRefGroup = 3747446F2F7F6B7F00EBDF08 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				3735BFE42F73B0540087A1CF /* cloudnest */,
-				3735BFF12F73B0550087A1CF /* cloudnestTests */,
-				3735BFFB2F73B0550087A1CF /* cloudnestUITests */,
+				3747446D2F7F6B7F00EBDF08 /* cloudnest_ios */,
+				3747447A2F7F6B8100EBDF08 /* cloudnest_iosTests */,
+				374744842F7F6B8100EBDF08 /* cloudnest_iosUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		3735BFE32F73B0540087A1CF /* Resources */ = {
+		3747446C2F7F6B7F00EBDF08 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		3735BFF02F73B0550087A1CF /* Resources */ = {
+		374744792F7F6B8100EBDF08 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		3735BFFA2F73B0550087A1CF /* Resources */ = {
+		374744832F7F6B8100EBDF08 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -232,21 +232,21 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		3735BFE12F73B0540087A1CF /* Sources */ = {
+		3747446A2F7F6B7F00EBDF08 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		3735BFEE2F73B0550087A1CF /* Sources */ = {
+		374744772F7F6B8100EBDF08 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		3735BFF82F73B0550087A1CF /* Sources */ = {
+		374744812F7F6B8100EBDF08 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -256,20 +256,20 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		3735BFF42F73B0550087A1CF /* PBXTargetDependency */ = {
+		3747447D2F7F6B8100EBDF08 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 3735BFE42F73B0540087A1CF /* cloudnest */;
-			targetProxy = 3735BFF32F73B0550087A1CF /* PBXContainerItemProxy */;
+			target = 3747446D2F7F6B7F00EBDF08 /* cloudnest_ios */;
+			targetProxy = 3747447C2F7F6B8100EBDF08 /* PBXContainerItemProxy */;
 		};
-		3735BFFE2F73B0550087A1CF /* PBXTargetDependency */ = {
+		374744872F7F6B8100EBDF08 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 3735BFE42F73B0540087A1CF /* cloudnest */;
-			targetProxy = 3735BFFD2F73B0550087A1CF /* PBXContainerItemProxy */;
+			target = 3747446D2F7F6B7F00EBDF08 /* cloudnest_ios */;
+			targetProxy = 374744862F7F6B8100EBDF08 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
-		3735C0042F73B0550087A1CF /* Debug */ = {
+		3747448D2F7F6B8100EBDF08 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -332,7 +332,7 @@
 			};
 			name = Debug;
 		};
-		3735C0052F73B0550087A1CF /* Release */ = {
+		3747448E2F7F6B8100EBDF08 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -388,7 +388,7 @@
 			};
 			name = Release;
 		};
-		3735C0072F73B0550087A1CF /* Debug */ = {
+		374744902F7F6B8100EBDF08 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -407,7 +407,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = me.rainhouse.cloudnest;
+				PRODUCT_BUNDLE_IDENTIFIER = "me.rainhouse.cloudnest-ios";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -419,7 +419,7 @@
 			};
 			name = Debug;
 		};
-		3735C0082F73B0550087A1CF /* Release */ = {
+		374744912F7F6B8100EBDF08 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -438,7 +438,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = me.rainhouse.cloudnest;
+				PRODUCT_BUNDLE_IDENTIFIER = "me.rainhouse.cloudnest-ios";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -450,7 +450,7 @@
 			};
 			name = Release;
 		};
-		3735C00A2F73B0550087A1CF /* Debug */ = {
+		374744932F7F6B8100EBDF08 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -459,7 +459,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = me.rainhouse.cloudnestTests;
+				PRODUCT_BUNDLE_IDENTIFIER = "me.rainhouse.cloudnest-iosTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -467,11 +467,11 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/cloudnest.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/cloudnest";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/cloudnest_ios.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/cloudnest_ios";
 			};
 			name = Debug;
 		};
-		3735C00B2F73B0550087A1CF /* Release */ = {
+		374744942F7F6B8100EBDF08 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -480,7 +480,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = me.rainhouse.cloudnestTests;
+				PRODUCT_BUNDLE_IDENTIFIER = "me.rainhouse.cloudnest-iosTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -488,18 +488,18 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/cloudnest.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/cloudnest";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/cloudnest_ios.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/cloudnest_ios";
 			};
 			name = Release;
 		};
-		3735C00D2F73B0550087A1CF /* Debug */ = {
+		374744962F7F6B8100EBDF08 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = me.rainhouse.cloudnestUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = "me.rainhouse.cloudnest-iosUITests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -507,18 +507,18 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = cloudnest;
+				TEST_TARGET_NAME = cloudnest_ios;
 			};
 			name = Debug;
 		};
-		3735C00E2F73B0550087A1CF /* Release */ = {
+		374744972F7F6B8100EBDF08 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = me.rainhouse.cloudnestUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = "me.rainhouse.cloudnest-iosUITests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -526,50 +526,50 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = cloudnest;
+				TEST_TARGET_NAME = cloudnest_ios;
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		3735BFE02F73B0540087A1CF /* Build configuration list for PBXProject "cloudnest" */ = {
+		374744692F7F6B7F00EBDF08 /* Build configuration list for PBXProject "cloudnest_ios" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				3735C0042F73B0550087A1CF /* Debug */,
-				3735C0052F73B0550087A1CF /* Release */,
+				3747448D2F7F6B8100EBDF08 /* Debug */,
+				3747448E2F7F6B8100EBDF08 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		3735C0062F73B0550087A1CF /* Build configuration list for PBXNativeTarget "cloudnest" */ = {
+		3747448F2F7F6B8100EBDF08 /* Build configuration list for PBXNativeTarget "cloudnest_ios" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				3735C0072F73B0550087A1CF /* Debug */,
-				3735C0082F73B0550087A1CF /* Release */,
+				374744902F7F6B8100EBDF08 /* Debug */,
+				374744912F7F6B8100EBDF08 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		3735C0092F73B0550087A1CF /* Build configuration list for PBXNativeTarget "cloudnestTests" */ = {
+		374744922F7F6B8100EBDF08 /* Build configuration list for PBXNativeTarget "cloudnest_iosTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				3735C00A2F73B0550087A1CF /* Debug */,
-				3735C00B2F73B0550087A1CF /* Release */,
+				374744932F7F6B8100EBDF08 /* Debug */,
+				374744942F7F6B8100EBDF08 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		3735C00C2F73B0550087A1CF /* Build configuration list for PBXNativeTarget "cloudnestUITests" */ = {
+		374744952F7F6B8100EBDF08 /* Build configuration list for PBXNativeTarget "cloudnest_iosUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				3735C00D2F73B0550087A1CF /* Debug */,
-				3735C00E2F73B0550087A1CF /* Release */,
+				374744962F7F6B8100EBDF08 /* Debug */,
+				374744972F7F6B8100EBDF08 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};
-	rootObject = 3735BFDD2F73B0540087A1CF /* Project object */;
+	rootObject = 374744662F7F6B7F00EBDF08 /* Project object */;
 }

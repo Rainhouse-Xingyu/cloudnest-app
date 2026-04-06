@@ -1,13 +1,13 @@
 //
-//  cloudnestUITests.swift
-//  cloudnestUITests
+//  cloudnest_iosUITests.swift
+//  cloudnest_iosUITests
 //
-//  Created by Xingyu Zhao on 2026/3/25.
+//  Created by Xingyu Zhao on 2026/4/3.
 //
 
 import XCTest
 
-final class cloudnestUITests: XCTestCase {
+final class cloudnest_iosUITests: XCTestCase {
 
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.

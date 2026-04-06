@@ -1,13 +1,13 @@
 //
-//  cloudnestUITestsLaunchTests.swift
-//  cloudnestUITests
+//  cloudnest_iosUITestsLaunchTests.swift
+//  cloudnest_iosUITests
 //
-//  Created by Xingyu Zhao on 2026/3/25.
+//  Created by Xingyu Zhao on 2026/4/3.
 //
 
 import XCTest
 
-final class cloudnestUITestsLaunchTests: XCTestCase {
+final class cloudnest_iosUITestsLaunchTests: XCTestCase {
 
     override class var runsForEachTargetApplicationUIConfiguration: Bool {
         true

@@ -1,14 +1,14 @@
 //
-//  cloudnestApp.swift
-//  cloudnest
+//  cloudnest_iosApp.swift
+//  cloudnest_ios
 //
-//  Created by Xingyu Zhao on 2026/3/25.
+//  Created by Xingyu Zhao on 2026/4/3.
 //
 
 import SwiftUI
 
 @main
-struct cloudnestApp: App {
+struct cloudnest_iosApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()

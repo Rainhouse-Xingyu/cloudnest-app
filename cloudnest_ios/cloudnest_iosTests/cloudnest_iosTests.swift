@@ -1,14 +1,14 @@
 //
-//  cloudnestTests.swift
-//  cloudnestTests
+//  cloudnest_iosTests.swift
+//  cloudnest_iosTests
 //
-//  Created by Xingyu Zhao on 2026/3/25.
+//  Created by Xingyu Zhao on 2026/4/3.
 //
 
 import Testing
-@testable import cloudnest
+@testable import cloudnest_ios
 
-struct cloudnestTests {
+struct cloudnest_iosTests {
 
     @Test func example() async throws {
         // Write your test here and use APIs like `#expect(...)` to check expected conditions.

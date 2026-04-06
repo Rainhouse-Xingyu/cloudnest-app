@@ -1,8 +1,8 @@
 //
 //  ContentView.swift
-//  cloudnest
+//  cloudnest_ios
 //
-//  Created by Xingyu Zhao on 2026/3/25.
+//  Created by Xingyu Zhao on 2026/4/3.
 //
 
 import SwiftUI
