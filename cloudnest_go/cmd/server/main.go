@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strings"
 
 	"cloudenest_go/internal/config"
 	"cloudenest_go/internal/handler"
 	"cloudenest_go/internal/middleware"
+	"cloudenest_go/internal/service"
+	storageMysql "cloudenest_go/internal/storage/mysql"
 	"cloudenest_go/internal/store"
-	"cloudenest_go/model"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -44,6 +44,8 @@ func main() {
 	aiHandler := &handler.AIHandler{DB: db, Cfg: cfg}
 	frpHandler := &handler.FrpHandler{DB: db, RDB: rdb}
 	livePhotoHandler := &handler.LivePhotoHandler{DB: db}
+	permissionRepo := storageMysql.NewPermissionRepo(db)
+	authzService := service.NewAuthzService(permissionRepo)
 
 	r := gin.Default()
 
@@ -57,19 +59,7 @@ func main() {
 
 	api := r.Group("/api")
 	api.Use(middleware.Authenticate(rdb, cfg.JWTSecret, func(ctx context.Context, userID int64) ([]string, error) {
-		rows := make([]model.UserPathPermission, 0)
-		if err := db.WithContext(ctx).Where("user_id = ?", userID).Find(&rows).Error; err != nil {
-			return nil, err
-		}
-		perms := make([]string, 0, len(rows))
-		for _, p := range rows {
-			method := strings.ToUpper(strings.TrimSpace(p.Method))
-			if method == "" {
-				method = "*"
-			}
-			perms = append(perms, method+":"+p.Path)
-		}
-		return perms, nil
+		return authzService.ResolveUserPermissions(ctx, userID)
 	}, skipPaths))
 
 	api.POST("/auth/logout", authHandler.Logout)
