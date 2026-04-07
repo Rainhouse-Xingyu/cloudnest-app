@@ -34,6 +34,7 @@ func NewMySQL(cfg config.Config) (*gorm.DB, error) {
 		&model.UploadChunk{},
 		&model.Share{},
 		&model.OperationLog{},
+		&model.SystemSetting{},
 		&model.LivePhoto{},
 		&model.Device{},
 		&model.FrpMapping{},

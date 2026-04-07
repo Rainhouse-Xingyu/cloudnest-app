@@ -18,6 +18,7 @@ import (
 	"image/jpeg"
 	"io"
 	"mime"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -64,8 +65,8 @@ type InitUploadRequest struct {
 	ParentID    int64  `json:"parent_id"`
 	Filename    string `json:"filename" binding:"required"`
 	TotalSize   int64  `json:"total_size" binding:"required"`
-	ChunkSize   int    `json:"chunk_size" binding:"required"`
-	TotalChunks int    `json:"total_chunks" binding:"required"`
+	ChunkSize   int    `json:"chunk_size"`
+	TotalChunks int    `json:"total_chunks"`
 }
 
 type CompleteUploadRequest struct {
@@ -87,7 +88,7 @@ type BatchDownloadRequest struct {
 }
 
 type CreateShareRequest struct {
-	ExpireHours int `json:"expire_hours"`
+	ExpireHours *int `json:"expire_hours"`
 }
 
 type OperationLogQuery struct {
@@ -114,6 +115,10 @@ const (
 	chunkBaseDir   = "data/chunks"
 	storageBaseDir = "data/storage"
 	thumbBaseDir   = "data/thumbnails"
+
+	defaultUploadRateBytesPerSec int64 = 2 * 1024 * 1024
+	minUploadRateKbps            int64 = 64
+	maxUploadRateKbps            int64 = 10240
 
 	defaultDownloadRateBytesPerSec int64 = 2 * 1024 * 1024
 	minDownloadRateKbps            int64 = 64
@@ -371,8 +376,31 @@ func (h *FileHandler) InitUpload(c *gin.Context) {
 	}
 
 	req.Filename = strings.TrimSpace(req.Filename)
-	if req.Filename == "" || req.TotalSize <= 0 || req.ChunkSize <= 0 || req.TotalChunks <= 0 || req.ParentID < 0 {
+	if req.Filename == "" || req.TotalSize <= 0 || req.ParentID < 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid upload parameters"})
+		return
+	}
+
+	// 分片大小优先使用请求值；未传时读取 system_setting；都没有则回落 4MB。
+	if req.ChunkSize <= 0 {
+		if v, ok, err := h.getSystemSettingInt64(c.Request.Context(), "upload_default_chunk_size_mb"); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+			return
+		} else if ok && v > 0 {
+			req.ChunkSize = int(v * 1024 * 1024)
+		}
+	}
+	if req.ChunkSize <= 0 {
+		req.ChunkSize = 4 * 1024 * 1024
+	}
+
+	// total_chunks 未传时自动按 total_size/chunk_size 计算。
+	calculatedTotalChunks := int((req.TotalSize + int64(req.ChunkSize) - 1) / int64(req.ChunkSize))
+	if req.TotalChunks <= 0 {
+		req.TotalChunks = calculatedTotalChunks
+	}
+	if req.TotalChunks <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid total_chunks"})
 		return
 	}
 
@@ -488,7 +516,8 @@ func (h *FileHandler) UploadChunk(c *gin.Context) {
 	}
 
 	chunkPath := filepath.Join(chunkDir, fmt.Sprintf("%d.part", chunkIndex))
-	if err := c.SaveUploadedFile(chunkFile, chunkPath); err != nil {
+	uploadRate := h.getUploadRateBytesPerSec(c)
+	if err := h.saveUploadedFileWithRateLimit(c, chunkFile, chunkPath, uploadRate); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "save chunk failed"})
 		return
 	}
@@ -932,7 +961,7 @@ func (h *FileHandler) Download(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "physical file not found"})
 		return
 	}
-	rate := getDownloadRateBytesPerSec(c)
+	rate := h.getDownloadRateBytesPerSec(c)
 	if err := h.sendFileWithRateLimit(c, storage.FilePath, f.Filename, rate); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "download failed"})
 		return
@@ -980,7 +1009,7 @@ func (h *FileHandler) DownloadFolderZip(c *gin.Context) {
 	defer os.Remove(zipPath)
 
 	zipName := sanitizeFileName(folder.Filename) + ".zip"
-	rate := getDownloadRateBytesPerSec(c)
+	rate := h.getDownloadRateBytesPerSec(c)
 	if err := h.sendFileWithRateLimit(c, zipPath, zipName, rate); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "download failed"})
 		return
@@ -1184,7 +1213,7 @@ func (h *FileHandler) BatchDownload(c *gin.Context) {
 		return
 	}
 
-	rate := getDownloadRateBytesPerSec(c)
+	rate := h.getDownloadRateBytesPerSec(c)
 	if err := h.sendFileWithRateLimit(c, zipPath, "batch_download.zip", rate); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "download failed"})
 		return
@@ -1450,7 +1479,21 @@ func (h *FileHandler) CreateShare(c *gin.Context) {
 			return
 		}
 	}
-	if req.ExpireHours < 0 || req.ExpireHours > 24*365 {
+
+	// 默认过期时间来自 system_setting，可被请求参数覆盖。
+	expireHours := int64(0)
+	if req.ExpireHours != nil {
+		expireHours = int64(*req.ExpireHours)
+	} else {
+		if v, ok, err := h.getSystemSettingInt64(c.Request.Context(), "share_default_expire_hours"); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+			return
+		} else if ok {
+			expireHours = v
+		}
+	}
+
+	if expireHours < 0 || expireHours > 24*365 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "expire_hours should be between 0 and 8760"})
 		return
 	}
@@ -1464,8 +1507,8 @@ func (h *FileHandler) CreateShare(c *gin.Context) {
 	fileIDCopy := fileID
 	uidCopy := uid
 	var expireAt *time.Time
-	if req.ExpireHours > 0 {
-		t := time.Now().Add(time.Duration(req.ExpireHours) * time.Hour)
+	if expireHours > 0 {
+		t := time.Now().Add(time.Duration(expireHours) * time.Hour)
 		expireAt = &t
 	}
 
@@ -1744,7 +1787,7 @@ func (h *FileHandler) PublicShareDownload(c *gin.Context) {
 			return
 		}
 		defer os.Remove(zipPath)
-		rate := getDownloadRateBytesPerSec(c)
+		rate := h.getDownloadRateBytesPerSec(c)
 		if err := h.sendFileWithRateLimit(c, zipPath, sanitizeFileName(file.Filename)+".zip", rate); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "download failed"})
 			return
@@ -1770,7 +1813,7 @@ func (h *FileHandler) PublicShareDownload(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "physical file not found"})
 		return
 	}
-	rate := getDownloadRateBytesPerSec(c)
+	rate := h.getDownloadRateBytesPerSec(c)
 	if err := h.sendFileWithRateLimit(c, storage.FilePath, file.Filename, rate); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "download failed"})
 		return
@@ -2779,9 +2822,153 @@ func (h *FileHandler) checkShareAccessRateLimit(ctx context.Context, shareCode s
 	return count <= int64(maxInWindow), nil
 }
 
-// getDownloadRateBytesPerSec 获取下载限速值，支持 query 参数 rate_kbps 临时覆盖。
-func getDownloadRateBytesPerSec(c *gin.Context) int64 {
+// getUploadRateBytesPerSec 获取上传限速值：query 参数优先，其次读取 system_setting。
+func (h *FileHandler) getUploadRateBytesPerSec(c *gin.Context) int64 {
+	rateKbpsRaw := strings.TrimSpace(c.Query("upload_rate_kbps"))
+	uid := c.GetInt64(middleware.ContextUserIDKey)
+	ctx := c.Request.Context()
+	if rateKbpsRaw == "" {
+		if v, ok, err := h.getSystemSettingInt64(ctx, "upload_speed_limit_kbps"); err == nil && ok && v > 0 {
+			rateKbpsRaw = strconv.FormatInt(v, 10)
+		}
+		if inPeak, err := h.isInPeakWindow(ctx, uid); err == nil && inPeak {
+			if v, ok, err := h.getSystemSettingInt64(ctx, "upload_peak_speed_limit_kbps"); err == nil && ok && v > 0 {
+				rateKbpsRaw = strconv.FormatInt(v, 10)
+			}
+		}
+	}
+	if rateKbpsRaw == "" {
+		return defaultUploadRateBytesPerSec
+	}
+	rateKbps, err := strconv.ParseInt(rateKbpsRaw, 10, 64)
+	if err != nil {
+		return defaultUploadRateBytesPerSec
+	}
+	if rateKbps < minUploadRateKbps {
+		rateKbps = minUploadRateKbps
+	}
+	if rateKbps > maxUploadRateKbps {
+		rateKbps = maxUploadRateKbps
+	}
+	return rateKbps * 1024
+}
+
+// saveUploadedFileWithRateLimit 以限速方式写入上传分片，防止上传突发占满带宽。
+func (h *FileHandler) saveUploadedFileWithRateLimit(c *gin.Context, fh *multipart.FileHeader, dstPath string, bytesPerSec int64) error {
+	src, err := fh.Open()
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	dst, err := os.Create(dstPath)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = dst.Close()
+	}()
+
+	if bytesPerSec <= 0 {
+		_, copyErr := io.Copy(dst, src)
+		return copyErr
+	}
+
+	const chunkSize = 32 * 1024
+	buf := make([]byte, chunkSize)
+	start := time.Now()
+	var writtenTotal int64
+
+	for {
+		n, readErr := src.Read(buf)
+		if n > 0 {
+			w, writeErr := dst.Write(buf[:n])
+			if writeErr != nil {
+				return writeErr
+			}
+			writtenTotal += int64(w)
+
+			elapsed := time.Since(start)
+			expected := time.Duration(float64(writtenTotal) / float64(bytesPerSec) * float64(time.Second))
+			if expected > elapsed {
+				time.Sleep(expected - elapsed)
+			}
+		}
+		if readErr != nil {
+			if errors.Is(readErr, io.EOF) {
+				break
+			}
+			return readErr
+		}
+
+		if c.Request.Context().Err() != nil {
+			return c.Request.Context().Err()
+		}
+	}
+
+	return nil
+}
+
+// getSystemSettingInt64 读取整数配置项，返回值、是否存在、错误。
+func (h *FileHandler) getSystemSettingInt64(ctx context.Context, key string) (int64, bool, error) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return 0, false, nil
+	}
+
+	var row model.SystemSetting
+	err := h.DB.WithContext(ctx).Where("setting_key = ?", key).First(&row).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return 0, false, nil
+		}
+		return 0, false, err
+	}
+
+	v := strings.TrimSpace(row.SettingValue)
+	if v == "" {
+		return 0, false, nil
+	}
+	n, parseErr := strconv.ParseInt(v, 10, 64)
+	if parseErr != nil {
+		return 0, false, nil
+	}
+	return n, true, nil
+}
+
+// getSystemSettingString 读取字符串配置项，返回值、是否存在、错误。
+func (h *FileHandler) getSystemSettingString(ctx context.Context, key string) (string, bool, error) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return "", false, nil
+	}
+
+	var row model.SystemSetting
+	err := h.DB.WithContext(ctx).Where("setting_key = ?", key).First(&row).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	return strings.TrimSpace(row.SettingValue), true, nil
+}
+
+// getDownloadRateBytesPerSec 获取下载限速值：query 参数优先，其次读取 system_setting。
+func (h *FileHandler) getDownloadRateBytesPerSec(c *gin.Context) int64 {
 	rateKbpsRaw := strings.TrimSpace(c.Query("rate_kbps"))
+	uid := c.GetInt64(middleware.ContextUserIDKey)
+	ctx := c.Request.Context()
+	if rateKbpsRaw == "" {
+		if v, ok, err := h.getSystemSettingInt64(ctx, "download_speed_limit_kbps"); err == nil && ok && v > 0 {
+			rateKbpsRaw = strconv.FormatInt(v, 10)
+		}
+		if inPeak, err := h.isInPeakWindow(ctx, uid); err == nil && inPeak {
+			if v, ok, err := h.getSystemSettingInt64(ctx, "download_peak_speed_limit_kbps"); err == nil && ok && v > 0 {
+				rateKbpsRaw = strconv.FormatInt(v, 10)
+			}
+		}
+	}
 	if rateKbpsRaw == "" {
 		return defaultDownloadRateBytesPerSec
 	}
@@ -2796,6 +2983,88 @@ func getDownloadRateBytesPerSec(c *gin.Context) int64 {
 		rateKbps = maxDownloadRateKbps
 	}
 	return rateKbps * 1024
+}
+
+// isInPeakWindow 判断当前请求是否处于高峰时段。
+func (h *FileHandler) isInPeakWindow(ctx context.Context, uid int64) (bool, error) {
+	enabled, start, end, err := h.resolvePeakWindowSetting(ctx, uid)
+	if err != nil {
+		return false, err
+	}
+	if !enabled {
+		return false, nil
+	}
+	startMin, okStart := parseHHMMToMinute(start)
+	endMin, okEnd := parseHHMMToMinute(end)
+	if !okStart || !okEnd {
+		return false, nil
+	}
+
+	now := time.Now()
+	nowMin := now.Hour()*60 + now.Minute()
+	if startMin == endMin {
+		return true, nil
+	}
+	if startMin < endMin {
+		return nowMin >= startMin && nowMin < endMin, nil
+	}
+	// 跨天时段，如 22:00-07:00。
+	return nowMin >= startMin || nowMin < endMin, nil
+}
+
+func (h *FileHandler) resolvePeakWindowSetting(ctx context.Context, uid int64) (bool, string, string, error) {
+	// 1) 先读用户自定义高峰时段。
+	if uid > 0 {
+		enabledKey := "peak_window_enabled_user_" + strconv.FormatInt(uid, 10)
+		startKey := "peak_window_start_user_" + strconv.FormatInt(uid, 10)
+		endKey := "peak_window_end_user_" + strconv.FormatInt(uid, 10)
+
+		if enabledVal, exists, err := h.getSystemSettingString(ctx, enabledKey); err != nil {
+			return false, "", "", err
+		} else if exists {
+			enabled := strings.TrimSpace(enabledVal) == "1"
+			startVal, _, errStart := h.getSystemSettingString(ctx, startKey)
+			if errStart != nil {
+				return false, "", "", errStart
+			}
+			endVal, _, errEnd := h.getSystemSettingString(ctx, endKey)
+			if errEnd != nil {
+				return false, "", "", errEnd
+			}
+			return enabled, startVal, endVal, nil
+		}
+	}
+
+	// 2) 用户未配置时，回落全局配置。
+	enabledGlobal, _, err := h.getSystemSettingInt64(ctx, "peak_window_enabled")
+	if err != nil {
+		return false, "", "", err
+	}
+	startGlobal, _, err := h.getSystemSettingString(ctx, "peak_window_start")
+	if err != nil {
+		return false, "", "", err
+	}
+	endGlobal, _, err := h.getSystemSettingString(ctx, "peak_window_end")
+	if err != nil {
+		return false, "", "", err
+	}
+	return enabledGlobal == 1, startGlobal, endGlobal, nil
+}
+
+func parseHHMMToMinute(v string) (int, bool) {
+	v = strings.TrimSpace(v)
+	if len(v) != 5 || v[2] != ':' {
+		return 0, false
+	}
+	h, errH := strconv.Atoi(v[:2])
+	m, errM := strconv.Atoi(v[3:])
+	if errH != nil || errM != nil {
+		return 0, false
+	}
+	if h < 0 || h > 23 || m < 0 || m > 59 {
+		return 0, false
+	}
+	return h*60 + m, true
 }
 
 // sendFileWithRateLimit 以限速方式输出文件流，避免下载占满带宽。

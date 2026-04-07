@@ -39,6 +39,7 @@ func main() {
 	authHandler := &handler.AuthHandler{DB: db, RDB: rdb, Cfg: cfg}
 	adminHandler := &handler.AdminHandler{DB: db, RDB: rdb}
 	fileHandler := &handler.FileHandler{DB: db, RDB: rdb, Cfg: cfg}
+	settingsHandler := &handler.SettingsHandler{DB: db}
 	collabHandler := &handler.CollaborationHandler{DB: db}
 	aiHandler := &handler.AIHandler{DB: db, Cfg: cfg}
 	frpHandler := &handler.FrpHandler{DB: db, RDB: rdb}
@@ -115,6 +116,11 @@ func main() {
 	api.DELETE("/shares/:code", fileHandler.RevokeShare)
 	api.GET("/operation-logs", fileHandler.ListOperationLogs)
 	api.GET("/operation-logs/export", fileHandler.ExportOperationLogs)
+	api.GET("/settings", settingsHandler.GetSettings)
+	api.PUT("/settings", settingsHandler.UpsertSettings)
+	api.GET("/settings/permissions", settingsHandler.GetPermissionSummary)
+	api.GET("/settings/rate-window", settingsHandler.GetMyRateWindow)
+	api.PUT("/settings/rate-window", settingsHandler.UpdateMyRateWindow)
 	api.POST("/frp/devices", frpHandler.CreateDevice)
 	api.GET("/frp/devices", frpHandler.ListDevices)
 	api.GET("/frp/devices/:id", frpHandler.GetDevice)
