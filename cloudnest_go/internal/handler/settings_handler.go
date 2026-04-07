@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -57,10 +58,19 @@ type updateRateWindowRequest struct {
 
 // GetSettings 返回 system_setting 全量配置。
 func (h *SettingsHandler) GetSettings(c *gin.Context) {
+	isAdmin, _ := c.Get(middleware.ContextIsAdminKey)
+	isAdminBool, _ := isAdmin.(bool)
+
 	var rows []model.SystemSetting
 	if err := h.DB.WithContext(c.Request.Context()).Order("setting_key ASC").Find(&rows).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
+	}
+
+	for i := range rows {
+		if !isAdminBool && isSensitiveSettingKey(rows[i].SettingKey) {
+			rows[i].SettingValue = maskSettingValue(rows[i].SettingValue)
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"items": rows})
@@ -95,6 +105,9 @@ func (h *SettingsHandler) UpsertSettings(c *gin.Context) {
 			if _, ok := allowedSystemSettingKeys[key]; !ok {
 				return gorm.ErrInvalidField
 			}
+			if err := validateSettingValue(key, value); err != nil {
+				return err
+			}
 
 			var row model.SystemSetting
 			err := tx.Where("setting_key = ?", key).First(&row).Error
@@ -126,6 +139,10 @@ func (h *SettingsHandler) UpsertSettings(c *gin.Context) {
 		}
 		if err == gorm.ErrInvalidField {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported setting_key"})
+			return
+		}
+		if strings.Contains(err.Error(), "invalid value for") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "save settings failed"})
@@ -205,16 +222,39 @@ func (h *SettingsHandler) GetMyRateWindow(c *gin.Context) {
 	startKey := "peak_window_start_user_" + strconv.FormatInt(uid, 10)
 	endKey := "peak_window_end_user_" + strconv.FormatInt(uid, 10)
 
-	enabled, _ := h.readSettingValue(c, enabledKey)
-	start, _ := h.readSettingValue(c, startKey)
-	end, _ := h.readSettingValue(c, endKey)
-
+	enabled, err := h.readSettingValue(c, enabledKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+		return
+	}
+	start, err := h.readSettingValue(c, startKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+		return
+	}
+	end, err := h.readSettingValue(c, endKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+		return
+	}
 	// 用户未配置时回落全局时段设置，保证可用性。
 	source := "user"
 	if enabled == "" && start == "" && end == "" {
-		enabled, _ = h.readSettingValue(c, "peak_window_enabled")
-		start, _ = h.readSettingValue(c, "peak_window_start")
-		end, _ = h.readSettingValue(c, "peak_window_end")
+		enabled, err = h.readSettingValue(c, "peak_window_enabled")
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+			return
+		}
+		start, err = h.readSettingValue(c, "peak_window_start")
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+			return
+		}
+		end, err = h.readSettingValue(c, "peak_window_end")
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+			return
+		}
 		source = "global"
 	}
 
@@ -324,6 +364,69 @@ func boolToFlag(v bool) string {
 		return "1"
 	}
 	return "0"
+}
+
+func validateSettingValue(key, value string) error {
+	value = strings.TrimSpace(value)
+	key = strings.TrimSpace(key)
+	if key == "" || value == "" {
+		return gorm.ErrInvalidData
+	}
+
+	intInRange := func(min, max int64) error {
+		n, err := strconv.ParseInt(value, 10, 64)
+		if err != nil || n < min || n > max {
+			return errInvalidSettingValue(key)
+		}
+		return nil
+	}
+
+	switch key {
+	case "upload_chunk_threshold_mb":
+		return intInRange(1, 10240)
+	case "upload_default_chunk_size_mb":
+		return intInRange(1, 1024)
+	case "share_default_expire_hours":
+		return intInRange(0, 8760)
+	case "upload_speed_limit_kbps", "download_speed_limit_kbps", "upload_peak_speed_limit_kbps", "download_peak_speed_limit_kbps":
+		return intInRange(64, 10240)
+	case "peak_window_enabled":
+		if value != "0" && value != "1" {
+			return errInvalidSettingValue(key)
+		}
+		return nil
+	case "peak_window_start", "peak_window_end":
+		if !isValidHHMM(value) {
+			return errInvalidSettingValue(key)
+		}
+		return nil
+	case "upload_max_concurrency":
+		return intInRange(1, 32)
+	case "recycle_retention_days":
+		return intInRange(1, 3650)
+	default:
+		return nil
+	}
+}
+
+func errInvalidSettingValue(key string) error {
+	return errors.New("invalid value for setting_key: " + key)
+}
+
+func isSensitiveSettingKey(key string) bool {
+	k := strings.ToLower(strings.TrimSpace(key))
+	return strings.Contains(k, "token") || strings.Contains(k, "secret") || strings.Contains(k, "password") || strings.Contains(k, "private")
+}
+
+func maskSettingValue(value string) string {
+	v := strings.TrimSpace(value)
+	if v == "" {
+		return ""
+	}
+	if len(v) <= 4 {
+		return "****"
+	}
+	return v[:2] + "****" + v[len(v)-2:]
 }
 
 func parseInt64Setting(v string) (int64, bool) {
