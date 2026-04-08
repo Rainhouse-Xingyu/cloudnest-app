@@ -29,4 +29,9 @@ type FileRepository interface {
 	SearchFiles(ctx context.Context, uid int64, q FileSearchQuery) ([]model.File, int64, error)
 	ResolveValidShare(ctx context.Context, code string) (model.Share, model.File, error)
 	CollectBatchDownloadEntries(ctx context.Context, uid int64, fileIDs []int64) ([]BatchDownloadEntry, error)
+	ListFiles(ctx context.Context, uid int64, parentID int64) ([]model.File, error)
+	ListRecycleBin(ctx context.Context, uid int64) ([]model.File, error)
+	CanAccessFile(ctx context.Context, userID int64, fileID int64, requireWrite bool) (bool, error)
+	GetActiveFileByID(ctx context.Context, fileID int64) (model.File, error)
+	GetStorageByID(ctx context.Context, storageID int64) (model.Storage, error)
 }

@@ -151,6 +151,14 @@ func (s *FileService) ListFiles(ctx context.Context, uid int64, parentID int64) 
 		}
 	}
 
+	if s.fileRepo != nil {
+		rows, err := s.fileRepo.ListFiles(ctx, uid, parentID)
+		if err != nil {
+			return nil, err
+		}
+		return rows, nil
+	}
+
 	var rows []model.File
 	err := s.db.WithContext(ctx).
 		Table("file f").
@@ -305,7 +313,6 @@ func (s *FileService) DeleteFile(ctx context.Context, uid int64, fileID int64, c
 	if err != nil {
 		return err
 	}
-
 	_ = s.logOperation(ctx, uid, &f.ID, "delete", "success", "moved to recycle bin", clientIP)
 	return nil
 }
@@ -594,6 +601,17 @@ func (s *FileService) GetAccessibleFile(ctx context.Context, uid int64, fileID i
 		return model.File{}, ErrFilePermissionDenied
 	}
 
+	if s.fileRepo != nil {
+		f, err := s.fileRepo.GetActiveFileByID(ctx, fileID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return model.File{}, ErrFileNotFound
+			}
+			return model.File{}, err
+		}
+		return f, nil
+	}
+
 	var f model.File
 	if err := s.db.WithContext(ctx).First(&f, "id = ? AND is_deleted = 0", fileID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -612,6 +630,17 @@ func (s *FileService) GetAccessibleFileAndStorage(ctx context.Context, uid int64
 	}
 	if f.StorageID == nil {
 		return f, model.Storage{}, gorm.ErrRecordNotFound
+	}
+
+	if s.fileRepo != nil {
+		storage, err := s.fileRepo.GetStorageByID(ctx, *f.StorageID)
+		if err != nil {
+			return model.File{}, model.Storage{}, err
+		}
+		if _, err := os.Stat(storage.FilePath); err != nil {
+			return model.File{}, model.Storage{}, os.ErrNotExist
+		}
+		return f, storage, nil
 	}
 
 	var storage model.Storage
@@ -765,6 +794,10 @@ func (s *FileService) CopyFiles(ctx context.Context, uid int64, fileIDs []int64,
 
 // ListRecycleBin 获取当前用户回收站列表。
 func (s *FileService) ListRecycleBin(ctx context.Context, uid int64) ([]model.File, error) {
+	if s.fileRepo != nil {
+		return s.fileRepo.ListRecycleBin(ctx, uid)
+	}
+
 	var rows []model.File
 	if err := s.db.WithContext(ctx).Where("user_id = ? AND is_deleted = 1", uid).Order("update_time DESC").Find(&rows).Error; err != nil {
 		return nil, err
@@ -1143,6 +1176,10 @@ func (s *FileService) ExportOperationLogs(ctx context.Context, uid int64, isAdmi
 }
 
 func (s *FileService) canAccessFile(ctx context.Context, userID int64, fileID int64, requireWrite bool) (bool, error) {
+	if s.fileRepo != nil {
+		return s.fileRepo.CanAccessFile(ctx, userID, fileID, requireWrite)
+	}
+
 	var f model.File
 	err := s.db.WithContext(ctx).First(&f, "id = ? AND is_deleted = 0", fileID).Error
 	if err != nil {

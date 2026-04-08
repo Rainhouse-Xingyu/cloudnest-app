@@ -79,6 +79,50 @@ func (r *FileRepo) SearchFiles(ctx context.Context, uid int64, q contract.FileSe
 	return rows, total, nil
 }
 
+func (r *FileRepo) ListFiles(ctx context.Context, uid int64, parentID int64) ([]model.File, error) {
+	var rows []model.File
+	err := r.db.WithContext(ctx).
+		Table("file f").
+		Select("f.*").
+		Joins("LEFT JOIN file_permission fp ON fp.file_id = f.id AND fp.user_id = ?", uid).
+		Where("f.parent_id = ? AND f.is_deleted = 0", parentID).
+		Where("f.user_id = ? OR fp.permission IN ?", uid, []string{"read", "write"}).
+		Order("f.is_folder DESC, f.filename ASC").
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+func (r *FileRepo) ListRecycleBin(ctx context.Context, uid int64) ([]model.File, error) {
+	var rows []model.File
+	if err := r.db.WithContext(ctx).Where("user_id = ? AND is_deleted = 1", uid).Order("update_time DESC").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+func (r *FileRepo) CanAccessFile(ctx context.Context, userID int64, fileID int64, requireWrite bool) (bool, error) {
+	return canAccessFileForFileRepo(ctx, r.db, userID, fileID, requireWrite)
+}
+
+func (r *FileRepo) GetActiveFileByID(ctx context.Context, fileID int64) (model.File, error) {
+	var f model.File
+	if err := r.db.WithContext(ctx).First(&f, "id = ? AND is_deleted = 0", fileID).Error; err != nil {
+		return model.File{}, err
+	}
+	return f, nil
+}
+
+func (r *FileRepo) GetStorageByID(ctx context.Context, storageID int64) (model.Storage, error) {
+	var storage model.Storage
+	if err := r.db.WithContext(ctx).First(&storage, "id = ?", storageID).Error; err != nil {
+		return model.Storage{}, err
+	}
+	return storage, nil
+}
+
 func (r *FileRepo) ResolveValidShare(ctx context.Context, code string) (model.Share, model.File, error) {
 	code = strings.TrimSpace(code)
 	if code == "" {
