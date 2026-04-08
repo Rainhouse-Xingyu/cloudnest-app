@@ -26,6 +26,8 @@ type Container struct {
 	TxRunner         *storageMysql.TxRunner
 
 	AuthzService        *service.AuthzService
+	AuthService         *service.AuthService
+	AdminService        *service.AdminService
 	OperationLogService *service.OperationLogService
 
 	AuthHandler          *handler.AuthHandler
@@ -45,6 +47,8 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 	txRunner := storageMysql.NewTxRunner(db)
 
 	authzService := service.NewAuthzService(permissionRepo)
+	authService := service.NewAuthService(db, rdb, cfg)
+	adminService := service.NewAdminService(db, rdb)
 	operationLogService := service.NewOperationLogService(operationLogRepo)
 
 	return &Container{
@@ -57,10 +61,12 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 		TxRunner:         txRunner,
 
 		AuthzService:        authzService,
+		AuthService:         authService,
+		AdminService:        adminService,
 		OperationLogService: operationLogService,
 
-		AuthHandler:          &handler.AuthHandler{DB: db, RDB: rdb, Cfg: cfg},
-		AdminHandler:         &handler.AdminHandler{DB: db, RDB: rdb},
+		AuthHandler:          &handler.AuthHandler{Svc: authService},
+		AdminHandler:         &handler.AdminHandler{Svc: adminService},
 		FileHandler:          &handler.FileHandler{DB: db, RDB: rdb, Cfg: cfg},
 		SettingsHandler:      &handler.SettingsHandler{DB: db},
 		CollaborationHandler: &handler.CollaborationHandler{DB: db},
