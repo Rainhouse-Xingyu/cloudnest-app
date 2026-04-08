@@ -5,14 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
 
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
-	"gorm.io/gorm"
 )
 
 const redisPermKeyPrefix = "auth:perm:user:"
@@ -33,12 +31,12 @@ type CreateUserInput struct {
 
 // AdminService 承接管理员业务逻辑。
 type AdminService struct {
-	db  *gorm.DB
-	rdb *redis.Client
+	repo contract.AdminRepository
+	rdb  *redis.Client
 }
 
-func NewAdminService(db *gorm.DB, rdb *redis.Client) *AdminService {
-	return &AdminService{db: db, rdb: rdb}
+func NewAdminService(repo contract.AdminRepository, rdb *redis.Client) *AdminService {
+	return &AdminService{repo: repo, rdb: rdb}
 }
 
 // CreateUser 创建用户、绑定默认角色并按需写入权限。
@@ -55,46 +53,11 @@ func (s *AdminService) CreateUser(ctx context.Context, req CreateUserInput) (mod
 		Status:   1,
 	}
 
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(&user).Error; err != nil {
-			if strings.Contains(strings.ToLower(err.Error()), "duplicate") {
-				return contract.ErrConflict
-			}
-			return err
-		}
-
-		var normalRole model.Role
-		err := tx.Where("role_name = ?", "user").First(&normalRole).Error
-		if err != nil {
-			if !errors.Is(err, gorm.ErrRecordNotFound) {
-				return err
-			}
-			normalRole = model.Role{RoleName: "user", Description: "normal user"}
-			if err := tx.Create(&normalRole).Error; err != nil {
-				return err
-			}
-		}
-
-		if err := tx.Create(&model.UserRole{UserID: user.ID, RoleID: normalRole.ID}).Error; err != nil {
-			return err
-		}
-
-		if len(req.Permissions) == 0 {
-			return nil
-		}
-
-		now := time.Now()
-		rows := make([]model.UserPathPermission, 0, len(req.Permissions))
-		for _, p := range req.Permissions {
-			rows = append(rows, model.UserPathPermission{
-				UserID:     user.ID,
-				Method:     normalizeMethod(p.Method),
-				Path:       p.Path,
-				CreateTime: now,
-			})
-		}
-		return tx.Create(&rows).Error
-	})
+	perms := make([]contract.MethodPathPermission, 0, len(req.Permissions))
+	for _, p := range req.Permissions {
+		perms = append(perms, contract.MethodPathPermission{Method: p.Method, Path: p.Path})
+	}
+	user, err = s.repo.CreateUserWithPermissions(ctx, user, perms)
 	if err != nil {
 		if errors.Is(err, contract.ErrConflict) {
 			return model.User{}, contract.ErrConflict
@@ -108,53 +71,11 @@ func (s *AdminService) CreateUser(ctx context.Context, req CreateUserInput) (mod
 
 // SetUserPermissions 覆盖用户路径权限并记录审计日志。
 func (s *AdminService) SetUserPermissions(ctx context.Context, adminID int64, userID int64, permissions []PermissionInput, clientIP string) error {
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var oldRows []model.UserPathPermission
-		if err := tx.Where("user_id = ?", userID).Find(&oldRows).Error; err != nil {
-			return err
-		}
-
-		if err := tx.Where("user_id = ?", userID).Delete(&model.UserPathPermission{}).Error; err != nil {
-			return err
-		}
-
-		rows := make([]model.UserPathPermission, 0, len(permissions))
-		now := time.Now()
-		for _, p := range permissions {
-			rows = append(rows, model.UserPathPermission{
-				UserID:     userID,
-				Method:     normalizeMethod(p.Method),
-				Path:       p.Path,
-				CreateTime: now,
-			})
-		}
-		if len(rows) > 0 {
-			if err := tx.Create(&rows).Error; err != nil {
-				return err
-			}
-		}
-
-		detail := fmt.Sprintf(
-			"target_user=%d old_count=%d new_count=%d old=%s new=%s",
-			userID,
-			len(oldRows),
-			len(rows),
-			formatPermissions(oldRows),
-			formatPermissionInputs(permissions),
-		)
-		if len(detail) > 500 {
-			detail = detail[:500]
-		}
-
-		actor := adminID
-		return tx.Create(&model.OperationLog{
-			UserID:   &actor,
-			Action:   "admin_permission_change",
-			Status:   "success",
-			Detail:   detail,
-			ClientIP: clientIP,
-		}).Error
-	})
+	repoPerms := make([]contract.MethodPathPermission, 0, len(permissions))
+	for _, p := range permissions {
+		repoPerms = append(repoPerms, contract.MethodPathPermission{Method: p.Method, Path: p.Path})
+	}
+	err := s.repo.ReplaceUserPermissionsWithAudit(ctx, adminID, userID, repoPerms, clientIP)
 	if err != nil {
 		return contract.ErrInternal
 	}
@@ -169,36 +90,4 @@ func normalizeMethod(method string) string {
 		return "*"
 	}
 	return m
-}
-
-func formatPermissions(rows []model.UserPathPermission) string {
-	if len(rows) == 0 {
-		return "-"
-	}
-	b := strings.Builder{}
-	for i, p := range rows {
-		if i > 0 {
-			b.WriteString(",")
-		}
-		b.WriteString(normalizeMethod(p.Method))
-		b.WriteString(":")
-		b.WriteString(strings.TrimSpace(p.Path))
-	}
-	return b.String()
-}
-
-func formatPermissionInputs(rows []PermissionInput) string {
-	if len(rows) == 0 {
-		return "-"
-	}
-	b := strings.Builder{}
-	for i, p := range rows {
-		if i > 0 {
-			b.WriteString(",")
-		}
-		b.WriteString(normalizeMethod(p.Method))
-		b.WriteString(":")
-		b.WriteString(strings.TrimSpace(p.Path))
-	}
-	return b.String()
 }

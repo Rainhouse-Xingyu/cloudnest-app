@@ -35,19 +35,19 @@ type LoginResult struct {
 
 // AuthService 承接认证模块业务逻辑。
 type AuthService struct {
-	db  *gorm.DB
-	rdb *redis.Client
-	cfg config.Config
+	repo contract.AuthRepository
+	rdb  *redis.Client
+	cfg  config.Config
 }
 
-func NewAuthService(db *gorm.DB, rdb *redis.Client, cfg config.Config) *AuthService {
-	return &AuthService{db: db, rdb: rdb, cfg: cfg}
+func NewAuthService(repo contract.AuthRepository, rdb *redis.Client, cfg config.Config) *AuthService {
+	return &AuthService{repo: repo, rdb: rdb, cfg: cfg}
 }
 
 // Login 执行账号密码登录与 token 写入。
 func (s *AuthService) Login(ctx context.Context, username, password string) (LoginResult, error) {
 	var u model.User
-	err := s.db.WithContext(ctx).Where("username = ?", username).First(&u).Error
+	u, err := s.repo.GetUserByUsername(ctx, username)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return LoginResult{}, ErrInvalidCredentials
@@ -66,10 +66,10 @@ func (s *AuthService) Login(ctx context.Context, username, password string) (Log
 	// 对历史明文密码做透明升级，保持与旧逻辑兼容。
 	if !isBcryptHash(u.Password) {
 		hash, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-		_ = s.db.WithContext(ctx).Model(&u).Update("password", string(hash)).Error
+		_ = s.repo.UpdateUserPassword(ctx, u.ID, string(hash))
 	}
 
-	isAdmin, err := isAdminUser(ctx, s.db, u.ID)
+	isAdmin, err := s.repo.CheckUserIsAdmin(ctx, u.ID)
 	if err != nil {
 		return LoginResult{}, contract.ErrInternal
 	}
@@ -98,8 +98,8 @@ func (s *AuthService) Logout(ctx context.Context, token string) {
 
 // GetUserProfile 获取当前用户信息。
 func (s *AuthService) GetUserProfile(ctx context.Context, userID int64) (model.User, error) {
-	var u model.User
-	if err := s.db.WithContext(ctx).Select("id", "username", "email", "status", "create_time", "update_time").First(&u, userID).Error; err != nil {
+	u, err := s.repo.GetUserProfile(ctx, userID)
+	if err != nil {
 		return model.User{}, contract.ErrInternal
 	}
 	return u, nil
@@ -116,15 +116,4 @@ func isBcryptHash(raw string) bool {
 	return strings.HasPrefix(raw, "$2a$") || strings.HasPrefix(raw, "$2b$") || strings.HasPrefix(raw, "$2y$")
 }
 
-func isAdminUser(ctx context.Context, db *gorm.DB, userID int64) (bool, error) {
-	var count int64
-	err := db.WithContext(ctx).
-		Table("user_role ur").
-		Joins("JOIN role r ON ur.role_id = r.id").
-		Where("ur.user_id = ? AND r.role_name = ?", userID, "admin").
-		Count(&count).Error
-	if err != nil {
-		return false, err
-	}
-	return count > 0, nil
-}
+// 管理员判断已下沉至 AuthRepository。

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
 
 	"gorm.io/gorm"
@@ -13,11 +14,11 @@ import (
 
 // SettingsService 承接设置模块业务逻辑。
 type SettingsService struct {
-	db *gorm.DB
+	repo contract.SettingsRepository
 }
 
-func NewSettingsService(db *gorm.DB) *SettingsService {
-	return &SettingsService{db: db}
+func NewSettingsService(repo contract.SettingsRepository) *SettingsService {
+	return &SettingsService{repo: repo}
 }
 
 // SettingUpsertItem 表示设置更新项。
@@ -75,8 +76,8 @@ var allowedSystemSettingKeys = map[string]struct{}{
 
 // GetSettings 返回 system_setting 全量配置（非管理员脱敏）。
 func (s *SettingsService) GetSettings(ctx context.Context, isAdmin bool) ([]model.SystemSetting, error) {
-	var rows []model.SystemSetting
-	if err := s.db.WithContext(ctx).Order("setting_key ASC").Find(&rows).Error; err != nil {
+	rows, err := s.repo.ListSystemSettings(ctx)
+	if err != nil {
 		return nil, err
 	}
 
@@ -91,80 +92,55 @@ func (s *SettingsService) GetSettings(ctx context.Context, isAdmin bool) ([]mode
 
 // UpsertSettings 批量新增/更新系统设置。
 func (s *SettingsService) UpsertSettings(ctx context.Context, items []SettingUpsertItem) error {
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		for _, item := range items {
-			key := strings.TrimSpace(item.SettingKey)
-			value := strings.TrimSpace(item.SettingValue)
-			desc := strings.TrimSpace(item.Description)
-			if key == "" || value == "" {
-				return gorm.ErrInvalidData
-			}
-			if _, ok := allowedSystemSettingKeys[key]; !ok {
-				return gorm.ErrInvalidField
-			}
-			if err := validateSettingValue(key, value); err != nil {
-				return err
-			}
-
-			var row model.SystemSetting
-			err := tx.Where("setting_key = ?", key).First(&row).Error
-			if err != nil {
-				if err != gorm.ErrRecordNotFound {
-					return err
-				}
-				row = model.SystemSetting{SettingKey: key, SettingValue: value, Description: desc}
-				if err := tx.Create(&row).Error; err != nil {
-					return err
-				}
-				continue
-			}
-
-			updates := map[string]interface{}{"setting_value": value}
-			if desc != "" {
-				updates["description"] = desc
-			}
-			if err := tx.Model(&row).Updates(updates).Error; err != nil {
-				return err
-			}
+	repoItems := make([]contract.SettingUpsertItem, 0, len(items))
+	for _, item := range items {
+		key := strings.TrimSpace(item.SettingKey)
+		value := strings.TrimSpace(item.SettingValue)
+		desc := strings.TrimSpace(item.Description)
+		if key == "" || value == "" {
+			return gorm.ErrInvalidData
 		}
-		return nil
-	})
+		if _, ok := allowedSystemSettingKeys[key]; !ok {
+			return gorm.ErrInvalidField
+		}
+		if err := validateSettingValue(key, value); err != nil {
+			return err
+		}
+		repoItems = append(repoItems, contract.SettingUpsertItem{SettingKey: key, SettingValue: value, Description: desc})
+	}
+	return s.repo.UpsertSystemSettings(ctx, repoItems)
 }
 
 // GetPermissionSummary 聚合展示角色、空间角色与文件授权规则。
 func (s *SettingsService) GetPermissionSummary(ctx context.Context, uid int64, all bool) (PermissionSummaryResult, error) {
 	res := PermissionSummaryResult{Scope: PermissionScopeView{All: all, CurrentUID: uid}}
 
-	if err := s.db.WithContext(ctx).Order("id ASC").Find(&res.Roles).Error; err != nil {
+	roles, err := s.repo.ListRoles(ctx)
+	if err != nil {
 		return PermissionSummaryResult{}, err
+	}
+	res.Roles = roles
+
+	roleRows, err := s.repo.ListUserRoles(ctx, uid, all)
+	if err != nil {
+		return PermissionSummaryResult{}, err
+	}
+	res.UserRoles = make([]UserRoleView, 0, len(roleRows))
+	for _, row := range roleRows {
+		res.UserRoles = append(res.UserRoles, UserRoleView{UserID: row.UserID, Username: row.Username, RoleID: row.RoleID, RoleName: row.RoleName})
 	}
 
-	roleSQL := s.db.WithContext(ctx).Table("user_role ur").
-		Select("ur.user_id, u.username, ur.role_id, r.role_name").
-		Joins("JOIN user u ON u.id = ur.user_id").
-		Joins("JOIN role r ON r.id = ur.role_id")
-	if !all {
-		roleSQL = roleSQL.Where("ur.user_id = ?", uid)
-	}
-	if err := roleSQL.Order("ur.user_id ASC, ur.role_id ASC").Scan(&res.UserRoles).Error; err != nil {
+	workspaceRoles, err := s.repo.ListWorkspaceRoles(ctx, uid, all)
+	if err != nil {
 		return PermissionSummaryResult{}, err
 	}
+	res.WorkspaceRoles = workspaceRoles
 
-	workspaceSQL := s.db.WithContext(ctx).Order("workspace_id ASC, user_id ASC")
-	if !all {
-		workspaceSQL = workspaceSQL.Where("user_id = ?", uid)
-	}
-	if err := workspaceSQL.Find(&res.WorkspaceRoles).Error; err != nil {
+	filePerms, err := s.repo.ListFilePermissions(ctx, uid, all)
+	if err != nil {
 		return PermissionSummaryResult{}, err
 	}
-
-	filePermSQL := s.db.WithContext(ctx).Order("file_id ASC, user_id ASC")
-	if !all {
-		filePermSQL = filePermSQL.Where("user_id = ?", uid)
-	}
-	if err := filePermSQL.Find(&res.FilePermissions).Error; err != nil {
-		return PermissionSummaryResult{}, err
-	}
+	res.FilePermissions = filePerms
 
 	return res, nil
 }
@@ -219,48 +195,29 @@ func (s *SettingsService) UpdateMyRateWindow(ctx context.Context, uid int64, ena
 	startKey := "peak_window_start_user_" + strconv.FormatInt(uid, 10)
 	endKey := "peak_window_end_user_" + strconv.FormatInt(uid, 10)
 
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := s.upsertSetting(tx, enabledKey, boolToFlag(enabled), "用户自定义高峰时段开关"); err != nil {
-			return err
-		}
-		if enabled {
-			if err := s.upsertSetting(tx, startKey, start, "用户自定义高峰开始时刻 HH:MM"); err != nil {
-				return err
-			}
-			if err := s.upsertSetting(tx, endKey, end, "用户自定义高峰结束时刻 HH:MM"); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-}
-
-func (s *SettingsService) upsertSetting(tx *gorm.DB, key, value, desc string) error {
-	var row model.SystemSetting
-	err := tx.Where("setting_key = ?", key).First(&row).Error
-	if err != nil {
-		if err != gorm.ErrRecordNotFound {
-			return err
-		}
-		row = model.SystemSetting{SettingKey: key, SettingValue: value, Description: desc}
-		return tx.Create(&row).Error
+	if err := s.repo.UpsertSystemSetting(ctx, enabledKey, boolToFlag(enabled), "用户自定义高峰时段开关"); err != nil {
+		return err
 	}
-	return tx.Model(&row).Updates(map[string]interface{}{
-		"setting_value": value,
-		"description":   desc,
-	}).Error
+	if enabled {
+		if err := s.repo.UpsertSystemSetting(ctx, startKey, start, "用户自定义高峰开始时刻 HH:MM"); err != nil {
+			return err
+		}
+		if err := s.repo.UpsertSystemSetting(ctx, endKey, end, "用户自定义高峰结束时刻 HH:MM"); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *SettingsService) readSettingValue(ctx context.Context, key string) (string, error) {
-	var row model.SystemSetting
-	err := s.db.WithContext(ctx).Where("setting_key = ?", key).First(&row).Error
+	v, err := s.repo.GetSystemSettingValue(ctx, key)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return "", nil
 		}
 		return "", err
 	}
-	return row.SettingValue, nil
+	return v, nil
 }
 
 func isValidHHMM(v string) bool {

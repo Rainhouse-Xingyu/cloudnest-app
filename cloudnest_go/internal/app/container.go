@@ -23,6 +23,9 @@ type Container struct {
 
 	PermissionRepo   *storageMysql.PermissionRepo
 	OperationLogRepo *storageMysql.OperationLogRepo
+	AuthRepo         *storageMysql.AuthRepo
+	AdminRepo        *storageMysql.AdminRepo
+	SettingsRepo     *storageMysql.SettingsRepo
 	FileRepo         *storageMysql.FileRepo
 	TxRunner         *storageMysql.TxRunner
 
@@ -51,14 +54,17 @@ type Container struct {
 func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container {
 	permissionRepo := storageMysql.NewPermissionRepo(db)
 	operationLogRepo := storageMysql.NewOperationLogRepo(db)
+	authRepo := storageMysql.NewAuthRepo(db)
+	adminRepo := storageMysql.NewAdminRepo(db)
+	settingsRepo := storageMysql.NewSettingsRepo(db)
 	fileRepo := storageMysql.NewFileRepo(db)
 	txRunner := storageMysql.NewTxRunner(db)
 
 	authzService := service.NewAuthzService(permissionRepo)
-	authService := service.NewAuthService(db, rdb, cfg)
-	adminService := service.NewAdminService(db, rdb)
+	authService := service.NewAuthService(authRepo, rdb, cfg)
+	adminService := service.NewAdminService(adminRepo, rdb)
 	collaborationService := service.NewCollaborationService(db)
-	settingsService := service.NewSettingsService(db)
+	settingsService := service.NewSettingsService(settingsRepo)
 	operationLogService := service.NewOperationLogService(operationLogRepo)
 	frpService := service.NewFrpService(db, rdb)
 	livePhotoService := service.NewLivePhotoService(db)
@@ -72,6 +78,9 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 
 		PermissionRepo:   permissionRepo,
 		OperationLogRepo: operationLogRepo,
+		AuthRepo:         authRepo,
+		AdminRepo:        adminRepo,
+		SettingsRepo:     settingsRepo,
 		FileRepo:         fileRepo,
 		TxRunner:         txRunner,
 
