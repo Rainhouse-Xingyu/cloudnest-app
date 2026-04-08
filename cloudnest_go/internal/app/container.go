@@ -75,7 +75,7 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 		AdminHandler:         &handler.AdminHandler{Svc: adminService},
 		FileHandler:          &handler.FileHandler{DB: db, RDB: rdb, Cfg: cfg},
 		SettingsHandler:      &handler.SettingsHandler{Svc: settingsService},
-		CollaborationHandler: &handler.CollaborationHandler{DB: db, Svc: collaborationService},
+		CollaborationHandler: &handler.CollaborationHandler{Svc: collaborationService},
 		AIHandler:            &handler.AIHandler{DB: db, Cfg: cfg},
 		FrpHandler:           &handler.FrpHandler{DB: db, RDB: rdb},
 		LivePhotoHandler:     &handler.LivePhotoHandler{DB: db},

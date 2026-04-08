@@ -3,12 +3,14 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
 	"cloudenest_go/model"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // CollaborationService 提供协作模块的数据与事务能力。
@@ -41,6 +43,29 @@ type FilePermissionRow struct {
 	UserID     int64  `json:"user_id"`
 	Username   string `json:"username"`
 	Permission string `json:"permission"`
+}
+
+// CreateFileVersionInput 创建文件版本输入参数。
+type CreateFileVersionInput struct {
+	FileID      int64
+	StorageID   int64
+	BaseVersion int
+	Comment     string
+	FileType    string
+	Size        *int64
+	UserID      int64
+}
+
+// FileVersionRow 文件版本查询返回行。
+type FileVersionRow struct {
+	ID         int64     `json:"id"`
+	Version    int       `json:"version"`
+	StorageID  int64     `json:"storage_id"`
+	Size       *int64    `json:"size"`
+	Comment    string    `json:"comment"`
+	CreateUser *int64    `json:"create_user"`
+	Username   string    `json:"username"`
+	CreateTime time.Time `json:"create_time"`
 }
 
 // CreateWorkspace 创建空间并写入 owner 成员关系。
@@ -218,6 +243,80 @@ func (s *CollaborationService) ListFilePermissions(ctx context.Context, fileID i
 // RevokeFilePermission 删除指定文件协作权限。
 func (s *CollaborationService) RevokeFilePermission(ctx context.Context, fileID int64, targetUserID int64) error {
 	return s.db.WithContext(ctx).Where("file_id = ? AND user_id = ?", fileID, targetUserID).Delete(&model.FilePermission{}).Error
+}
+
+// CreateFileVersion 保存新版本，采用“基于上一版本提交”的协作策略。
+func (s *CollaborationService) CreateFileVersion(ctx context.Context, req CreateFileVersionInput) (model.FileVersion, error) {
+	var created model.FileVersion
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var f model.File
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&f, "id = ? AND is_deleted = 0", req.FileID).Error; err != nil {
+			return err
+		}
+		if f.IsFolder == 1 {
+			return fmt.Errorf("folder does not support versioning")
+		}
+		if req.BaseVersion != f.CurrentVersion {
+			return fmt.Errorf("version conflict")
+		}
+
+		var storage model.Storage
+		if err := tx.First(&storage, "id = ?", req.StorageID).Error; err != nil {
+			return err
+		}
+
+		nextVersion := f.CurrentVersion + 1
+		sizeVal := f.Size
+		if req.Size != nil {
+			sizeVal = *req.Size
+		} else if storage.FileSize != nil {
+			sizeVal = *storage.FileSize
+		}
+
+		uidCopy := req.UserID
+		sizeCopy := sizeVal
+		created = model.FileVersion{
+			FileID:     req.FileID,
+			Version:    nextVersion,
+			StorageID:  req.StorageID,
+			Size:       &sizeCopy,
+			CreateUser: &uidCopy,
+			Comment:    req.Comment,
+		}
+		if err := tx.Create(&created).Error; err != nil {
+			return err
+		}
+
+		updates := map[string]interface{}{
+			"current_version": nextVersion,
+			"storage_id":      req.StorageID,
+			"size":            sizeVal,
+		}
+		if req.FileType != "" {
+			updates["file_type"] = req.FileType
+		}
+		return tx.Model(&model.File{}).Where("id = ?", req.FileID).Updates(updates).Error
+	})
+	if err != nil {
+		return model.FileVersion{}, err
+	}
+	return created, nil
+}
+
+// ListFileVersions 查询文件版本历史（倒序）。
+func (s *CollaborationService) ListFileVersions(ctx context.Context, fileID int64) ([]FileVersionRow, error) {
+	rows := make([]FileVersionRow, 0)
+	err := s.db.WithContext(ctx).
+		Table("file_version fv").
+		Select("fv.id, fv.version, fv.storage_id, fv.size, fv.comment, fv.create_user, u.username, fv.create_time").
+		Joins("LEFT JOIN user u ON u.id = fv.create_user").
+		Where("fv.file_id = ?", fileID).
+		Order("fv.version DESC").
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
 }
 
 // LogOperation 记录协作操作日志。

@@ -1,13 +1,11 @@
 package handler
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"cloudenest_go/internal/middleware"
 	"cloudenest_go/internal/service"
@@ -15,12 +13,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 // CollaborationHandler 处理多人协作相关接口。
 type CollaborationHandler struct {
-	DB  *gorm.DB
 	Svc *service.CollaborationService
 }
 
@@ -429,7 +425,7 @@ func (h *CollaborationHandler) CreateFileVersion(c *gin.Context) {
 		return
 	}
 
-	canWrite, err := h.canAccessFile(c.Request.Context(), uid, fileID, true)
+	canWrite, err := h.Svc.CanAccessFile(c.Request.Context(), uid, fileID, true)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
@@ -439,55 +435,14 @@ func (h *CollaborationHandler) CreateFileVersion(c *gin.Context) {
 		return
 	}
 
-	var created model.FileVersion
-	err = h.DB.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
-		var f model.File
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&f, "id = ? AND is_deleted = 0", fileID).Error; err != nil {
-			return err
-		}
-		if f.IsFolder == 1 {
-			return fmt.Errorf("folder does not support versioning")
-		}
-		if req.BaseVersion != f.CurrentVersion {
-			return fmt.Errorf("version conflict")
-		}
-
-		var storage model.Storage
-		if err := tx.First(&storage, "id = ?", req.StorageID).Error; err != nil {
-			return err
-		}
-
-		nextVersion := f.CurrentVersion + 1
-		sizeVal := f.Size
-		if req.Size != nil {
-			sizeVal = *req.Size
-		} else if storage.FileSize != nil {
-			sizeVal = *storage.FileSize
-		}
-
-		uidCopy := uid
-		sizeCopy := sizeVal
-		created = model.FileVersion{
-			FileID:     fileID,
-			Version:    nextVersion,
-			StorageID:  req.StorageID,
-			Size:       &sizeCopy,
-			CreateUser: &uidCopy,
-			Comment:    req.Comment,
-		}
-		if err := tx.Create(&created).Error; err != nil {
-			return err
-		}
-
-		updates := map[string]interface{}{
-			"current_version": nextVersion,
-			"storage_id":      req.StorageID,
-			"size":            sizeVal,
-		}
-		if req.FileType != "" {
-			updates["file_type"] = req.FileType
-		}
-		return tx.Model(&model.File{}).Where("id = ?", fileID).Updates(updates).Error
+	created, err := h.Svc.CreateFileVersion(c.Request.Context(), service.CreateFileVersionInput{
+		FileID:      fileID,
+		StorageID:   req.StorageID,
+		BaseVersion: req.BaseVersion,
+		Comment:     req.Comment,
+		FileType:    req.FileType,
+		Size:        req.Size,
+		UserID:      uid,
 	})
 	if err != nil {
 		msg := strings.ToLower(err.Error())
@@ -521,7 +476,7 @@ func (h *CollaborationHandler) ListFileVersions(c *gin.Context) {
 		return
 	}
 
-	canRead, err := h.canAccessFile(c.Request.Context(), uid, fileID, false)
+	canRead, err := h.Svc.CanAccessFile(c.Request.Context(), uid, fileID, false)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
@@ -531,63 +486,13 @@ func (h *CollaborationHandler) ListFileVersions(c *gin.Context) {
 		return
 	}
 
-	type row struct {
-		ID         int64     `json:"id"`
-		Version    int       `json:"version"`
-		StorageID  int64     `json:"storage_id"`
-		Size       *int64    `json:"size"`
-		Comment    string    `json:"comment"`
-		CreateUser *int64    `json:"create_user"`
-		Username   string    `json:"username"`
-		CreateTime time.Time `json:"create_time"`
-	}
-
-	rows := make([]row, 0)
-	err = h.DB.WithContext(c.Request.Context()).
-		Table("file_version fv").
-		Select("fv.id, fv.version, fv.storage_id, fv.size, fv.comment, fv.create_user, u.username, fv.create_time").
-		Joins("LEFT JOIN user u ON u.id = fv.create_user").
-		Where("fv.file_id = ?", fileID).
-		Order("fv.version DESC").
-		Find(&rows).Error
+	rows, err := h.Svc.ListFileVersions(c.Request.Context(), fileID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"items": rows})
-}
-
-// canAccessFile 判断是否有文件访问权限（写权限要求更严格）。
-func (h *CollaborationHandler) canAccessFile(ctx context.Context, userID int64, fileID int64, requireWrite bool) (bool, error) {
-	var f model.File
-	err := h.DB.WithContext(ctx).First(&f, "id = ? AND is_deleted = 0", fileID).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return false, nil
-		}
-		return false, err
-	}
-
-	if f.UserID == userID {
-		return true, nil
-	}
-
-	permissions := []string{"read", "write"}
-	if requireWrite {
-		permissions = []string{"write"}
-	}
-
-	var count int64
-	err = h.DB.WithContext(ctx).
-		Model(&model.FilePermission{}).
-		Where("file_id = ? AND user_id = ? AND permission IN ?", fileID, userID, permissions).
-		Count(&count).Error
-	if err != nil {
-		return false, err
-	}
-
-	return count > 0, nil
 }
 
 func normalizeWorkspaceRole(role string) string {
