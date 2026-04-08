@@ -362,6 +362,140 @@ func (r *FileRepo) PermanentDeleteFromRecycleBin(ctx context.Context, uid int64,
 	})
 }
 
+func (r *FileRepo) GetUploadTaskByUploadID(ctx context.Context, uploadID string) (model.UploadTask, error) {
+	var task model.UploadTask
+	if err := r.db.WithContext(ctx).Where("upload_id = ?", uploadID).First(&task).Error; err != nil {
+		return model.UploadTask{}, err
+	}
+	return task, nil
+}
+
+func (r *FileRepo) GetUploadTaskAndUploadedChunkIndexes(ctx context.Context, userID int64, uploadID string) (model.UploadTask, []int, error) {
+	task, err := r.GetUploadTaskByUploadID(ctx, uploadID)
+	if err != nil {
+		return model.UploadTask{}, nil, err
+	}
+	if task.UserID == nil || *task.UserID != userID {
+		return model.UploadTask{}, nil, gorm.ErrRecordNotFound
+	}
+
+	var rows []model.UploadChunk
+	err = r.db.WithContext(ctx).
+		Where("upload_id = ? AND status = 1", uploadID).
+		Order("chunk_index ASC").
+		Find(&rows).Error
+	if err != nil {
+		return model.UploadTask{}, nil, err
+	}
+
+	chunkIndexes := make([]int, 0, len(rows))
+	for _, row := range rows {
+		chunkIndexes = append(chunkIndexes, row.ChunkIndex)
+	}
+
+	return task, chunkIndexes, nil
+}
+
+func (r *FileRepo) CreateUploadTask(ctx context.Context, task model.UploadTask) error {
+	return r.db.WithContext(ctx).Create(&task).Error
+}
+
+func (r *FileRepo) UpsertUploadChunkAndRefreshProgress(ctx context.Context, taskID int64, uploadID string, chunkIndex int, chunkSize int64, chunkPath string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var row model.UploadChunk
+		err := tx.Where("upload_id = ? AND chunk_index = ?", uploadID, chunkIndex).First(&row).Error
+		if err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+			chunkSizeVal := chunkSize
+			row = model.UploadChunk{
+				UploadID:   uploadID,
+				ChunkIndex: chunkIndex,
+				ChunkSize:  &chunkSizeVal,
+				ChunkPath:  chunkPath,
+				Status:     1,
+			}
+			if err := tx.Create(&row).Error; err != nil {
+				return err
+			}
+		} else {
+			chunkSizeVal := chunkSize
+			if err := tx.Model(&row).Updates(map[string]interface{}{
+				"chunk_size": chunkSizeVal,
+				"chunk_path": chunkPath,
+				"status":     1,
+			}).Error; err != nil {
+				return err
+			}
+		}
+
+		var doneCount int64
+		if err := tx.Model(&model.UploadChunk{}).Where("upload_id = ? AND status = 1", uploadID).Count(&doneCount).Error; err != nil {
+			return err
+		}
+		return tx.Model(&model.UploadTask{}).Where("id = ?", taskID).Update("uploaded_chunks", int(doneCount)).Error
+	})
+}
+
+func (r *FileRepo) CountDoneUploadChunks(ctx context.Context, uploadID string) (int64, error) {
+	var doneCount int64
+	err := r.db.WithContext(ctx).
+		Model(&model.UploadChunk{}).
+		Where("upload_id = ? AND status = 1", uploadID).
+		Count(&doneCount).Error
+	if err != nil {
+		return 0, err
+	}
+	return doneCount, nil
+}
+
+func (r *FileRepo) CompleteUploadPersist(ctx context.Context, uid int64, parentID int64, uploadID string, task model.UploadTask, totalChunks int, storagePath string, mergedSize int64, fileHash string) (model.File, error) {
+	var createdFile model.File
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		storageID, err := ensureStorageForFileRepo(tx, fileHash, storagePath, mergedSize)
+		if err != nil {
+			return err
+		}
+
+		finalName, err := ensureUniqueFilenameForFileRepo(tx, parentID, task.Filename)
+		if err != nil {
+			return err
+		}
+
+		fileType := strings.TrimPrefix(strings.ToLower(filepath.Ext(finalName)), ".")
+		createdFile = model.File{
+			UserID:    uid,
+			Filename:  finalName,
+			ParentID:  parentID,
+			IsFolder:  0,
+			FileType:  fileType,
+			Size:      mergedSize,
+			StorageID: &storageID,
+		}
+		if err := tx.Create(&createdFile).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Model(&model.UploadTask{}).Where("id = ?", task.ID).Updates(map[string]interface{}{
+			"status":          1,
+			"uploaded_chunks": totalChunks,
+		}).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Where("upload_id = ?", uploadID).Delete(&model.UploadChunk{}).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		return model.File{}, err
+	}
+	return createdFile, nil
+}
+
 func (r *FileRepo) ResolveValidShare(ctx context.Context, code string) (model.Share, model.File, error) {
 	code = strings.TrimSpace(code)
 	if code == "" {
@@ -595,6 +729,25 @@ func copyNodeForFileRepo(tx *gorm.DB, newOwnerID int64, src model.File, targetPa
 	}
 
 	return newNode.ID, nil
+}
+
+func ensureStorageForFileRepo(tx *gorm.DB, fileHash string, storagePath string, size int64) (int64, error) {
+	var existing model.Storage
+	err := tx.Where("file_hash = ?", fileHash).First(&existing).Error
+	if err == nil {
+		_ = os.Remove(storagePath)
+		return existing.ID, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return 0, err
+	}
+
+	sizeCopy := size
+	storage := model.Storage{FileHash: fileHash, FilePath: storagePath, FileSize: &sizeCopy}
+	if err := tx.Create(&storage).Error; err != nil {
+		return 0, err
+	}
+	return storage.ID, nil
 }
 
 var _ contract.FileRepository = (*FileRepo)(nil)

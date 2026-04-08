@@ -403,6 +403,17 @@ func (s *FileService) InitUpload(ctx context.Context, uid int64, in FileUploadIn
 	}
 
 	if in.UploadID != "" {
+		if s.fileRepo != nil {
+			task, chunkIndexes, err := s.fileRepo.GetUploadTaskAndUploadedChunkIndexes(ctx, uid, in.UploadID)
+			if err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return FileUploadInitResult{}, ErrUploadTaskNotFound
+				}
+				return FileUploadInitResult{}, err
+			}
+			return FileUploadInitResult{UploadID: task.UploadID, UploadedChunks: chunkIndexes, UploadedCount: task.UploadedChunks, Status: task.Status}, nil
+		}
+
 		task, chunkIndexes, err := s.getUploadTaskAndChunks(ctx, uid, in.UploadID)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -432,6 +443,13 @@ func (s *FileService) InitUpload(ctx context.Context, uid int64, in FileUploadIn
 		TotalChunks: &totalChunksCopy,
 		Status:      0,
 	}
+	if s.fileRepo != nil {
+		if err := s.fileRepo.CreateUploadTask(ctx, task); err != nil {
+			return FileUploadInitResult{}, err
+		}
+		return FileUploadInitResult{UploadID: uploadID, UploadedChunks: []int{}, UploadedCount: 0, Status: 0}, nil
+	}
+
 	if err := s.db.WithContext(ctx).Create(&task).Error; err != nil {
 		return FileUploadInitResult{}, err
 	}
@@ -441,6 +459,26 @@ func (s *FileService) InitUpload(ctx context.Context, uid int64, in FileUploadIn
 
 // ValidateUploadChunk 校验分片上传任务归属与状态。
 func (s *FileService) ValidateUploadChunk(ctx context.Context, uid int64, uploadID string, chunkIndex int) (model.UploadTask, error) {
+	if s.fileRepo != nil {
+		task, err := s.fileRepo.GetUploadTaskByUploadID(ctx, uploadID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return model.UploadTask{}, ErrUploadTaskNotFound
+			}
+			return model.UploadTask{}, err
+		}
+		if task.UserID == nil || *task.UserID != uid {
+			return model.UploadTask{}, ErrFilePermissionDenied
+		}
+		if task.Status == 1 {
+			return model.UploadTask{}, ErrUploadTaskCompleted
+		}
+		if task.TotalChunks != nil && chunkIndex >= *task.TotalChunks {
+			return model.UploadTask{}, ErrChunkIndexOutOfRange
+		}
+		return task, nil
+	}
+
 	var task model.UploadTask
 	if err := s.db.WithContext(ctx).Where("upload_id = ?", uploadID).First(&task).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -462,6 +500,10 @@ func (s *FileService) ValidateUploadChunk(ctx context.Context, uid int64, upload
 
 // MarkChunkUploaded 记录分片上传完成并刷新已上传分片数。
 func (s *FileService) MarkChunkUploaded(ctx context.Context, task model.UploadTask, uploadID string, chunkIndex int, chunkSize int64, chunkPath string) error {
+	if s.fileRepo != nil {
+		return s.fileRepo.UpsertUploadChunkAndRefreshProgress(ctx, task.ID, uploadID, chunkIndex, chunkSize, chunkPath)
+	}
+
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var row model.UploadChunk
 		err := tx.Where("upload_id = ? AND chunk_index = ?", uploadID, chunkIndex).First(&row).Error
@@ -516,7 +558,16 @@ func (s *FileService) PrepareCompleteUpload(ctx context.Context, uid int64, uplo
 	}
 
 	var task model.UploadTask
-	if err := s.db.WithContext(ctx).Where("upload_id = ?", uploadID).First(&task).Error; err != nil {
+	if s.fileRepo != nil {
+		t, err := s.fileRepo.GetUploadTaskByUploadID(ctx, uploadID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return FileUploadTaskSnapshot{}, ErrUploadTaskNotFound
+			}
+			return FileUploadTaskSnapshot{}, err
+		}
+		task = t
+	} else if err := s.db.WithContext(ctx).Where("upload_id = ?", uploadID).First(&task).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return FileUploadTaskSnapshot{}, ErrUploadTaskNotFound
 		}
@@ -532,15 +583,29 @@ func (s *FileService) PrepareCompleteUpload(ctx context.Context, uid int64, uplo
 		return FileUploadTaskSnapshot{}, ErrUploadMetaIncomplete
 	}
 
-	var chunks []model.UploadChunk
-	if err := s.db.WithContext(ctx).
-		Where("upload_id = ? AND status = 1", uploadID).
-		Order("chunk_index ASC").
-		Find(&chunks).Error; err != nil {
-		return FileUploadTaskSnapshot{}, err
+	if s.fileRepo != nil {
+		doneCount, err := s.fileRepo.CountDoneUploadChunks(ctx, uploadID)
+		if err != nil {
+			return FileUploadTaskSnapshot{}, err
+		}
+		if int(doneCount) != *task.TotalChunks {
+			return FileUploadTaskSnapshot{}, ErrChunksNotComplete
+		}
+	} else {
+		var chunks []model.UploadChunk
+		if err := s.db.WithContext(ctx).
+			Where("upload_id = ? AND status = 1", uploadID).
+			Order("chunk_index ASC").
+			Find(&chunks).Error; err != nil {
+			return FileUploadTaskSnapshot{}, err
+		}
+		if len(chunks) != *task.TotalChunks {
+			return FileUploadTaskSnapshot{}, ErrChunksNotComplete
+		}
 	}
-	if len(chunks) != *task.TotalChunks {
-		return FileUploadTaskSnapshot{}, ErrChunksNotComplete
+
+	if task.TotalSize == nil || task.ChunkSize == nil || task.TotalChunks == nil {
+		return FileUploadTaskSnapshot{}, ErrUploadMetaIncomplete
 	}
 
 	return FileUploadTaskSnapshot{Task: task, TotalSize: *task.TotalSize, ChunkSize: *task.ChunkSize, TotalChunk: *task.TotalChunks}, nil
@@ -548,6 +613,15 @@ func (s *FileService) PrepareCompleteUpload(ctx context.Context, uid int64, uplo
 
 // CompleteUpload 完成上传后写入 storage/file 及任务状态。
 func (s *FileService) CompleteUpload(ctx context.Context, uid int64, parentID int64, uploadID string, snapshot FileUploadTaskSnapshot, storagePath string, mergedSize int64, fileHash string, clientIP string) (model.File, error) {
+	if s.fileRepo != nil {
+		createdFile, err := s.fileRepo.CompleteUploadPersist(ctx, uid, parentID, uploadID, snapshot.Task, snapshot.TotalChunk, storagePath, mergedSize, fileHash)
+		if err != nil {
+			return model.File{}, err
+		}
+		_ = s.logOperation(ctx, uid, &createdFile.ID, "upload_complete", "success", fmt.Sprintf("upload_id=%s", uploadID), clientIP)
+		return createdFile, nil
+	}
+
 	var createdFile model.File
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		storageID, err := ensureStorageInService(tx, fileHash, storagePath, mergedSize)
@@ -597,7 +671,16 @@ func (s *FileService) CompleteUpload(ctx context.Context, uid int64, parentID in
 
 // UploadProgress 查询上传进度。
 func (s *FileService) UploadProgress(ctx context.Context, uid int64, uploadID string) (FileUploadProgressResult, error) {
-	task, uploadedChunks, err := s.getUploadTaskAndChunks(ctx, uid, uploadID)
+	var (
+		task           model.UploadTask
+		uploadedChunks []int
+		err            error
+	)
+	if s.fileRepo != nil {
+		task, uploadedChunks, err = s.fileRepo.GetUploadTaskAndUploadedChunkIndexes(ctx, uid, uploadID)
+	} else {
+		task, uploadedChunks, err = s.getUploadTaskAndChunks(ctx, uid, uploadID)
+	}
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return FileUploadProgressResult{}, ErrUploadTaskNotFound
@@ -628,15 +711,7 @@ func (s *FileService) UploadProgress(ctx context.Context, uid int64, uploadID st
 		progress = float64(len(uploadedChunks)) * 100 / float64(totalChunks)
 	}
 
-	return FileUploadProgressResult{
-		UploadID:       task.UploadID,
-		Status:         task.Status,
-		UploadedCount:  len(uploadedChunks),
-		TotalChunks:    totalChunks,
-		UploadedChunks: uploadedChunks,
-		MissingChunks:  missingChunks,
-		Progress:       progress,
-	}, nil
+	return FileUploadProgressResult{UploadID: task.UploadID, Status: task.Status, UploadedCount: len(uploadedChunks), TotalChunks: totalChunks, UploadedChunks: uploadedChunks, MissingChunks: missingChunks, Progress: progress}, nil
 }
 
 // GetAccessibleFile 查询可访问文件（不包含 storage 校验）。
