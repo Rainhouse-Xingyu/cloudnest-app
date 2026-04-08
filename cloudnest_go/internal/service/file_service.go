@@ -205,6 +205,23 @@ func (s *FileService) CreateFolder(ctx context.Context, uid int64, name string, 
 		}
 	}
 
+	if s.fileRepo != nil {
+		existed, err := s.fileRepo.HasActiveNameConflict(ctx, parentID, name, nil)
+		if err != nil {
+			return model.File{}, err
+		}
+		if existed {
+			return model.File{}, ErrFileNameConflict
+		}
+
+		folder, err := s.fileRepo.CreateFolderRecord(ctx, uid, name, parentID)
+		if err != nil {
+			return model.File{}, err
+		}
+		_ = s.logOperation(ctx, uid, &folder.ID, "create_folder", "success", fmt.Sprintf("parent_id=%d", parentID), clientIP)
+		return folder, nil
+	}
+
 	var existed int64
 	err := s.db.WithContext(ctx).
 		Model(&model.File{}).
@@ -248,6 +265,24 @@ func (s *FileService) RenameFile(ctx context.Context, uid int64, fileID int64, n
 		return model.File{}, err
 	}
 
+	if s.fileRepo != nil {
+		excludeID := f.ID
+		existed, err := s.fileRepo.HasActiveNameConflict(ctx, f.ParentID, name, &excludeID)
+		if err != nil {
+			return model.File{}, err
+		}
+		if existed {
+			return model.File{}, ErrFileNameConflict
+		}
+
+		if err := s.fileRepo.UpdateFileName(ctx, f.ID, name); err != nil {
+			return model.File{}, err
+		}
+		f.Filename = name
+		_ = s.logOperation(ctx, uid, &f.ID, "rename", "success", "renamed file", clientIP)
+		return f, nil
+	}
+
 	var existed int64
 	err = s.db.WithContext(ctx).
 		Model(&model.File{}).
@@ -288,16 +323,29 @@ func (s *FileService) DeleteFile(ctx context.Context, uid int64, fileID int64, c
 
 	if f.IsFolder == 1 {
 		var childCount int64
-		err := s.db.WithContext(ctx).
-			Model(&model.File{}).
-			Where("parent_id = ? AND is_deleted = 0", fileID).
-			Count(&childCount).Error
+		var err error
+		if s.fileRepo != nil {
+			childCount, err = s.fileRepo.CountActiveChildren(ctx, fileID)
+		} else {
+			err = s.db.WithContext(ctx).
+				Model(&model.File{}).
+				Where("parent_id = ? AND is_deleted = 0", fileID).
+				Count(&childCount).Error
+		}
 		if err != nil {
 			return err
 		}
 		if childCount > 0 {
 			return ErrFileFolderNotEmpty
 		}
+	}
+
+	if s.fileRepo != nil {
+		if err := s.fileRepo.SoftDeleteFileWithLivePhotoCleanup(ctx, f.ID); err != nil {
+			return err
+		}
+		_ = s.logOperation(ctx, uid, &f.ID, "delete", "success", "moved to recycle bin", clientIP)
+		return nil
 	}
 
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -659,6 +707,30 @@ func (s *FileService) MoveFiles(ctx context.Context, uid int64, fileIDs []int64,
 		return nil, ErrFileInvalidParentID
 	}
 
+	if s.fileRepo != nil {
+		updated, err := s.fileRepo.MoveFiles(ctx, uid, fileIDs, targetParentID)
+		if err != nil {
+			switch {
+			case errors.Is(err, contract.ErrForbidden):
+				return nil, ErrFilePermissionDenied
+			case errors.Is(err, contract.ErrTargetNotFound):
+				return nil, ErrTargetFolderNotFound
+			case errors.Is(err, contract.ErrTargetNotFolder):
+				return nil, ErrTargetNotFolder
+			case errors.Is(err, contract.ErrCannotMoveToItself):
+				return nil, ErrCannotMoveToItself
+			case errors.Is(err, contract.ErrCannotMoveToDesc):
+				return nil, ErrCannotMoveToDesc
+			case errors.Is(err, contract.ErrNotFound):
+				return nil, ErrFileNotFound
+			default:
+				return nil, err
+			}
+		}
+		_ = s.logOperation(ctx, uid, nil, "move", "success", fmt.Sprintf("count=%d,target_parent=%d", len(updated), targetParentID), clientIP)
+		return updated, nil
+	}
+
 	if targetParentID > 0 {
 		canWrite, err := s.canAccessFile(ctx, uid, targetParentID, true)
 		if err != nil {
@@ -743,6 +815,22 @@ func (s *FileService) CopyFiles(ctx context.Context, uid int64, fileIDs []int64,
 		return nil, ErrFileInvalidParentID
 	}
 
+	if s.fileRepo != nil {
+		newIDs, err := s.fileRepo.CopyFiles(ctx, uid, fileIDs, targetParentID)
+		if err != nil {
+			switch {
+			case errors.Is(err, contract.ErrForbidden):
+				return nil, ErrFilePermissionDenied
+			case errors.Is(err, contract.ErrNotFound):
+				return nil, ErrFileNotFound
+			default:
+				return nil, err
+			}
+		}
+		_ = s.logOperation(ctx, uid, nil, "copy", "success", fmt.Sprintf("count=%d,target_parent=%d", len(newIDs), targetParentID), clientIP)
+		return newIDs, nil
+	}
+
 	if targetParentID > 0 {
 		canWrite, err := s.canAccessFile(ctx, uid, targetParentID, true)
 		if err != nil {
@@ -807,6 +895,22 @@ func (s *FileService) ListRecycleBin(ctx context.Context, uid int64) ([]model.Fi
 
 // RestoreFromRecycleBin 恢复回收站条目。
 func (s *FileService) RestoreFromRecycleBin(ctx context.Context, uid int64, fileID int64, clientIP string) (model.File, error) {
+	if s.fileRepo != nil {
+		restored, err := s.fileRepo.RestoreFromRecycleBin(ctx, uid, fileID)
+		if err != nil {
+			switch {
+			case errors.Is(err, contract.ErrRecycleItemNotFound):
+				return model.File{}, ErrRecycleItemNotFound
+			case errors.Is(err, contract.ErrForbidden):
+				return model.File{}, ErrFilePermissionDenied
+			default:
+				return model.File{}, err
+			}
+		}
+		_ = s.logOperation(ctx, uid, &restored.ID, "restore", "success", "restore from recycle bin", clientIP)
+		return restored, nil
+	}
+
 	var restored model.File
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.First(&restored, "id = ? AND is_deleted = 1", fileID).Error; err != nil {
@@ -841,6 +945,22 @@ func (s *FileService) RestoreFromRecycleBin(ctx context.Context, uid int64, file
 
 // PermanentDeleteFromRecycleBin 彻底删除回收站条目。
 func (s *FileService) PermanentDeleteFromRecycleBin(ctx context.Context, uid int64, fileID int64, clientIP string) error {
+	if s.fileRepo != nil {
+		err := s.fileRepo.PermanentDeleteFromRecycleBin(ctx, uid, fileID)
+		if err != nil {
+			switch {
+			case errors.Is(err, contract.ErrRecycleItemNotFound):
+				return ErrRecycleItemNotFound
+			case errors.Is(err, contract.ErrForbidden):
+				return ErrFilePermissionDenied
+			default:
+				return err
+			}
+		}
+		_ = s.logOperation(ctx, uid, &fileID, "permanent_delete", "success", "delete from recycle bin", clientIP)
+		return nil
+	}
+
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var root model.File
 		if err := tx.First(&root, "id = ? AND is_deleted = 1", fileID).Error; err != nil {

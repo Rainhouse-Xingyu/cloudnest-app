@@ -34,4 +34,13 @@ type FileRepository interface {
 	CanAccessFile(ctx context.Context, userID int64, fileID int64, requireWrite bool) (bool, error)
 	GetActiveFileByID(ctx context.Context, fileID int64) (model.File, error)
 	GetStorageByID(ctx context.Context, storageID int64) (model.Storage, error)
+	HasActiveNameConflict(ctx context.Context, parentID int64, name string, excludeID *int64) (bool, error)
+	CreateFolderRecord(ctx context.Context, uid int64, name string, parentID int64) (model.File, error)
+	UpdateFileName(ctx context.Context, fileID int64, name string) error
+	CountActiveChildren(ctx context.Context, parentID int64) (int64, error)
+	SoftDeleteFileWithLivePhotoCleanup(ctx context.Context, fileID int64) error
+	MoveFiles(ctx context.Context, uid int64, fileIDs []int64, targetParentID int64) ([]int64, error)
+	CopyFiles(ctx context.Context, uid int64, fileIDs []int64, targetParentID int64) ([]int64, error)
+	RestoreFromRecycleBin(ctx context.Context, uid int64, fileID int64) (model.File, error)
+	PermanentDeleteFromRecycleBin(ctx context.Context, uid int64, fileID int64) error
 }

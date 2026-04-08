@@ -2,8 +2,10 @@ package mysql
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -123,6 +125,243 @@ func (r *FileRepo) GetStorageByID(ctx context.Context, storageID int64) (model.S
 	return storage, nil
 }
 
+func (r *FileRepo) HasActiveNameConflict(ctx context.Context, parentID int64, name string, excludeID *int64) (bool, error) {
+	q := r.db.WithContext(ctx).
+		Model(&model.File{}).
+		Where("parent_id = ? AND filename = ? AND is_deleted = 0", parentID, name)
+	if excludeID != nil {
+		q = q.Where("id <> ?", *excludeID)
+	}
+
+	var count int64
+	if err := q.Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func (r *FileRepo) CreateFolderRecord(ctx context.Context, uid int64, name string, parentID int64) (model.File, error) {
+	folder := model.File{UserID: uid, Filename: name, ParentID: parentID, IsFolder: 1}
+	if err := r.db.WithContext(ctx).Create(&folder).Error; err != nil {
+		return model.File{}, err
+	}
+	return folder, nil
+}
+
+func (r *FileRepo) UpdateFileName(ctx context.Context, fileID int64, name string) error {
+	return r.db.WithContext(ctx).Model(&model.File{}).Where("id = ?", fileID).Update("filename", name).Error
+}
+
+func (r *FileRepo) CountActiveChildren(ctx context.Context, parentID int64) (int64, error) {
+	var childCount int64
+	err := r.db.WithContext(ctx).
+		Model(&model.File{}).
+		Where("parent_id = ? AND is_deleted = 0", parentID).
+		Count(&childCount).Error
+	if err != nil {
+		return 0, err
+	}
+	return childCount, nil
+}
+
+func (r *FileRepo) SoftDeleteFileWithLivePhotoCleanup(ctx context.Context, fileID int64) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&model.File{}).Where("id = ?", fileID).Update("is_deleted", 1).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("image_file_id IN ? OR video_file_id IN ?", []int64{fileID}, []int64{fileID}).Delete(&model.LivePhoto{}).Error; err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
+func (r *FileRepo) MoveFiles(ctx context.Context, uid int64, fileIDs []int64, targetParentID int64) ([]int64, error) {
+	if targetParentID > 0 {
+		canWrite, err := canAccessFileForFileRepo(ctx, r.db, uid, targetParentID, true)
+		if err != nil {
+			return nil, err
+		}
+		if !canWrite {
+			return nil, contract.ErrForbidden
+		}
+
+		var target model.File
+		if err := r.db.WithContext(ctx).First(&target, "id = ? AND is_deleted = 0", targetParentID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, contract.ErrTargetNotFound
+			}
+			return nil, err
+		}
+		if target.IsFolder != 1 {
+			return nil, contract.ErrTargetNotFolder
+		}
+	}
+
+	updated := make([]int64, 0, len(fileIDs))
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for _, fileID := range uniqueInt64ForFileRepo(fileIDs) {
+			if fileID <= 0 {
+				return contract.ErrInvalidInput
+			}
+
+			canWrite, err := canAccessFileForFileRepo(tx.Statement.Context, tx, uid, fileID, true)
+			if err != nil {
+				return err
+			}
+			if !canWrite {
+				return contract.ErrForbidden
+			}
+
+			var src model.File
+			if err := tx.First(&src, "id = ? AND is_deleted = 0", fileID).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return contract.ErrNotFound
+				}
+				return err
+			}
+
+			if src.ID == targetParentID {
+				return contract.ErrCannotMoveToItself
+			}
+
+			if src.IsFolder == 1 && targetParentID > 0 {
+				isDescendant, err := isDescendantFolderForFileRepo(tx.Statement.Context, tx, targetParentID, src.ID)
+				if err != nil {
+					return err
+				}
+				if isDescendant {
+					return contract.ErrCannotMoveToDesc
+				}
+			}
+
+			finalName, err := ensureUniqueFilenameForFileRepo(tx, targetParentID, src.Filename)
+			if err != nil {
+				return err
+			}
+
+			if err := tx.Model(&src).Updates(map[string]interface{}{"parent_id": targetParentID, "filename": finalName}).Error; err != nil {
+				return err
+			}
+			updated = append(updated, src.ID)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return updated, nil
+}
+
+func (r *FileRepo) CopyFiles(ctx context.Context, uid int64, fileIDs []int64, targetParentID int64) ([]int64, error) {
+	if targetParentID > 0 {
+		canWrite, err := canAccessFileForFileRepo(ctx, r.db, uid, targetParentID, true)
+		if err != nil {
+			return nil, err
+		}
+		if !canWrite {
+			return nil, contract.ErrForbidden
+		}
+	}
+
+	newIDs := make([]int64, 0)
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for _, fileID := range uniqueInt64ForFileRepo(fileIDs) {
+			if fileID <= 0 {
+				return contract.ErrInvalidInput
+			}
+
+			canRead, err := canAccessFileForFileRepo(tx.Statement.Context, tx, uid, fileID, false)
+			if err != nil {
+				return err
+			}
+			if !canRead {
+				return contract.ErrForbidden
+			}
+
+			var src model.File
+			if err := tx.First(&src, "id = ? AND is_deleted = 0", fileID).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return contract.ErrNotFound
+				}
+				return err
+			}
+
+			copiedID, err := copyNodeForFileRepo(tx, uid, src, targetParentID)
+			if err != nil {
+				return err
+			}
+			newIDs = append(newIDs, copiedID)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return newIDs, nil
+}
+
+func (r *FileRepo) RestoreFromRecycleBin(ctx context.Context, uid int64, fileID int64) (model.File, error) {
+	var restored model.File
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.First(&restored, "id = ? AND is_deleted = 1", fileID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return contract.ErrRecycleItemNotFound
+			}
+			return err
+		}
+		if restored.UserID != uid {
+			return contract.ErrForbidden
+		}
+
+		finalName, err := ensureUniqueFilenameForFileRepo(tx, restored.ParentID, restored.Filename)
+		if err != nil {
+			return err
+		}
+
+		if err := tx.Model(&restored).Updates(map[string]interface{}{"is_deleted": 0, "filename": finalName}).Error; err != nil {
+			return err
+		}
+		restored.Filename = finalName
+		restored.IsDeleted = 0
+		return nil
+	})
+	if err != nil {
+		return model.File{}, err
+	}
+
+	return restored, nil
+}
+
+func (r *FileRepo) PermanentDeleteFromRecycleBin(ctx context.Context, uid int64, fileID int64) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var root model.File
+		if err := tx.First(&root, "id = ? AND is_deleted = 1", fileID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return contract.ErrRecycleItemNotFound
+			}
+			return err
+		}
+		if root.UserID != uid {
+			return contract.ErrForbidden
+		}
+
+		ids, err := collectDescendantIDsForFileRepo(tx.Statement.Context, tx, root.ID)
+		if err != nil {
+			return err
+		}
+		ids = append(ids, root.ID)
+
+		if err := tx.Where("image_file_id IN ? OR video_file_id IN ?", ids, ids).Delete(&model.LivePhoto{}).Error; err != nil {
+			return err
+		}
+
+		return tx.Where("id IN ?", ids).Delete(&model.File{}).Error
+	})
+}
+
 func (r *FileRepo) ResolveValidShare(ctx context.Context, code string) (model.Share, model.File, error) {
 	code = strings.TrimSpace(code)
 	if code == "" {
@@ -240,6 +479,122 @@ func canAccessFileForFileRepo(ctx context.Context, db *gorm.DB, userID int64, fi
 		return false, err
 	}
 	return count > 0, nil
+}
+
+func ensureUniqueFilenameForFileRepo(tx *gorm.DB, parentID int64, baseName string) (string, error) {
+	finalName := baseName
+	for i := 0; i < 100; i++ {
+		var count int64
+		err := tx.Model(&model.File{}).
+			Where("parent_id = ? AND filename = ? AND is_deleted = 0", parentID, finalName).
+			Count(&count).Error
+		if err != nil {
+			return "", err
+		}
+		if count == 0 {
+			return finalName, nil
+		}
+		finalName = appendNameSuffixForFileRepo(baseName, time.Now().Format("20060102150405"))
+	}
+	return "", fmt.Errorf("failed to allocate unique filename")
+}
+
+func appendNameSuffixForFileRepo(name string, suffix string) string {
+	ext := filepath.Ext(name)
+	base := strings.TrimSuffix(name, ext)
+	if ext == "" {
+		return fmt.Sprintf("%s_%s", base, suffix)
+	}
+	return fmt.Sprintf("%s_%s%s", base, suffix, ext)
+}
+
+func isDescendantFolderForFileRepo(ctx context.Context, db *gorm.DB, candidateID int64, ancestorID int64) (bool, error) {
+	if candidateID <= 0 || ancestorID <= 0 {
+		return false, nil
+	}
+
+	current := candidateID
+	for current > 0 {
+		if current == ancestorID {
+			return true, nil
+		}
+		var f model.File
+		err := db.WithContext(ctx).Select("id", "parent_id").First(&f, "id = ? AND is_deleted = 0", current).Error
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return false, nil
+			}
+			return false, err
+		}
+		if f.ParentID == current {
+			return false, nil
+		}
+		current = f.ParentID
+	}
+
+	return false, nil
+}
+
+func collectDescendantIDsForFileRepo(ctx context.Context, db *gorm.DB, rootID int64) ([]int64, error) {
+	ids := make([]int64, 0)
+	queue := []int64{rootID}
+
+	for len(queue) > 0 {
+		parentID := queue[0]
+		queue = queue[1:]
+
+		var children []model.File
+		err := db.WithContext(ctx).Select("id", "is_folder").Where("parent_id = ?", parentID).Find(&children).Error
+		if err != nil {
+			return nil, err
+		}
+
+		for _, child := range children {
+			ids = append(ids, child.ID)
+			if child.IsFolder == 1 {
+				queue = append(queue, child.ID)
+			}
+		}
+	}
+
+	return ids, nil
+}
+
+func copyNodeForFileRepo(tx *gorm.DB, newOwnerID int64, src model.File, targetParentID int64) (int64, error) {
+	finalName, err := ensureUniqueFilenameForFileRepo(tx, targetParentID, src.Filename)
+	if err != nil {
+		return 0, err
+	}
+
+	newNode := model.File{
+		UserID:         newOwnerID,
+		Filename:       finalName,
+		ParentID:       targetParentID,
+		IsFolder:       src.IsFolder,
+		FileType:       src.FileType,
+		Size:           src.Size,
+		StorageID:      src.StorageID,
+		WorkspaceID:    src.WorkspaceID,
+		CurrentVersion: src.CurrentVersion,
+		IsDeleted:      0,
+	}
+	if err := tx.Create(&newNode).Error; err != nil {
+		return 0, err
+	}
+
+	if src.IsFolder == 1 {
+		var children []model.File
+		if err := tx.Where("parent_id = ? AND is_deleted = 0", src.ID).Order("id ASC").Find(&children).Error; err != nil {
+			return 0, err
+		}
+		for _, child := range children {
+			if _, err := copyNodeForFileRepo(tx, newOwnerID, child, newNode.ID); err != nil {
+				return 0, err
+			}
+		}
+	}
+
+	return newNode.ID, nil
 }
 
 var _ contract.FileRepository = (*FileRepo)(nil)
