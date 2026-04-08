@@ -135,6 +135,13 @@ type FileBatchDownloadEntry struct {
 	StoragePath string
 }
 
+// FileFolderZipEntry 表示目录打包中的单个条目。
+type FileFolderZipEntry struct {
+	RelPath     string
+	StoragePath string
+	IsDir       bool
+}
+
 // ListFiles 返回指定目录下可读文件列表。
 func (s *FileService) ListFiles(ctx context.Context, uid int64, parentID int64) ([]model.File, error) {
 	if parentID < 0 {
@@ -602,10 +609,6 @@ func (s *FileService) PrepareCompleteUpload(ctx context.Context, uid int64, uplo
 		if len(chunks) != *task.TotalChunks {
 			return FileUploadTaskSnapshot{}, ErrChunksNotComplete
 		}
-	}
-
-	if task.TotalSize == nil || task.ChunkSize == nil || task.TotalChunks == nil {
-		return FileUploadTaskSnapshot{}, ErrUploadMetaIncomplete
 	}
 
 	return FileUploadTaskSnapshot{Task: task, TotalSize: *task.TotalSize, ChunkSize: *task.ChunkSize, TotalChunk: *task.TotalChunks}, nil
@@ -1172,12 +1175,20 @@ func (s *FileService) ResolvePublicShareDownload(ctx context.Context, code strin
 		return model.File{}, nil, ErrStorageNotFound
 	}
 
-	var storage model.Storage
-	if err := s.db.WithContext(ctx).First(&storage, "id = ?", *file.StorageID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+	var (
+		storage    model.Storage
+		storageErr error
+	)
+	if s.fileRepo != nil {
+		storage, storageErr = s.fileRepo.GetStorageByID(ctx, *file.StorageID)
+	} else {
+		storageErr = s.db.WithContext(ctx).First(&storage, "id = ?", *file.StorageID).Error
+	}
+	if storageErr != nil {
+		if errors.Is(storageErr, gorm.ErrRecordNotFound) {
 			return model.File{}, nil, ErrStorageNotFound
 		}
-		return model.File{}, nil, err
+		return model.File{}, nil, storageErr
 	}
 	if _, err := os.Stat(storage.FilePath); err != nil {
 		return model.File{}, nil, ErrPhysicalFileNotFound
@@ -1416,6 +1427,319 @@ func (s *FileService) ExportOperationLogs(ctx context.Context, uid int64, isAdmi
 	return rows, nil
 }
 
+// GetStorageByID 按存储 ID 获取存储记录。
+func (s *FileService) GetStorageByID(ctx context.Context, storageID int64) (model.Storage, error) {
+	if storageID <= 0 {
+		return model.Storage{}, ErrStorageNotFound
+	}
+
+	if s.fileRepo != nil {
+		storage, err := s.fileRepo.GetStorageByID(ctx, storageID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return model.Storage{}, ErrStorageNotFound
+			}
+			return model.Storage{}, err
+		}
+		return storage, nil
+	}
+
+	var storage model.Storage
+	if err := s.db.WithContext(ctx).First(&storage, "id = ?", storageID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return model.Storage{}, ErrStorageNotFound
+		}
+		return model.Storage{}, err
+	}
+	return storage, nil
+}
+
+// RecordOperation 写入操作日志。
+func (s *FileService) RecordOperation(ctx context.Context, userID int64, fileID *int64, action string, status string, detail string, clientIP string) error {
+	return s.logOperation(ctx, userID, fileID, action, status, detail, clientIP)
+}
+
+// BatchDeleteFiles 批量删除文件或目录（移动到回收站）。
+func (s *FileService) BatchDeleteFiles(ctx context.Context, uid int64, fileIDs []int64, clientIP string) ([]int64, map[string]string) {
+	ids := uniqueInt64InService(fileIDs)
+	deletedIDs := make([]int64, 0, len(ids))
+	failed := make(map[string]string)
+
+	for _, fileID := range ids {
+		if fileID <= 0 {
+			failed[strconv.FormatInt(fileID, 10)] = "invalid file id"
+			continue
+		}
+
+		err := s.DeleteFile(ctx, uid, fileID, clientIP)
+		if err != nil {
+			switch {
+			case errors.Is(err, ErrFilePermissionDenied):
+				failed[strconv.FormatInt(fileID, 10)] = "permission denied"
+			case errors.Is(err, ErrFileNotFound):
+				failed[strconv.FormatInt(fileID, 10)] = "file not found"
+			case errors.Is(err, ErrFileFolderNotEmpty):
+				failed[strconv.FormatInt(fileID, 10)] = "folder is not empty"
+			default:
+				failed[strconv.FormatInt(fileID, 10)] = "delete failed"
+			}
+			continue
+		}
+
+		deletedIDs = append(deletedIDs, fileID)
+	}
+
+	_ = s.logOperation(ctx, uid, nil, "batch_delete", "success", fmt.Sprintf("requested=%d,deleted=%d", len(ids), len(deletedIDs)), clientIP)
+	return deletedIDs, failed
+}
+
+// CollectFolderZipEntries 收集目录下载所需的 zip 条目。
+func (s *FileService) CollectFolderZipEntries(ctx context.Context, root model.File) ([]FileFolderZipEntry, error) {
+	type queueNode struct {
+		FolderID int64
+		RelPath  string
+	}
+
+	entries := make([]FileFolderZipEntry, 0)
+	storageCache := make(map[int64]model.Storage)
+	queue := []queueNode{{FolderID: root.ID, RelPath: sanitizeFileNameInService(root.Filename)}}
+
+	for len(queue) > 0 {
+		node := queue[0]
+		queue = queue[1:]
+
+		var (
+			children []model.File
+			err      error
+		)
+		if s.fileRepo != nil {
+			children, err = s.fileRepo.ListActiveChildrenByParent(ctx, node.FolderID)
+		} else {
+			err = s.db.WithContext(ctx).
+				Where("parent_id = ? AND is_deleted = 0", node.FolderID).
+				Order("is_folder DESC, filename ASC").
+				Find(&children).Error
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		if len(children) == 0 {
+			entries = append(entries, FileFolderZipEntry{RelPath: node.RelPath, IsDir: true})
+			continue
+		}
+
+		for _, child := range children {
+			childRelPath := filepath.ToSlash(filepath.Join(node.RelPath, sanitizeFileNameInService(child.Filename)))
+			if child.IsFolder == 1 {
+				queue = append(queue, queueNode{FolderID: child.ID, RelPath: childRelPath})
+				continue
+			}
+			if child.StorageID == nil {
+				continue
+			}
+
+			storage, ok := storageCache[*child.StorageID]
+			if !ok {
+				storage, err = s.GetStorageByID(ctx, *child.StorageID)
+				if err != nil {
+					if errors.Is(err, ErrStorageNotFound) {
+						continue
+					}
+					return nil, err
+				}
+				storageCache[*child.StorageID] = storage
+			}
+
+			if _, err := os.Stat(storage.FilePath); err != nil {
+				continue
+			}
+			entries = append(entries, FileFolderZipEntry{RelPath: childRelPath, StoragePath: storage.FilePath})
+		}
+	}
+
+	return entries, nil
+}
+
+// TryAutoBindLivePhotoForFile 尝试将当前文件与同目录同名异类型文件自动绑定。
+func (s *FileService) TryAutoBindLivePhotoForFile(ctx context.Context, userID int64, file model.File, clientIP string) error {
+	if file.IsFolder == 1 || file.IsDeleted == 1 {
+		return nil
+	}
+
+	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(file.Filename), "."))
+	isImage := isLivePhotoImageExtInService(ext)
+	isVideo := isLivePhotoVideoExtInService(ext)
+	if !isImage && !isVideo {
+		return nil
+	}
+
+	base := strings.TrimSpace(strings.TrimSuffix(file.Filename, filepath.Ext(file.Filename)))
+	if base == "" {
+		return nil
+	}
+
+	var (
+		matched *model.File
+		err     error
+	)
+	if s.fileRepo != nil {
+		matched, err = s.fileRepo.FindLivePhotoAutoBindCandidate(ctx, file.ParentID, file.ID, base, isImage)
+		if err != nil {
+			return err
+		}
+	} else {
+		var siblingFiles []model.File
+		if err := s.db.WithContext(ctx).
+			Where("parent_id = ? AND is_deleted = 0 AND is_folder = 0 AND id <> ?", file.ParentID, file.ID).
+			Order("id ASC").
+			Find(&siblingFiles).Error; err != nil {
+			return err
+		}
+		for i := range siblingFiles {
+			s := siblingFiles[i]
+			sBase := strings.TrimSpace(strings.TrimSuffix(s.Filename, filepath.Ext(s.Filename)))
+			if !strings.EqualFold(sBase, base) {
+				continue
+			}
+			sExt := strings.ToLower(strings.TrimPrefix(filepath.Ext(s.Filename), "."))
+			if isImage && isLivePhotoVideoExtInService(sExt) {
+				matched = &s
+				break
+			}
+			if isVideo && isLivePhotoImageExtInService(sExt) {
+				matched = &s
+				break
+			}
+		}
+	}
+	if matched == nil {
+		return nil
+	}
+
+	canWriteSelf, err := s.canAccessFile(ctx, userID, file.ID, true)
+	if err != nil || !canWriteSelf {
+		return err
+	}
+	canWriteOther, err := s.canAccessFile(ctx, userID, matched.ID, true)
+	if err != nil || !canWriteOther {
+		return err
+	}
+
+	imageID := file.ID
+	videoID := matched.ID
+	if isVideo {
+		imageID = matched.ID
+		videoID = file.ID
+	}
+
+	if s.fileRepo != nil {
+		return s.fileRepo.CreateLivePhotoAutoBindIfAbsent(ctx, userID, imageID, videoID, clientIP)
+	}
+
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var exists model.LivePhoto
+		lookupErr := tx.Where("image_file_id = ? OR video_file_id = ?", imageID, videoID).First(&exists).Error
+		if lookupErr == nil {
+			return nil
+		}
+		if !errors.Is(lookupErr, gorm.ErrRecordNotFound) {
+			return lookupErr
+		}
+
+		row := model.LivePhoto{ImageFileID: imageID, VideoFileID: videoID}
+		if err := tx.Create(&row).Error; err != nil {
+			low := strings.ToLower(err.Error())
+			if strings.Contains(low, "duplicate") || strings.Contains(low, "1062") {
+				return nil
+			}
+			return err
+		}
+
+		detail := fmt.Sprintf("live_photo_id=%d image_file_id=%d video_file_id=%d", row.ID, row.ImageFileID, row.VideoFileID)
+		if len(detail) > 500 {
+			detail = detail[:500]
+		}
+		uid := userID
+		fileID := row.ImageFileID
+		return tx.Create(&model.OperationLog{UserID: &uid, FileID: &fileID, Action: "live_photo_auto_bind", Status: "success", Detail: detail, ClientIP: strings.TrimSpace(clientIP)}).Error
+	})
+}
+
+// GetSystemSettingInt64 读取整数配置项。
+func (s *FileService) GetSystemSettingInt64(ctx context.Context, key string) (int64, bool, error) {
+	return s.getSystemSettingInt64(ctx, key)
+}
+
+// GetSystemSettingString 读取字符串配置项。
+func (s *FileService) GetSystemSettingString(ctx context.Context, key string) (string, bool, error) {
+	return s.getSystemSettingString(ctx, key)
+}
+
+// IsInPeakWindow 判断当前请求是否处于高峰时段。
+func (s *FileService) IsInPeakWindow(ctx context.Context, uid int64) (bool, error) {
+	enabled, start, end, err := s.ResolvePeakWindowSetting(ctx, uid)
+	if err != nil {
+		return false, err
+	}
+	if !enabled {
+		return false, nil
+	}
+	startMin, okStart := parseHHMMToMinuteInService(start)
+	endMin, okEnd := parseHHMMToMinuteInService(end)
+	if !okStart || !okEnd {
+		return false, nil
+	}
+
+	now := time.Now()
+	nowMin := now.Hour()*60 + now.Minute()
+	if startMin == endMin {
+		return true, nil
+	}
+	if startMin < endMin {
+		return nowMin >= startMin && nowMin < endMin, nil
+	}
+	return nowMin >= startMin || nowMin < endMin, nil
+}
+
+// ResolvePeakWindowSetting 解析用户或全局高峰时段配置。
+func (s *FileService) ResolvePeakWindowSetting(ctx context.Context, uid int64) (bool, string, string, error) {
+	if uid > 0 {
+		enabledKey := "peak_window_enabled_user_" + strconv.FormatInt(uid, 10)
+		startKey := "peak_window_start_user_" + strconv.FormatInt(uid, 10)
+		endKey := "peak_window_end_user_" + strconv.FormatInt(uid, 10)
+
+		if enabledVal, exists, err := s.getSystemSettingString(ctx, enabledKey); err != nil {
+			return false, "", "", err
+		} else if exists {
+			enabled := strings.TrimSpace(enabledVal) == "1"
+			startVal, _, errStart := s.getSystemSettingString(ctx, startKey)
+			if errStart != nil {
+				return false, "", "", errStart
+			}
+			endVal, _, errEnd := s.getSystemSettingString(ctx, endKey)
+			if errEnd != nil {
+				return false, "", "", errEnd
+			}
+			return enabled, startVal, endVal, nil
+		}
+	}
+
+	enabledGlobal, _, err := s.getSystemSettingInt64(ctx, "peak_window_enabled")
+	if err != nil {
+		return false, "", "", err
+	}
+	startGlobal, _, err := s.getSystemSettingString(ctx, "peak_window_start")
+	if err != nil {
+		return false, "", "", err
+	}
+	endGlobal, _, err := s.getSystemSettingString(ctx, "peak_window_end")
+	if err != nil {
+		return false, "", "", err
+	}
+	return enabledGlobal == 1, startGlobal, endGlobal, nil
+}
+
 func (s *FileService) canAccessFile(ctx context.Context, userID int64, fileID int64, requireWrite bool) (bool, error) {
 	if s.fileRepo != nil {
 		return s.fileRepo.CanAccessFile(ctx, userID, fileID, requireWrite)
@@ -1450,6 +1774,25 @@ func (s *FileService) canAccessFile(ctx context.Context, userID int64, fileID in
 }
 
 func (s *FileService) getSystemSettingInt64(ctx context.Context, key string) (int64, bool, error) {
+	if s.fileRepo != nil {
+		row, err := s.fileRepo.GetSystemSettingByKey(ctx, key)
+		if err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return 0, false, nil
+			}
+			return 0, false, err
+		}
+		v := strings.TrimSpace(row.SettingValue)
+		if v == "" {
+			return 0, false, nil
+		}
+		n, convErr := strconv.ParseInt(v, 10, 64)
+		if convErr != nil {
+			return 0, false, convErr
+		}
+		return n, true, nil
+	}
+
 	var row model.SystemSetting
 	err := s.db.WithContext(ctx).Where("setting_key = ?", key).First(&row).Error
 	if err != nil {
@@ -1467,6 +1810,29 @@ func (s *FileService) getSystemSettingInt64(ctx context.Context, key string) (in
 		return 0, false, convErr
 	}
 	return n, true, nil
+}
+
+func (s *FileService) getSystemSettingString(ctx context.Context, key string) (string, bool, error) {
+	if s.fileRepo != nil {
+		row, err := s.fileRepo.GetSystemSettingByKey(ctx, key)
+		if err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return "", false, nil
+			}
+			return "", false, err
+		}
+		return strings.TrimSpace(row.SettingValue), true, nil
+	}
+
+	var row model.SystemSetting
+	err := s.db.WithContext(ctx).Where("setting_key = ?", key).First(&row).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	return strings.TrimSpace(row.SettingValue), true, nil
 }
 
 func (s *FileService) logOperation(ctx context.Context, userID int64, fileID *int64, action string, status string, detail string, clientIP string) error {
@@ -1728,4 +2094,39 @@ func parseFlexibleTimeForFile(raw string) (time.Time, error) {
 		}
 	}
 	return time.Time{}, fmt.Errorf("invalid time format")
+}
+
+func parseHHMMToMinuteInService(v string) (int, bool) {
+	v = strings.TrimSpace(v)
+	if len(v) != 5 || v[2] != ':' {
+		return 0, false
+	}
+	h, errH := strconv.Atoi(v[:2])
+	m, errM := strconv.Atoi(v[3:])
+	if errH != nil || errM != nil {
+		return 0, false
+	}
+	if h < 0 || h > 23 || m < 0 || m > 59 {
+		return 0, false
+	}
+	return h*60 + m, true
+}
+
+func sanitizeFileNameInService(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "unnamed.bin"
+	}
+	replacer := strings.NewReplacer("/", "_", "\\", "_", "..", "_", " ", "_")
+	return replacer.Replace(name)
+}
+
+func isLivePhotoImageExtInService(ext string) bool {
+	images := map[string]bool{"jpg": true, "jpeg": true, "heic": true}
+	return images[ext]
+}
+
+func isLivePhotoVideoExtInService(ext string) bool {
+	videos := map[string]bool{"mov": true, "mp4": true, "m4v": true}
+	return videos[ext]
 }

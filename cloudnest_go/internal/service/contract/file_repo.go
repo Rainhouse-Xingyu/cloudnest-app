@@ -46,6 +46,8 @@ type FileRepository interface {
 	CanAccessFile(ctx context.Context, userID int64, fileID int64, requireWrite bool) (bool, error)
 	GetActiveFileByID(ctx context.Context, fileID int64) (model.File, error)
 	GetStorageByID(ctx context.Context, storageID int64) (model.Storage, error)
+	ListActiveChildrenByParent(ctx context.Context, parentID int64) ([]model.File, error)
+	GetSystemSettingByKey(ctx context.Context, key string) (model.SystemSetting, error)
 	HasActiveNameConflict(ctx context.Context, parentID int64, name string, excludeID *int64) (bool, error)
 	CreateFolderRecord(ctx context.Context, uid int64, name string, parentID int64) (model.File, error)
 	UpdateFileName(ctx context.Context, fileID int64, name string) error
@@ -66,4 +68,6 @@ type FileRepository interface {
 	RevokeShare(ctx context.Context, uid int64, code string) error
 	ListOperationLogs(ctx context.Context, uid int64, isAdmin bool, q FileOperationLogQuery) ([]model.OperationLog, int64, error)
 	ExportOperationLogs(ctx context.Context, uid int64, isAdmin bool, q FileOperationLogQuery) ([]model.OperationLog, error)
+	FindLivePhotoAutoBindCandidate(ctx context.Context, parentID int64, excludeID int64, baseName string, needVideo bool) (*model.File, error)
+	CreateLivePhotoAutoBindIfAbsent(ctx context.Context, userID int64, imageID int64, videoID int64, clientIP string) error
 }

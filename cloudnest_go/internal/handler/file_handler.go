@@ -477,19 +477,19 @@ func (h *FileHandler) triggerAsyncAutoAnalyze(file model.File, userID int64, cli
 		tags, desc, ocrText, err := h.buildAutoAnalyzeResult(ctx, ai, f)
 		if err != nil {
 			_ = ai.createAITask(ctx, uid, f.ID, "auto_analyze", "failed", err.Error())
-			_ = h.logOperation(ctx, uid, &f.ID, "ai_auto_analyze", "failed", truncateForLog(err.Error(), 500), ip)
+			_ = h.Svc.RecordOperation(ctx, uid, &f.ID, "ai_auto_analyze", "failed", truncateForLog(err.Error(), 500), ip)
 			return
 		}
 
 		if _, err := ai.upsertAIMetadata(ctx, f.ID, tags, desc, ocrText); err != nil {
 			_ = ai.createAITask(ctx, uid, f.ID, "auto_analyze", "failed", err.Error())
-			_ = h.logOperation(ctx, uid, &f.ID, "ai_auto_analyze", "failed", truncateForLog(err.Error(), 500), ip)
+			_ = h.Svc.RecordOperation(ctx, uid, &f.ID, "ai_auto_analyze", "failed", truncateForLog(err.Error(), 500), ip)
 			return
 		}
 
 		result := fmt.Sprintf("tags=%s | desc_len=%d | ocr_len=%d", tags, len(desc), len(ocrText))
 		_ = ai.createAITask(ctx, uid, f.ID, "auto_analyze", "success", truncateForLog(result, 500))
-		_ = h.logOperation(ctx, uid, &f.ID, "ai_auto_analyze", "success", truncateForLog(result, 500), ip)
+		_ = h.Svc.RecordOperation(ctx, uid, &f.ID, "ai_auto_analyze", "success", truncateForLog(result, 500), ip)
 	}(file, userID, clientIP)
 }
 
@@ -499,8 +499,8 @@ func (h *FileHandler) buildAutoAnalyzeResult(ctx context.Context, ai *AIHandler,
 		return "", "", "", fmt.Errorf("storage id missing")
 	}
 
-	var storage model.Storage
-	if err := h.DB.WithContext(ctx).First(&storage, "id = ?", *f.StorageID).Error; err != nil {
+	storage, err := h.Svc.GetStorageByID(ctx, *f.StorageID)
+	if err != nil {
 		return "", "", "", err
 	}
 
@@ -750,70 +750,7 @@ func (h *FileHandler) BatchDelete(c *gin.Context) {
 		return
 	}
 
-	deletedIDs := make([]int64, 0, len(ids))
-	failed := make(map[string]string)
-
-	for _, fileID := range ids {
-		if fileID <= 0 {
-			failed[strconv.FormatInt(fileID, 10)] = "invalid file id"
-			continue
-		}
-
-		canWrite, err := h.canAccessFile(c.Request.Context(), uid, fileID, true)
-		if err != nil {
-			failed[strconv.FormatInt(fileID, 10)] = "db error"
-			continue
-		}
-		if !canWrite {
-			failed[strconv.FormatInt(fileID, 10)] = "permission denied"
-			continue
-		}
-
-		var f model.File
-		if err := h.DB.WithContext(c.Request.Context()).First(&f, "id = ? AND is_deleted = 0", fileID).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				failed[strconv.FormatInt(fileID, 10)] = "file not found"
-			} else {
-				failed[strconv.FormatInt(fileID, 10)] = "db error"
-			}
-			continue
-		}
-
-		if f.IsFolder == 1 {
-			var childCount int64
-			err := h.DB.WithContext(c.Request.Context()).
-				Model(&model.File{}).
-				Where("parent_id = ? AND is_deleted = 0", fileID).
-				Count(&childCount).Error
-			if err != nil {
-				failed[strconv.FormatInt(fileID, 10)] = "db error"
-				continue
-			}
-			if childCount > 0 {
-				failed[strconv.FormatInt(fileID, 10)] = "folder is not empty"
-				continue
-			}
-		}
-
-		err = h.DB.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
-			if err := tx.Model(&f).Update("is_deleted", 1).Error; err != nil {
-				return err
-			}
-			// 批量删除时同步清理 Live Photo 关系，保证关系一致性。
-			if err := h.cleanupLivePhotoByFileIDs(tx, []int64{f.ID}); err != nil {
-				return err
-			}
-			return nil
-		})
-		if err != nil {
-			failed[strconv.FormatInt(fileID, 10)] = "delete failed"
-			continue
-		}
-
-		deletedIDs = append(deletedIDs, fileID)
-	}
-
-	_ = h.logOperation(c.Request.Context(), uid, nil, "batch_delete", "success", fmt.Sprintf("requested=%d,deleted=%d", len(ids), len(deletedIDs)), c.ClientIP())
+	deletedIDs, failed := h.Svc.BatchDeleteFiles(c.Request.Context(), uid, ids, c.ClientIP())
 
 	c.JSON(http.StatusOK, gin.H{
 		"deleted_ids": deletedIDs,
@@ -919,7 +856,7 @@ func (h *FileHandler) BatchDownload(c *gin.Context) {
 		return
 	}
 
-	_ = h.logOperation(c.Request.Context(), uid, nil, "batch_download", "success", fmt.Sprintf("count=%d", len(ids)), c.ClientIP())
+	_ = h.Svc.RecordOperation(c.Request.Context(), uid, nil, "batch_download", "success", fmt.Sprintf("count=%d", len(ids)), c.ClientIP())
 }
 
 // StreamVideo 视频流媒体播放接口，支持 Range 请求和拖拽进度。
@@ -1558,37 +1495,6 @@ func (h *FileHandler) PermanentDelete(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "permanently deleted"})
 }
 
-func (h *FileHandler) canAccessFile(ctx context.Context, userID int64, fileID int64, requireWrite bool) (bool, error) {
-	var f model.File
-	err := h.DB.WithContext(ctx).First(&f, "id = ? AND is_deleted = 0", fileID).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return false, nil
-		}
-		return false, err
-	}
-
-	if f.UserID == userID {
-		return true, nil
-	}
-
-	permissions := []string{"read", "write"}
-	if requireWrite {
-		permissions = []string{"write"}
-	}
-
-	var count int64
-	err = h.DB.WithContext(ctx).
-		Model(&model.FilePermission{}).
-		Where("file_id = ? AND user_id = ? AND permission IN ?", fileID, userID, permissions).
-		Count(&count).Error
-	if err != nil {
-		return false, err
-	}
-
-	return count > 0, nil
-}
-
 func parseInt64WithDefault(raw string, defaultValue int64) (int64, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -1601,137 +1507,9 @@ func generateUploadID(userID int64) string {
 	return fmt.Sprintf("u%d_%d", userID, time.Now().UnixNano())
 }
 
-// cleanupLivePhotoByFileIDs 根据文件 ID 清理 Live Photo 绑定关系。
-func (h *FileHandler) cleanupLivePhotoByFileIDs(tx *gorm.DB, fileIDs []int64) error {
-	ids := uniqueInt64(fileIDs)
-	if len(ids) == 0 {
-		return nil
-	}
-	return tx.Where("image_file_id IN ? OR video_file_id IN ?", ids, ids).Delete(&model.LivePhoto{}).Error
-}
-
 // tryAutoBindLivePhotoForFile 尝试将当前文件与同目录同名异类型文件自动配对绑定。
 func (h *FileHandler) tryAutoBindLivePhotoForFile(ctx context.Context, userID int64, file model.File, clientIP string) error {
-	if file.IsFolder == 1 || file.IsDeleted == 1 {
-		return nil
-	}
-
-	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(file.Filename), "."))
-	isImage := isLivePhotoImageExt(ext)
-	isVideo := isLivePhotoVideoExt(ext)
-	if !isImage && !isVideo {
-		return nil
-	}
-
-	base := strings.TrimSpace(strings.TrimSuffix(file.Filename, filepath.Ext(file.Filename)))
-	if base == "" {
-		return nil
-	}
-
-	var siblingFiles []model.File
-	if err := h.DB.WithContext(ctx).
-		Where("parent_id = ? AND is_deleted = 0 AND is_folder = 0 AND id <> ?", file.ParentID, file.ID).
-		Order("id ASC").
-		Find(&siblingFiles).Error; err != nil {
-		return err
-	}
-
-	var matched *model.File
-	for i := range siblingFiles {
-		s := siblingFiles[i]
-		sBase := strings.TrimSpace(strings.TrimSuffix(s.Filename, filepath.Ext(s.Filename)))
-		if !strings.EqualFold(sBase, base) {
-			continue
-		}
-		sExt := strings.ToLower(strings.TrimPrefix(filepath.Ext(s.Filename), "."))
-		if isImage && isLivePhotoVideoExt(sExt) {
-			matched = &s
-			break
-		}
-		if isVideo && isLivePhotoImageExt(sExt) {
-			matched = &s
-			break
-		}
-	}
-	if matched == nil {
-		return nil
-	}
-
-	// 自动绑定要求对双方文件都具备写权限。
-	canWriteSelf, err := h.canAccessFile(ctx, userID, file.ID, true)
-	if err != nil || !canWriteSelf {
-		return err
-	}
-	canWriteOther, err := h.canAccessFile(ctx, userID, matched.ID, true)
-	if err != nil || !canWriteOther {
-		return err
-	}
-
-	imageID := file.ID
-	videoID := matched.ID
-	if isVideo {
-		imageID = matched.ID
-		videoID = file.ID
-	}
-
-	return h.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var exists model.LivePhoto
-		err := tx.Where("image_file_id = ? OR video_file_id = ?", imageID, videoID).First(&exists).Error
-		if err == nil {
-			return nil
-		}
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
-		}
-
-		row := model.LivePhoto{ImageFileID: imageID, VideoFileID: videoID}
-		if err := tx.Create(&row).Error; err != nil {
-			if strings.Contains(strings.ToLower(err.Error()), "duplicate") || strings.Contains(strings.ToLower(err.Error()), "1062") {
-				return nil
-			}
-			return err
-		}
-
-		detail := fmt.Sprintf("live_photo_id=%d image_file_id=%d video_file_id=%d", row.ID, row.ImageFileID, row.VideoFileID)
-		if len(detail) > 500 {
-			detail = detail[:500]
-		}
-		return tx.Create(&model.OperationLog{
-			UserID:   &userID,
-			FileID:   &row.ImageFileID,
-			Action:   "live_photo_auto_bind",
-			Status:   "success",
-			Detail:   detail,
-			ClientIP: strings.TrimSpace(clientIP),
-		}).Error
-	})
-}
-
-func (h *FileHandler) getUploadTaskAndChunks(ctx context.Context, userID int64, uploadID string) (model.UploadTask, []int, error) {
-	var task model.UploadTask
-	err := h.DB.WithContext(ctx).Where("upload_id = ?", uploadID).First(&task).Error
-	if err != nil {
-		return model.UploadTask{}, nil, err
-	}
-	if task.UserID == nil || *task.UserID != userID {
-		return model.UploadTask{}, nil, gorm.ErrRecordNotFound
-	}
-
-	var rows []model.UploadChunk
-	err = h.DB.WithContext(ctx).
-		Where("upload_id = ? AND status = 1", uploadID).
-		Order("chunk_index ASC").
-		Find(&rows).Error
-	if err != nil {
-		return model.UploadTask{}, nil, err
-	}
-
-	chunkIndexes := make([]int, 0, len(rows))
-	for _, row := range rows {
-		chunkIndexes = append(chunkIndexes, row.ChunkIndex)
-	}
-
-	return task, chunkIndexes, nil
+	return h.Svc.TryAutoBindLivePhotoForFile(ctx, userID, file, clientIP)
 }
 
 func mergeChunks(uploadID string, filename string, totalChunks int) (string, int64, string, error) {
@@ -1773,56 +1551,6 @@ func mergeChunks(uploadID string, filename string, totalChunks int) (string, int
 	return outputPath, stat.Size(), hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
-func ensureStorage(tx *gorm.DB, fileHash string, storagePath string, size int64) (int64, error) {
-	var existing model.Storage
-	err := tx.Where("file_hash = ?", fileHash).First(&existing).Error
-	if err == nil {
-		_ = os.Remove(storagePath)
-		return existing.ID, nil
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return 0, err
-	}
-
-	sizeCopy := size
-	storage := model.Storage{
-		FileHash: fileHash,
-		FilePath: storagePath,
-		FileSize: &sizeCopy,
-	}
-	if err := tx.Create(&storage).Error; err != nil {
-		return 0, err
-	}
-	return storage.ID, nil
-}
-
-func ensureUniqueFilename(tx *gorm.DB, parentID int64, baseName string) (string, error) {
-	finalName := baseName
-	for i := 0; i < 100; i++ {
-		var count int64
-		err := tx.Model(&model.File{}).
-			Where("parent_id = ? AND filename = ? AND is_deleted = 0", parentID, finalName).
-			Count(&count).Error
-		if err != nil {
-			return "", err
-		}
-		if count == 0 {
-			return finalName, nil
-		}
-		finalName = appendNameSuffix(baseName, time.Now().Format("20060102150405"))
-	}
-	return "", fmt.Errorf("failed to allocate unique filename")
-}
-
-func appendNameSuffix(name string, suffix string) string {
-	ext := filepath.Ext(name)
-	base := strings.TrimSuffix(name, ext)
-	if ext == "" {
-		return fmt.Sprintf("%s_%s", base, suffix)
-	}
-	return fmt.Sprintf("%s_%s%s", base, suffix, ext)
-}
-
 func sanitizeFileName(name string) string {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -1830,101 +1558,6 @@ func sanitizeFileName(name string) string {
 	}
 	replacer := strings.NewReplacer("/", "_", "\\", "_", "..", "_", " ", "_")
 	return replacer.Replace(name)
-}
-
-// copyNode 递归复制目录树，文件复用 storage_id 以减少重复存储。
-func (h *FileHandler) copyNode(tx *gorm.DB, newOwnerID int64, src model.File, targetParentID int64) (int64, error) {
-	finalName, err := ensureUniqueFilename(tx, targetParentID, src.Filename)
-	if err != nil {
-		return 0, err
-	}
-
-	newNode := model.File{
-		UserID:         newOwnerID,
-		Filename:       finalName,
-		ParentID:       targetParentID,
-		IsFolder:       src.IsFolder,
-		FileType:       src.FileType,
-		Size:           src.Size,
-		StorageID:      src.StorageID,
-		WorkspaceID:    src.WorkspaceID,
-		CurrentVersion: src.CurrentVersion,
-		IsDeleted:      0,
-	}
-	if err := tx.Create(&newNode).Error; err != nil {
-		return 0, err
-	}
-
-	if src.IsFolder == 1 {
-		var children []model.File
-		if err := tx.Where("parent_id = ? AND is_deleted = 0", src.ID).Order("id ASC").Find(&children).Error; err != nil {
-			return 0, err
-		}
-		for _, child := range children {
-			if _, err := h.copyNode(tx, newOwnerID, child, newNode.ID); err != nil {
-				return 0, err
-			}
-		}
-	}
-
-	return newNode.ID, nil
-}
-
-// isDescendantFolder 检查 candidateID 是否是 ancestorID 的后代目录。
-func (h *FileHandler) isDescendantFolder(ctx context.Context, candidateID int64, ancestorID int64) (bool, error) {
-	if candidateID <= 0 || ancestorID <= 0 {
-		return false, nil
-	}
-
-	current := candidateID
-	for current > 0 {
-		if current == ancestorID {
-			return true, nil
-		}
-		var f model.File
-		err := h.DB.WithContext(ctx).Select("id", "parent_id").First(&f, "id = ? AND is_deleted = 0", current).Error
-		if err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return false, nil
-			}
-			return false, err
-		}
-		if f.ParentID == current {
-			return false, nil
-		}
-		current = f.ParentID
-	}
-
-	return false, nil
-}
-
-// collectDescendantIDs 收集某目录下所有后代节点的 ID。
-func (h *FileHandler) collectDescendantIDs(ctx context.Context, rootID int64) ([]int64, error) {
-	ids := make([]int64, 0)
-	queue := []int64{rootID}
-
-	for len(queue) > 0 {
-		parentID := queue[0]
-		queue = queue[1:]
-
-		var children []model.File
-		err := h.DB.WithContext(ctx).
-			Select("id", "is_folder").
-			Where("parent_id = ?", parentID).
-			Find(&children).Error
-		if err != nil {
-			return nil, err
-		}
-
-		for _, child := range children {
-			ids = append(ids, child.ID)
-			if child.IsFolder == 1 {
-				queue = append(queue, child.ID)
-			}
-		}
-	}
-
-	return ids, nil
 }
 
 func uniqueInt64(input []int64) []int64 {
@@ -1942,22 +1575,7 @@ func uniqueInt64(input []int64) []int64 {
 
 // logOperation 写入操作日志，失败时不影响主流程。
 func (h *FileHandler) logOperation(ctx context.Context, userID int64, fileID *int64, action string, status string, detail string, clientIP string) error {
-	uid := userID
-	row := model.OperationLog{
-		UserID:   &uid,
-		FileID:   fileID,
-		Action:   strings.TrimSpace(action),
-		Status:   strings.TrimSpace(status),
-		Detail:   strings.TrimSpace(detail),
-		ClientIP: strings.TrimSpace(clientIP),
-	}
-	if row.Action == "" {
-		row.Action = "unknown"
-	}
-	if row.Status == "" {
-		row.Status = "success"
-	}
-	return h.DB.WithContext(ctx).Create(&row).Error
+	return h.Svc.RecordOperation(ctx, userID, fileID, action, status, detail, clientIP)
 }
 
 func isTextPreviewExt(ext string) bool {
@@ -2302,47 +1920,12 @@ func (h *FileHandler) saveUploadedFileWithRateLimit(c *gin.Context, fh *multipar
 
 // getSystemSettingInt64 读取整数配置项，返回值、是否存在、错误。
 func (h *FileHandler) getSystemSettingInt64(ctx context.Context, key string) (int64, bool, error) {
-	key = strings.TrimSpace(key)
-	if key == "" {
-		return 0, false, nil
-	}
-
-	var row model.SystemSetting
-	err := h.DB.WithContext(ctx).Where("setting_key = ?", key).First(&row).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return 0, false, nil
-		}
-		return 0, false, err
-	}
-
-	v := strings.TrimSpace(row.SettingValue)
-	if v == "" {
-		return 0, false, nil
-	}
-	n, parseErr := strconv.ParseInt(v, 10, 64)
-	if parseErr != nil {
-		return 0, false, nil
-	}
-	return n, true, nil
+	return h.Svc.GetSystemSettingInt64(ctx, key)
 }
 
 // getSystemSettingString 读取字符串配置项，返回值、是否存在、错误。
 func (h *FileHandler) getSystemSettingString(ctx context.Context, key string) (string, bool, error) {
-	key = strings.TrimSpace(key)
-	if key == "" {
-		return "", false, nil
-	}
-
-	var row model.SystemSetting
-	err := h.DB.WithContext(ctx).Where("setting_key = ?", key).First(&row).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return "", false, nil
-		}
-		return "", false, err
-	}
-	return strings.TrimSpace(row.SettingValue), true, nil
+	return h.Svc.GetSystemSettingString(ctx, key)
 }
 
 // getDownloadRateBytesPerSec 获取下载限速值：query 参数优先，其次读取 system_setting。
@@ -2378,68 +1961,11 @@ func (h *FileHandler) getDownloadRateBytesPerSec(c *gin.Context) int64 {
 
 // isInPeakWindow 判断当前请求是否处于高峰时段。
 func (h *FileHandler) isInPeakWindow(ctx context.Context, uid int64) (bool, error) {
-	enabled, start, end, err := h.resolvePeakWindowSetting(ctx, uid)
-	if err != nil {
-		return false, err
-	}
-	if !enabled {
-		return false, nil
-	}
-	startMin, okStart := parseHHMMToMinute(start)
-	endMin, okEnd := parseHHMMToMinute(end)
-	if !okStart || !okEnd {
-		return false, nil
-	}
-
-	now := time.Now()
-	nowMin := now.Hour()*60 + now.Minute()
-	if startMin == endMin {
-		return true, nil
-	}
-	if startMin < endMin {
-		return nowMin >= startMin && nowMin < endMin, nil
-	}
-	// 跨天时段，如 22:00-07:00。
-	return nowMin >= startMin || nowMin < endMin, nil
+	return h.Svc.IsInPeakWindow(ctx, uid)
 }
 
 func (h *FileHandler) resolvePeakWindowSetting(ctx context.Context, uid int64) (bool, string, string, error) {
-	// 1) 先读用户自定义高峰时段。
-	if uid > 0 {
-		enabledKey := "peak_window_enabled_user_" + strconv.FormatInt(uid, 10)
-		startKey := "peak_window_start_user_" + strconv.FormatInt(uid, 10)
-		endKey := "peak_window_end_user_" + strconv.FormatInt(uid, 10)
-
-		if enabledVal, exists, err := h.getSystemSettingString(ctx, enabledKey); err != nil {
-			return false, "", "", err
-		} else if exists {
-			enabled := strings.TrimSpace(enabledVal) == "1"
-			startVal, _, errStart := h.getSystemSettingString(ctx, startKey)
-			if errStart != nil {
-				return false, "", "", errStart
-			}
-			endVal, _, errEnd := h.getSystemSettingString(ctx, endKey)
-			if errEnd != nil {
-				return false, "", "", errEnd
-			}
-			return enabled, startVal, endVal, nil
-		}
-	}
-
-	// 2) 用户未配置时，回落全局配置。
-	enabledGlobal, _, err := h.getSystemSettingInt64(ctx, "peak_window_enabled")
-	if err != nil {
-		return false, "", "", err
-	}
-	startGlobal, _, err := h.getSystemSettingString(ctx, "peak_window_start")
-	if err != nil {
-		return false, "", "", err
-	}
-	endGlobal, _, err := h.getSystemSettingString(ctx, "peak_window_end")
-	if err != nil {
-		return false, "", "", err
-	}
-	return enabledGlobal == 1, startGlobal, endGlobal, nil
+	return h.Svc.ResolvePeakWindowSetting(ctx, uid)
 }
 
 func parseHHMMToMinute(v string) (int, bool) {
@@ -2560,63 +2086,23 @@ func (h *FileHandler) createFolderZip(ctx context.Context, root model.File) (str
 		_ = tmpFile.Close()
 	}()
 
-	storageCache := make(map[int64]model.Storage)
-	queue := []zipQueueNode{{FolderID: root.ID, RelPath: sanitizeFileName(root.Filename)}}
+	entries, err := h.Svc.CollectFolderZipEntries(ctx, root)
+	if err != nil {
+		_ = os.Remove(zipPath)
+		return "", err
+	}
 
-	for len(queue) > 0 {
-		node := queue[0]
-		queue = queue[1:]
-
-		var children []model.File
-		err := h.DB.WithContext(ctx).
-			Where("parent_id = ? AND is_deleted = 0", node.FolderID).
-			Order("is_folder DESC, filename ASC").
-			Find(&children).Error
-		if err != nil {
-			_ = os.Remove(zipPath)
-			return "", err
-		}
-
-		if len(children) == 0 {
-			if err := addZipDir(zw, node.RelPath); err != nil {
+	for _, entry := range entries {
+		if entry.IsDir {
+			if err := addZipDir(zw, entry.RelPath); err != nil {
 				_ = os.Remove(zipPath)
 				return "", err
 			}
 			continue
 		}
-
-		for _, child := range children {
-			childRelPath := filepath.ToSlash(filepath.Join(node.RelPath, sanitizeFileName(child.Filename)))
-			if child.IsFolder == 1 {
-				queue = append(queue, zipQueueNode{FolderID: child.ID, RelPath: childRelPath})
-				continue
-			}
-
-			if child.StorageID == nil {
-				continue
-			}
-
-			storage, ok := storageCache[*child.StorageID]
-			if !ok {
-				var s model.Storage
-				if err := h.DB.WithContext(ctx).First(&s, "id = ?", *child.StorageID).Error; err != nil {
-					if errors.Is(err, gorm.ErrRecordNotFound) {
-						continue
-					}
-					_ = os.Remove(zipPath)
-					return "", err
-				}
-				storage = s
-				storageCache[*child.StorageID] = s
-			}
-
-			if _, err := os.Stat(storage.FilePath); err != nil {
-				continue
-			}
-			if err := addZipFileFromPath(zw, childRelPath, storage.FilePath); err != nil {
-				_ = os.Remove(zipPath)
-				return "", err
-			}
+		if err := addZipFileFromPath(zw, entry.RelPath, entry.StoragePath); err != nil {
+			_ = os.Remove(zipPath)
+			return "", err
 		}
 	}
 

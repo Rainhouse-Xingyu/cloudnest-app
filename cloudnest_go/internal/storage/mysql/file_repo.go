@@ -125,6 +125,26 @@ func (r *FileRepo) GetStorageByID(ctx context.Context, storageID int64) (model.S
 	return storage, nil
 }
 
+func (r *FileRepo) ListActiveChildrenByParent(ctx context.Context, parentID int64) ([]model.File, error) {
+	var rows []model.File
+	err := r.db.WithContext(ctx).
+		Where("parent_id = ? AND is_deleted = 0", parentID).
+		Order("is_folder DESC, filename ASC").
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+func (r *FileRepo) GetSystemSettingByKey(ctx context.Context, key string) (model.SystemSetting, error) {
+	var row model.SystemSetting
+	if err := r.db.WithContext(ctx).Where("setting_key = ?", key).First(&row).Error; err != nil {
+		return model.SystemSetting{}, err
+	}
+	return row, nil
+}
+
 func (r *FileRepo) HasActiveNameConflict(ctx context.Context, parentID int64, name string, excludeID *int64) (bool, error) {
 	q := r.db.WithContext(ctx).
 		Model(&model.File{}).
@@ -623,6 +643,68 @@ func (r *FileRepo) ExportOperationLogs(ctx context.Context, uid int64, isAdmin b
 	return rows, nil
 }
 
+func (r *FileRepo) FindLivePhotoAutoBindCandidate(ctx context.Context, parentID int64, excludeID int64, baseName string, needVideo bool) (*model.File, error) {
+	var siblingFiles []model.File
+	if err := r.db.WithContext(ctx).
+		Where("parent_id = ? AND is_deleted = 0 AND is_folder = 0 AND id <> ?", parentID, excludeID).
+		Order("id ASC").
+		Find(&siblingFiles).Error; err != nil {
+		return nil, err
+	}
+
+	for i := range siblingFiles {
+		s := siblingFiles[i]
+		sBase := strings.TrimSpace(strings.TrimSuffix(s.Filename, filepath.Ext(s.Filename)))
+		if !strings.EqualFold(sBase, baseName) {
+			continue
+		}
+		sExt := strings.ToLower(strings.TrimPrefix(filepath.Ext(s.Filename), "."))
+		if needVideo && isLivePhotoVideoExtForFileRepo(sExt) {
+			return &s, nil
+		}
+		if !needVideo && isLivePhotoImageExtForFileRepo(sExt) {
+			return &s, nil
+		}
+	}
+
+	return nil, nil
+}
+
+func (r *FileRepo) CreateLivePhotoAutoBindIfAbsent(ctx context.Context, userID int64, imageID int64, videoID int64, clientIP string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var exists model.LivePhoto
+		lookupErr := tx.Where("image_file_id = ? OR video_file_id = ?", imageID, videoID).First(&exists).Error
+		if lookupErr == nil {
+			return nil
+		}
+		if !errors.Is(lookupErr, gorm.ErrRecordNotFound) {
+			return lookupErr
+		}
+
+		row := model.LivePhoto{ImageFileID: imageID, VideoFileID: videoID}
+		if err := tx.Create(&row).Error; err != nil {
+			low := strings.ToLower(err.Error())
+			if strings.Contains(low, "duplicate") || strings.Contains(low, "1062") {
+				return nil
+			}
+			return err
+		}
+
+		detail := fmt.Sprintf("live_photo_id=%d image_file_id=%d video_file_id=%d", row.ID, row.ImageFileID, row.VideoFileID)
+		if len(detail) > 500 {
+			detail = detail[:500]
+		}
+		return tx.Create(&model.OperationLog{
+			UserID:   &userID,
+			FileID:   &row.ImageFileID,
+			Action:   "live_photo_auto_bind",
+			Status:   "success",
+			Detail:   detail,
+			ClientIP: strings.TrimSpace(clientIP),
+		}).Error
+	})
+}
+
 func (r *FileRepo) CollectBatchDownloadEntries(ctx context.Context, uid int64, fileIDs []int64) ([]contract.BatchDownloadEntry, error) {
 	entries := make([]contract.BatchDownloadEntry, 0)
 	for _, fileID := range uniqueInt64ForFileRepo(fileIDs) {
@@ -742,6 +824,16 @@ func appendNameSuffixForFileRepo(name string, suffix string) string {
 		return fmt.Sprintf("%s_%s", base, suffix)
 	}
 	return fmt.Sprintf("%s_%s%s", base, suffix, ext)
+}
+
+func isLivePhotoImageExtForFileRepo(ext string) bool {
+	images := map[string]bool{"jpg": true, "jpeg": true, "heic": true}
+	return images[ext]
+}
+
+func isLivePhotoVideoExtForFileRepo(ext string) bool {
+	videos := map[string]bool{"mov": true, "mp4": true, "m4v": true}
+	return videos[ext]
 }
 
 func isDescendantFolderForFileRepo(ctx context.Context, db *gorm.DB, candidateID int64, ancestorID int64) (bool, error) {
