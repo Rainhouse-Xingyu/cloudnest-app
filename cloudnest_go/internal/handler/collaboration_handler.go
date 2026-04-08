@@ -311,7 +311,7 @@ func (h *CollaborationHandler) GrantFilePermission(c *gin.Context) {
 		return
 	}
 
-	canWrite, err := h.canAccessFile(c.Request.Context(), uid, fileID, true)
+	canWrite, err := h.Svc.CanAccessFile(c.Request.Context(), uid, fileID, true)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
@@ -321,7 +321,7 @@ func (h *CollaborationHandler) GrantFilePermission(c *gin.Context) {
 		return
 	}
 
-	targetUser, err := h.resolveTargetUser(c.Request.Context(), req.UserID, req.Username)
+	targetUser, err := h.Svc.ResolveTargetUser(c.Request.Context(), req.UserID, req.Username)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "target user not found"})
@@ -335,25 +335,14 @@ func (h *CollaborationHandler) GrantFilePermission(c *gin.Context) {
 		return
 	}
 
-	err = h.DB.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
-		var row model.FilePermission
-		err := tx.Where("file_id = ? AND user_id = ?", fileID, targetUser.ID).First(&row).Error
-		if err != nil {
-			if !errors.Is(err, gorm.ErrRecordNotFound) {
-				return err
-			}
-			newRow := model.FilePermission{FileID: fileID, UserID: targetUser.ID, Permission: req.Permission}
-			return tx.Create(&newRow).Error
-		}
-		return tx.Model(&row).Update("permission", req.Permission).Error
-	})
+	err = h.Svc.UpsertFilePermission(c.Request.Context(), fileID, targetUser.ID, req.Permission)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "save file permission failed"})
 		return
 	}
 
 	detail := fmt.Sprintf("file_id=%d target_user=%d permission=%s", fileID, targetUser.ID, req.Permission)
-	_ = h.logOperation(c.Request.Context(), uid, &fileID, "file_permission_upsert", "success", detail, c.ClientIP())
+	_ = h.Svc.LogOperation(c.Request.Context(), uid, &fileID, "file_permission_upsert", "success", detail, c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{"message": "file permission updated"})
 }
 
@@ -366,7 +355,7 @@ func (h *CollaborationHandler) ListFilePermissions(c *gin.Context) {
 		return
 	}
 
-	canRead, err := h.canAccessFile(c.Request.Context(), uid, fileID, false)
+	canRead, err := h.Svc.CanAccessFile(c.Request.Context(), uid, fileID, false)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
@@ -376,20 +365,7 @@ func (h *CollaborationHandler) ListFilePermissions(c *gin.Context) {
 		return
 	}
 
-	type row struct {
-		UserID     int64  `json:"user_id"`
-		Username   string `json:"username"`
-		Permission string `json:"permission"`
-	}
-
-	rows := make([]row, 0)
-	err = h.DB.WithContext(c.Request.Context()).
-		Table("file_permission fp").
-		Select("fp.user_id, u.username, fp.permission").
-		Joins("JOIN user u ON u.id = fp.user_id").
-		Where("fp.file_id = ?", fileID).
-		Order("fp.id ASC").
-		Find(&rows).Error
+	rows, err := h.Svc.ListFilePermissions(c.Request.Context(), fileID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
@@ -412,7 +388,7 @@ func (h *CollaborationHandler) RevokeFilePermission(c *gin.Context) {
 		return
 	}
 
-	canWrite, err := h.canAccessFile(c.Request.Context(), uid, fileID, true)
+	canWrite, err := h.Svc.CanAccessFile(c.Request.Context(), uid, fileID, true)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
@@ -422,13 +398,13 @@ func (h *CollaborationHandler) RevokeFilePermission(c *gin.Context) {
 		return
 	}
 
-	if err := h.DB.WithContext(c.Request.Context()).Where("file_id = ? AND user_id = ?", fileID, targetUserID).Delete(&model.FilePermission{}).Error; err != nil {
+	if err := h.Svc.RevokeFilePermission(c.Request.Context(), fileID, targetUserID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "revoke file permission failed"})
 		return
 	}
 
 	detail := fmt.Sprintf("file_id=%d target_user=%d", fileID, targetUserID)
-	_ = h.logOperation(c.Request.Context(), uid, &fileID, "file_permission_revoke", "success", detail, c.ClientIP())
+	_ = h.Svc.LogOperation(c.Request.Context(), uid, &fileID, "file_permission_revoke", "success", detail, c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{"message": "file permission revoked"})
 }
 
@@ -532,7 +508,7 @@ func (h *CollaborationHandler) CreateFileVersion(c *gin.Context) {
 	}
 
 	detail := fmt.Sprintf("file_id=%d version=%d base=%d", fileID, created.Version, req.BaseVersion)
-	_ = h.logOperation(c.Request.Context(), uid, &fileID, "file_version_create", "success", detail, c.ClientIP())
+	_ = h.Svc.LogOperation(c.Request.Context(), uid, &fileID, "file_version_create", "success", detail, c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{"item": created})
 }
 
@@ -614,35 +590,6 @@ func (h *CollaborationHandler) canAccessFile(ctx context.Context, userID int64, 
 	return count > 0, nil
 }
 
-// getWorkspaceRole 查询当前用户在空间中的角色，并返回是否可查看/管理。
-func (h *CollaborationHandler) getWorkspaceRole(ctx context.Context, workspaceID int64, userID int64) (string, bool, error) {
-	var row model.WorkspaceUser
-	err := h.DB.WithContext(ctx).Where("workspace_id = ? AND user_id = ?", workspaceID, userID).First(&row).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return "", false, nil
-		}
-		return "", false, err
-	}
-	role := normalizeWorkspaceRole(row.Role)
-	return role, true, nil
-}
-
-// resolveTargetUser 根据 user_id 或 username 定位目标用户。
-func (h *CollaborationHandler) resolveTargetUser(ctx context.Context, userID *int64, username string) (model.User, error) {
-	var user model.User
-	if userID != nil && *userID > 0 {
-		err := h.DB.WithContext(ctx).First(&user, "id = ?", *userID).Error
-		return user, err
-	}
-	username = strings.TrimSpace(username)
-	if username == "" {
-		return user, gorm.ErrRecordNotFound
-	}
-	err := h.DB.WithContext(ctx).First(&user, "username = ?", username).Error
-	return user, err
-}
-
 func normalizeWorkspaceRole(role string) string {
 	r := strings.ToLower(strings.TrimSpace(role))
 	switch r {
@@ -665,24 +612,4 @@ func normalizeFilePermission(p string) string {
 
 func canManageWorkspace(role string) bool {
 	return role == "owner" || role == "admin"
-}
-
-// logOperation 记录关键协作操作，失败不影响主流程。
-func (h *CollaborationHandler) logOperation(ctx context.Context, userID int64, fileID *int64, action string, status string, detail string, clientIP string) error {
-	uid := userID
-	row := model.OperationLog{
-		UserID:   &uid,
-		FileID:   fileID,
-		Action:   strings.TrimSpace(action),
-		Status:   strings.TrimSpace(status),
-		Detail:   strings.TrimSpace(detail),
-		ClientIP: strings.TrimSpace(clientIP),
-	}
-	if row.Action == "" {
-		row.Action = "unknown"
-	}
-	if row.Status == "" {
-		row.Status = "success"
-	}
-	return h.DB.WithContext(ctx).Create(&row).Error
 }

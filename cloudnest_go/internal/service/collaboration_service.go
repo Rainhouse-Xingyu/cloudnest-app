@@ -36,6 +36,13 @@ type WorkspaceMemberRow struct {
 	Role     string `json:"role"`
 }
 
+// FilePermissionRow 文件协作权限列表项。
+type FilePermissionRow struct {
+	UserID     int64  `json:"user_id"`
+	Username   string `json:"username"`
+	Permission string `json:"permission"`
+}
+
 // CreateWorkspace 创建空间并写入 owner 成员关系。
 func (s *CollaborationService) CreateWorkspace(ctx context.Context, ws *model.Workspace, ownerID int64) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -142,6 +149,75 @@ func (s *CollaborationService) UpdateWorkspaceMemberRole(ctx context.Context, ta
 // DeleteWorkspaceMember 删除空间成员。
 func (s *CollaborationService) DeleteWorkspaceMember(ctx context.Context, target *model.WorkspaceUser) error {
 	return s.db.WithContext(ctx).Delete(target).Error
+}
+
+// CanAccessFile 判断用户是否有文件访问权限（写权限要求更严格）。
+func (s *CollaborationService) CanAccessFile(ctx context.Context, userID int64, fileID int64, requireWrite bool) (bool, error) {
+	var f model.File
+	err := s.db.WithContext(ctx).First(&f, "id = ? AND is_deleted = 0", fileID).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	if f.UserID == userID {
+		return true, nil
+	}
+
+	permissions := []string{"read", "write"}
+	if requireWrite {
+		permissions = []string{"write"}
+	}
+
+	var count int64
+	err = s.db.WithContext(ctx).
+		Model(&model.FilePermission{}).
+		Where("file_id = ? AND user_id = ? AND permission IN ?", fileID, userID, permissions).
+		Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+
+	return count > 0, nil
+}
+
+// UpsertFilePermission 新增或更新文件协作权限。
+func (s *CollaborationService) UpsertFilePermission(ctx context.Context, fileID int64, targetUserID int64, permission string) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var row model.FilePermission
+		err := tx.Where("file_id = ? AND user_id = ?", fileID, targetUserID).First(&row).Error
+		if err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+			newRow := model.FilePermission{FileID: fileID, UserID: targetUserID, Permission: permission}
+			return tx.Create(&newRow).Error
+		}
+		return tx.Model(&row).Update("permission", permission).Error
+	})
+}
+
+// ListFilePermissions 查询文件协作权限列表。
+func (s *CollaborationService) ListFilePermissions(ctx context.Context, fileID int64) ([]FilePermissionRow, error) {
+	rows := make([]FilePermissionRow, 0)
+	err := s.db.WithContext(ctx).
+		Table("file_permission fp").
+		Select("fp.user_id, u.username, fp.permission").
+		Joins("JOIN user u ON u.id = fp.user_id").
+		Where("fp.file_id = ?", fileID).
+		Order("fp.id ASC").
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// RevokeFilePermission 删除指定文件协作权限。
+func (s *CollaborationService) RevokeFilePermission(ctx context.Context, fileID int64, targetUserID int64) error {
+	return s.db.WithContext(ctx).Where("file_id = ? AND user_id = ?", fileID, targetUserID).Delete(&model.FilePermission{}).Error
 }
 
 // LogOperation 记录协作操作日志。
