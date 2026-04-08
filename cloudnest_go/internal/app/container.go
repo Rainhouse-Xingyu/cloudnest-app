@@ -23,6 +23,7 @@ type Container struct {
 
 	PermissionRepo   *storageMysql.PermissionRepo
 	OperationLogRepo *storageMysql.OperationLogRepo
+	FileRepo         *storageMysql.FileRepo
 	TxRunner         *storageMysql.TxRunner
 
 	AuthzService         *service.AuthzService
@@ -50,6 +51,7 @@ type Container struct {
 func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container {
 	permissionRepo := storageMysql.NewPermissionRepo(db)
 	operationLogRepo := storageMysql.NewOperationLogRepo(db)
+	fileRepo := storageMysql.NewFileRepo(db)
 	txRunner := storageMysql.NewTxRunner(db)
 
 	authzService := service.NewAuthzService(permissionRepo)
@@ -61,7 +63,7 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 	frpService := service.NewFrpService(db, rdb)
 	livePhotoService := service.NewLivePhotoService(db)
 	aiService := service.NewAIService(db, cfg, nil)
-	fileService := service.NewFileService(db)
+	fileService := service.NewFileService(db, fileRepo)
 
 	return &Container{
 		Cfg: cfg,
@@ -70,6 +72,7 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 
 		PermissionRepo:   permissionRepo,
 		OperationLogRepo: operationLogRepo,
+		FileRepo:         fileRepo,
 		TxRunner:         txRunner,
 
 		AuthzService:         authzService,

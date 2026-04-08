@@ -9,4 +9,5 @@ var (
 	ErrForbidden    = errors.New("forbidden")
 	ErrConflict     = errors.New("conflict")
 	ErrInternal     = errors.New("internal error")
+	ErrShareExpired = errors.New("share expired")
 )

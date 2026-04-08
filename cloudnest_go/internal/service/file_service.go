@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
 
 	"gorm.io/gorm"
@@ -18,7 +19,8 @@ import (
 
 // FileService 承接 File 模块分阶段迁移的业务逻辑。
 type FileService struct {
-	db *gorm.DB
+	db       *gorm.DB
+	fileRepo contract.FileRepository
 }
 
 var (
@@ -45,8 +47,8 @@ var (
 	ErrPhysicalFileNotFound = errors.New("physical file not found")
 )
 
-func NewFileService(db *gorm.DB) *FileService {
-	return &FileService{db: db}
+func NewFileService(db *gorm.DB, fileRepo contract.FileRepository) *FileService {
+	return &FileService{db: db, fileRepo: fileRepo}
 }
 
 // FileOperationLogQuery 表示操作日志查询参数。
@@ -940,6 +942,18 @@ func (s *FileService) ResolvePublicShareDownload(ctx context.Context, code strin
 
 // CollectBatchDownloadEntries 收集批量下载的可下载条目（无权限或异常条目会被跳过）。
 func (s *FileService) CollectBatchDownloadEntries(ctx context.Context, uid int64, fileIDs []int64) ([]FileBatchDownloadEntry, error) {
+	if s.fileRepo != nil {
+		rows, err := s.fileRepo.CollectBatchDownloadEntries(ctx, uid, fileIDs)
+		if err != nil {
+			return nil, err
+		}
+		entries := make([]FileBatchDownloadEntry, 0, len(rows))
+		for _, row := range rows {
+			entries = append(entries, FileBatchDownloadEntry{File: row.File, IsFolderZip: row.IsFolderZip, StoragePath: row.StoragePath})
+		}
+		return entries, nil
+	}
+
 	entries := make([]FileBatchDownloadEntry, 0)
 	for _, fileID := range uniqueInt64InService(fileIDs) {
 		if fileID <= 0 {
@@ -981,6 +995,22 @@ func (s *FileService) CollectBatchDownloadEntries(ctx context.Context, uid int64
 
 // SearchFiles 按名称/类型/时间进行检索和筛选。
 func (s *FileService) SearchFiles(ctx context.Context, uid int64, q FileSearchQuery) (FileSearchResult, error) {
+	if s.fileRepo != nil {
+		items, total, err := s.fileRepo.SearchFiles(ctx, uid, contract.FileSearchQuery{
+			ParentID:  q.ParentID,
+			Name:      q.Name,
+			FileType:  q.FileType,
+			StartTime: q.StartTime,
+			EndTime:   q.EndTime,
+			Page:      q.Page,
+			Limit:     q.Limit,
+		})
+		if err != nil {
+			return FileSearchResult{}, err
+		}
+		return FileSearchResult{Items: items, Total: total}, nil
+	}
+
 	q.Name = strings.TrimSpace(q.Name)
 	q.FileType = strings.ToLower(strings.TrimSpace(q.FileType))
 	q.StartTime = strings.TrimSpace(q.StartTime)
@@ -1267,6 +1297,17 @@ func generateUploadID(userID int64) string {
 }
 
 func (s *FileService) resolveValidShare(ctx context.Context, code string) (model.Share, model.File, error) {
+	if s.fileRepo != nil {
+		share, file, err := s.fileRepo.ResolveValidShare(ctx, code)
+		if err != nil {
+			if errors.Is(err, contract.ErrShareExpired) {
+				return model.Share{}, model.File{}, ErrShareExpired
+			}
+			return model.Share{}, model.File{}, err
+		}
+		return share, file, nil
+	}
+
 	code = strings.TrimSpace(code)
 	if code == "" {
 		return model.Share{}, model.File{}, gorm.ErrRecordNotFound
