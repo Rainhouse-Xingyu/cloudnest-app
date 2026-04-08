@@ -540,36 +540,28 @@ func (h *FrpHandler) DeployConfig(c *gin.Context) {
 		return
 	}
 
-	_, err = h.findDeviceWithPermission(c, uid, deviceID)
+	commandID, configID, err := h.Svc.DeployConfig(c.Request.Context(), uid, h.isAdmin(c), deviceID, req.ConfigID)
 	if err != nil {
-		h.writeConfigError(c, err)
-		return
-	}
-
-	configID, err := h.resolveConfigID(c, deviceID, req.ConfigID)
-	if err != nil {
+		if errors.Is(err, service.ErrFrpNoConfigForDevice) {
+			c.JSON(http.StatusConflict, gin.H{"error": "no config for device"})
+			return
+		}
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "config not found"})
 			return
 		}
-		c.JSON(http.StatusConflict, gin.H{"error": "no config for device"})
-		return
-	}
-
-	commandID := fmt.Sprintf("deploy-%d-%d", deviceID, time.Now().UnixNano())
-	payload := map[string]interface{}{
-		"command_id": commandID,
-		"action":     "deploy_config",
-		"device_id":  deviceID,
-		"config_id":  configID,
-		"created_at": time.Now().Format(time.RFC3339),
-	}
-	if err := h.enqueueDeviceCommand(c, deviceID, payload); err != nil {
+		if errors.Is(err, service.ErrFrpForbidden) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+			return
+		}
+		if strings.Contains(strings.ToLower(err.Error()), "device not found") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "device not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "enqueue command failed"})
 		return
 	}
-
-	_ = h.logFrpOperation(c, uid, "frp_config_deploy", fmt.Sprintf("device_id=%d config_id=%d command_id=%s", deviceID, configID, commandID))
+	_ = h.Svc.LogOperation(c.Request.Context(), uid, "frp_config_deploy", fmt.Sprintf("device_id=%d config_id=%d command_id=%s", deviceID, configID, commandID), c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{
 		"message":    "deploy command queued",
 		"command_id": commandID,
@@ -587,25 +579,20 @@ func (h *FrpHandler) ReloadDevice(c *gin.Context) {
 		return
 	}
 
-	_, err = h.findDeviceWithPermission(c, uid, deviceID)
+	commandID, err := h.Svc.ReloadDevice(c.Request.Context(), uid, h.isAdmin(c), deviceID)
 	if err != nil {
-		h.writeConfigError(c, err)
-		return
-	}
-
-	commandID := fmt.Sprintf("reload-%d-%d", deviceID, time.Now().UnixNano())
-	payload := map[string]interface{}{
-		"command_id": commandID,
-		"action":     "reload",
-		"device_id":  deviceID,
-		"created_at": time.Now().Format(time.RFC3339),
-	}
-	if err := h.enqueueDeviceCommand(c, deviceID, payload); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "device not found"})
+			return
+		}
+		if errors.Is(err, service.ErrFrpForbidden) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "enqueue command failed"})
 		return
 	}
-
-	_ = h.logFrpOperation(c, uid, "frp_reload", fmt.Sprintf("device_id=%d command_id=%s", deviceID, commandID))
+	_ = h.Svc.LogOperation(c.Request.Context(), uid, "frp_reload", fmt.Sprintf("device_id=%d command_id=%s", deviceID, commandID), c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{
 		"message":    "reload command queued",
 		"command_id": commandID,
@@ -622,56 +609,38 @@ func (h *FrpHandler) ReportDeviceStatus(c *gin.Context) {
 		return
 	}
 
-	_, err = h.findDeviceWithPermission(c, uid, deviceID)
-	if err != nil {
-		h.writeConfigError(c, err)
-		return
-	}
-
 	var req ReportDeviceStatusRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
 		return
 	}
 
-	heartbeatAt := time.Now()
-	if strings.TrimSpace(req.LastHeartbeat) != "" {
-		parsed, parseErr := time.Parse(time.RFC3339, strings.TrimSpace(req.LastHeartbeat))
-		if parseErr != nil {
+	err = h.Svc.ReportDeviceStatus(c.Request.Context(), uid, h.isAdmin(c), deviceID, service.ReportDeviceStatusInput{
+		Online:          req.Online,
+		LastHeartbeat:   req.LastHeartbeat,
+		LastError:       req.LastError,
+		FailureReason:   req.FailureReason,
+		ClientVersion:   req.ClientVersion,
+		CurrentConfigID: req.CurrentConfigID,
+	})
+	if err != nil {
+		if errors.Is(err, service.ErrFrpInvalidHeartbeat) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "last_heartbeat must be RFC3339"})
 			return
 		}
-		heartbeatAt = parsed
-	}
-
-	lastError := strings.TrimSpace(req.LastError)
-	if strings.TrimSpace(req.FailureReason) != "" {
-		lastError = strings.TrimSpace(req.FailureReason)
-	}
-	if len(lastError) > 500 {
-		lastError = lastError[:500]
-	}
-
-	statusKey := frpStatusKeyPrefix + strconv.FormatInt(deviceID, 10)
-	values := map[string]interface{}{
-		"online":            boolToInt(req.Online),
-		"last_heartbeat":    heartbeatAt.Format(time.RFC3339),
-		"last_error":        lastError,
-		"client_version":    strings.TrimSpace(req.ClientVersion),
-		"updated_at":        time.Now().Format(time.RFC3339),
-		"current_config_id": 0,
-	}
-	if req.CurrentConfigID != nil && *req.CurrentConfigID > 0 {
-		values["current_config_id"] = *req.CurrentConfigID
-	}
-
-	if err := h.RDB.HSet(c.Request.Context(), statusKey, values).Err(); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "device not found"})
+			return
+		}
+		if errors.Is(err, service.ErrFrpForbidden) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "redis error"})
 		return
 	}
-	_ = h.RDB.Expire(c.Request.Context(), statusKey, 7*24*time.Hour).Err()
 
-	_ = h.logFrpOperation(c, uid, "frp_status_report", fmt.Sprintf("device_id=%d online=%v", deviceID, req.Online))
+	_ = h.Svc.LogOperation(c.Request.Context(), uid, "frp_status_report", fmt.Sprintf("device_id=%d online=%v", deviceID, req.Online), c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{"message": "status updated"})
 }
 
@@ -684,38 +653,28 @@ func (h *FrpHandler) GetDeviceStatus(c *gin.Context) {
 		return
 	}
 
-	_, err = h.findDeviceWithPermission(c, uid, deviceID)
+	item, err := h.Svc.GetDeviceStatus(c.Request.Context(), uid, h.isAdmin(c), deviceID)
 	if err != nil {
-		h.writeConfigError(c, err)
-		return
-	}
-
-	statusKey := frpStatusKeyPrefix + strconv.FormatInt(deviceID, 10)
-	data, err := h.RDB.HGetAll(c.Request.Context(), statusKey).Result()
-	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "device not found"})
+			return
+		}
+		if errors.Is(err, service.ErrFrpForbidden) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "redis error"})
-		return
-	}
-	if len(data) == 0 {
-		c.JSON(http.StatusOK, gin.H{
-			"item": gin.H{
-				"online":         false,
-				"last_heartbeat": nil,
-				"last_error":     "",
-				"client_version": "",
-			},
-		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"item": gin.H{
-			"online":            data["online"] == "1",
-			"last_heartbeat":    data["last_heartbeat"],
-			"last_error":        data["last_error"],
-			"client_version":    data["client_version"],
-			"updated_at":        data["updated_at"],
-			"current_config_id": data["current_config_id"],
+			"online":            item.Online,
+			"last_heartbeat":    item.LastHeartbeat,
+			"last_error":        item.LastError,
+			"client_version":    item.ClientVersion,
+			"updated_at":        item.UpdatedAt,
+			"current_config_id": item.CurrentConfigID,
 		},
 	})
 }
@@ -729,62 +688,42 @@ func (h *FrpHandler) PullNextCommand(c *gin.Context) {
 		return
 	}
 
-	_, err = h.findDeviceWithPermission(c, uid, deviceID)
+	item, err := h.Svc.PullNextCommand(c.Request.Context(), uid, h.isAdmin(c), deviceID)
 	if err != nil {
-		h.writeConfigError(c, err)
-		return
-	}
-
-	queueKey := frpCommandQueuePrefix + strconv.FormatInt(deviceID, 10)
-	rawToken, err := h.RDB.LPop(c.Request.Context(), queueKey).Result()
-	if err != nil {
-		if errors.Is(err, redis.Nil) {
-			c.JSON(http.StatusOK, gin.H{"item": nil})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "redis error"})
-		return
-	}
-
-	commandID := strings.TrimSpace(rawToken)
-	if strings.HasPrefix(commandID, "{") {
-		// 兼容早期直接将整段 JSON 入队的情况。
-		legacyID, convertErr := h.convertLegacyQueuedCommand(c, deviceID, commandID)
-		if convertErr != nil {
+		if errors.Is(err, service.ErrFrpInvalidQueuedCommand) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid queued command"})
 			return
 		}
-		commandID = legacyID
-	}
-
-	dataKey := frpCommandDataKeyPrefix + commandID
-	cmdData, err := h.RDB.HGetAll(c.Request.Context(), dataKey).Result()
-	if err != nil {
+		if errors.Is(err, service.ErrFrpCommandDataNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "command data not found"})
+			return
+		}
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "device not found"})
+			return
+		}
+		if errors.Is(err, service.ErrFrpForbidden) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "redis error"})
 		return
 	}
-	if len(cmdData) == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"error": "command data not found"})
+	if item == nil {
+		c.JSON(http.StatusOK, gin.H{"item": nil})
 		return
 	}
 
-	now := time.Now().Format(time.RFC3339)
-	_ = h.RDB.HSet(c.Request.Context(), dataKey, map[string]interface{}{
-		"status":       "delivered",
-		"delivered_at": now,
-		"updated_at":   now,
-	}).Err()
-
-	_ = h.logFrpOperation(c, uid, "frp_command_pull", fmt.Sprintf("device_id=%d command_id=%s", deviceID, commandID))
+	_ = h.Svc.LogOperation(c.Request.Context(), uid, "frp_command_pull", fmt.Sprintf("device_id=%d command_id=%s", deviceID, item.CommandID), c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{
 		"item": gin.H{
-			"command_id":   commandID,
-			"action":       cmdData["action"],
-			"config_id":    cmdData["config_id"],
-			"status":       "delivered",
-			"created_at":   cmdData["created_at"],
-			"delivered_at": now,
-			"payload":      cmdData["payload"],
+			"command_id":   item.CommandID,
+			"action":       item.Action,
+			"config_id":    item.ConfigID,
+			"status":       item.Status,
+			"created_at":   item.CreatedAt,
+			"delivered_at": item.DeliveredAt,
+			"payload":      item.Payload,
 		},
 	})
 }
@@ -804,68 +743,38 @@ func (h *FrpHandler) ReportCommandResult(c *gin.Context) {
 		return
 	}
 
-	dataKey := frpCommandDataKeyPrefix + commandID
-	cmdData, err := h.RDB.HGetAll(c.Request.Context(), dataKey).Result()
+	deviceID, status, err := h.Svc.ReportCommandResult(c.Request.Context(), uid, h.isAdmin(c), commandID, service.CommandResultInput{
+		Success:       req.Success,
+		ResultMessage: req.ResultMessage,
+		FailureReason: req.FailureReason,
+		ExecutedAt:    req.ExecutedAt,
+	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "redis error"})
-		return
-	}
-	if len(cmdData) == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"error": "command not found"})
-		return
-	}
-
-	deviceID, parseErr := strconv.ParseInt(cmdData["device_id"], 10, 64)
-	if parseErr != nil || deviceID <= 0 {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid command data"})
-		return
-	}
-
-	_, err = h.findDeviceWithPermission(c, uid, deviceID)
-	if err != nil {
-		h.writeConfigError(c, err)
-		return
-	}
-
-	executedAt := time.Now()
-	if strings.TrimSpace(req.ExecutedAt) != "" {
-		parsed, pErr := time.Parse(time.RFC3339, strings.TrimSpace(req.ExecutedAt))
-		if pErr != nil {
+		if errors.Is(err, service.ErrFrpCommandNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "command not found"})
+			return
+		}
+		if errors.Is(err, service.ErrFrpInvalidCommandData) {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid command data"})
+			return
+		}
+		if errors.Is(err, service.ErrFrpInvalidExecutedAt) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "executed_at must be RFC3339"})
 			return
 		}
-		executedAt = parsed
-	}
-
-	msg := strings.TrimSpace(req.ResultMessage)
-	if len(msg) > 500 {
-		msg = msg[:500]
-	}
-	failureReason := strings.TrimSpace(req.FailureReason)
-	if len(failureReason) > 500 {
-		failureReason = failureReason[:500]
-	}
-
-	status := "executed_success"
-	if !req.Success {
-		status = "executed_failed"
-		if failureReason == "" {
-			failureReason = msg
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "device not found"})
+			return
 		}
-	}
-
-	if err := h.RDB.HSet(c.Request.Context(), dataKey, map[string]interface{}{
-		"status":         status,
-		"result_message": msg,
-		"failure_reason": failureReason,
-		"executed_at":    executedAt.Format(time.RFC3339),
-		"updated_at":     time.Now().Format(time.RFC3339),
-	}).Err(); err != nil {
+		if errors.Is(err, service.ErrFrpForbidden) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "redis error"})
 		return
 	}
 
-	_ = h.logFrpOperation(c, uid, "frp_command_result", fmt.Sprintf("command_id=%s device_id=%d status=%s", commandID, deviceID, status))
+	_ = h.Svc.LogOperation(c.Request.Context(), uid, "frp_command_result", fmt.Sprintf("command_id=%s device_id=%d status=%s", commandID, deviceID, status), c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{"message": "command result updated"})
 }
 
@@ -878,32 +787,28 @@ func (h *FrpHandler) ListDeviceCommands(c *gin.Context) {
 		return
 	}
 
-	_, err = h.findDeviceWithPermission(c, uid, deviceID)
-	if err != nil {
-		h.writeConfigError(c, err)
-		return
-	}
-
 	limit, err := parseLimitWithDefault(c.Query("limit"), 20, 100)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid limit"})
 		return
 	}
 
-	historyKey := frpCommandHistoryPrefix + strconv.FormatInt(deviceID, 10)
-	ids, err := h.RDB.LRange(c.Request.Context(), historyKey, 0, int64(limit-1)).Result()
+	rows, err := h.Svc.ListDeviceCommands(c.Request.Context(), uid, h.isAdmin(c), deviceID, limit)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "device not found"})
+			return
+		}
+		if errors.Is(err, service.ErrFrpForbidden) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "redis error"})
 		return
 	}
 
-	items := make([]gin.H, 0, len(ids))
-	for _, commandID := range ids {
-		dataKey := frpCommandDataKeyPrefix + strings.TrimSpace(commandID)
-		row, hErr := h.RDB.HGetAll(c.Request.Context(), dataKey).Result()
-		if hErr != nil || len(row) == 0 {
-			continue
-		}
+	items := make([]gin.H, 0, len(rows))
+	for _, row := range rows {
 		items = append(items, gin.H{
 			"command_id":     row["command_id"],
 			"action":         row["action"],

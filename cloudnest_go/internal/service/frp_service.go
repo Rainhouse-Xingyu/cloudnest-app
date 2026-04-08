@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,6 +20,12 @@ const (
 	defaultFrpRemotePortStart = 20000
 	defaultFrpRemotePortEnd   = 20999
 	maxAllocateRetries        = 5
+	frpStatusKeyPrefix        = "frp:device:status:"
+	frpCommandQueuePrefix     = "frp:device:cmd:"
+	frpLastCommandKeyPrefix   = "frp:device:last_command:"
+	frpCommandDataKeyPrefix   = "frp:command:data:"
+	frpCommandHistoryPrefix   = "frp:device:command:history:"
+	frpCommandHistoryLimit    = 200
 )
 
 var (
@@ -29,6 +37,20 @@ var (
 	ErrFrpBadConfig = errors.New("frp config invalid")
 	// ErrFrpNeedServer 表示缺少服务端地址。
 	ErrFrpNeedServer = errors.New("frp server_addr is required")
+	// ErrFrpNoConfigForDevice 表示设备不存在可下发配置。
+	ErrFrpNoConfigForDevice = errors.New("frp no config for device")
+	// ErrFrpInvalidQueuedCommand 表示命令队列中的旧数据格式无效。
+	ErrFrpInvalidQueuedCommand = errors.New("frp invalid queued command")
+	// ErrFrpCommandDataNotFound 表示命令数据不存在。
+	ErrFrpCommandDataNotFound = errors.New("frp command data not found")
+	// ErrFrpCommandNotFound 表示命令不存在。
+	ErrFrpCommandNotFound = errors.New("frp command not found")
+	// ErrFrpInvalidCommandData 表示命令数据内容异常。
+	ErrFrpInvalidCommandData = errors.New("frp invalid command data")
+	// ErrFrpInvalidHeartbeat 表示心跳时间格式错误。
+	ErrFrpInvalidHeartbeat = errors.New("frp invalid heartbeat")
+	// ErrFrpInvalidExecutedAt 表示命令回执时间格式错误。
+	ErrFrpInvalidExecutedAt = errors.New("frp invalid executed_at")
 )
 
 // FrpService 承接 FRP 模块业务逻辑。
@@ -78,6 +100,45 @@ type SaveConfigInput struct {
 	ServerAddr string
 	ServerPort int
 	Token      string
+}
+
+// ReportDeviceStatusInput 表示设备状态上报输入。
+type ReportDeviceStatusInput struct {
+	Online          bool
+	LastHeartbeat   string
+	LastError       string
+	FailureReason   string
+	ClientVersion   string
+	CurrentConfigID *int64
+}
+
+// DeviceStatusResult 表示设备最近状态结果。
+type DeviceStatusResult struct {
+	Online          bool
+	LastHeartbeat   *string
+	LastError       string
+	ClientVersion   string
+	UpdatedAt       string
+	CurrentConfigID string
+}
+
+// PullCommandResult 表示拉取到的命令。
+type PullCommandResult struct {
+	CommandID   string
+	Action      string
+	ConfigID    string
+	Status      string
+	CreatedAt   string
+	DeliveredAt string
+	Payload     string
+}
+
+// CommandResultInput 表示命令结果回传输入。
+type CommandResultInput struct {
+	Success       bool
+	ResultMessage string
+	FailureReason string
+	ExecutedAt    string
 }
 
 // CreateDevice 创建设备并绑定当前用户。
@@ -381,6 +442,268 @@ func (s *FrpService) RollbackConfig(ctx context.Context, uid int64, isAdmin bool
 	return oldCfg, newCfg, nil
 }
 
+// DeployConfig 写入配置下发命令，等待客户端执行。
+func (s *FrpService) DeployConfig(ctx context.Context, uid int64, isAdmin bool, deviceID int64, requestedConfigID *int64) (string, int64, error) {
+	if _, err := s.findDeviceWithPermission(ctx, uid, isAdmin, deviceID); err != nil {
+		return "", 0, err
+	}
+
+	configID, err := s.resolveConfigID(ctx, deviceID, requestedConfigID)
+	if err != nil {
+		return "", 0, err
+	}
+
+	commandID := fmt.Sprintf("deploy-%d-%d", deviceID, time.Now().UnixNano())
+	payload := map[string]interface{}{
+		"command_id": commandID,
+		"action":     "deploy_config",
+		"device_id":  deviceID,
+		"config_id":  configID,
+		"created_at": time.Now().Format(time.RFC3339),
+	}
+	if err := s.enqueueDeviceCommand(ctx, deviceID, payload); err != nil {
+		return "", 0, err
+	}
+
+	return commandID, configID, nil
+}
+
+// ReloadDevice 写入重载命令，等待客户端执行。
+func (s *FrpService) ReloadDevice(ctx context.Context, uid int64, isAdmin bool, deviceID int64) (string, error) {
+	if _, err := s.findDeviceWithPermission(ctx, uid, isAdmin, deviceID); err != nil {
+		return "", err
+	}
+
+	commandID := fmt.Sprintf("reload-%d-%d", deviceID, time.Now().UnixNano())
+	payload := map[string]interface{}{
+		"command_id": commandID,
+		"action":     "reload",
+		"device_id":  deviceID,
+		"created_at": time.Now().Format(time.RFC3339),
+	}
+	if err := s.enqueueDeviceCommand(ctx, deviceID, payload); err != nil {
+		return "", err
+	}
+
+	return commandID, nil
+}
+
+// ReportDeviceStatus 更新设备在线状态与最近心跳。
+func (s *FrpService) ReportDeviceStatus(ctx context.Context, uid int64, isAdmin bool, deviceID int64, req ReportDeviceStatusInput) error {
+	if _, err := s.findDeviceWithPermission(ctx, uid, isAdmin, deviceID); err != nil {
+		return err
+	}
+
+	heartbeatAt := time.Now()
+	if strings.TrimSpace(req.LastHeartbeat) != "" {
+		parsed, parseErr := time.Parse(time.RFC3339, strings.TrimSpace(req.LastHeartbeat))
+		if parseErr != nil {
+			return ErrFrpInvalidHeartbeat
+		}
+		heartbeatAt = parsed
+	}
+
+	lastError := strings.TrimSpace(req.LastError)
+	if strings.TrimSpace(req.FailureReason) != "" {
+		lastError = strings.TrimSpace(req.FailureReason)
+	}
+	if len(lastError) > 500 {
+		lastError = lastError[:500]
+	}
+
+	statusKey := frpStatusKeyPrefix + strconv.FormatInt(deviceID, 10)
+	values := map[string]interface{}{
+		"online":            boolToInt(req.Online),
+		"last_heartbeat":    heartbeatAt.Format(time.RFC3339),
+		"last_error":        lastError,
+		"client_version":    strings.TrimSpace(req.ClientVersion),
+		"updated_at":        time.Now().Format(time.RFC3339),
+		"current_config_id": 0,
+	}
+	if req.CurrentConfigID != nil && *req.CurrentConfigID > 0 {
+		values["current_config_id"] = *req.CurrentConfigID
+	}
+
+	if err := s.rdb.HSet(ctx, statusKey, values).Err(); err != nil {
+		return err
+	}
+	_ = s.rdb.Expire(ctx, statusKey, 7*24*time.Hour).Err()
+	return nil
+}
+
+// GetDeviceStatus 查询设备最近状态。
+func (s *FrpService) GetDeviceStatus(ctx context.Context, uid int64, isAdmin bool, deviceID int64) (DeviceStatusResult, error) {
+	if _, err := s.findDeviceWithPermission(ctx, uid, isAdmin, deviceID); err != nil {
+		return DeviceStatusResult{}, err
+	}
+
+	statusKey := frpStatusKeyPrefix + strconv.FormatInt(deviceID, 10)
+	data, err := s.rdb.HGetAll(ctx, statusKey).Result()
+	if err != nil {
+		return DeviceStatusResult{}, err
+	}
+	if len(data) == 0 {
+		return DeviceStatusResult{Online: false, LastHeartbeat: nil, LastError: "", ClientVersion: ""}, nil
+	}
+
+	lastHeartbeat := data["last_heartbeat"]
+	return DeviceStatusResult{
+		Online:          data["online"] == "1",
+		LastHeartbeat:   &lastHeartbeat,
+		LastError:       data["last_error"],
+		ClientVersion:   data["client_version"],
+		UpdatedAt:       data["updated_at"],
+		CurrentConfigID: data["current_config_id"],
+	}, nil
+}
+
+// PullNextCommand 拉取设备下一条待执行命令。
+func (s *FrpService) PullNextCommand(ctx context.Context, uid int64, isAdmin bool, deviceID int64) (*PullCommandResult, error) {
+	if _, err := s.findDeviceWithPermission(ctx, uid, isAdmin, deviceID); err != nil {
+		return nil, err
+	}
+
+	queueKey := frpCommandQueuePrefix + strconv.FormatInt(deviceID, 10)
+	rawToken, err := s.rdb.LPop(ctx, queueKey).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	commandID := strings.TrimSpace(rawToken)
+	if strings.HasPrefix(commandID, "{") {
+		legacyID, convertErr := s.convertLegacyQueuedCommand(ctx, deviceID, commandID)
+		if convertErr != nil {
+			return nil, ErrFrpInvalidQueuedCommand
+		}
+		commandID = legacyID
+	}
+
+	dataKey := frpCommandDataKeyPrefix + commandID
+	cmdData, err := s.rdb.HGetAll(ctx, dataKey).Result()
+	if err != nil {
+		return nil, err
+	}
+	if len(cmdData) == 0 {
+		return nil, ErrFrpCommandDataNotFound
+	}
+
+	now := time.Now().Format(time.RFC3339)
+	_ = s.rdb.HSet(ctx, dataKey, map[string]interface{}{
+		"status":       "delivered",
+		"delivered_at": now,
+		"updated_at":   now,
+	}).Err()
+
+	return &PullCommandResult{
+		CommandID:   commandID,
+		Action:      cmdData["action"],
+		ConfigID:    cmdData["config_id"],
+		Status:      "delivered",
+		CreatedAt:   cmdData["created_at"],
+		DeliveredAt: now,
+		Payload:     cmdData["payload"],
+	}, nil
+}
+
+// ReportCommandResult 更新命令执行结果。
+func (s *FrpService) ReportCommandResult(ctx context.Context, uid int64, isAdmin bool, commandID string, req CommandResultInput) (int64, string, error) {
+	dataKey := frpCommandDataKeyPrefix + commandID
+	cmdData, err := s.rdb.HGetAll(ctx, dataKey).Result()
+	if err != nil {
+		return 0, "", err
+	}
+	if len(cmdData) == 0 {
+		return 0, "", ErrFrpCommandNotFound
+	}
+
+	deviceID, parseErr := strconv.ParseInt(cmdData["device_id"], 10, 64)
+	if parseErr != nil || deviceID <= 0 {
+		return 0, "", ErrFrpInvalidCommandData
+	}
+
+	if _, err := s.findDeviceWithPermission(ctx, uid, isAdmin, deviceID); err != nil {
+		return 0, "", err
+	}
+
+	executedAt := time.Now()
+	if strings.TrimSpace(req.ExecutedAt) != "" {
+		parsed, pErr := time.Parse(time.RFC3339, strings.TrimSpace(req.ExecutedAt))
+		if pErr != nil {
+			return 0, "", ErrFrpInvalidExecutedAt
+		}
+		executedAt = parsed
+	}
+
+	msg := strings.TrimSpace(req.ResultMessage)
+	if len(msg) > 500 {
+		msg = msg[:500]
+	}
+	failureReason := strings.TrimSpace(req.FailureReason)
+	if len(failureReason) > 500 {
+		failureReason = failureReason[:500]
+	}
+
+	status := "executed_success"
+	if !req.Success {
+		status = "executed_failed"
+		if failureReason == "" {
+			failureReason = msg
+		}
+	}
+
+	if err := s.rdb.HSet(ctx, dataKey, map[string]interface{}{
+		"status":         status,
+		"result_message": msg,
+		"failure_reason": failureReason,
+		"executed_at":    executedAt.Format(time.RFC3339),
+		"updated_at":     time.Now().Format(time.RFC3339),
+	}).Err(); err != nil {
+		return 0, "", err
+	}
+
+	return deviceID, status, nil
+}
+
+// ListDeviceCommands 查询设备命令历史。
+func (s *FrpService) ListDeviceCommands(ctx context.Context, uid int64, isAdmin bool, deviceID int64, limit int) ([]map[string]string, error) {
+	if _, err := s.findDeviceWithPermission(ctx, uid, isAdmin, deviceID); err != nil {
+		return nil, err
+	}
+
+	historyKey := frpCommandHistoryPrefix + strconv.FormatInt(deviceID, 10)
+	ids, err := s.rdb.LRange(ctx, historyKey, 0, int64(limit-1)).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]map[string]string, 0, len(ids))
+	for _, commandID := range ids {
+		dataKey := frpCommandDataKeyPrefix + strings.TrimSpace(commandID)
+		row, hErr := s.rdb.HGetAll(ctx, dataKey).Result()
+		if hErr != nil || len(row) == 0 {
+			continue
+		}
+		items = append(items, map[string]string{
+			"command_id":     row["command_id"],
+			"action":         row["action"],
+			"status":         row["status"],
+			"device_id":      row["device_id"],
+			"config_id":      row["config_id"],
+			"created_at":     row["created_at"],
+			"delivered_at":   row["delivered_at"],
+			"executed_at":    row["executed_at"],
+			"result_message": row["result_message"],
+			"failure_reason": row["failure_reason"],
+			"updated_at":     row["updated_at"],
+		})
+	}
+
+	return items, nil
+}
+
 // LogOperation 写入 FRP 关键操作日志。
 func (s *FrpService) LogOperation(ctx context.Context, userID int64, action string, detail string, clientIP string) error {
 	if len(detail) > 500 {
@@ -552,6 +875,152 @@ func generateFRPCYaml(serverAddr string, serverPort int, token string, mappings 
 	}
 
 	return b.String()
+}
+
+// resolveConfigID 解析要下发的配置 ID；如果请求未指定则选择设备最新配置。
+func (s *FrpService) resolveConfigID(ctx context.Context, deviceID int64, requested *int64) (int64, error) {
+	var cfg model.FrpConfig
+	query := s.db.WithContext(ctx).Where("device_id = ?", deviceID)
+	if requested != nil && *requested > 0 {
+		query = query.Where("id = ?", *requested)
+	}
+	if err := query.Order("id DESC").First(&cfg).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) && (requested == nil || *requested <= 0) {
+			return 0, ErrFrpNoConfigForDevice
+		}
+		return 0, err
+	}
+	return cfg.ID, nil
+}
+
+// enqueueDeviceCommand 将命令写入设备队列，供客户端轮询拉取后执行。
+func (s *FrpService) enqueueDeviceCommand(ctx context.Context, deviceID int64, payload map[string]interface{}) error {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	commandID := strings.TrimSpace(fmt.Sprintf("%v", payload["command_id"]))
+	if commandID == "" || commandID == "<nil>" {
+		return fmt.Errorf("missing command_id")
+	}
+	action := strings.TrimSpace(fmt.Sprintf("%v", payload["action"]))
+	if action == "" || action == "<nil>" {
+		action = "unknown"
+	}
+	configID := int64(0)
+	if val, ok := payload["config_id"]; ok {
+		configID = parseAnyToInt64(val)
+	}
+	now := time.Now().Format(time.RFC3339)
+
+	queueKey := frpCommandQueuePrefix + strconv.FormatInt(deviceID, 10)
+	lastKey := frpLastCommandKeyPrefix + strconv.FormatInt(deviceID, 10)
+	historyKey := frpCommandHistoryPrefix + strconv.FormatInt(deviceID, 10)
+	if err := s.persistCommandData(ctx, commandID, deviceID, action, configID, "pending", string(raw), now); err != nil {
+		return err
+	}
+	if err := s.rdb.RPush(ctx, queueKey, commandID).Err(); err != nil {
+		return err
+	}
+	if err := s.rdb.Expire(ctx, queueKey, 7*24*time.Hour).Err(); err != nil {
+		return err
+	}
+	if err := s.rdb.LPush(ctx, historyKey, commandID).Err(); err != nil {
+		return err
+	}
+	if err := s.rdb.LTrim(ctx, historyKey, 0, frpCommandHistoryLimit-1).Err(); err != nil {
+		return err
+	}
+	if err := s.rdb.Expire(ctx, historyKey, 7*24*time.Hour).Err(); err != nil {
+		return err
+	}
+	if err := s.rdb.Set(ctx, lastKey, string(raw), 7*24*time.Hour).Err(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// convertLegacyQueuedCommand 兼容旧队列格式（整段 JSON），并转换为标准命令数据。
+func (s *FrpService) convertLegacyQueuedCommand(ctx context.Context, deviceID int64, raw string) (string, error) {
+	var payload map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return "", err
+	}
+	commandID := strings.TrimSpace(fmt.Sprintf("%v", payload["command_id"]))
+	if commandID == "" || commandID == "<nil>" {
+		commandID = fmt.Sprintf("legacy-%d-%d", deviceID, time.Now().UnixNano())
+		payload["command_id"] = commandID
+	}
+	if _, ok := payload["device_id"]; !ok {
+		payload["device_id"] = deviceID
+	}
+	action := strings.TrimSpace(fmt.Sprintf("%v", payload["action"]))
+	if action == "" || action == "<nil>" {
+		action = "unknown"
+	}
+	configID := int64(0)
+	if val, ok := payload["config_id"]; ok {
+		configID = parseAnyToInt64(val)
+	}
+	now := time.Now().Format(time.RFC3339)
+	if err := s.persistCommandData(ctx, commandID, deviceID, action, configID, "pending", raw, now); err != nil {
+		return "", err
+	}
+	historyKey := frpCommandHistoryPrefix + strconv.FormatInt(deviceID, 10)
+	if err := s.rdb.LPush(ctx, historyKey, commandID).Err(); err != nil {
+		return "", err
+	}
+	if err := s.rdb.LTrim(ctx, historyKey, 0, frpCommandHistoryLimit-1).Err(); err != nil {
+		return "", err
+	}
+	if err := s.rdb.Expire(ctx, historyKey, 7*24*time.Hour).Err(); err != nil {
+		return "", err
+	}
+	return commandID, nil
+}
+
+// persistCommandData 持久化命令基础信息，用于后续状态流转和历史查询。
+func (s *FrpService) persistCommandData(ctx context.Context, commandID string, deviceID int64, action string, configID int64, status string, payload string, now string) error {
+	commandDataKey := frpCommandDataKeyPrefix + commandID
+	if err := s.rdb.HSet(ctx, commandDataKey, map[string]interface{}{
+		"command_id":     commandID,
+		"action":         action,
+		"device_id":      deviceID,
+		"config_id":      configID,
+		"status":         status,
+		"created_at":     now,
+		"updated_at":     now,
+		"payload":        payload,
+		"result_message": "",
+		"failure_reason": "",
+	}).Err(); err != nil {
+		return err
+	}
+	if err := s.rdb.Expire(ctx, commandDataKey, 7*24*time.Hour).Err(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// boolToInt 布尔值转整型，便于 Redis 字段存储。
+func boolToInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
+}
+
+// parseAnyToInt64 将任意常见数字类型转换为 int64。
+func parseAnyToInt64(v interface{}) int64 {
+	s := strings.TrimSpace(fmt.Sprintf("%v", v))
+	if s == "" || s == "<nil>" {
+		return 0
+	}
+	i, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return i
 }
 
 // isDuplicateKeyErr 判断是否为唯一键冲突。
