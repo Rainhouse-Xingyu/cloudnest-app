@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"time"
 
 	"cloudenest_go/model"
 )
@@ -22,6 +23,17 @@ type BatchDownloadEntry struct {
 	File        model.File
 	IsFolderZip bool
 	StoragePath string
+}
+
+// FileOperationLogQuery 定义操作日志查询参数。
+type FileOperationLogQuery struct {
+	Action    string
+	Status    string
+	StartTime string
+	EndTime   string
+	Page      int
+	Limit     int
+	All       int
 }
 
 // FileRepository 定义 File 模块核心查询访问接口。
@@ -49,4 +61,9 @@ type FileRepository interface {
 	UpsertUploadChunkAndRefreshProgress(ctx context.Context, taskID int64, uploadID string, chunkIndex int, chunkSize int64, chunkPath string) error
 	CountDoneUploadChunks(ctx context.Context, uploadID string) (int64, error)
 	CompleteUploadPersist(ctx context.Context, uid int64, parentID int64, uploadID string, task model.UploadTask, totalChunks int, storagePath string, mergedSize int64, fileHash string) (model.File, error)
+	CreateShare(ctx context.Context, uid int64, fileID int64, shareCode string, expireAt *time.Time) (model.Share, error)
+	ListShares(ctx context.Context, uid int64) ([]model.Share, error)
+	RevokeShare(ctx context.Context, uid int64, code string) error
+	ListOperationLogs(ctx context.Context, uid int64, isAdmin bool, q FileOperationLogQuery) ([]model.OperationLog, int64, error)
+	ExportOperationLogs(ctx context.Context, uid int64, isAdmin bool, q FileOperationLogQuery) ([]model.OperationLog, error)
 }

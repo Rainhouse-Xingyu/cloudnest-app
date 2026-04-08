@@ -521,6 +521,108 @@ func (r *FileRepo) ResolveValidShare(ctx context.Context, code string) (model.Sh
 	return share, file, nil
 }
 
+func (r *FileRepo) CreateShare(ctx context.Context, uid int64, fileID int64, shareCode string, expireAt *time.Time) (model.Share, error) {
+	fileIDCopy := fileID
+	uidCopy := uid
+	share := model.Share{FileID: &fileIDCopy, UserID: &uidCopy, ShareCode: shareCode, ExpireTime: expireAt}
+	if err := r.db.WithContext(ctx).Create(&share).Error; err != nil {
+		return model.Share{}, err
+	}
+	return share, nil
+}
+
+func (r *FileRepo) ListShares(ctx context.Context, uid int64) ([]model.Share, error) {
+	var shares []model.Share
+	if err := r.db.WithContext(ctx).Where("user_id = ?", uid).Order("create_time DESC").Find(&shares).Error; err != nil {
+		return nil, err
+	}
+	return shares, nil
+}
+
+func (r *FileRepo) RevokeShare(ctx context.Context, uid int64, code string) error {
+	res := r.db.WithContext(ctx).Where("share_code = ? AND user_id = ?", code, uid).Delete(&model.Share{})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
+func (r *FileRepo) ListOperationLogs(ctx context.Context, uid int64, isAdmin bool, q contract.FileOperationLogQuery) ([]model.OperationLog, int64, error) {
+	dbq := r.db.WithContext(ctx).Model(&model.OperationLog{})
+	if !(isAdmin && q.All == 1) {
+		dbq = dbq.Where("user_id = ?", uid)
+	}
+	if q.Action != "" {
+		dbq = dbq.Where("action = ?", q.Action)
+	}
+	if q.Status != "" {
+		dbq = dbq.Where("status = ?", q.Status)
+	}
+	if q.StartTime != "" {
+		startAt, err := parseFlexibleTimeForFileRepo(q.StartTime)
+		if err != nil {
+			return nil, 0, fmt.Errorf("invalid start_time")
+		}
+		dbq = dbq.Where("create_time >= ?", startAt)
+	}
+	if q.EndTime != "" {
+		endAt, err := parseFlexibleTimeForFileRepo(q.EndTime)
+		if err != nil {
+			return nil, 0, fmt.Errorf("invalid end_time")
+		}
+		dbq = dbq.Where("create_time <= ?", endAt)
+	}
+
+	var total int64
+	if err := dbq.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	offset := (q.Page - 1) * q.Limit
+	var rows []model.OperationLog
+	if err := dbq.Order("id DESC").Limit(q.Limit).Offset(offset).Find(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return rows, total, nil
+}
+
+func (r *FileRepo) ExportOperationLogs(ctx context.Context, uid int64, isAdmin bool, q contract.FileOperationLogQuery) ([]model.OperationLog, error) {
+	dbq := r.db.WithContext(ctx).Model(&model.OperationLog{})
+	if !(isAdmin && q.All == 1) {
+		dbq = dbq.Where("user_id = ?", uid)
+	}
+	if q.Action != "" {
+		dbq = dbq.Where("action = ?", q.Action)
+	}
+	if q.Status != "" {
+		dbq = dbq.Where("status = ?", q.Status)
+	}
+	if q.StartTime != "" {
+		startAt, err := parseFlexibleTimeForFileRepo(q.StartTime)
+		if err != nil {
+			return nil, fmt.Errorf("invalid start_time")
+		}
+		dbq = dbq.Where("create_time >= ?", startAt)
+	}
+	if q.EndTime != "" {
+		endAt, err := parseFlexibleTimeForFileRepo(q.EndTime)
+		if err != nil {
+			return nil, fmt.Errorf("invalid end_time")
+		}
+		dbq = dbq.Where("create_time <= ?", endAt)
+	}
+
+	var rows []model.OperationLog
+	if err := dbq.Order("id DESC").Limit(q.Limit).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
 func (r *FileRepo) CollectBatchDownloadEntries(ctx context.Context, uid int64, fileIDs []int64) ([]contract.BatchDownloadEntry, error) {
 	entries := make([]contract.BatchDownloadEntry, 0)
 	for _, fileID := range uniqueInt64ForFileRepo(fileIDs) {

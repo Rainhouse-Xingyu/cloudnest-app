@@ -1106,7 +1106,13 @@ func (s *FileService) CreateShare(ctx context.Context, uid int64, fileID int64, 
 	}
 
 	share := model.Share{FileID: &fileIDCopy, UserID: &uidCopy, ShareCode: shareCode, ExpireTime: expireAt}
-	if err := s.db.WithContext(ctx).Create(&share).Error; err != nil {
+	if s.fileRepo != nil {
+		repoShare, err := s.fileRepo.CreateShare(ctx, uid, fileID, shareCode, expireAt)
+		if err != nil {
+			return FileCreateShareResult{}, err
+		}
+		share = repoShare
+	} else if err := s.db.WithContext(ctx).Create(&share).Error; err != nil {
 		return FileCreateShareResult{}, err
 	}
 
@@ -1116,6 +1122,10 @@ func (s *FileService) CreateShare(ctx context.Context, uid int64, fileID int64, 
 
 // ListShares 查询当前用户的分享记录。
 func (s *FileService) ListShares(ctx context.Context, uid int64) ([]model.Share, error) {
+	if s.fileRepo != nil {
+		return s.fileRepo.ListShares(ctx, uid)
+	}
+
 	var shares []model.Share
 	if err := s.db.WithContext(ctx).Where("user_id = ?", uid).Order("create_time DESC").Find(&shares).Error; err != nil {
 		return nil, err
@@ -1125,6 +1135,14 @@ func (s *FileService) ListShares(ctx context.Context, uid int64) ([]model.Share,
 
 // RevokeShare 撤销指定分享。
 func (s *FileService) RevokeShare(ctx context.Context, uid int64, code string, clientIP string) error {
+	if s.fileRepo != nil {
+		if err := s.fileRepo.RevokeShare(ctx, uid, code); err != nil {
+			return err
+		}
+		_ = s.logOperation(ctx, uid, nil, "revoke_share", "success", fmt.Sprintf("share_code=%s", code), clientIP)
+		return nil
+	}
+
 	res := s.db.WithContext(ctx).Where("share_code = ? AND user_id = ?", code, uid).Delete(&model.Share{})
 	if res.Error != nil {
 		return res.Error
@@ -1297,6 +1315,22 @@ func (s *FileService) SearchFiles(ctx context.Context, uid int64, q FileSearchQu
 
 // ListOperationLogs 查询操作日志。
 func (s *FileService) ListOperationLogs(ctx context.Context, uid int64, isAdmin bool, q FileOperationLogQuery) (FileOperationLogListResult, error) {
+	if s.fileRepo != nil {
+		rows, total, err := s.fileRepo.ListOperationLogs(ctx, uid, isAdmin, contract.FileOperationLogQuery{
+			Action:    q.Action,
+			Status:    q.Status,
+			StartTime: q.StartTime,
+			EndTime:   q.EndTime,
+			Page:      q.Page,
+			Limit:     q.Limit,
+			All:       q.All,
+		})
+		if err != nil {
+			return FileOperationLogListResult{}, err
+		}
+		return FileOperationLogListResult{Items: rows, Total: total}, nil
+	}
+
 	dbq := s.db.WithContext(ctx).Model(&model.OperationLog{})
 	if !(isAdmin && q.All == 1) {
 		dbq = dbq.Where("user_id = ?", uid)
@@ -1338,6 +1372,18 @@ func (s *FileService) ListOperationLogs(ctx context.Context, uid int64, isAdmin 
 
 // ExportOperationLogs 导出操作日志查询（返回行数据，由 handler 输出 CSV）。
 func (s *FileService) ExportOperationLogs(ctx context.Context, uid int64, isAdmin bool, q FileOperationLogQuery) ([]model.OperationLog, error) {
+	if s.fileRepo != nil {
+		return s.fileRepo.ExportOperationLogs(ctx, uid, isAdmin, contract.FileOperationLogQuery{
+			Action:    q.Action,
+			Status:    q.Status,
+			StartTime: q.StartTime,
+			EndTime:   q.EndTime,
+			Page:      q.Page,
+			Limit:     q.Limit,
+			All:       q.All,
+		})
+	}
+
 	dbq := s.db.WithContext(ctx).Model(&model.OperationLog{})
 	if !(isAdmin && q.All == 1) {
 		dbq = dbq.Where("user_id = ?", uid)
