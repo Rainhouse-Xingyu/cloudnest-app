@@ -4,14 +4,12 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -19,6 +17,7 @@ import (
 
 	"cloudenest_go/internal/config"
 	"cloudenest_go/internal/middleware"
+	"cloudenest_go/internal/service"
 	"cloudenest_go/model"
 
 	"github.com/gin-gonic/gin"
@@ -34,6 +33,7 @@ type AIHandler struct {
 	DB         *gorm.DB
 	Cfg        config.Config
 	HTTPClient *http.Client
+	Svc        *service.AIService
 }
 
 // OCRRequest OCR 识别请求。
@@ -128,96 +128,30 @@ func (h *AIHandler) OCR(c *gin.Context) {
 		return
 	}
 
-	f, storage, err := h.getReadableFileAndStorage(c.Request.Context(), uid, req.FileID)
+	res, err := h.Svc.OCR(c.Request.Context(), uid, service.AIOCRInput{
+		FileID:      req.FileID,
+		Location:    req.Location,
+		Landmark:    req.Landmark,
+		CapturedAt:  req.CapturedAt,
+		Tags:        req.Tags,
+		Description: req.Description,
+	})
 	if err != nil {
 		h.writeAIErr(c, err)
 		return
 	}
 
-	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(f.Filename), "."))
-	if !isImageExt(ext) && !isLivePhotoImageExt(ext) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "ocr only supports image files"})
-		return
-	}
-
-	raw, err := os.ReadFile(storage.FilePath)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "read image failed"})
-		return
-	}
-
-	// 入库时优先读取照片 EXIF 信息（GPS/拍摄时间/设备信息）。
-	exifMeta := extractEXIFInfo(storage.FilePath)
-
-	prompt := "请执行OCR识别，完整提取图片中的可见文字，尽量保留原始顺序与换行。"
-	ocrText, callErr := h.callOllamaGenerate(c.Request.Context(), prompt, []string{base64.StdEncoding.EncodeToString(raw)})
-	if callErr != nil {
-		h.createAITask(c.Request.Context(), uid, req.FileID, "ocr", "failed", callErr.Error())
-		c.JSON(http.StatusBadGateway, gin.H{"error": "ollama call failed"})
-		return
-	}
-	ocrText = strings.TrimSpace(ocrText)
-	if ocrText == "" {
-		ocrText = "未识别到有效文本"
-	}
-
-	// 文档照片继续做“关键点摘要”，便于搜索结果预览与快速阅读。
-	photoSummary := h.summarizeDocumentPhoto(c.Request.Context(), ocrText)
-
-	exifLocationTag := formatEXIFLocationTag(exifMeta)
-	tags := mergeTags(req.Tags, req.Location, req.Landmark, exifLocationTag)
-	desc := strings.TrimSpace(req.Description)
-	if capAt := strings.TrimSpace(req.CapturedAt); capAt != "" {
-		if desc == "" {
-			desc = "captured_at=" + capAt
-		} else {
-			desc = desc + " | captured_at=" + capAt
-		}
-	}
-
-	if exifMeta.CapturedAt != "" {
-		if desc == "" {
-			desc = "exif_captured_at=" + exifMeta.CapturedAt
-		} else {
-			desc = desc + " | exif_captured_at=" + exifMeta.CapturedAt
-		}
-	}
-	if exifMeta.CameraMake != "" || exifMeta.CameraModel != "" {
-		camera := strings.TrimSpace(strings.TrimSpace(exifMeta.CameraMake) + " " + strings.TrimSpace(exifMeta.CameraModel))
-		if camera != "" {
-			if desc == "" {
-				desc = "camera=" + camera
-			} else {
-				desc = desc + " | camera=" + camera
-			}
-		}
-	}
-	if photoSummary != "" {
-		if desc == "" {
-			desc = "doc_summary=" + photoSummary
-		} else {
-			desc = desc + " | doc_summary=" + photoSummary
-		}
-	}
-
-	meta, err := h.upsertAIMetadata(c.Request.Context(), req.FileID, tags, desc, ocrText)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "save ai metadata failed"})
-		return
-	}
-
-	_ = h.createAITask(c.Request.Context(), uid, req.FileID, "ocr", "success", ocrText)
 	c.JSON(http.StatusOK, gin.H{
-		"item": meta,
+		"item": res.Metadata,
 		"exif": gin.H{
-			"latitude":     exifMeta.Latitude,
-			"longitude":    exifMeta.Longitude,
-			"altitude":     exifMeta.Altitude,
-			"captured_at":  exifMeta.CapturedAt,
-			"camera_make":  exifMeta.CameraMake,
-			"camera_model": exifMeta.CameraModel,
+			"latitude":     res.EXIF.Latitude,
+			"longitude":    res.EXIF.Longitude,
+			"altitude":     res.EXIF.Altitude,
+			"captured_at":  res.EXIF.CapturedAt,
+			"camera_make":  res.EXIF.CameraMake,
+			"camera_model": res.EXIF.CameraModel,
 		},
-		"doc_summary": photoSummary,
+		"doc_summary": res.DocSummary,
 	})
 }
 
@@ -243,18 +177,28 @@ func (h *AIHandler) Search(c *gin.Context) {
 		q.Limit = 20
 	}
 
-	items, total, err := h.executeAISearch(c.Request.Context(), uid, q)
+	res, err := h.Svc.Search(c.Request.Context(), uid, service.AISearchQuery{
+		Keyword:   q.Keyword,
+		FileType:  q.FileType,
+		Location:  q.Location,
+		Landmark:  q.Landmark,
+		StartTime: q.StartTime,
+		EndTime:   q.EndTime,
+		TagOnly:   q.TagOnly,
+		Page:      q.Page,
+		Limit:     q.Limit,
+	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"items": items,
+		"items": res.Items,
 		"pagination": gin.H{
 			"page":  q.Page,
 			"limit": q.Limit,
-			"total": total,
+			"total": res.Total,
 		},
 	})
 }
@@ -274,43 +218,22 @@ func (h *AIHandler) NLSearch(c *gin.Context) {
 		return
 	}
 
-	plan, source := h.parseNLSearchPlan(c.Request.Context(), req.Question)
-
-	q := AISearchQuery{
-		Keyword:   strings.TrimSpace(plan.Keyword),
-		FileType:  strings.ToLower(strings.TrimSpace(plan.FileType)),
-		Location:  strings.TrimSpace(plan.Location),
-		Landmark:  strings.TrimSpace(plan.Landmark),
-		StartTime: strings.TrimSpace(plan.StartTime),
-		EndTime:   strings.TrimSpace(plan.EndTime),
-		Page:      req.Page,
-		Limit:     req.Limit,
-	}
-	// 自然语言场景优先走标签检索，降低 OCR 大文本扫描成本。
-	q.TagOnly = shouldUseTagOnlyForNL(req.Question, q)
-	if q.Page <= 0 {
-		q.Page = 1
-	}
-	if q.Limit <= 0 || q.Limit > 100 {
-		q.Limit = 20
-	}
-
-	items, total, err := h.executeAISearch(c.Request.Context(), uid, q)
+	res, err := h.Svc.NLSearch(c.Request.Context(), uid, req.Question, req.Page, req.Limit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"items": items,
+		"items": res.Search.Items,
 		"pagination": gin.H{
-			"page":  q.Page,
-			"limit": q.Limit,
-			"total": total,
+			"page":  res.Query.Page,
+			"limit": res.Query.Limit,
+			"total": res.Search.Total,
 		},
 		"nl_plan": gin.H{
-			"source": source,
-			"query":  q,
+			"source": res.Source,
+			"query":  res.Query,
 		},
 	})
 }
@@ -558,57 +481,20 @@ func (h *AIHandler) Summarize(c *gin.Context) {
 		req.MaxPoints = 6
 	}
 
-	f, storage, err := h.getReadableFileAndStorage(c.Request.Context(), uid, req.FileID)
+	res, err := h.Svc.Summarize(c.Request.Context(), uid, req.FileID, req.MaxPoints)
 	if err != nil {
 		h.writeAIErr(c, err)
 		return
 	}
 
-	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(f.Filename), "."))
-
-	body, truncated, err := extractDocumentText(storage.FilePath, ext, aiReadMaxBytes)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "read file failed"})
-		return
-	}
-	body = strings.TrimSpace(body)
-	if body == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "document content is empty or unsupported"})
-		return
-	}
-
-	prompt := fmt.Sprintf("请对下面文档生成中文摘要：\\n1) 输出%d条关键点（编号列表）\\n2) 最后补充一段不超过120字的总览\\n3) 只输出结果，不要解释过程。\\n\\n文档内容：\\n%s", req.MaxPoints, body)
-	summary, callErr := h.callOllamaGenerate(c.Request.Context(), prompt, nil)
-	if callErr != nil {
-		h.createAITask(c.Request.Context(), uid, req.FileID, "document_summary", "failed", callErr.Error())
-		c.JSON(http.StatusBadGateway, gin.H{"error": "ollama call failed"})
-		return
-	}
-	summary = strings.TrimSpace(summary)
-
-	// 将文档摘要与正文索引写入 ai_metadata，便于后续关键词检索直接命中。
-	metaDesc := "doc_summary=" + summary
-	if truncated {
-		metaDesc += " | content_truncated=1"
-	}
-	indexedText := body
-	if len(indexedText) > 100000 {
-		indexedText = indexedText[:100000]
-	}
-	if _, err := h.upsertAIMetadata(c.Request.Context(), req.FileID, mergeTags("doc", ext), metaDesc, indexedText); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "save ai metadata failed"})
-		return
-	}
-	_ = h.createAITask(c.Request.Context(), uid, req.FileID, "document_summary", "success", summary)
-
 	c.JSON(http.StatusOK, gin.H{
 		"item": gin.H{
-			"file_id":    req.FileID,
-			"filename":   f.Filename,
-			"summary":    summary,
-			"truncated":  truncated,
-			"max_points": req.MaxPoints,
-			"model":      h.Cfg.AIOllamaModel,
+			"file_id":    res.FileID,
+			"filename":   res.Filename,
+			"summary":    res.Summary,
+			"truncated":  res.Truncated,
+			"max_points": res.MaxPoints,
+			"model":      res.Model,
 		},
 	})
 }
@@ -740,24 +626,7 @@ func (h *AIHandler) AskAssistant(c *gin.Context) {
 		return
 	}
 
-	guideText := ""
-	if strings.TrimSpace(h.Cfg.AIGuideDocPath) != "" {
-		b, err := os.ReadFile(strings.TrimSpace(h.Cfg.AIGuideDocPath))
-		if err == nil {
-			guideText = string(b)
-			if len(guideText) > 24000 {
-				guideText = guideText[:24000]
-			}
-		}
-	}
-
-	prompt := "你是 CloudNest 系统助手，请根据提供的项目文档和当前问题，用中文给出准确可执行的答复。"
-	if guideText != "" {
-		prompt += "\\n\\n项目文档：\\n" + guideText
-	}
-	prompt += "\\n\\n用户问题：" + question + "\\n\\n请直接给出答案。"
-
-	answer, err := h.callOllamaGenerate(c.Request.Context(), prompt, nil)
+	res, err := h.Svc.AskAssistant(c.Request.Context(), question)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "ollama call failed"})
 		return
@@ -765,9 +634,9 @@ func (h *AIHandler) AskAssistant(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"item": gin.H{
-			"answer":           strings.TrimSpace(answer),
-			"model":            h.Cfg.AIOllamaModel,
-			"guide_doc_loaded": guideText != "",
+			"answer":           strings.TrimSpace(res.Answer),
+			"model":            res.Model,
+			"guide_doc_loaded": res.GuideDocLoaded,
 		},
 	})
 }
@@ -794,43 +663,7 @@ func (h *AIHandler) ApplySetting(c *gin.Context) {
 		return
 	}
 
-	err := h.DB.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
-		var row model.SystemSetting
-		err := tx.Where("setting_key = ?", req.SettingKey).First(&row).Error
-		if err != nil {
-			if !errors.Is(err, gorm.ErrRecordNotFound) {
-				return err
-			}
-			row = model.SystemSetting{
-				SettingKey:   req.SettingKey,
-				SettingValue: req.SettingValue,
-				Description:  req.Description,
-			}
-			if err := tx.Create(&row).Error; err != nil {
-				return err
-			}
-		} else {
-			updates := map[string]interface{}{"setting_value": req.SettingValue}
-			if req.Description != "" {
-				updates["description"] = req.Description
-			}
-			if err := tx.Model(&row).Updates(updates).Error; err != nil {
-				return err
-			}
-		}
-
-		detail := fmt.Sprintf("ai_apply_setting key=%s value=%s", req.SettingKey, req.SettingValue)
-		if len(detail) > 500 {
-			detail = detail[:500]
-		}
-		return tx.Create(&model.OperationLog{
-			UserID:   &uid,
-			Action:   "ai_apply_setting",
-			Status:   "success",
-			Detail:   detail,
-			ClientIP: c.ClientIP(),
-		}).Error
-	})
+	err := h.Svc.ApplySetting(c.Request.Context(), uid, req.SettingKey, req.SettingValue, req.Description, c.ClientIP())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "save setting failed"})
 		return
@@ -1020,6 +853,30 @@ func (h *AIHandler) writeAIErr(c *gin.Context, err error) {
 		return
 	}
 	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "ollama call failed") {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "ollama call failed"})
+		return
+	}
+	if strings.Contains(msg, "ocr only supports image files") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ocr only supports image files"})
+		return
+	}
+	if strings.Contains(msg, "document content is empty or unsupported") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "document content is empty or unsupported"})
+		return
+	}
+	if strings.Contains(msg, "read image failed") {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "read image failed"})
+		return
+	}
+	if strings.Contains(msg, "read file failed") {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "read file failed"})
+		return
+	}
+	if strings.Contains(msg, "save ai metadata failed") {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "save ai metadata failed"})
+		return
+	}
 	if strings.Contains(msg, "permission denied") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
 		return
