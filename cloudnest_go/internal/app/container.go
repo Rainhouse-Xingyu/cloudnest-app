@@ -28,6 +28,7 @@ type Container struct {
 	AuthzService        *service.AuthzService
 	AuthService         *service.AuthService
 	AdminService        *service.AdminService
+	SettingsService     *service.SettingsService
 	OperationLogService *service.OperationLogService
 
 	AuthHandler          *handler.AuthHandler
@@ -49,6 +50,7 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 	authzService := service.NewAuthzService(permissionRepo)
 	authService := service.NewAuthService(db, rdb, cfg)
 	adminService := service.NewAdminService(db, rdb)
+	settingsService := service.NewSettingsService(db)
 	operationLogService := service.NewOperationLogService(operationLogRepo)
 
 	return &Container{
@@ -63,12 +65,13 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 		AuthzService:        authzService,
 		AuthService:         authService,
 		AdminService:        adminService,
+		SettingsService:     settingsService,
 		OperationLogService: operationLogService,
 
 		AuthHandler:          &handler.AuthHandler{Svc: authService},
 		AdminHandler:         &handler.AdminHandler{Svc: adminService},
 		FileHandler:          &handler.FileHandler{DB: db, RDB: rdb, Cfg: cfg},
-		SettingsHandler:      &handler.SettingsHandler{DB: db},
+		SettingsHandler:      &handler.SettingsHandler{Svc: settingsService},
 		CollaborationHandler: &handler.CollaborationHandler{DB: db},
 		AIHandler:            &handler.AIHandler{DB: db, Cfg: cfg},
 		FrpHandler:           &handler.FrpHandler{DB: db, RDB: rdb},
