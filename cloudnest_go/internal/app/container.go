@@ -34,6 +34,7 @@ type Container struct {
 	FrpService           *service.FrpService
 	LivePhotoService     *service.LivePhotoService
 	AIService            *service.AIService
+	FileService          *service.FileService
 
 	AuthHandler          *handler.AuthHandler
 	AdminHandler         *handler.AdminHandler
@@ -60,6 +61,7 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 	frpService := service.NewFrpService(db, rdb)
 	livePhotoService := service.NewLivePhotoService(db)
 	aiService := service.NewAIService(db, cfg, nil)
+	fileService := service.NewFileService(db)
 
 	return &Container{
 		Cfg: cfg,
@@ -79,10 +81,11 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 		FrpService:           frpService,
 		LivePhotoService:     livePhotoService,
 		AIService:            aiService,
+		FileService:          fileService,
 
 		AuthHandler:          &handler.AuthHandler{Svc: authService},
 		AdminHandler:         &handler.AdminHandler{Svc: adminService},
-		FileHandler:          &handler.FileHandler{DB: db, RDB: rdb, Cfg: cfg},
+		FileHandler:          &handler.FileHandler{DB: db, RDB: rdb, Cfg: cfg, Svc: fileService},
 		SettingsHandler:      &handler.SettingsHandler{Svc: settingsService},
 		CollaborationHandler: &handler.CollaborationHandler{Svc: collaborationService},
 		AIHandler:            &handler.AIHandler{DB: db, Cfg: cfg, Svc: aiService},

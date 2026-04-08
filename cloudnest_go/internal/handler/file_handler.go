@@ -28,6 +28,7 @@ import (
 
 	"cloudenest_go/internal/config"
 	"cloudenest_go/internal/middleware"
+	"cloudenest_go/internal/service"
 	"cloudenest_go/model"
 
 	"github.com/gin-gonic/gin"
@@ -44,6 +45,7 @@ type FileHandler struct {
 	RDB        *redis.Client
 	Cfg        config.Config
 	HTTPClient *http.Client
+	Svc        *service.FileService
 }
 
 type autoAnalyzeLLMResult struct {
@@ -137,28 +139,12 @@ func (h *FileHandler) List(c *gin.Context) {
 		return
 	}
 
-	if parentID > 0 {
-		canRead, err := h.canAccessFile(c.Request.Context(), uid, parentID, false)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-			return
-		}
-		if !canRead {
+	rows, err := h.Svc.ListFiles(c.Request.Context(), uid, parentID)
+	if err != nil {
+		if errors.Is(err, service.ErrFilePermissionDenied) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
 			return
 		}
-	}
-
-	var rows []model.File
-	err = h.DB.WithContext(c.Request.Context()).
-		Table("file f").
-		Select("f.*").
-		Joins("LEFT JOIN file_permission fp ON fp.file_id = f.id AND fp.user_id = ?", uid).
-		Where("f.parent_id = ? AND f.is_deleted = 0", parentID).
-		Where("f.user_id = ? OR fp.permission IN ?", uid, []string{"read", "write"}).
-		Order("f.is_folder DESC, f.filename ASC").
-		Find(&rows).Error
-	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
@@ -184,57 +170,26 @@ func (h *FileHandler) CreateFolder(c *gin.Context) {
 		return
 	}
 
-	if req.ParentID > 0 {
-		canWrite, err := h.canAccessFile(c.Request.Context(), uid, req.ParentID, true)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-			return
-		}
-		if !canWrite {
+	folder, err := h.Svc.CreateFolder(c.Request.Context(), uid, req.Name, req.ParentID, c.ClientIP())
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrFilePermissionDenied):
 			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
 			return
-		}
-
-		var parent model.File
-		if err := h.DB.WithContext(c.Request.Context()).First(&parent, "id = ? AND is_deleted = 0", req.ParentID).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				c.JSON(http.StatusNotFound, gin.H{"error": "parent not found"})
-				return
-			}
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+		case errors.Is(err, service.ErrFileParentNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "parent not found"})
 			return
-		}
-		if parent.IsFolder != 1 {
+		case errors.Is(err, service.ErrFileParentNotFolder):
 			c.JSON(http.StatusBadRequest, gin.H{"error": "parent is not folder"})
 			return
+		case errors.Is(err, service.ErrFileNameConflict):
+			c.JSON(http.StatusConflict, gin.H{"error": "name already exists in this folder"})
+			return
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "create folder failed"})
+			return
 		}
 	}
-
-	var existed int64
-	err := h.DB.WithContext(c.Request.Context()).
-		Model(&model.File{}).
-		Where("parent_id = ? AND filename = ? AND is_deleted = 0", req.ParentID, req.Name).
-		Count(&existed).Error
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-	if existed > 0 {
-		c.JSON(http.StatusConflict, gin.H{"error": "name already exists in this folder"})
-		return
-	}
-
-	folder := model.File{
-		UserID:   uid,
-		Filename: req.Name,
-		ParentID: req.ParentID,
-		IsFolder: 1,
-	}
-	if err := h.DB.WithContext(c.Request.Context()).Create(&folder).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "create folder failed"})
-		return
-	}
-	_ = h.logOperation(c.Request.Context(), uid, &folder.ID, "create_folder", "success", fmt.Sprintf("parent_id=%d", req.ParentID), c.ClientIP())
 
 	c.JSON(http.StatusOK, gin.H{"item": folder})
 }
@@ -258,46 +213,23 @@ func (h *FileHandler) Rename(c *gin.Context) {
 		return
 	}
 
-	canWrite, err := h.canAccessFile(c.Request.Context(), uid, fileID, true)
+	f, err := h.Svc.RenameFile(c.Request.Context(), uid, fileID, req.Name, c.ClientIP())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-	if !canWrite {
-		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-		return
-	}
-
-	var f model.File
-	if err := h.DB.WithContext(c.Request.Context()).First(&f, "id = ? AND is_deleted = 0", fileID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		switch {
+		case errors.Is(err, service.ErrFilePermissionDenied):
+			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+			return
+		case errors.Is(err, service.ErrFileNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
 			return
+		case errors.Is(err, service.ErrFileNameConflict):
+			c.JSON(http.StatusConflict, gin.H{"error": "name already exists in this folder"})
+			return
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "rename failed"})
+			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
 	}
-
-	var existed int64
-	err = h.DB.WithContext(c.Request.Context()).
-		Model(&model.File{}).
-		Where("parent_id = ? AND filename = ? AND is_deleted = 0 AND id <> ?", f.ParentID, req.Name, f.ID).
-		Count(&existed).Error
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-	if existed > 0 {
-		c.JSON(http.StatusConflict, gin.H{"error": "name already exists in this folder"})
-		return
-	}
-
-	if err := h.DB.WithContext(c.Request.Context()).Model(&f).Update("filename", req.Name).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "rename failed"})
-		return
-	}
-	f.Filename = req.Name
-	_ = h.logOperation(c.Request.Context(), uid, &f.ID, "rename", "success", "renamed file", c.ClientIP())
 
 	c.JSON(http.StatusOK, gin.H{"item": f})
 }
@@ -310,57 +242,23 @@ func (h *FileHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	canWrite, err := h.canAccessFile(c.Request.Context(), uid, fileID, true)
+	err = h.Svc.DeleteFile(c.Request.Context(), uid, fileID, c.ClientIP())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-	if !canWrite {
-		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-		return
-	}
-
-	var f model.File
-	if err := h.DB.WithContext(c.Request.Context()).First(&f, "id = ? AND is_deleted = 0", fileID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		switch {
+		case errors.Is(err, service.ErrFilePermissionDenied):
+			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+			return
+		case errors.Is(err, service.ErrFileNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
 			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-
-	if f.IsFolder == 1 {
-		var childCount int64
-		err := h.DB.WithContext(c.Request.Context()).
-			Model(&model.File{}).
-			Where("parent_id = ? AND is_deleted = 0", fileID).
-			Count(&childCount).Error
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-			return
-		}
-		if childCount > 0 {
+		case errors.Is(err, service.ErrFileFolderNotEmpty):
 			c.JSON(http.StatusConflict, gin.H{"error": "folder is not empty"})
 			return
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "delete failed"})
+			return
 		}
 	}
-
-	err = h.DB.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&f).Update("is_deleted", 1).Error; err != nil {
-			return err
-		}
-		// 文件删除后同步清理 Live Photo 关系，避免悬挂绑定。
-		if err := h.cleanupLivePhotoByFileIDs(tx, []int64{f.ID}); err != nil {
-			return err
-		}
-		return nil
-	})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "delete failed"})
-		return
-	}
-	_ = h.logOperation(c.Request.Context(), uid, &f.ID, "delete", "success", "moved to recycle bin", c.ClientIP())
 
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
@@ -381,85 +279,46 @@ func (h *FileHandler) InitUpload(c *gin.Context) {
 		return
 	}
 
-	// 分片大小优先使用请求值；未传时读取 system_setting；都没有则回落 4MB。
-	if req.ChunkSize <= 0 {
-		if v, ok, err := h.getSystemSettingInt64(c.Request.Context(), "upload_default_chunk_size_mb"); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-			return
-		} else if ok && v > 0 {
-			req.ChunkSize = int(v * 1024 * 1024)
-		}
-	}
-	if req.ChunkSize <= 0 {
-		req.ChunkSize = 4 * 1024 * 1024
-	}
-
-	// total_chunks 未传时自动按 total_size/chunk_size 计算。
-	calculatedTotalChunks := int((req.TotalSize + int64(req.ChunkSize) - 1) / int64(req.ChunkSize))
-	if req.TotalChunks <= 0 {
-		req.TotalChunks = calculatedTotalChunks
-	}
-	if req.TotalChunks <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid total_chunks"})
-		return
-	}
-
-	if req.ParentID > 0 {
-		canWrite, err := h.canAccessFile(c.Request.Context(), uid, req.ParentID, true)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-			return
-		}
-		if !canWrite {
+	res, err := h.Svc.InitUpload(c.Request.Context(), uid, service.FileUploadInitInput{
+		UploadID:    req.UploadID,
+		ParentID:    req.ParentID,
+		Filename:    req.Filename,
+		TotalSize:   req.TotalSize,
+		ChunkSize:   req.ChunkSize,
+		TotalChunks: req.TotalChunks,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrFilePermissionDenied):
 			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
 			return
-		}
-	}
-
-	if req.UploadID != "" {
-		// 客户端传入 upload_id 时，直接查询任务并返回已上传分片，便于断点续传。
-		task, chunkIndexes, err := h.getUploadTaskAndChunks(c.Request.Context(), uid, req.UploadID)
-		if err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				c.JSON(http.StatusNotFound, gin.H{"error": "upload task not found"})
+		case errors.Is(err, service.ErrUploadTaskNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "upload task not found"})
+			return
+		default:
+			msg := strings.ToLower(err.Error())
+			if strings.Contains(msg, "invalid upload parameters") {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid upload parameters"})
+				return
+			}
+			if strings.Contains(msg, "invalid total_chunks") {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid total_chunks"})
+				return
+			}
+			if strings.Contains(msg, "create") {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "create upload task failed"})
 				return
 			}
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{
-			"upload_id":       task.UploadID,
-			"uploaded_chunks": chunkIndexes,
-			"uploaded_count":  task.UploadedChunks,
-			"status":          task.Status,
-		})
-		return
-	}
-
-	uploadID := generateUploadID(uid)
-	uidCopy := uid
-	totalSizeCopy := req.TotalSize
-	chunkSizeCopy := req.ChunkSize
-	totalChunksCopy := req.TotalChunks
-	task := model.UploadTask{
-		UploadID:    uploadID,
-		UserID:      &uidCopy,
-		Filename:    req.Filename,
-		TotalSize:   &totalSizeCopy,
-		ChunkSize:   &chunkSizeCopy,
-		TotalChunks: &totalChunksCopy,
-		Status:      0,
-	}
-	if err := h.DB.WithContext(c.Request.Context()).Create(&task).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "create upload task failed"})
-		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"upload_id":       uploadID,
-		"uploaded_chunks": []int{},
-		"uploaded_count":  0,
-		"status":          0,
+		"upload_id":       res.UploadID,
+		"uploaded_chunks": res.UploadedChunks,
+		"uploaded_count":  res.UploadedCount,
+		"status":          res.Status,
 	})
 }
 
@@ -481,26 +340,25 @@ func (h *FileHandler) UploadChunk(c *gin.Context) {
 		return
 	}
 
-	var task model.UploadTask
-	if err := h.DB.WithContext(c.Request.Context()).Where("upload_id = ?", uploadID).First(&task).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+	task, err := h.Svc.ValidateUploadChunk(c.Request.Context(), uid, uploadID, chunkIndex)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrUploadTaskNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "upload task not found"})
 			return
+		case errors.Is(err, service.ErrFilePermissionDenied):
+			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+			return
+		case errors.Is(err, service.ErrUploadTaskCompleted):
+			c.JSON(http.StatusConflict, gin.H{"error": "upload task already completed"})
+			return
+		case errors.Is(err, service.ErrChunkIndexOutOfRange):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "chunk_index out of range"})
+			return
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-	if task.UserID == nil || *task.UserID != uid {
-		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-		return
-	}
-	if task.Status == 1 {
-		c.JSON(http.StatusConflict, gin.H{"error": "upload task already completed"})
-		return
-	}
-	if task.TotalChunks != nil && chunkIndex >= *task.TotalChunks {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "chunk_index out of range"})
-		return
 	}
 
 	chunkFile, err := c.FormFile("chunk")
@@ -534,43 +392,7 @@ func (h *FileHandler) UploadChunk(c *gin.Context) {
 		return
 	}
 
-	// 使用事务保证分片记录与上传进度一致。
-	err = h.DB.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
-		var row model.UploadChunk
-		err := tx.Where("upload_id = ? AND chunk_index = ?", uploadID, chunkIndex).First(&row).Error
-		if err != nil {
-			if !errors.Is(err, gorm.ErrRecordNotFound) {
-				return err
-			}
-			chunkSizeVal := chunkFile.Size
-			row = model.UploadChunk{
-				UploadID:   uploadID,
-				ChunkIndex: chunkIndex,
-				ChunkSize:  &chunkSizeVal,
-				ChunkPath:  chunkPath,
-				Status:     1,
-			}
-			if err := tx.Create(&row).Error; err != nil {
-				return err
-			}
-		} else {
-			chunkSizeVal := chunkFile.Size
-			if err := tx.Model(&row).Updates(map[string]interface{}{
-				"chunk_size": chunkSizeVal,
-				"chunk_path": chunkPath,
-				"status":     1,
-			}).Error; err != nil {
-				return err
-			}
-		}
-
-		var doneCount int64
-		if err := tx.Model(&model.UploadChunk{}).Where("upload_id = ? AND status = 1", uploadID).Count(&doneCount).Error; err != nil {
-			return err
-		}
-
-		return tx.Model(&model.UploadTask{}).Where("id = ?", task.ID).Update("uploaded_chunks", int(doneCount)).Error
-	})
+	err = h.Svc.MarkChunkUploaded(c.Request.Context(), task, uploadID, chunkIndex, chunkFile.Size, chunkPath)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "update chunk status failed"})
 		return
@@ -594,106 +416,47 @@ func (h *FileHandler) CompleteUpload(c *gin.Context) {
 		return
 	}
 
-	if req.ParentID > 0 {
-		canWrite, err := h.canAccessFile(c.Request.Context(), uid, req.ParentID, true)
-		if err != nil {
+	snapshot, err := h.Svc.PrepareCompleteUpload(c.Request.Context(), uid, req.UploadID, req.ParentID)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrFilePermissionDenied):
+			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+			return
+		case errors.Is(err, service.ErrUploadTaskNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "upload task not found"})
+			return
+		case errors.Is(err, service.ErrUploadTaskCompleted):
+			c.JSON(http.StatusConflict, gin.H{"error": "upload task already completed"})
+			return
+		case errors.Is(err, service.ErrUploadMetaIncomplete):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "upload task metadata incomplete"})
+			return
+		case errors.Is(err, service.ErrChunksNotComplete):
+			c.JSON(http.StatusConflict, gin.H{"error": "chunks not fully uploaded"})
+			return
+		default:
+			if strings.Contains(strings.ToLower(err.Error()), "invalid parameters") {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid parameters"})
+				return
+			}
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 			return
 		}
-		if !canWrite {
-			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-			return
-		}
 	}
 
-	var task model.UploadTask
-	if err := h.DB.WithContext(c.Request.Context()).Where("upload_id = ?", req.UploadID).First(&task).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "upload task not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-	if task.UserID == nil || *task.UserID != uid {
-		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-		return
-	}
-	if task.Status == 1 {
-		c.JSON(http.StatusConflict, gin.H{"error": "upload task already completed"})
-		return
-	}
-	if task.TotalChunks == nil || task.ChunkSize == nil || task.TotalSize == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "upload task metadata incomplete"})
-		return
-	}
-
-	var chunks []model.UploadChunk
-	if err := h.DB.WithContext(c.Request.Context()).
-		Where("upload_id = ? AND status = 1", req.UploadID).
-		Order("chunk_index ASC").
-		Find(&chunks).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-	if len(chunks) != *task.TotalChunks {
-		c.JSON(http.StatusConflict, gin.H{"error": "chunks not fully uploaded"})
-		return
-	}
-
-	storagePath, mergedSize, fileHash, err := mergeChunks(req.UploadID, task.Filename, *task.TotalChunks)
+	storagePath, mergedSize, fileHash, err := mergeChunks(req.UploadID, snapshot.Task.Filename, snapshot.TotalChunk)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "merge chunks failed"})
 		return
 	}
 
-	var createdFile model.File
-	err = h.DB.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
-		storageID, err := ensureStorage(tx, fileHash, storagePath, mergedSize)
-		if err != nil {
-			return err
-		}
-
-		// 若文件名冲突，自动追加时间戳，避免覆盖已有元数据记录。
-		finalName, err := ensureUniqueFilename(tx, req.ParentID, task.Filename)
-		if err != nil {
-			return err
-		}
-
-		fileType := strings.TrimPrefix(strings.ToLower(filepath.Ext(finalName)), ".")
-		createdFile = model.File{
-			UserID:    uid,
-			Filename:  finalName,
-			ParentID:  req.ParentID,
-			IsFolder:  0,
-			FileType:  fileType,
-			Size:      mergedSize,
-			StorageID: &storageID,
-		}
-		if err := tx.Create(&createdFile).Error; err != nil {
-			return err
-		}
-
-		if err := tx.Model(&model.UploadTask{}).Where("id = ?", task.ID).Updates(map[string]interface{}{
-			"status":          1,
-			"uploaded_chunks": *task.TotalChunks,
-		}).Error; err != nil {
-			return err
-		}
-
-		if err := tx.Where("upload_id = ?", req.UploadID).Delete(&model.UploadChunk{}).Error; err != nil {
-			return err
-		}
-
-		return nil
-	})
+	createdFile, err := h.Svc.CompleteUpload(c.Request.Context(), uid, req.ParentID, req.UploadID, snapshot, storagePath, mergedSize, fileHash, c.ClientIP())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "complete upload failed"})
 		return
 	}
 
 	_ = os.RemoveAll(filepath.Join(chunkBaseDir, req.UploadID))
-	_ = h.logOperation(c.Request.Context(), uid, &createdFile.ID, "upload_complete", "success", fmt.Sprintf("upload_id=%s", req.UploadID), c.ClientIP())
 	// 上传成功后触发 AI 异步分析：自动生成 tags/description/ocr_text 并写入 ai_metadata。
 	h.triggerAsyncAutoAnalyze(createdFile, uid, c.ClientIP())
 	// 上传完成后尝试自动与同目录同名文件配对绑定 Live Photo（无阻塞失败）。
@@ -867,9 +630,9 @@ func (h *FileHandler) UploadProgress(c *gin.Context) {
 		return
 	}
 
-	task, uploadedChunks, err := h.getUploadTaskAndChunks(c.Request.Context(), uid, uploadID)
+	res, err := h.Svc.UploadProgress(c.Request.Context(), uid, uploadID)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, service.ErrUploadTaskNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "upload task not found"})
 			return
 		}
@@ -877,37 +640,14 @@ func (h *FileHandler) UploadProgress(c *gin.Context) {
 		return
 	}
 
-	totalChunks := 0
-	if task.TotalChunks != nil {
-		totalChunks = *task.TotalChunks
-	}
-
-	missingChunks := make([]int, 0)
-	if totalChunks > 0 {
-		uploadedSet := make(map[int]bool, len(uploadedChunks))
-		for _, idx := range uploadedChunks {
-			uploadedSet[idx] = true
-		}
-		for i := 0; i < totalChunks; i++ {
-			if !uploadedSet[i] {
-				missingChunks = append(missingChunks, i)
-			}
-		}
-	}
-
-	progress := 0.0
-	if totalChunks > 0 {
-		progress = float64(len(uploadedChunks)) * 100 / float64(totalChunks)
-	}
-
 	c.JSON(http.StatusOK, gin.H{
-		"upload_id":       task.UploadID,
-		"status":          task.Status,
-		"uploaded_count":  len(uploadedChunks),
-		"total_chunks":    totalChunks,
-		"uploaded_chunks": uploadedChunks,
-		"missing_chunks":  missingChunks,
-		"progress":        progress,
+		"upload_id":       res.UploadID,
+		"status":          res.Status,
+		"uploaded_count":  res.UploadedCount,
+		"total_chunks":    res.TotalChunks,
+		"uploaded_chunks": res.UploadedChunks,
+		"missing_chunks":  res.MissingChunks,
+		"progress":        res.Progress,
 	})
 }
 
@@ -920,20 +660,22 @@ func (h *FileHandler) Download(c *gin.Context) {
 		return
 	}
 
-	canRead, err := h.canAccessFile(c.Request.Context(), uid, fileID, false)
+	f, storage, err := h.Svc.GetAccessibleFileAndStorage(c.Request.Context(), uid, fileID, false)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-	if !canRead {
-		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-		return
-	}
-
-	var f model.File
-	if err := h.DB.WithContext(c.Request.Context()).First(&f, "id = ? AND is_deleted = 0", fileID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, service.ErrFilePermissionDenied) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+			return
+		}
+		if errors.Is(err, service.ErrFileNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
+			return
+		}
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "storage record not found"})
+			return
+		}
+		if errors.Is(err, os.ErrNotExist) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "physical file not found"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
@@ -941,24 +683,6 @@ func (h *FileHandler) Download(c *gin.Context) {
 	}
 	if f.IsFolder == 1 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "target is folder, use folder zip download"})
-		return
-	}
-	if f.StorageID == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "storage record not found"})
-		return
-	}
-
-	var storage model.Storage
-	if err := h.DB.WithContext(c.Request.Context()).First(&storage, "id = ?", *f.StorageID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "storage record not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-	if _, err := os.Stat(storage.FilePath); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "physical file not found"})
 		return
 	}
 	rate := h.getDownloadRateBytesPerSec(c)
@@ -977,19 +701,13 @@ func (h *FileHandler) DownloadFolderZip(c *gin.Context) {
 		return
 	}
 
-	canRead, err := h.canAccessFile(c.Request.Context(), uid, folderID, false)
+	folder, err := h.Svc.GetAccessibleFile(c.Request.Context(), uid, folderID, false)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-	if !canRead {
-		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-		return
-	}
-
-	var folder model.File
-	if err := h.DB.WithContext(c.Request.Context()).First(&folder, "id = ? AND is_deleted = 0", folderID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, service.ErrFilePermissionDenied) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+			return
+		}
+		if errors.Is(err, service.ErrFileNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "folder not found"})
 			return
 		}
@@ -1161,46 +879,28 @@ func (h *FileHandler) BatchDownload(c *gin.Context) {
 		}
 	}
 
-	for _, fileID := range ids {
-		if fileID <= 0 {
-			continue
-		}
+	entries, err := h.Svc.CollectBatchDownloadEntries(c.Request.Context(), uid, ids)
+	if err != nil {
+		_ = zw.Close()
+		_ = tmpFile.Close()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "create zip failed"})
+		return
+	}
 
-		canRead, err := h.canAccessFile(c.Request.Context(), uid, fileID, false)
-		if err != nil || !canRead {
-			continue
-		}
-
-		var f model.File
-		if err := h.DB.WithContext(c.Request.Context()).First(&f, "id = ? AND is_deleted = 0", fileID).Error; err != nil {
-			continue
-		}
-
-		if f.IsFolder == 1 {
-			folderZipPath, err := h.createFolderZip(c.Request.Context(), f)
+	for _, entry := range entries {
+		if entry.IsFolderZip {
+			folderZipPath, err := h.createFolderZip(c.Request.Context(), entry.File)
 			if err != nil {
 				continue
 			}
-			entryName := nextEntryName(f.Filename) + ".zip"
+			entryName := nextEntryName(entry.File.Filename) + ".zip"
 			_ = addFileToZip(entryName, folderZipPath)
 			_ = os.Remove(folderZipPath)
 			continue
 		}
 
-		if f.StorageID == nil {
-			continue
-		}
-
-		var storage model.Storage
-		if err := h.DB.WithContext(c.Request.Context()).First(&storage, "id = ?", *f.StorageID).Error; err != nil {
-			continue
-		}
-		if _, err := os.Stat(storage.FilePath); err != nil {
-			continue
-		}
-
-		entryName := nextEntryName(f.Filename)
-		_ = addFileToZip(entryName, storage.FilePath)
+		entryName := nextEntryName(entry.File.Filename)
+		_ = addFileToZip(entryName, entry.StoragePath)
 	}
 
 	if err := zw.Close(); err != nil {
@@ -1334,60 +1034,35 @@ func (h *FileHandler) SearchFiles(c *gin.Context) {
 		q.Limit = 50
 	}
 
-	dbq := h.DB.WithContext(c.Request.Context()).
-		Table("file f").
-		Select("f.*").
-		Joins("LEFT JOIN file_permission fp ON fp.file_id = f.id AND fp.user_id = ?", uid).
-		Where("f.is_deleted = 0").
-		Where("f.user_id = ? OR fp.permission IN ?", uid, []string{"read", "write"})
-
-	if q.ParentID > 0 {
-		dbq = dbq.Where("f.parent_id = ?", q.ParentID)
-	}
-	if q.Name != "" {
-		dbq = dbq.Where("f.filename LIKE ?", "%"+q.Name+"%")
-	}
-	if q.FileType != "" {
-		dbq = dbq.Where("LOWER(f.file_type) = ?", q.FileType)
-	}
-	if q.StartTime != "" {
-		startAt, err := parseFlexibleTime(q.StartTime)
-		if err != nil {
+	res, err := h.Svc.SearchFiles(c.Request.Context(), uid, service.FileSearchQuery{
+		ParentID:  q.ParentID,
+		Name:      q.Name,
+		FileType:  q.FileType,
+		StartTime: q.StartTime,
+		EndTime:   q.EndTime,
+		Page:      q.Page,
+		Limit:     q.Limit,
+	})
+	if err != nil {
+		errMsg := strings.ToLower(err.Error())
+		if strings.Contains(errMsg, "invalid start_time") {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid start_time"})
 			return
 		}
-		dbq = dbq.Where("f.update_time >= ?", startAt)
-	}
-	if q.EndTime != "" {
-		endAt, err := parseFlexibleTime(q.EndTime)
-		if err != nil {
+		if strings.Contains(errMsg, "invalid end_time") {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid end_time"})
 			return
 		}
-		dbq = dbq.Where("f.update_time <= ?", endAt)
-	}
-
-	var total int64
-	if err := h.DB.WithContext(c.Request.Context()).
-		Table("(?) as t", dbq).
-		Count(&total).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-
-	offset := (q.Page - 1) * q.Limit
-	var rows []model.File
-	if err := dbq.Order("f.is_folder DESC, f.filename ASC").Limit(q.Limit).Offset(offset).Find(&rows).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"items": rows,
+		"items": res.Items,
 		"pagination": gin.H{
 			"page":  q.Page,
 			"limit": q.Limit,
-			"total": total,
+			"total": res.Total,
 		},
 	})
 }
@@ -1462,16 +1137,6 @@ func (h *FileHandler) CreateShare(c *gin.Context) {
 		return
 	}
 
-	canRead, err := h.canAccessFile(c.Request.Context(), uid, fileID, false)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-	if !canRead {
-		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-		return
-	}
-
 	var req CreateShareRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		if !errors.Is(err, io.EOF) {
@@ -1480,54 +1145,29 @@ func (h *FileHandler) CreateShare(c *gin.Context) {
 		}
 	}
 
-	// 默认过期时间来自 system_setting，可被请求参数覆盖。
-	expireHours := int64(0)
-	if req.ExpireHours != nil {
-		expireHours = int64(*req.ExpireHours)
-	} else {
-		if v, ok, err := h.getSystemSettingInt64(c.Request.Context(), "share_default_expire_hours"); err != nil {
+	res, err := h.Svc.CreateShare(c.Request.Context(), uid, fileID, req.ExpireHours, c.ClientIP())
+	if err != nil {
+		msg := strings.ToLower(err.Error())
+		if strings.Contains(msg, "permission denied") {
+			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+			return
+		}
+		if strings.Contains(msg, "invalid expire_hours") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "expire_hours should be between 0 and 8760"})
+			return
+		}
+		if strings.Contains(msg, "invalid syntax") {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 			return
-		} else if ok {
-			expireHours = v
 		}
-	}
-
-	if expireHours < 0 || expireHours > 24*365 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "expire_hours should be between 0 and 8760"})
-		return
-	}
-
-	shareCode, err := generateShareCode(12)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "generate share code failed"})
-		return
-	}
-
-	fileIDCopy := fileID
-	uidCopy := uid
-	var expireAt *time.Time
-	if expireHours > 0 {
-		t := time.Now().Add(time.Duration(expireHours) * time.Hour)
-		expireAt = &t
-	}
-
-	share := model.Share{
-		FileID:     &fileIDCopy,
-		UserID:     &uidCopy,
-		ShareCode:  shareCode,
-		ExpireTime: expireAt,
-	}
-	if err := h.DB.WithContext(c.Request.Context()).Create(&share).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "create share failed"})
 		return
 	}
-	_ = h.logOperation(c.Request.Context(), uid, &fileID, "create_share", "success", fmt.Sprintf("share_code=%s", shareCode), c.ClientIP())
 
 	c.JSON(http.StatusOK, gin.H{
-		"share_code":  share.ShareCode,
-		"expire_time": share.ExpireTime,
-		"access_url":  fmt.Sprintf("/api/public/shares/%s", share.ShareCode),
+		"share_code":  res.ShareCode,
+		"expire_time": res.ExpireTime,
+		"access_url":  fmt.Sprintf("/api/public/shares/%s", res.ShareCode),
 	})
 }
 
@@ -1535,11 +1175,7 @@ func (h *FileHandler) CreateShare(c *gin.Context) {
 func (h *FileHandler) ListShares(c *gin.Context) {
 	uid := c.GetInt64(middleware.ContextUserIDKey)
 
-	var shares []model.Share
-	err := h.DB.WithContext(c.Request.Context()).
-		Where("user_id = ?", uid).
-		Order("create_time DESC").
-		Find(&shares).Error
+	shares, err := h.Svc.ListShares(c.Request.Context(), uid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
@@ -1570,53 +1206,34 @@ func (h *FileHandler) ListOperationLogs(c *gin.Context) {
 		q.Limit = 50
 	}
 
-	dbq := h.DB.WithContext(c.Request.Context()).Model(&model.OperationLog{})
-	if !(isAdminBool && q.All == 1) {
-		dbq = dbq.Where("user_id = ?", uid)
-	}
-	if q.Action != "" {
-		dbq = dbq.Where("action = ?", q.Action)
-	}
-	if q.Status != "" {
-		dbq = dbq.Where("status = ?", q.Status)
-	}
-	if q.StartTime != "" {
-		startAt, err := parseFlexibleTime(q.StartTime)
-		if err != nil {
+	res, err := h.Svc.ListOperationLogs(c.Request.Context(), uid, isAdminBool, service.FileOperationLogQuery{
+		Action:    q.Action,
+		Status:    q.Status,
+		StartTime: q.StartTime,
+		EndTime:   q.EndTime,
+		Page:      q.Page,
+		Limit:     q.Limit,
+		All:       q.All,
+	})
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "invalid start_time") {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid start_time"})
 			return
 		}
-		dbq = dbq.Where("create_time >= ?", startAt)
-	}
-	if q.EndTime != "" {
-		endAt, err := parseFlexibleTime(q.EndTime)
-		if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "invalid end_time") {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid end_time"})
 			return
 		}
-		dbq = dbq.Where("create_time <= ?", endAt)
-	}
-
-	var total int64
-	if err := dbq.Count(&total).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-
-	offset := (q.Page - 1) * q.Limit
-
-	var rows []model.OperationLog
-	if err := dbq.Order("id DESC").Limit(q.Limit).Offset(offset).Find(&rows).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"items": rows,
+		"items": res.Items,
 		"pagination": gin.H{
 			"page":  q.Page,
 			"limit": q.Limit,
-			"total": total,
+			"total": res.Total,
 		},
 	})
 }
@@ -1642,35 +1259,23 @@ func (h *FileHandler) ExportOperationLogs(c *gin.Context) {
 		q.Limit = maxExportRows
 	}
 
-	dbq := h.DB.WithContext(c.Request.Context()).Model(&model.OperationLog{})
-	if !(isAdminBool && q.All == 1) {
-		dbq = dbq.Where("user_id = ?", uid)
-	}
-	if q.Action != "" {
-		dbq = dbq.Where("action = ?", q.Action)
-	}
-	if q.Status != "" {
-		dbq = dbq.Where("status = ?", q.Status)
-	}
-	if q.StartTime != "" {
-		startAt, err := parseFlexibleTime(q.StartTime)
-		if err != nil {
+	rows, err := h.Svc.ExportOperationLogs(c.Request.Context(), uid, isAdminBool, service.FileOperationLogQuery{
+		Action:    q.Action,
+		Status:    q.Status,
+		StartTime: q.StartTime,
+		EndTime:   q.EndTime,
+		Limit:     q.Limit,
+		All:       q.All,
+	})
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "invalid start_time") {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid start_time"})
 			return
 		}
-		dbq = dbq.Where("create_time >= ?", startAt)
-	}
-	if q.EndTime != "" {
-		endAt, err := parseFlexibleTime(q.EndTime)
-		if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "invalid end_time") {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid end_time"})
 			return
 		}
-		dbq = dbq.Where("create_time <= ?", endAt)
-	}
-
-	var rows []model.OperationLog
-	if err := dbq.Order("id DESC").Limit(q.Limit).Find(&rows).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
@@ -1714,16 +1319,15 @@ func (h *FileHandler) RevokeShare(c *gin.Context) {
 		return
 	}
 
-	res := h.DB.WithContext(c.Request.Context()).Where("share_code = ? AND user_id = ?", code, uid).Delete(&model.Share{})
-	if res.Error != nil {
+	err := h.Svc.RevokeShare(c.Request.Context(), uid, code, c.ClientIP())
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "share not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
-	if res.RowsAffected == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"error": "share not found"})
-		return
-	}
-	_ = h.logOperation(c.Request.Context(), uid, nil, "revoke_share", "success", fmt.Sprintf("share_code=%s", code), c.ClientIP())
 
 	c.JSON(http.StatusOK, gin.H{"message": "share revoked"})
 }
@@ -1741,7 +1345,7 @@ func (h *FileHandler) PublicShareInfo(c *gin.Context) {
 		return
 	}
 
-	share, file, err := h.resolveValidShare(c.Request.Context(), shareCode)
+	share, file, err := h.Svc.GetPublicShareInfo(c.Request.Context(), shareCode)
 	if err != nil {
 		h.handleShareError(c, err)
 		return
@@ -1774,8 +1378,16 @@ func (h *FileHandler) PublicShareDownload(c *gin.Context) {
 		return
 	}
 
-	_, file, err := h.resolveValidShare(c.Request.Context(), shareCode)
+	file, storage, err := h.Svc.ResolvePublicShareDownload(c.Request.Context(), shareCode)
 	if err != nil {
+		if errors.Is(err, service.ErrStorageNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "storage record not found"})
+			return
+		}
+		if errors.Is(err, service.ErrPhysicalFileNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "physical file not found"})
+			return
+		}
 		h.handleShareError(c, err)
 		return
 	}
@@ -1795,24 +1407,6 @@ func (h *FileHandler) PublicShareDownload(c *gin.Context) {
 		return
 	}
 
-	if file.StorageID == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "storage record not found"})
-		return
-	}
-
-	var storage model.Storage
-	if err := h.DB.WithContext(c.Request.Context()).First(&storage, "id = ?", *file.StorageID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "storage record not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-	if _, err := os.Stat(storage.FilePath); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "physical file not found"})
-		return
-	}
 	rate := h.getDownloadRateBytesPerSec(c)
 	if err := h.sendFileWithRateLimit(c, storage.FilePath, file.Filename, rate); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "download failed"})
@@ -1835,100 +1429,29 @@ func (h *FileHandler) Move(c *gin.Context) {
 		return
 	}
 
-	if req.TargetParentID > 0 {
-		canWrite, err := h.canAccessFile(c.Request.Context(), uid, req.TargetParentID, true)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-			return
-		}
-		if !canWrite {
+	updated, err := h.Svc.MoveFiles(c.Request.Context(), uid, req.FileIDs, req.TargetParentID, c.ClientIP())
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrFilePermissionDenied):
 			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
 			return
-		}
-
-		var target model.File
-		if err := h.DB.WithContext(c.Request.Context()).First(&target, "id = ? AND is_deleted = 0", req.TargetParentID).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				c.JSON(http.StatusNotFound, gin.H{"error": "target folder not found"})
-				return
-			}
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+		case errors.Is(err, service.ErrTargetFolderNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "target folder not found"})
 			return
-		}
-		if target.IsFolder != 1 {
+		case errors.Is(err, service.ErrTargetNotFolder):
 			c.JSON(http.StatusBadRequest, gin.H{"error": "target is not folder"})
 			return
-		}
-	}
-
-	updated := make([]int64, 0, len(req.FileIDs))
-	err := h.DB.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
-		for _, fileID := range uniqueInt64(req.FileIDs) {
-			if fileID <= 0 {
-				return fmt.Errorf("invalid file id")
-			}
-
-			canWrite, err := h.canAccessFile(tx.Statement.Context, uid, fileID, true)
-			if err != nil {
-				return err
-			}
-			if !canWrite {
-				return fmt.Errorf("permission denied")
-			}
-
-			var src model.File
-			if err := tx.First(&src, "id = ? AND is_deleted = 0", fileID).Error; err != nil {
-				return err
-			}
-
-			if src.ID == req.TargetParentID {
-				return fmt.Errorf("cannot move to itself")
-			}
-
-			// 防止将目录移动到其后代目录下，避免形成循环。
-			if src.IsFolder == 1 && req.TargetParentID > 0 {
-				isDescendant, err := h.isDescendantFolder(tx.Statement.Context, req.TargetParentID, src.ID)
-				if err != nil {
-					return err
-				}
-				if isDescendant {
-					return fmt.Errorf("cannot move folder into its descendant")
-				}
-			}
-
-			finalName, err := ensureUniqueFilename(tx, req.TargetParentID, src.Filename)
-			if err != nil {
-				return err
-			}
-
-			if err := tx.Model(&src).Updates(map[string]interface{}{
-				"parent_id": req.TargetParentID,
-				"filename":  finalName,
-			}).Error; err != nil {
-				return err
-			}
-
-			updated = append(updated, src.ID)
-		}
-		return nil
-	})
-	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "permission denied") {
-			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-			return
-		}
-		if strings.Contains(strings.ToLower(err.Error()), "cannot move") {
+		case errors.Is(err, service.ErrCannotMoveToItself), errors.Is(err, service.ErrCannotMoveToDesc):
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 			return
-		}
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		case errors.Is(err, service.ErrFileNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
 			return
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "move failed"})
+			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "move failed"})
-		return
 	}
-	_ = h.logOperation(c.Request.Context(), uid, nil, "move", "success", fmt.Sprintf("count=%d,target_parent=%d", len(updated), req.TargetParentID), c.ClientIP())
 
 	c.JSON(http.StatusOK, gin.H{"updated_ids": updated})
 }
@@ -1948,59 +1471,20 @@ func (h *FileHandler) Copy(c *gin.Context) {
 		return
 	}
 
-	if req.TargetParentID > 0 {
-		canWrite, err := h.canAccessFile(c.Request.Context(), uid, req.TargetParentID, true)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-			return
-		}
-		if !canWrite {
-			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-			return
-		}
-	}
-
-	newIDs := make([]int64, 0)
-	err := h.DB.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
-		for _, fileID := range uniqueInt64(req.FileIDs) {
-			if fileID <= 0 {
-				return fmt.Errorf("invalid file id")
-			}
-
-			canRead, err := h.canAccessFile(tx.Statement.Context, uid, fileID, false)
-			if err != nil {
-				return err
-			}
-			if !canRead {
-				return fmt.Errorf("permission denied")
-			}
-
-			var src model.File
-			if err := tx.First(&src, "id = ? AND is_deleted = 0", fileID).Error; err != nil {
-				return err
-			}
-
-			copiedID, err := h.copyNode(tx, uid, src, req.TargetParentID)
-			if err != nil {
-				return err
-			}
-			newIDs = append(newIDs, copiedID)
-		}
-		return nil
-	})
+	newIDs, err := h.Svc.CopyFiles(c.Request.Context(), uid, req.FileIDs, req.TargetParentID, c.ClientIP())
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "permission denied") {
+		switch {
+		case errors.Is(err, service.ErrFilePermissionDenied):
 			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
 			return
-		}
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		case errors.Is(err, service.ErrFileNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
 			return
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "copy failed"})
+			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "copy failed"})
-		return
 	}
-	_ = h.logOperation(c.Request.Context(), uid, nil, "copy", "success", fmt.Sprintf("count=%d,target_parent=%d", len(newIDs), req.TargetParentID), c.ClientIP())
 
 	c.JSON(http.StatusOK, gin.H{"new_ids": newIDs})
 }
@@ -2009,11 +1493,7 @@ func (h *FileHandler) Copy(c *gin.Context) {
 func (h *FileHandler) RecycleBin(c *gin.Context) {
 	uid := c.GetInt64(middleware.ContextUserIDKey)
 
-	var rows []model.File
-	err := h.DB.WithContext(c.Request.Context()).
-		Where("user_id = ? AND is_deleted = 1", uid).
-		Order("update_time DESC").
-		Find(&rows).Error
+	rows, err := h.Svc.ListRecycleBin(c.Request.Context(), uid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
@@ -2031,43 +1511,20 @@ func (h *FileHandler) Restore(c *gin.Context) {
 		return
 	}
 
-	var restored model.File
-	err = h.DB.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
-		if err := tx.First(&restored, "id = ? AND is_deleted = 1", fileID).Error; err != nil {
-			return err
-		}
-		if restored.UserID != uid {
-			return fmt.Errorf("permission denied")
-		}
-
-		finalName, err := ensureUniqueFilename(tx, restored.ParentID, restored.Filename)
-		if err != nil {
-			return err
-		}
-
-		if err := tx.Model(&restored).Updates(map[string]interface{}{
-			"is_deleted": 0,
-			"filename":   finalName,
-		}).Error; err != nil {
-			return err
-		}
-		restored.Filename = finalName
-		restored.IsDeleted = 0
-		return nil
-	})
+	restored, err := h.Svc.RestoreFromRecycleBin(c.Request.Context(), uid, fileID, c.ClientIP())
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "permission denied") {
+		switch {
+		case errors.Is(err, service.ErrFilePermissionDenied):
 			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
 			return
-		}
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		case errors.Is(err, service.ErrRecycleItemNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "recycle item not found"})
 			return
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "restore failed"})
+			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "restore failed"})
-		return
 	}
-	_ = h.logOperation(c.Request.Context(), uid, &restored.ID, "restore", "success", "restore from recycle bin", c.ClientIP())
 	// 恢复后尝试按同目录同名规则自动重建 Live Photo 绑定（无阻塞失败）。
 	_ = h.tryAutoBindLivePhotoForFile(c.Request.Context(), uid, restored, c.ClientIP())
 
@@ -2083,40 +1540,20 @@ func (h *FileHandler) PermanentDelete(c *gin.Context) {
 		return
 	}
 
-	err = h.DB.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
-		var root model.File
-		if err := tx.First(&root, "id = ? AND is_deleted = 1", fileID).Error; err != nil {
-			return err
-		}
-		if root.UserID != uid {
-			return fmt.Errorf("permission denied")
-		}
-
-		ids, err := h.collectDescendantIDs(tx.Statement.Context, root.ID)
-		if err != nil {
-			return err
-		}
-		ids = append(ids, root.ID)
-		// 彻底删除前清理所有相关 Live Photo 关系。
-		if err := h.cleanupLivePhotoByFileIDs(tx, ids); err != nil {
-			return err
-		}
-
-		return tx.Where("id IN ?", ids).Delete(&model.File{}).Error
-	})
+	err = h.Svc.PermanentDeleteFromRecycleBin(c.Request.Context(), uid, fileID, c.ClientIP())
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "permission denied") {
+		switch {
+		case errors.Is(err, service.ErrFilePermissionDenied):
 			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
 			return
-		}
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		case errors.Is(err, service.ErrRecycleItemNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "recycle item not found"})
 			return
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "permanent delete failed"})
+			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "permanent delete failed"})
-		return
 	}
-	_ = h.logOperation(c.Request.Context(), uid, &fileID, "permanent_delete", "success", "delete from recycle bin", c.ClientIP())
 
 	c.JSON(http.StatusOK, gin.H{"message": "permanently deleted"})
 }
@@ -2696,34 +2133,13 @@ func generateShareCode(length int) (string, error) {
 	return string(b), nil
 }
 
-var errShareExpired = errors.New("share expired")
-
 func (h *FileHandler) resolveValidShare(ctx context.Context, code string) (model.Share, model.File, error) {
-	if code == "" {
-		return model.Share{}, model.File{}, gorm.ErrRecordNotFound
-	}
-
-	var share model.Share
-	if err := h.DB.WithContext(ctx).Where("share_code = ?", code).First(&share).Error; err != nil {
-		return model.Share{}, model.File{}, err
-	}
-	if share.ExpireTime != nil && time.Now().After(*share.ExpireTime) {
-		return model.Share{}, model.File{}, errShareExpired
-	}
-	if share.FileID == nil {
-		return model.Share{}, model.File{}, gorm.ErrRecordNotFound
-	}
-
-	var file model.File
-	if err := h.DB.WithContext(ctx).First(&file, "id = ? AND is_deleted = 0", *share.FileID).Error; err != nil {
-		return model.Share{}, model.File{}, err
-	}
-
-	return share, file, nil
+	// 兼容旧调用路径，当前实现已委托给 service。
+	return h.Svc.GetPublicShareInfo(ctx, code)
 }
 
 func (h *FileHandler) handleShareError(c *gin.Context, err error) {
-	if errors.Is(err, errShareExpired) {
+	if errors.Is(err, service.ErrShareExpired) {
 		c.JSON(http.StatusGone, gin.H{"error": "share expired"})
 		return
 	}
@@ -2735,32 +2151,7 @@ func (h *FileHandler) handleShareError(c *gin.Context, err error) {
 }
 
 func (h *FileHandler) getAccessibleFileAndStorage(ctx context.Context, uid int64, fileID int64, requireWrite bool) (model.File, model.Storage, error) {
-	canAccess, err := h.canAccessFile(ctx, uid, fileID, requireWrite)
-	if err != nil {
-		return model.File{}, model.Storage{}, err
-	}
-	if !canAccess {
-		return model.File{}, model.Storage{}, fmt.Errorf("permission denied")
-	}
-
-	var f model.File
-	if err := h.DB.WithContext(ctx).First(&f, "id = ? AND is_deleted = 0", fileID).Error; err != nil {
-		return model.File{}, model.Storage{}, err
-	}
-
-	if f.StorageID == nil {
-		return f, model.Storage{}, gorm.ErrRecordNotFound
-	}
-
-	var storage model.Storage
-	if err := h.DB.WithContext(ctx).First(&storage, "id = ?", *f.StorageID).Error; err != nil {
-		return model.File{}, model.Storage{}, err
-	}
-	if _, err := os.Stat(storage.FilePath); err != nil {
-		return model.File{}, model.Storage{}, os.ErrNotExist
-	}
-
-	return f, storage, nil
+	return h.Svc.GetAccessibleFileAndStorage(ctx, uid, fileID, requireWrite)
 }
 
 func (h *FileHandler) handleFileAccessError(c *gin.Context, err error) {
