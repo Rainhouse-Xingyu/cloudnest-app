@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"cloudenest_go/internal/middleware"
+	"cloudenest_go/internal/service"
 	"cloudenest_go/model"
 
 	"github.com/gin-gonic/gin"
@@ -34,6 +35,7 @@ const (
 type FrpHandler struct {
 	DB  *gorm.DB
 	RDB *redis.Client
+	Svc *service.FrpService
 }
 
 // CreateDeviceRequest 创建设备请求。
@@ -122,18 +124,13 @@ func (h *FrpHandler) CreateDevice(c *gin.Context) {
 		return
 	}
 
-	device := model.Device{
-		UserID:     uid,
-		DeviceName: req.DeviceName,
-		DeviceIP:   req.DeviceIP,
-		Status:     1,
-	}
-	if err := h.DB.WithContext(c.Request.Context()).Create(&device).Error; err != nil {
+	device, err := h.Svc.CreateDevice(c.Request.Context(), uid, req.DeviceName, req.DeviceIP)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "create device failed"})
 		return
 	}
 
-	_ = h.logFrpOperation(c, uid, "frp_device_create", fmt.Sprintf("device_id=%d", device.ID))
+	_ = h.Svc.LogOperation(c.Request.Context(), uid, "frp_device_create", fmt.Sprintf("device_id=%d", device.ID), c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{"item": device})
 }
 
@@ -154,16 +151,8 @@ func (h *FrpHandler) ListDevices(c *gin.Context) {
 		statusFilter = &t
 	}
 
-	query := h.DB.WithContext(c.Request.Context()).Model(&model.Device{})
-	if !isAdmin {
-		query = query.Where("user_id = ?", uid)
-	}
-	if statusFilter != nil {
-		query = query.Where("status = ?", *statusFilter)
-	}
-
-	var rows []model.Device
-	if err := query.Order("id DESC").Find(&rows).Error; err != nil {
+	rows, err := h.Svc.ListDevices(c.Request.Context(), uid, isAdmin, statusFilter)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
@@ -180,13 +169,13 @@ func (h *FrpHandler) GetDevice(c *gin.Context) {
 		return
 	}
 
-	device, err := h.findDeviceWithPermission(c, uid, deviceID)
+	res, err := h.Svc.GetDeviceDetail(c.Request.Context(), uid, h.isAdmin(c), deviceID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "device not found"})
 			return
 		}
-		if err == errFrpForbidden {
+		if errors.Is(err, service.ErrFrpForbidden) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
 			return
 		}
@@ -194,23 +183,11 @@ func (h *FrpHandler) GetDevice(c *gin.Context) {
 		return
 	}
 
-	var mappingCount int64
-	if err := h.DB.WithContext(c.Request.Context()).Model(&model.FrpMapping{}).Where("device_id = ?", device.ID).Count(&mappingCount).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-
-	var latestCfg model.FrpConfig
-	var latestConfigTime *time.Time
-	if err := h.DB.WithContext(c.Request.Context()).Where("device_id = ?", device.ID).Order("id DESC").First(&latestCfg).Error; err == nil {
-		latestConfigTime = &latestCfg.CreateTime
-	}
-
 	c.JSON(http.StatusOK, gin.H{
 		"item": gin.H{
-			"device":             device,
-			"mapping_count":      mappingCount,
-			"latest_config_time": latestConfigTime,
+			"device":             res.Device,
+			"mapping_count":      res.MappingCount,
+			"latest_config_time": res.LatestConfigTime,
 		},
 	})
 }
@@ -230,51 +207,28 @@ func (h *FrpHandler) UpdateDevice(c *gin.Context) {
 		return
 	}
 
-	device, err := h.findDeviceWithPermission(c, uid, deviceID)
+	device, err := h.Svc.UpdateDevice(c.Request.Context(), uid, h.isAdmin(c), deviceID, service.UpdateDeviceInput{
+		DeviceName: req.DeviceName,
+		DeviceIP:   req.DeviceIP,
+		Status:     req.Status,
+	})
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "device not found"})
 			return
 		}
-		if err == errFrpForbidden {
+		if errors.Is(err, service.ErrFrpForbidden) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-
-	updates := map[string]interface{}{}
-	if strings.TrimSpace(req.DeviceName) != "" {
-		updates["device_name"] = strings.TrimSpace(req.DeviceName)
-	}
-	if strings.TrimSpace(req.DeviceIP) != "" {
-		updates["device_ip"] = strings.TrimSpace(req.DeviceIP)
-	}
-	if req.Status != nil {
-		if *req.Status != 0 && *req.Status != 1 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status"})
+		if errors.Is(err, gorm.ErrInvalidData) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "no fields to update"})
 			return
 		}
-		updates["status"] = *req.Status
-	}
-
-	if len(updates) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "no fields to update"})
-		return
-	}
-
-	if err := h.DB.WithContext(c.Request.Context()).Model(&model.Device{}).Where("id = ?", device.ID).Updates(updates).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "update device failed"})
-		return
-	}
-
-	if err := h.DB.WithContext(c.Request.Context()).First(&device, device.ID).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
-
-	_ = h.logFrpOperation(c, uid, "frp_device_update", fmt.Sprintf("device_id=%d", device.ID))
+	_ = h.Svc.LogOperation(c.Request.Context(), uid, "frp_device_update", fmt.Sprintf("device_id=%d", device.ID), c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{"item": device})
 }
 
@@ -287,26 +241,20 @@ func (h *FrpHandler) DeleteDevice(c *gin.Context) {
 		return
 	}
 
-	device, err := h.findDeviceWithPermission(c, uid, deviceID)
+	device, err := h.Svc.DeleteDevice(c.Request.Context(), uid, h.isAdmin(c), deviceID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "device not found"})
 			return
 		}
-		if err == errFrpForbidden {
+		if errors.Is(err, service.ErrFrpForbidden) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
-
-	if err := h.DB.WithContext(c.Request.Context()).Delete(&model.Device{}, "id = ?", device.ID).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "delete device failed"})
-		return
-	}
-
-	_ = h.logFrpOperation(c, uid, "frp_device_delete", fmt.Sprintf("device_id=%d", device.ID))
+	_ = h.Svc.LogOperation(c.Request.Context(), uid, "frp_device_delete", fmt.Sprintf("device_id=%d", device.ID), c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 
@@ -330,74 +278,24 @@ func (h *FrpHandler) CreateMapping(c *gin.Context) {
 	}
 	req.Domain = strings.TrimSpace(req.Domain)
 
-	device, err := h.findDeviceWithPermission(c, uid, req.DeviceID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+	created, allocErr := h.Svc.CreateMapping(c.Request.Context(), uid, h.isAdmin(c), service.CreateMappingInput{
+		DeviceID:   req.DeviceID,
+		LocalPort:  req.LocalPort,
+		RemotePort: req.RemotePort,
+		Domain:     req.Domain,
+		Status:     req.Status,
+	})
+	if allocErr != nil {
+		if errors.Is(allocErr, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "device not found"})
 			return
 		}
-		if err == errFrpForbidden {
+		if errors.Is(allocErr, service.ErrFrpForbidden) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-	if device.Status == 0 {
-		c.JSON(http.StatusConflict, gin.H{"error": "device disabled"})
-		return
-	}
-
-	status := int8(1)
-	if req.Status != nil {
-		if *req.Status != 0 && *req.Status != 1 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status"})
-			return
-		}
-		status = *req.Status
-	}
-
-	var created model.FrpMapping
-	allocErr := h.DB.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
-		if req.Domain != "" {
-			var conflictCount int64
-			if err := tx.Model(&model.FrpMapping{}).Where("domain = ?", req.Domain).Count(&conflictCount).Error; err != nil {
-				return err
-			}
-			if conflictCount > 0 {
-				return fmt.Errorf("domain already exists")
-			}
-		}
-
-		remotePort := 0
-		if req.RemotePort != nil {
-			remotePort = *req.RemotePort
-		} else {
-			p, err := h.allocateRemotePort(tx)
-			if err != nil {
-				return err
-			}
-			remotePort = p
-		}
-
-		created = model.FrpMapping{
-			DeviceID:   req.DeviceID,
-			LocalPort:  req.LocalPort,
-			RemotePort: remotePort,
-			Domain:     req.Domain,
-			Status:     status,
-		}
-		if err := tx.Create(&created).Error; err != nil {
-			if isDuplicateKeyErr(err) {
-				return fmt.Errorf("remote_port already exists")
-			}
-			return err
-		}
-		return nil
-	})
-	if allocErr != nil {
 		msg := strings.ToLower(allocErr.Error())
-		if strings.Contains(msg, "remote_port already exists") || strings.Contains(msg, "domain already exists") {
+		if strings.Contains(msg, "remote_port already exists") || strings.Contains(msg, "domain already exists") || strings.Contains(msg, "device disabled") {
 			c.JSON(http.StatusConflict, gin.H{"error": allocErr.Error()})
 			return
 		}
@@ -405,7 +303,7 @@ func (h *FrpHandler) CreateMapping(c *gin.Context) {
 		return
 	}
 
-	_ = h.logFrpOperation(c, uid, "frp_mapping_create", fmt.Sprintf("mapping_id=%d device_id=%d", created.ID, created.DeviceID))
+	_ = h.Svc.LogOperation(c.Request.Context(), uid, "frp_mapping_create", fmt.Sprintf("mapping_id=%d device_id=%d", created.ID, created.DeviceID), c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{"item": created})
 }
 
@@ -418,22 +316,16 @@ func (h *FrpHandler) ListDeviceMappings(c *gin.Context) {
 		return
 	}
 
-	_, err = h.findDeviceWithPermission(c, uid, deviceID)
+	rows, err := h.Svc.ListDeviceMappings(c.Request.Context(), uid, h.isAdmin(c), deviceID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "device not found"})
 			return
 		}
-		if err == errFrpForbidden {
+		if errors.Is(err, service.ErrFrpForbidden) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-
-	var rows []model.FrpMapping
-	if err := h.DB.WithContext(c.Request.Context()).Where("device_id = ?", deviceID).Order("id DESC").Find(&rows).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
@@ -456,93 +348,34 @@ func (h *FrpHandler) UpdateMapping(c *gin.Context) {
 		return
 	}
 
-	mapping, device, err := h.findMappingWithPermission(c, uid, mappingID)
+	mapping, err := h.Svc.UpdateMapping(c.Request.Context(), uid, h.isAdmin(c), mappingID, service.UpdateMappingInput{
+		LocalPort:  req.LocalPort,
+		RemotePort: req.RemotePort,
+		Domain:     req.Domain,
+		Status:     req.Status,
+	})
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "mapping not found"})
 			return
 		}
-		if err == errFrpForbidden {
+		if errors.Is(err, service.ErrFrpForbidden) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-	if device.Status == 0 {
-		c.JSON(http.StatusConflict, gin.H{"error": "device disabled"})
-		return
-	}
-
-	updates := map[string]interface{}{}
-	if req.LocalPort != nil {
-		if *req.LocalPort <= 0 || *req.LocalPort > 65535 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid local_port"})
+		if errors.Is(err, gorm.ErrInvalidData) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "no fields to update"})
 			return
 		}
-		updates["local_port"] = *req.LocalPort
-	}
-	if req.RemotePort != nil {
-		if *req.RemotePort <= 0 || *req.RemotePort > 65535 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid remote_port"})
-			return
-		}
-		updates["remote_port"] = *req.RemotePort
-	}
-	if req.Domain != nil {
-		domain := strings.TrimSpace(*req.Domain)
-		updates["domain"] = domain
-	}
-	if req.Status != nil {
-		if *req.Status != 0 && *req.Status != 1 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status"})
-			return
-		}
-		updates["status"] = *req.Status
-	}
-	if len(updates) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "no fields to update"})
-		return
-	}
-
-	err = h.DB.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
-		if domainAny, ok := updates["domain"]; ok {
-			domain := domainAny.(string)
-			if domain != "" {
-				var conflict int64
-				if err := tx.Model(&model.FrpMapping{}).Where("domain = ? AND id <> ?", domain, mapping.ID).Count(&conflict).Error; err != nil {
-					return err
-				}
-				if conflict > 0 {
-					return fmt.Errorf("domain already exists")
-				}
-			}
-		}
-
-		if err := tx.Model(&model.FrpMapping{}).Where("id = ?", mapping.ID).Updates(updates).Error; err != nil {
-			if isDuplicateKeyErr(err) {
-				return fmt.Errorf("remote_port already exists")
-			}
-			return err
-		}
-		return nil
-	})
-	if err != nil {
 		msg := strings.ToLower(err.Error())
-		if strings.Contains(msg, "already exists") {
+		if strings.Contains(msg, "already exists") || strings.Contains(msg, "device disabled") {
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "update mapping failed"})
 		return
 	}
-
-	if err := h.DB.WithContext(c.Request.Context()).First(&mapping, mapping.ID).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-
-	_ = h.logFrpOperation(c, uid, "frp_mapping_update", fmt.Sprintf("mapping_id=%d device_id=%d", mapping.ID, mapping.DeviceID))
+	_ = h.Svc.LogOperation(c.Request.Context(), uid, "frp_mapping_update", fmt.Sprintf("mapping_id=%d device_id=%d", mapping.ID, mapping.DeviceID), c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{"item": mapping})
 }
 
@@ -555,26 +388,20 @@ func (h *FrpHandler) DeleteMapping(c *gin.Context) {
 		return
 	}
 
-	mapping, _, err := h.findMappingWithPermission(c, uid, mappingID)
+	mapping, err := h.Svc.DeleteMapping(c.Request.Context(), uid, h.isAdmin(c), mappingID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "mapping not found"})
 			return
 		}
-		if err == errFrpForbidden {
+		if errors.Is(err, service.ErrFrpForbidden) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
-
-	if err := h.DB.WithContext(c.Request.Context()).Delete(&model.FrpMapping{}, "id = ?", mapping.ID).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "delete mapping failed"})
-		return
-	}
-
-	_ = h.logFrpOperation(c, uid, "frp_mapping_delete", fmt.Sprintf("mapping_id=%d device_id=%d", mapping.ID, mapping.DeviceID))
+	_ = h.Svc.LogOperation(c.Request.Context(), uid, "frp_mapping_delete", fmt.Sprintf("mapping_id=%d device_id=%d", mapping.ID, mapping.DeviceID), c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 
@@ -588,7 +415,12 @@ func (h *FrpHandler) PreviewConfig(c *gin.Context) {
 		return
 	}
 
-	text, deviceID, err := h.buildConfigTextForDevice(c, uid, req.DeviceID, req.ServerAddr, req.ServerPort, req.Token)
+	text, deviceID, err := h.Svc.PreviewConfig(c.Request.Context(), uid, h.isAdmin(c), service.SaveConfigInput{
+		DeviceID:   req.DeviceID,
+		ServerAddr: req.ServerAddr,
+		ServerPort: req.ServerPort,
+		Token:      req.Token,
+	})
 	if err != nil {
 		h.writeConfigError(c, err)
 		return
@@ -610,22 +442,23 @@ func (h *FrpHandler) SaveConfig(c *gin.Context) {
 		return
 	}
 
-	text, deviceID, err := h.buildConfigTextForDevice(c, uid, req.DeviceID, req.ServerAddr, req.ServerPort, req.Token)
+	cfg, err := h.Svc.SaveConfig(c.Request.Context(), uid, h.isAdmin(c), service.SaveConfigInput{
+		DeviceID:   req.DeviceID,
+		ServerAddr: req.ServerAddr,
+		ServerPort: req.ServerPort,
+		Token:      req.Token,
+	})
 	if err != nil {
 		h.writeConfigError(c, err)
 		return
 	}
 
-	cfg := model.FrpConfig{
-		DeviceID:   &deviceID,
-		ConfigText: text,
-	}
-	if err := h.DB.WithContext(c.Request.Context()).Create(&cfg).Error; err != nil {
+	if cfg.DeviceID == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "save config failed"})
 		return
 	}
 
-	_ = h.logFrpOperation(c, uid, "frp_config_save", fmt.Sprintf("config_id=%d device_id=%d", cfg.ID, deviceID))
+	_ = h.Svc.LogOperation(c.Request.Context(), uid, "frp_config_save", fmt.Sprintf("config_id=%d device_id=%d", cfg.ID, *cfg.DeviceID), c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{"item": cfg})
 }
 
@@ -638,22 +471,16 @@ func (h *FrpHandler) ListDeviceConfigs(c *gin.Context) {
 		return
 	}
 
-	_, err = h.findDeviceWithPermission(c, uid, deviceID)
+	rows, err := h.Svc.ListDeviceConfigs(c.Request.Context(), uid, h.isAdmin(c), deviceID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "device not found"})
 			return
 		}
-		if err == errFrpForbidden {
+		if errors.Is(err, service.ErrFrpForbidden) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-
-	var rows []model.FrpConfig
-	if err := h.DB.WithContext(c.Request.Context()).Where("device_id = ?", deviceID).Order("id DESC").Find(&rows).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
@@ -670,44 +497,31 @@ func (h *FrpHandler) RollbackConfig(c *gin.Context) {
 		return
 	}
 
-	var oldCfg model.FrpConfig
-	if err := h.DB.WithContext(c.Request.Context()).First(&oldCfg, "id = ?", configID).Error; err != nil {
+	oldCfg, newCfg, err := h.Svc.RollbackConfig(c.Request.Context(), uid, h.isAdmin(c), configID)
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// 与原逻辑一致：优先返回配置不存在。
 			c.JSON(http.StatusNotFound, gin.H{"error": "config not found"})
+			return
+		}
+		if errors.Is(err, service.ErrFrpForbidden) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+			return
+		}
+		if strings.Contains(strings.ToLower(err.Error()), "config has no device") {
+			c.JSON(http.StatusConflict, gin.H{"error": "config has no device"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
-	if oldCfg.DeviceID == nil || *oldCfg.DeviceID <= 0 {
+	if oldCfg.DeviceID == nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "config has no device"})
 		return
 	}
 
-	_, err = h.findDeviceWithPermission(c, uid, *oldCfg.DeviceID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "device not found"})
-			return
-		}
-		if err == errFrpForbidden {
-			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-
-	newCfg := model.FrpConfig{
-		DeviceID:   oldCfg.DeviceID,
-		ConfigText: oldCfg.ConfigText,
-	}
-	if err := h.DB.WithContext(c.Request.Context()).Create(&newCfg).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "rollback config failed"})
-		return
-	}
-
-	_ = h.logFrpOperation(c, uid, "frp_config_rollback", fmt.Sprintf("from_config_id=%d to_config_id=%d device_id=%d", oldCfg.ID, newCfg.ID, *oldCfg.DeviceID))
+	// 保持原返回和日志结构不变。
+	_ = h.Svc.LogOperation(c.Request.Context(), uid, "frp_config_rollback", fmt.Sprintf("from_config_id=%d to_config_id=%d device_id=%d", oldCfg.ID, newCfg.ID, *oldCfg.DeviceID), c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{"item": newCfg})
 }
 
@@ -1460,6 +1274,22 @@ func (h *FrpHandler) writeConfigError(c *gin.Context, err error) {
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "device not found"})
+		return
+	}
+	if errors.Is(err, service.ErrFrpForbidden) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+		return
+	}
+	if errors.Is(err, service.ErrFrpNoMapping) {
+		c.JSON(http.StatusConflict, gin.H{"error": "no active mapping"})
+		return
+	}
+	if errors.Is(err, service.ErrFrpNeedServer) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "server_addr is required"})
+		return
+	}
+	if errors.Is(err, service.ErrFrpBadConfig) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid config parameters"})
 		return
 	}
 	if err == errFrpForbidden {
