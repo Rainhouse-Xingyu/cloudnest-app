@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"cloudenest_go/internal/middleware"
+	"cloudenest_go/internal/service"
 	"cloudenest_go/model"
 
 	"github.com/gin-gonic/gin"
@@ -19,7 +20,8 @@ import (
 
 // CollaborationHandler 处理多人协作相关接口。
 type CollaborationHandler struct {
-	DB *gorm.DB
+	DB  *gorm.DB
+	Svc *service.CollaborationService
 }
 
 // CreateWorkspaceRequest 创建团队空间请求。
@@ -71,20 +73,13 @@ func (h *CollaborationHandler) CreateWorkspace(c *gin.Context) {
 	}
 
 	ws := model.Workspace{Name: req.Name, OwnerID: uid}
-	err := h.DB.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(&ws).Error; err != nil {
-			return err
-		}
-		ownerRole := "owner"
-		row := model.WorkspaceUser{WorkspaceID: ws.ID, UserID: uid, Role: ownerRole}
-		return tx.Create(&row).Error
-	})
+	err := h.Svc.CreateWorkspace(c.Request.Context(), &ws, uid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "create workspace failed"})
 		return
 	}
 
-	_ = h.logOperation(c.Request.Context(), uid, nil, "workspace_create", "success", fmt.Sprintf("workspace_id=%d", ws.ID), c.ClientIP())
+	_ = h.Svc.LogOperation(c.Request.Context(), uid, nil, "workspace_create", "success", fmt.Sprintf("workspace_id=%d", ws.ID), c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{"item": ws})
 }
 
@@ -92,21 +87,7 @@ func (h *CollaborationHandler) CreateWorkspace(c *gin.Context) {
 func (h *CollaborationHandler) ListWorkspaces(c *gin.Context) {
 	uid := c.GetInt64(middleware.ContextUserIDKey)
 
-	type row struct {
-		ID         int64     `json:"id"`
-		Name       string    `json:"name"`
-		OwnerID    int64     `json:"owner_id"`
-		Role       string    `json:"role"`
-		CreateTime time.Time `json:"create_time"`
-	}
-
-	items := make([]row, 0)
-	err := h.DB.WithContext(c.Request.Context()).
-		Table("workspace w").
-		Select("w.id, w.name, w.owner_id, wu.role, w.create_time").
-		Joins("JOIN workspace_user wu ON wu.workspace_id = w.id AND wu.user_id = ?", uid).
-		Order("w.id DESC").
-		Find(&items).Error
+	items, err := h.Svc.ListWorkspaces(c.Request.Context(), uid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
@@ -140,7 +121,7 @@ func (h *CollaborationHandler) AddWorkspaceMember(c *gin.Context) {
 		return
 	}
 
-	role, inWorkspace, err := h.getWorkspaceRole(c.Request.Context(), workspaceID, uid)
+	role, inWorkspace, err := h.Svc.GetWorkspaceRole(c.Request.Context(), workspaceID, uid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
@@ -150,7 +131,7 @@ func (h *CollaborationHandler) AddWorkspaceMember(c *gin.Context) {
 		return
 	}
 
-	targetUser, err := h.resolveTargetUser(c.Request.Context(), req.UserID, req.Username)
+	targetUser, err := h.Svc.ResolveTargetUser(c.Request.Context(), req.UserID, req.Username)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "target user not found"})
@@ -160,21 +141,7 @@ func (h *CollaborationHandler) AddWorkspaceMember(c *gin.Context) {
 		return
 	}
 
-	err = h.DB.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
-		var row model.WorkspaceUser
-		err := tx.Where("workspace_id = ? AND user_id = ?", workspaceID, targetUser.ID).First(&row).Error
-		if err != nil {
-			if !errors.Is(err, gorm.ErrRecordNotFound) {
-				return err
-			}
-			newRow := model.WorkspaceUser{WorkspaceID: workspaceID, UserID: targetUser.ID, Role: req.Role}
-			return tx.Create(&newRow).Error
-		}
-		if row.Role == "owner" {
-			return fmt.Errorf("cannot change owner role")
-		}
-		return tx.Model(&row).Update("role", req.Role).Error
-	})
+	err = h.Svc.UpsertWorkspaceMember(c.Request.Context(), workspaceID, targetUser.ID, req.Role)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "cannot change owner") {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "cannot change owner role"})
@@ -185,7 +152,7 @@ func (h *CollaborationHandler) AddWorkspaceMember(c *gin.Context) {
 	}
 
 	detail := fmt.Sprintf("workspace_id=%d actor_role=%s target_user=%d role=%s", workspaceID, role, targetUser.ID, req.Role)
-	_ = h.logOperation(c.Request.Context(), uid, nil, "workspace_member_upsert", "success", detail, c.ClientIP())
+	_ = h.Svc.LogOperation(c.Request.Context(), uid, nil, "workspace_member_upsert", "success", detail, c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{"message": "member updated"})
 }
 
@@ -198,7 +165,7 @@ func (h *CollaborationHandler) ListWorkspaceMembers(c *gin.Context) {
 		return
 	}
 
-	_, canView, err := h.getWorkspaceRole(c.Request.Context(), workspaceID, uid)
+	_, canView, err := h.Svc.GetWorkspaceRole(c.Request.Context(), workspaceID, uid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
@@ -208,20 +175,7 @@ func (h *CollaborationHandler) ListWorkspaceMembers(c *gin.Context) {
 		return
 	}
 
-	type row struct {
-		UserID   int64  `json:"user_id"`
-		Username string `json:"username"`
-		Role     string `json:"role"`
-	}
-
-	rows := make([]row, 0)
-	err = h.DB.WithContext(c.Request.Context()).
-		Table("workspace_user wu").
-		Select("wu.user_id, u.username, wu.role").
-		Joins("JOIN user u ON u.id = wu.user_id").
-		Where("wu.workspace_id = ?", workspaceID).
-		Order("wu.id ASC").
-		Find(&rows).Error
+	rows, err := h.Svc.ListWorkspaceMembers(c.Request.Context(), workspaceID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
@@ -255,7 +209,7 @@ func (h *CollaborationHandler) UpdateWorkspaceMemberRole(c *gin.Context) {
 		return
 	}
 
-	role, inWorkspace, err := h.getWorkspaceRole(c.Request.Context(), workspaceID, uid)
+	role, inWorkspace, err := h.Svc.GetWorkspaceRole(c.Request.Context(), workspaceID, uid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
@@ -265,8 +219,7 @@ func (h *CollaborationHandler) UpdateWorkspaceMemberRole(c *gin.Context) {
 		return
 	}
 
-	var target model.WorkspaceUser
-	err = h.DB.WithContext(c.Request.Context()).Where("workspace_id = ? AND user_id = ?", workspaceID, targetUserID).First(&target).Error
+	target, err := h.Svc.GetWorkspaceMember(c.Request.Context(), workspaceID, targetUserID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "workspace member not found"})
@@ -280,13 +233,13 @@ func (h *CollaborationHandler) UpdateWorkspaceMemberRole(c *gin.Context) {
 		return
 	}
 
-	if err := h.DB.WithContext(c.Request.Context()).Model(&target).Update("role", req.Role).Error; err != nil {
+	if err := h.Svc.UpdateWorkspaceMemberRole(c.Request.Context(), &target, req.Role); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "update member role failed"})
 		return
 	}
 
 	detail := fmt.Sprintf("workspace_id=%d actor_role=%s target_user=%d role=%s", workspaceID, role, targetUserID, req.Role)
-	_ = h.logOperation(c.Request.Context(), uid, nil, "workspace_member_role_update", "success", detail, c.ClientIP())
+	_ = h.Svc.LogOperation(c.Request.Context(), uid, nil, "workspace_member_role_update", "success", detail, c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{"message": "member role updated"})
 }
 
@@ -304,7 +257,7 @@ func (h *CollaborationHandler) RemoveWorkspaceMember(c *gin.Context) {
 		return
 	}
 
-	role, inWorkspace, err := h.getWorkspaceRole(c.Request.Context(), workspaceID, uid)
+	role, inWorkspace, err := h.Svc.GetWorkspaceRole(c.Request.Context(), workspaceID, uid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
@@ -314,8 +267,7 @@ func (h *CollaborationHandler) RemoveWorkspaceMember(c *gin.Context) {
 		return
 	}
 
-	var target model.WorkspaceUser
-	err = h.DB.WithContext(c.Request.Context()).Where("workspace_id = ? AND user_id = ?", workspaceID, targetUserID).First(&target).Error
+	target, err := h.Svc.GetWorkspaceMember(c.Request.Context(), workspaceID, targetUserID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "workspace member not found"})
@@ -329,13 +281,13 @@ func (h *CollaborationHandler) RemoveWorkspaceMember(c *gin.Context) {
 		return
 	}
 
-	if err := h.DB.WithContext(c.Request.Context()).Delete(&target).Error; err != nil {
+	if err := h.Svc.DeleteWorkspaceMember(c.Request.Context(), &target); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "remove member failed"})
 		return
 	}
 
 	detail := fmt.Sprintf("workspace_id=%d actor_role=%s target_user=%d", workspaceID, role, targetUserID)
-	_ = h.logOperation(c.Request.Context(), uid, nil, "workspace_member_remove", "success", detail, c.ClientIP())
+	_ = h.Svc.LogOperation(c.Request.Context(), uid, nil, "workspace_member_remove", "success", detail, c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{"message": "member removed"})
 }
 

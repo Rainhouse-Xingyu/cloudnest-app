@@ -25,11 +25,12 @@ type Container struct {
 	OperationLogRepo *storageMysql.OperationLogRepo
 	TxRunner         *storageMysql.TxRunner
 
-	AuthzService        *service.AuthzService
-	AuthService         *service.AuthService
-	AdminService        *service.AdminService
-	SettingsService     *service.SettingsService
-	OperationLogService *service.OperationLogService
+	AuthzService         *service.AuthzService
+	AuthService          *service.AuthService
+	AdminService         *service.AdminService
+	CollaborationService *service.CollaborationService
+	SettingsService      *service.SettingsService
+	OperationLogService  *service.OperationLogService
 
 	AuthHandler          *handler.AuthHandler
 	AdminHandler         *handler.AdminHandler
@@ -50,6 +51,7 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 	authzService := service.NewAuthzService(permissionRepo)
 	authService := service.NewAuthService(db, rdb, cfg)
 	adminService := service.NewAdminService(db, rdb)
+	collaborationService := service.NewCollaborationService(db)
 	settingsService := service.NewSettingsService(db)
 	operationLogService := service.NewOperationLogService(operationLogRepo)
 
@@ -62,17 +64,18 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 		OperationLogRepo: operationLogRepo,
 		TxRunner:         txRunner,
 
-		AuthzService:        authzService,
-		AuthService:         authService,
-		AdminService:        adminService,
-		SettingsService:     settingsService,
-		OperationLogService: operationLogService,
+		AuthzService:         authzService,
+		AuthService:          authService,
+		AdminService:         adminService,
+		CollaborationService: collaborationService,
+		SettingsService:      settingsService,
+		OperationLogService:  operationLogService,
 
 		AuthHandler:          &handler.AuthHandler{Svc: authService},
 		AdminHandler:         &handler.AdminHandler{Svc: adminService},
 		FileHandler:          &handler.FileHandler{DB: db, RDB: rdb, Cfg: cfg},
 		SettingsHandler:      &handler.SettingsHandler{Svc: settingsService},
-		CollaborationHandler: &handler.CollaborationHandler{DB: db},
+		CollaborationHandler: &handler.CollaborationHandler{DB: db, Svc: collaborationService},
 		AIHandler:            &handler.AIHandler{DB: db, Cfg: cfg},
 		FrpHandler:           &handler.FrpHandler{DB: db, RDB: rdb},
 		LivePhotoHandler:     &handler.LivePhotoHandler{DB: db},
