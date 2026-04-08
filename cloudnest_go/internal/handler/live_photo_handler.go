@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"cloudenest_go/internal/middleware"
+	"cloudenest_go/internal/service"
 	"cloudenest_go/model"
 
 	"github.com/gin-gonic/gin"
@@ -18,7 +19,8 @@ import (
 
 // LivePhotoHandler 负责 Live Photo 绑定关系的管理接口。
 type LivePhotoHandler struct {
-	DB *gorm.DB
+	DB  *gorm.DB
+	Svc *service.LivePhotoService
 }
 
 // BindLivePhotoRequest 手动绑定 Live Photo 的请求体。
@@ -54,64 +56,24 @@ func (h *LivePhotoHandler) Bind(c *gin.Context) {
 		return
 	}
 
-	// 绑定操作要求对两个文件都具备写权限。
-	canWriteImage, err := h.canAccessFile(c.Request.Context(), uid, req.ImageFileID, true)
+	res, err := h.Svc.Bind(c.Request.Context(), uid, req.ImageFileID, req.VideoFileID, c.ClientIP())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-	canWriteVideo, err := h.canAccessFile(c.Request.Context(), uid, req.VideoFileID, true)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-	if !canWriteImage || !canWriteVideo {
-		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-		return
-	}
-
-	imageFile, videoFile, err := h.loadLivePhotoFiles(c.Request.Context(), req.ImageFileID, req.VideoFileID)
-	if err != nil {
+		if errors.Is(err, service.ErrLivePhotoPermissionDenied) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+			return
+		}
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
 			return
 		}
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	var created model.LivePhoto
-	err = h.DB.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
-		// 业务层去重：同一图片或同一视频只能属于一个 Live Photo。
-		var exists model.LivePhoto
-		err := tx.Where("image_file_id = ? OR video_file_id = ?", req.ImageFileID, req.VideoFileID).First(&exists).Error
-		if err == nil {
-			return fmt.Errorf("live photo relation already exists")
-		}
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
-		}
-
-		created = model.LivePhoto{
-			ImageFileID: req.ImageFileID,
-			VideoFileID: req.VideoFileID,
-		}
-		if err := tx.Create(&created).Error; err != nil {
-			return err
-		}
-
-		return tx.Create(&model.OperationLog{
-			UserID:   &uid,
-			FileID:   &created.ImageFileID,
-			Action:   "live_photo_bind",
-			Status:   "success",
-			Detail:   fmt.Sprintf("live_photo_id=%d image_file_id=%d video_file_id=%d", created.ID, created.ImageFileID, created.VideoFileID),
-			ClientIP: c.ClientIP(),
-		}).Error
-	})
-	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "already exists") {
 			c.JSON(http.StatusConflict, gin.H{"error": "live photo relation already exists"})
+			return
+		}
+		if strings.Contains(strings.ToLower(err.Error()), "folder cannot be bound") ||
+			strings.Contains(strings.ToLower(err.Error()), "image file type not supported") ||
+			strings.Contains(strings.ToLower(err.Error()), "video file type not supported") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "bind live photo failed"})
@@ -120,12 +82,12 @@ func (h *LivePhotoHandler) Bind(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"item": gin.H{
-			"id":            created.ID,
-			"image_file_id": created.ImageFileID,
-			"video_file_id": created.VideoFileID,
-			"create_time":   created.CreateTime,
-			"image_file":    toSimpleFileView(imageFile),
-			"video_file":    toSimpleFileView(videoFile),
+			"id":            res.Row.ID,
+			"image_file_id": res.Row.ImageFileID,
+			"video_file_id": res.Row.VideoFileID,
+			"create_time":   res.Row.CreateTime,
+			"image_file":    toSimpleFileView(res.ImageFile),
+			"video_file":    toSimpleFileView(res.VideoFile),
 		},
 	})
 }
@@ -139,46 +101,16 @@ func (h *LivePhotoHandler) Unbind(c *gin.Context) {
 		return
 	}
 
-	var row model.LivePhoto
-	if err := h.DB.WithContext(c.Request.Context()).First(&row, "id = ?", livePhotoID).Error; err != nil {
+	err = h.Svc.Unbind(c.Request.Context(), uid, livePhotoID, c.ClientIP())
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "live photo not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-
-	// 解绑要求对两个文件都具备写权限。
-	canWriteImage, err := h.canAccessFile(c.Request.Context(), uid, row.ImageFileID, true)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-	canWriteVideo, err := h.canAccessFile(c.Request.Context(), uid, row.VideoFileID, true)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-	if !canWriteImage || !canWriteVideo {
-		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-		return
-	}
-
-	err = h.DB.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Delete(&model.LivePhoto{}, "id = ?", livePhotoID).Error; err != nil {
-			return err
+		if errors.Is(err, service.ErrLivePhotoPermissionDenied) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+			return
 		}
-		return tx.Create(&model.OperationLog{
-			UserID:   &uid,
-			FileID:   &row.ImageFileID,
-			Action:   "live_photo_unbind",
-			Status:   "success",
-			Detail:   fmt.Sprintf("live_photo_id=%d image_file_id=%d video_file_id=%d", row.ID, row.ImageFileID, row.VideoFileID),
-			ClientIP: c.ClientIP(),
-		}).Error
-	})
-	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "unbind live photo failed"})
 		return
 	}
@@ -195,45 +127,14 @@ func (h *LivePhotoHandler) Detail(c *gin.Context) {
 		return
 	}
 
-	var row model.LivePhoto
-	if err := h.DB.WithContext(c.Request.Context()).First(&row, "id = ?", livePhotoID).Error; err != nil {
+	res, err := h.Svc.Detail(c.Request.Context(), uid, livePhotoID)
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "live photo not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-
-	// 详情查询要求当前用户对两个文件都具备读权限。
-	canReadImage, err := h.canAccessFile(c.Request.Context(), uid, row.ImageFileID, false)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-	canReadVideo, err := h.canAccessFile(c.Request.Context(), uid, row.VideoFileID, false)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-	if !canReadImage || !canReadVideo {
-		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-		return
-	}
-
-	var imageFile model.File
-	if err := h.DB.WithContext(c.Request.Context()).First(&imageFile, "id = ? AND is_deleted = 0", row.ImageFileID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "image file not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-	var videoFile model.File
-	if err := h.DB.WithContext(c.Request.Context()).First(&videoFile, "id = ? AND is_deleted = 0", row.VideoFileID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "video file not found"})
+		if errors.Is(err, service.ErrLivePhotoPermissionDenied) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
@@ -242,12 +143,12 @@ func (h *LivePhotoHandler) Detail(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"item": gin.H{
-			"id":            row.ID,
-			"image_file_id": row.ImageFileID,
-			"video_file_id": row.VideoFileID,
-			"create_time":   row.CreateTime,
-			"image_file":    toSimpleFileView(imageFile),
-			"video_file":    toSimpleFileView(videoFile),
+			"id":            res.Row.ID,
+			"image_file_id": res.Row.ImageFileID,
+			"video_file_id": res.Row.VideoFileID,
+			"create_time":   res.Row.CreateTime,
+			"image_file":    toSimpleFileView(res.ImageFile),
+			"video_file":    toSimpleFileView(res.VideoFile),
 		},
 	})
 }
@@ -274,66 +175,21 @@ func (h *LivePhotoHandler) List(c *gin.Context) {
 	if q.Limit > 100 {
 		q.Limit = 100
 	}
-	offset := (q.Page - 1) * q.Limit
-
-	// 列表查询同时校验图片文件与视频文件的可读权限。
-	base := h.DB.WithContext(c.Request.Context()).
-		Table("live_photo lp").
-		Joins("JOIN file fi ON fi.id = lp.image_file_id AND fi.is_deleted = 0").
-		Joins("JOIN file fv ON fv.id = lp.video_file_id AND fv.is_deleted = 0").
-		Joins("LEFT JOIN file_permission fpi ON fpi.file_id = fi.id AND fpi.user_id = ? AND fpi.permission IN ?", uid, []string{"read", "write"}).
-		Joins("LEFT JOIN file_permission fpv ON fpv.file_id = fv.id AND fpv.user_id = ? AND fpv.permission IN ?", uid, []string{"read", "write"}).
-		Where("(fi.user_id = ? OR fpi.id IS NOT NULL)", uid).
-		Where("(fv.user_id = ? OR fpv.id IS NOT NULL)", uid)
-
-	if q.ParentID > 0 {
-		base = base.Where("(fi.parent_id = ? OR fv.parent_id = ?)", q.ParentID, q.ParentID)
-	}
-
-	var total int64
-	if err := base.Count(&total).Error; err != nil {
+	res, err := h.Svc.List(c.Request.Context(), uid, service.LivePhotoListInput{ParentID: q.ParentID, Page: q.Page, Limit: q.Limit})
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
 
-	var rows []model.LivePhoto
-	if err := base.Select("lp.*").Order("lp.id DESC").Limit(q.Limit).Offset(offset).Find(&rows).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-
-	// 批量加载关联文件信息，减少 N+1 查询。
-	fileIDs := make([]int64, 0, len(rows)*2)
-	for _, row := range rows {
-		fileIDs = append(fileIDs, row.ImageFileID, row.VideoFileID)
-	}
-
-	fileMap := map[int64]model.File{}
-	if len(fileIDs) > 0 {
-		var files []model.File
-		if err := h.DB.WithContext(c.Request.Context()).Where("id IN ? AND is_deleted = 0", uniqueInt64(fileIDs)).Find(&files).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-			return
-		}
-		for _, f := range files {
-			fileMap[f.ID] = f
-		}
-	}
-
-	items := make([]gin.H, 0, len(rows))
-	for _, row := range rows {
-		imageFile, okImage := fileMap[row.ImageFileID]
-		videoFile, okVideo := fileMap[row.VideoFileID]
-		if !okImage || !okVideo {
-			continue
-		}
+	items := make([]gin.H, 0, len(res.Items))
+	for _, item := range res.Items {
 		items = append(items, gin.H{
-			"id":            row.ID,
-			"image_file_id": row.ImageFileID,
-			"video_file_id": row.VideoFileID,
-			"create_time":   row.CreateTime,
-			"image_file":    toSimpleFileView(imageFile),
-			"video_file":    toSimpleFileView(videoFile),
+			"id":            item.Row.ID,
+			"image_file_id": item.Row.ImageFileID,
+			"video_file_id": item.Row.VideoFileID,
+			"create_time":   item.Row.CreateTime,
+			"image_file":    toSimpleFileView(item.ImageFile),
+			"video_file":    toSimpleFileView(item.VideoFile),
 		})
 	}
 
@@ -342,7 +198,7 @@ func (h *LivePhotoHandler) List(c *gin.Context) {
 		"pagination": gin.H{
 			"page":  q.Page,
 			"limit": q.Limit,
-			"total": total,
+			"total": res.Total,
 		},
 	})
 }
@@ -356,67 +212,33 @@ func (h *LivePhotoHandler) GetByFileID(c *gin.Context) {
 		return
 	}
 
-	canRead, err := h.canAccessFile(c.Request.Context(), uid, fileID, false)
+	res, err := h.Svc.GetByFileID(c.Request.Context(), uid, fileID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-	if !canRead {
-		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-		return
-	}
-
-	var row model.LivePhoto
-	err = h.DB.WithContext(c.Request.Context()).
-		Where("image_file_id = ? OR video_file_id = ?", fileID, fileID).
-		Order("id DESC").
-		First(&row).Error
-	if err != nil {
+		if errors.Is(err, service.ErrLivePhotoPermissionDenied) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+			return
+		}
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusOK, gin.H{"item": nil})
+			c.JSON(http.StatusNotFound, gin.H{"error": "image file not found"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
-
-	// 反查时同样校验组合中另一个文件是否可读，避免越权泄露。
-	otherID := row.ImageFileID
-	role := "video"
-	if row.ImageFileID == fileID {
-		otherID = row.VideoFileID
-		role = "image"
-	}
-	canReadOther, err := h.canAccessFile(c.Request.Context(), uid, otherID, false)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-	if !canReadOther {
-		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-		return
-	}
-
-	var imageFile model.File
-	if err := h.DB.WithContext(c.Request.Context()).First(&imageFile, "id = ? AND is_deleted = 0", row.ImageFileID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "image file not found"})
-		return
-	}
-	var videoFile model.File
-	if err := h.DB.WithContext(c.Request.Context()).First(&videoFile, "id = ? AND is_deleted = 0", row.VideoFileID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "video file not found"})
+	if res == nil {
+		c.JSON(http.StatusOK, gin.H{"item": nil})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"item": gin.H{
-			"id":            row.ID,
-			"file_role":     role,
-			"image_file_id": row.ImageFileID,
-			"video_file_id": row.VideoFileID,
-			"create_time":   row.CreateTime,
-			"image_file":    toSimpleFileView(imageFile),
-			"video_file":    toSimpleFileView(videoFile),
+			"id":            res.Row.ID,
+			"file_role":     res.FileRole,
+			"image_file_id": res.Row.ImageFileID,
+			"video_file_id": res.Row.VideoFileID,
+			"create_time":   res.Row.CreateTime,
+			"image_file":    toSimpleFileView(res.ImageFile),
+			"video_file":    toSimpleFileView(res.VideoFile),
 		},
 	})
 }
@@ -436,145 +258,24 @@ func (h *LivePhotoHandler) AutoBind(c *gin.Context) {
 		return
 	}
 
-	// 加载候选文件（仅可写文件，避免越权绑定）。
-	candidates, err := h.loadAutoBindCandidates(c.Request.Context(), uid, req)
+	res, err := h.Svc.AutoBind(c.Request.Context(), uid, service.LivePhotoAutoBindInput{ParentID: req.ParentID, FileIDs: req.FileIDs}, c.ClientIP())
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "permission denied") {
+		if strings.Contains(strings.ToLower(err.Error()), "permission denied") || errors.Is(err, service.ErrLivePhotoPermissionDenied) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-	if len(candidates) == 0 {
-		c.JSON(http.StatusOK, gin.H{
-			"summary":       gin.H{"total_candidates": 0, "created": 0, "skipped": 0},
-			"created_items": []gin.H{},
-			"skipped_items": []gin.H{},
-		})
-		return
-	}
-
-	type pairGroup struct {
-		images []model.File
-		videos []model.File
-	}
-	groups := make(map[string]*pairGroup)
-	for _, f := range candidates {
-		ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(f.Filename), "."))
-		key := buildAutoBindKey(f.ParentID, f.Filename)
-		if key == "" {
-			continue
-		}
-		if groups[key] == nil {
-			groups[key] = &pairGroup{images: []model.File{}, videos: []model.File{}}
-		}
-		if isLivePhotoImageExt(ext) {
-			groups[key].images = append(groups[key].images, f)
-		} else if isLivePhotoVideoExt(ext) {
-			groups[key].videos = append(groups[key].videos, f)
-		}
-	}
-
-	// 查询候选文件中已经绑定的记录，避免重复绑定。
-	candidateIDs := make([]int64, 0, len(candidates))
-	for _, f := range candidates {
-		candidateIDs = append(candidateIDs, f.ID)
-	}
-
-	boundImage := make(map[int64]bool)
-	boundVideo := make(map[int64]bool)
-	if len(candidateIDs) > 0 {
-		var existed []model.LivePhoto
-		if err := h.DB.WithContext(c.Request.Context()).
-			Where("image_file_id IN ? OR video_file_id IN ?", candidateIDs, candidateIDs).
-			Find(&existed).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-			return
-		}
-		for _, row := range existed {
-			boundImage[row.ImageFileID] = true
-			boundVideo[row.VideoFileID] = true
-		}
-	}
-
-	createdItems := make([]gin.H, 0)
-	skippedItems := make([]gin.H, 0)
-
-	err = h.DB.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
-		for key, g := range groups {
-			if len(g.images) == 0 || len(g.videos) == 0 {
-				skippedItems = append(skippedItems, gin.H{"key": key, "reason": "pair not found"})
-				continue
-			}
-
-			pairCount := len(g.images)
-			if len(g.videos) < pairCount {
-				pairCount = len(g.videos)
-			}
-
-			for i := 0; i < pairCount; i++ {
-				img := g.images[i]
-				vid := g.videos[i]
-
-				if boundImage[img.ID] || boundVideo[vid.ID] {
-					skippedItems = append(skippedItems, gin.H{
-						"image_file_id": img.ID,
-						"video_file_id": vid.ID,
-						"reason":        "already bound",
-					})
-					continue
-				}
-
-				row := model.LivePhoto{ImageFileID: img.ID, VideoFileID: vid.ID}
-				if err := tx.Create(&row).Error; err != nil {
-					if strings.Contains(strings.ToLower(err.Error()), "duplicate") || strings.Contains(strings.ToLower(err.Error()), "1062") {
-						skippedItems = append(skippedItems, gin.H{
-							"image_file_id": img.ID,
-							"video_file_id": vid.ID,
-							"reason":        "already bound",
-						})
-						continue
-					}
-					return err
-				}
-
-				boundImage[img.ID] = true
-				boundVideo[vid.ID] = true
-				createdItems = append(createdItems, gin.H{
-					"id":            row.ID,
-					"image_file_id": row.ImageFileID,
-					"video_file_id": row.VideoFileID,
-					"create_time":   row.CreateTime,
-				})
-			}
-		}
-
-		detail := fmt.Sprintf("auto_bind created=%d skipped=%d", len(createdItems), len(skippedItems))
-		if len(detail) > 500 {
-			detail = detail[:500]
-		}
-		return tx.Create(&model.OperationLog{
-			UserID:   &uid,
-			Action:   "live_photo_auto_bind",
-			Status:   "success",
-			Detail:   detail,
-			ClientIP: c.ClientIP(),
-		}).Error
-	})
-	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "auto bind failed"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"summary": gin.H{
-			"total_candidates": len(candidates),
-			"created":          len(createdItems),
-			"skipped":          len(skippedItems),
+			"total_candidates": res.TotalCandidates,
+			"created":          len(res.CreatedItems),
+			"skipped":          len(res.SkippedItems),
 		},
-		"created_items": createdItems,
-		"skipped_items": skippedItems,
+		"created_items": res.CreatedItems,
+		"skipped_items": res.SkippedItems,
 	})
 }
 
