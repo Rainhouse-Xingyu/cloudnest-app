@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"cloudenest_go/internal/config"
+	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
 
 	pdf "github.com/ledongthuc/pdf"
@@ -29,13 +30,13 @@ const aiReadMaxBytes int64 = 2 * 1024 * 1024
 
 // AIService 承接 AI 模块业务逻辑。
 type AIService struct {
-	db         *gorm.DB
+	repo       contract.AIRepository
 	cfg        config.Config
 	httpClient *http.Client
 }
 
-func NewAIService(db *gorm.DB, cfg config.Config, httpClient *http.Client) *AIService {
-	return &AIService{db: db, cfg: cfg, httpClient: httpClient}
+func NewAIService(repo contract.AIRepository, cfg config.Config, httpClient *http.Client) *AIService {
+	return &AIService{repo: repo, cfg: cfg, httpClient: httpClient}
 }
 
 type AIOCRInput struct {
@@ -295,115 +296,39 @@ func (s *AIService) AskAssistant(ctx context.Context, question string) (AIAskRes
 }
 
 func (s *AIService) ApplySetting(ctx context.Context, uid int64, key string, value string, description string, clientIP string) error {
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var row model.SystemSetting
-		err := tx.Where("setting_key = ?", key).First(&row).Error
-		if err != nil {
-			if !errors.Is(err, gorm.ErrRecordNotFound) {
-				return err
-			}
-			row = model.SystemSetting{SettingKey: key, SettingValue: value, Description: description}
-			if err := tx.Create(&row).Error; err != nil {
-				return err
-			}
-		} else {
-			updates := map[string]interface{}{"setting_value": value}
-			if description != "" {
-				updates["description"] = description
-			}
-			if err := tx.Model(&row).Updates(updates).Error; err != nil {
-				return err
-			}
-		}
-
-		detail := fmt.Sprintf("ai_apply_setting key=%s value=%s", key, value)
-		if len(detail) > 500 {
-			detail = detail[:500]
-		}
-		return tx.Create(&model.OperationLog{UserID: &uid, Action: "ai_apply_setting", Status: "success", Detail: detail, ClientIP: clientIP}).Error
-	})
+	return s.repo.ApplySettingWithAudit(ctx, uid, key, value, description, clientIP)
 }
 
 func (s *AIService) executeAISearch(ctx context.Context, uid int64, q AISearchQuery) ([]map[string]interface{}, int64, error) {
-	base := s.db.WithContext(ctx).
-		Table("file f").
-		Select("f.id, f.filename, f.file_type, f.size, f.parent_id, f.user_id, f.create_time, f.update_time, am.tags, am.description, am.ocr_text").
-		Joins("LEFT JOIN file_permission fp ON fp.file_id = f.id AND fp.user_id = ?", uid).
-		Joins("LEFT JOIN ai_metadata am ON am.file_id = f.id").
-		Where("f.is_deleted = 0 AND f.is_folder = 0").
-		Where("f.user_id = ? OR fp.permission IN ?", uid, []string{"read", "write"})
-
-	if q.Keyword != "" {
-		like := "%" + q.Keyword + "%"
-		if q.TagOnly {
-			base = base.Where("am.tags LIKE ?", like)
-		} else {
-			base = base.Where("f.filename LIKE ? OR am.tags LIKE ? OR am.description LIKE ? OR am.ocr_text LIKE ?", like, like, like, like)
-		}
-	}
-	if q.FileType != "" {
-		switch strings.ToLower(q.FileType) {
-		case "image", "photo", "picture", "照片", "图片":
-			base = base.Where("LOWER(f.file_type) IN ?", []string{"jpg", "jpeg", "png", "gif", "webp", "heic", "heif"})
-		case "document", "doc", "文档", "票据", "发票":
-			base = base.Where("LOWER(f.file_type) IN ?", []string{"pdf", "docx", "xlsx", "pptx", "txt", "md", "csv", "json", "xml", "yaml", "yml"})
-		default:
-			base = base.Where("LOWER(f.file_type) = ?", strings.ToLower(q.FileType))
-		}
-	}
-	if q.Location != "" {
-		like := "%" + q.Location + "%"
-		if q.TagOnly {
-			base = base.Where("am.tags LIKE ?", like)
-		} else {
-			base = base.Where("am.tags LIKE ? OR am.description LIKE ? OR am.ocr_text LIKE ?", like, like, like)
-		}
-	}
-	if q.Landmark != "" {
-		like := "%" + q.Landmark + "%"
-		if q.TagOnly {
-			base = base.Where("am.tags LIKE ?", like)
-		} else {
-			base = base.Where("am.tags LIKE ? OR am.description LIKE ? OR am.ocr_text LIKE ?", like, like, like)
-		}
-	}
+	var startAt *time.Time
 	if q.StartTime != "" {
-		startAt, err := parseFlexibleTime(q.StartTime)
+		t, err := parseFlexibleTime(q.StartTime)
 		if err != nil {
 			return nil, 0, err
 		}
-		base = base.Where("f.create_time >= ?", startAt)
+		startAt = &t
 	}
+	var endAt *time.Time
 	if q.EndTime != "" {
-		endAt, err := parseFlexibleTime(q.EndTime)
+		t, err := parseFlexibleTime(q.EndTime)
 		if err != nil {
 			return nil, 0, err
 		}
-		base = base.Where("f.create_time <= ?", endAt)
+		endAt = &t
 	}
 
-	var total int64
-	if err := s.db.WithContext(ctx).Table("(?) as t", base).Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-
-	type row struct {
-		ID          int64     `json:"id"`
-		Filename    string    `json:"filename"`
-		FileType    string    `json:"file_type"`
-		Size        int64     `json:"size"`
-		ParentID    int64     `json:"parent_id"`
-		UserID      int64     `json:"user_id"`
-		CreateTime  time.Time `json:"create_time"`
-		UpdateTime  time.Time `json:"update_time"`
-		Tags        string    `json:"tags"`
-		Description string    `json:"description"`
-		OCRText     string    `json:"ocr_text"`
-	}
-
-	offset := (q.Page - 1) * q.Limit
-	rows := make([]row, 0)
-	if err := base.Order("f.id DESC").Limit(q.Limit).Offset(offset).Find(&rows).Error; err != nil {
+	rows, total, err := s.repo.Search(ctx, uid, contract.AISearchQuery{
+		Keyword:   q.Keyword,
+		FileType:  q.FileType,
+		Location:  q.Location,
+		Landmark:  q.Landmark,
+		StartTime: startAt,
+		EndTime:   endAt,
+		TagOnly:   q.TagOnly,
+		Page:      q.Page,
+		Limit:     q.Limit,
+	})
+	if err != nil {
 		return nil, 0, err
 	}
 
@@ -533,8 +458,8 @@ func (s *AIService) getReadableFileAndStorage(ctx context.Context, userID int64,
 		return model.File{}, model.Storage{}, fmt.Errorf("permission denied")
 	}
 
-	var f model.File
-	if err := s.db.WithContext(ctx).First(&f, "id = ? AND is_deleted = 0", fileID).Error; err != nil {
+	f, err := s.repo.GetActiveFileByID(ctx, fileID)
+	if err != nil {
 		return model.File{}, model.Storage{}, err
 	}
 	if f.IsFolder == 1 {
@@ -544,8 +469,8 @@ func (s *AIService) getReadableFileAndStorage(ctx context.Context, userID int64,
 		return model.File{}, model.Storage{}, gorm.ErrRecordNotFound
 	}
 
-	var storage model.Storage
-	if err := s.db.WithContext(ctx).First(&storage, "id = ?", *f.StorageID).Error; err != nil {
+	storage, err := s.repo.GetStorageByID(ctx, *f.StorageID)
+	if err != nil {
 		return model.File{}, model.Storage{}, err
 	}
 	if _, err := os.Stat(storage.FilePath); err != nil {
@@ -555,8 +480,7 @@ func (s *AIService) getReadableFileAndStorage(ctx context.Context, userID int64,
 }
 
 func (s *AIService) canAccessFile(ctx context.Context, userID int64, fileID int64, requireWrite bool) (bool, error) {
-	var f model.File
-	err := s.db.WithContext(ctx).First(&f, "id = ? AND is_deleted = 0", fileID).Error
+	f, err := s.repo.GetActiveFileByID(ctx, fileID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return false, nil
@@ -571,8 +495,7 @@ func (s *AIService) canAccessFile(ctx context.Context, userID int64, fileID int6
 	if requireWrite {
 		permissions = []string{"write"}
 	}
-	var count int64
-	err = s.db.WithContext(ctx).Model(&model.FilePermission{}).Where("file_id = ? AND user_id = ? AND permission IN ?", fileID, userID, permissions).Count(&count).Error
+	count, err := s.repo.CountFilePermissionsByLevels(ctx, fileID, userID, permissions)
 	if err != nil {
 		return false, err
 	}
@@ -584,25 +507,14 @@ func (s *AIService) upsertAIMetadata(ctx context.Context, fileID int64, tags str
 	desc = strings.TrimSpace(desc)
 	ocrText = strings.TrimSpace(ocrText)
 
-	var row model.AiMetadata
-	err := s.db.WithContext(ctx).Where("file_id = ?", fileID).First(&row).Error
+	row, err := s.repo.GetAIMetadataByFileID(ctx, fileID)
 	if err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return model.AiMetadata{}, err
 		}
-		row = model.AiMetadata{FileID: fileID, Tags: tags, Description: desc, OcrText: ocrText}
-		if err := s.db.WithContext(ctx).Create(&row).Error; err != nil {
-			return model.AiMetadata{}, err
-		}
-		return row, nil
+		return s.repo.CreateAIMetadata(ctx, model.AiMetadata{FileID: fileID, Tags: tags, Description: desc, OcrText: ocrText})
 	}
-	if err := s.db.WithContext(ctx).Model(&row).Updates(map[string]interface{}{"tags": tags, "description": desc, "ocr_text": ocrText}).Error; err != nil {
-		return model.AiMetadata{}, err
-	}
-	if err := s.db.WithContext(ctx).First(&row, row.ID).Error; err != nil {
-		return model.AiMetadata{}, err
-	}
-	return row, nil
+	return s.repo.UpdateAIMetadata(ctx, row, tags, desc, ocrText)
 }
 
 func (s *AIService) createAITask(ctx context.Context, userID int64, fileID int64, taskType string, status string, result string) error {
@@ -615,7 +527,7 @@ func (s *AIService) createAITask(ctx context.Context, userID int64, fileID int64
 	if row.Status == "" {
 		row.Status = "success"
 	}
-	return s.db.WithContext(ctx).Create(&row).Error
+	return s.repo.CreateAITask(ctx, row)
 }
 
 func (s *AIService) summarizeDocumentPhoto(ctx context.Context, ocrText string) string {
