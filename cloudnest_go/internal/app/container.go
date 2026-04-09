@@ -21,13 +21,14 @@ type Container struct {
 	DB  *gorm.DB
 	RDB *redis.Client
 
-	PermissionRepo   *storageMysql.PermissionRepo
-	OperationLogRepo *storageMysql.OperationLogRepo
-	AuthRepo         *storageMysql.AuthRepo
-	AdminRepo        *storageMysql.AdminRepo
-	SettingsRepo     *storageMysql.SettingsRepo
-	FileRepo         *storageMysql.FileRepo
-	TxRunner         *storageMysql.TxRunner
+	PermissionRepo    *storageMysql.PermissionRepo
+	OperationLogRepo  *storageMysql.OperationLogRepo
+	AuthRepo          *storageMysql.AuthRepo
+	AdminRepo         *storageMysql.AdminRepo
+	SettingsRepo      *storageMysql.SettingsRepo
+	FileRepo          *storageMysql.FileRepo
+	CollaborationRepo *storageMysql.CollaborationRepo
+	TxRunner          *storageMysql.TxRunner
 
 	AuthzService         *service.AuthzService
 	AuthService          *service.AuthService
@@ -58,12 +59,13 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 	adminRepo := storageMysql.NewAdminRepo(db)
 	settingsRepo := storageMysql.NewSettingsRepo(db)
 	fileRepo := storageMysql.NewFileRepo(db)
+	collaborationRepo := storageMysql.NewCollaborationRepo(db)
 	txRunner := storageMysql.NewTxRunner(db)
 
 	authzService := service.NewAuthzService(permissionRepo)
 	authService := service.NewAuthService(authRepo, rdb, cfg)
 	adminService := service.NewAdminService(adminRepo, rdb)
-	collaborationService := service.NewCollaborationService(db)
+	collaborationService := service.NewCollaborationService(collaborationRepo)
 	settingsService := service.NewSettingsService(settingsRepo)
 	operationLogService := service.NewOperationLogService(operationLogRepo)
 	frpService := service.NewFrpService(db, rdb)
@@ -76,13 +78,14 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 		DB:  db,
 		RDB: rdb,
 
-		PermissionRepo:   permissionRepo,
-		OperationLogRepo: operationLogRepo,
-		AuthRepo:         authRepo,
-		AdminRepo:        adminRepo,
-		SettingsRepo:     settingsRepo,
-		FileRepo:         fileRepo,
-		TxRunner:         txRunner,
+		PermissionRepo:    permissionRepo,
+		OperationLogRepo:  operationLogRepo,
+		AuthRepo:          authRepo,
+		AdminRepo:         adminRepo,
+		SettingsRepo:      settingsRepo,
+		FileRepo:          fileRepo,
+		CollaborationRepo: collaborationRepo,
+		TxRunner:          txRunner,
 
 		AuthzService:         authzService,
 		AuthService:          authService,
