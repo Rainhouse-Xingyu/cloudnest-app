@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
 
 	"gorm.io/gorm"
@@ -14,11 +15,11 @@ import (
 
 // LivePhotoService 承接 Live Photo 模块业务逻辑。
 type LivePhotoService struct {
-	db *gorm.DB
+	repo contract.LivePhotoRepository
 }
 
-func NewLivePhotoService(db *gorm.DB) *LivePhotoService {
-	return &LivePhotoService{db: db}
+func NewLivePhotoService(repo contract.LivePhotoRepository) *LivePhotoService {
+	return &LivePhotoService{repo: repo}
 }
 
 // LivePhotoBindResult 表示绑定后的结果。
@@ -100,31 +101,7 @@ func (s *LivePhotoService) Bind(ctx context.Context, uid int64, imageFileID int6
 		return LivePhotoBindResult{}, err
 	}
 
-	var created model.LivePhoto
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var exists model.LivePhoto
-		err := tx.Where("image_file_id = ? OR video_file_id = ?", imageFileID, videoFileID).First(&exists).Error
-		if err == nil {
-			return fmt.Errorf("live photo relation already exists")
-		}
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
-		}
-
-		created = model.LivePhoto{ImageFileID: imageFileID, VideoFileID: videoFileID}
-		if err := tx.Create(&created).Error; err != nil {
-			return err
-		}
-
-		return tx.Create(&model.OperationLog{
-			UserID:   &uid,
-			FileID:   &created.ImageFileID,
-			Action:   "live_photo_bind",
-			Status:   "success",
-			Detail:   fmt.Sprintf("live_photo_id=%d image_file_id=%d video_file_id=%d", created.ID, created.ImageFileID, created.VideoFileID),
-			ClientIP: clientIP,
-		}).Error
-	})
+	created, err := s.repo.CreateBindingWithLog(ctx, uid, imageFileID, videoFileID, clientIP)
 	if err != nil {
 		return LivePhotoBindResult{}, err
 	}
@@ -134,8 +111,8 @@ func (s *LivePhotoService) Bind(ctx context.Context, uid int64, imageFileID int6
 
 // Unbind 删除 Live Photo 绑定关系，不删除原始文件。
 func (s *LivePhotoService) Unbind(ctx context.Context, uid int64, livePhotoID int64, clientIP string) error {
-	var row model.LivePhoto
-	if err := s.db.WithContext(ctx).First(&row, "id = ?", livePhotoID).Error; err != nil {
+	row, err := s.repo.GetLivePhotoByID(ctx, livePhotoID)
+	if err != nil {
 		return err
 	}
 
@@ -151,25 +128,13 @@ func (s *LivePhotoService) Unbind(ctx context.Context, uid int64, livePhotoID in
 		return ErrLivePhotoPermissionDenied
 	}
 
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Delete(&model.LivePhoto{}, "id = ?", livePhotoID).Error; err != nil {
-			return err
-		}
-		return tx.Create(&model.OperationLog{
-			UserID:   &uid,
-			FileID:   &row.ImageFileID,
-			Action:   "live_photo_unbind",
-			Status:   "success",
-			Detail:   fmt.Sprintf("live_photo_id=%d image_file_id=%d video_file_id=%d", row.ID, row.ImageFileID, row.VideoFileID),
-			ClientIP: clientIP,
-		}).Error
-	})
+	return s.repo.DeleteBindingWithLog(ctx, uid, row, clientIP)
 }
 
 // Detail 查询单个 Live Photo 的详情。
 func (s *LivePhotoService) Detail(ctx context.Context, uid int64, livePhotoID int64) (LivePhotoDetailResult, error) {
-	var row model.LivePhoto
-	if err := s.db.WithContext(ctx).First(&row, "id = ?", livePhotoID).Error; err != nil {
+	row, err := s.repo.GetLivePhotoByID(ctx, livePhotoID)
+	if err != nil {
 		return LivePhotoDetailResult{}, err
 	}
 
@@ -185,12 +150,12 @@ func (s *LivePhotoService) Detail(ctx context.Context, uid int64, livePhotoID in
 		return LivePhotoDetailResult{}, ErrLivePhotoPermissionDenied
 	}
 
-	var imageFile model.File
-	if err := s.db.WithContext(ctx).First(&imageFile, "id = ? AND is_deleted = 0", row.ImageFileID).Error; err != nil {
+	imageFile, err := s.repo.GetActiveFileByID(ctx, row.ImageFileID)
+	if err != nil {
 		return LivePhotoDetailResult{}, err
 	}
-	var videoFile model.File
-	if err := s.db.WithContext(ctx).First(&videoFile, "id = ? AND is_deleted = 0", row.VideoFileID).Error; err != nil {
+	videoFile, err := s.repo.GetActiveFileByID(ctx, row.VideoFileID)
+	if err != nil {
 		return LivePhotoDetailResult{}, err
 	}
 
@@ -199,28 +164,8 @@ func (s *LivePhotoService) Detail(ctx context.Context, uid int64, livePhotoID in
 
 // List 分页查询 Live Photo 列表，支持按目录过滤。
 func (s *LivePhotoService) List(ctx context.Context, uid int64, q LivePhotoListInput) (LivePhotoListResult, error) {
-	offset := (q.Page - 1) * q.Limit
-
-	base := s.db.WithContext(ctx).
-		Table("live_photo lp").
-		Joins("JOIN file fi ON fi.id = lp.image_file_id AND fi.is_deleted = 0").
-		Joins("JOIN file fv ON fv.id = lp.video_file_id AND fv.is_deleted = 0").
-		Joins("LEFT JOIN file_permission fpi ON fpi.file_id = fi.id AND fpi.user_id = ? AND fpi.permission IN ?", uid, []string{"read", "write"}).
-		Joins("LEFT JOIN file_permission fpv ON fpv.file_id = fv.id AND fpv.user_id = ? AND fpv.permission IN ?", uid, []string{"read", "write"}).
-		Where("(fi.user_id = ? OR fpi.id IS NOT NULL)", uid).
-		Where("(fv.user_id = ? OR fpv.id IS NOT NULL)", uid)
-
-	if q.ParentID > 0 {
-		base = base.Where("(fi.parent_id = ? OR fv.parent_id = ?)", q.ParentID, q.ParentID)
-	}
-
-	var total int64
-	if err := base.Count(&total).Error; err != nil {
-		return LivePhotoListResult{}, err
-	}
-
-	var rows []model.LivePhoto
-	if err := base.Select("lp.*").Order("lp.id DESC").Limit(q.Limit).Offset(offset).Find(&rows).Error; err != nil {
+	rows, total, err := s.repo.ListAccessibleLivePhotos(ctx, uid, q.ParentID, q.Page, q.Limit)
+	if err != nil {
 		return LivePhotoListResult{}, err
 	}
 
@@ -231,8 +176,8 @@ func (s *LivePhotoService) List(ctx context.Context, uid int64, q LivePhotoListI
 
 	fileMap := map[int64]model.File{}
 	if len(fileIDs) > 0 {
-		var files []model.File
-		if err := s.db.WithContext(ctx).Where("id IN ? AND is_deleted = 0", uniqueInt64(fileIDs)).Find(&files).Error; err != nil {
+		files, err := s.repo.ListActiveFilesByIDs(ctx, uniqueInt64(fileIDs))
+		if err != nil {
 			return LivePhotoListResult{}, err
 		}
 		for _, f := range files {
@@ -263,11 +208,7 @@ func (s *LivePhotoService) GetByFileID(ctx context.Context, uid int64, fileID in
 		return nil, ErrLivePhotoPermissionDenied
 	}
 
-	var row model.LivePhoto
-	err = s.db.WithContext(ctx).
-		Where("image_file_id = ? OR video_file_id = ?", fileID, fileID).
-		Order("id DESC").
-		First(&row).Error
+	row, err := s.repo.GetLatestLivePhotoByFileID(ctx, fileID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -289,12 +230,12 @@ func (s *LivePhotoService) GetByFileID(ctx context.Context, uid int64, fileID in
 		return nil, ErrLivePhotoPermissionDenied
 	}
 
-	var imageFile model.File
-	if err := s.db.WithContext(ctx).First(&imageFile, "id = ? AND is_deleted = 0", row.ImageFileID).Error; err != nil {
+	imageFile, err := s.repo.GetActiveFileByID(ctx, row.ImageFileID)
+	if err != nil {
 		return nil, err
 	}
-	var videoFile model.File
-	if err := s.db.WithContext(ctx).First(&videoFile, "id = ? AND is_deleted = 0", row.VideoFileID).Error; err != nil {
+	videoFile, err := s.repo.GetActiveFileByID(ctx, row.VideoFileID)
+	if err != nil {
 		return nil, err
 	}
 
@@ -340,8 +281,8 @@ func (s *LivePhotoService) AutoBind(ctx context.Context, uid int64, req LivePhot
 	boundImage := make(map[int64]bool)
 	boundVideo := make(map[int64]bool)
 	if len(candidateIDs) > 0 {
-		var existed []model.LivePhoto
-		if err := s.db.WithContext(ctx).Where("image_file_id IN ? OR video_file_id IN ?", candidateIDs, candidateIDs).Find(&existed).Error; err != nil {
+		existed, err := s.repo.ListLivePhotosByFileIDs(ctx, candidateIDs)
+		if err != nil {
 			return LivePhotoAutoBindResult{}, err
 		}
 		for _, row := range existed {
@@ -350,52 +291,45 @@ func (s *LivePhotoService) AutoBind(ctx context.Context, uid int64, req LivePhot
 		}
 	}
 
-	createdItems := make([]map[string]interface{}, 0)
+	persistPairs := make([]contract.LivePhotoBindPair, 0)
 	skippedItems := make([]map[string]interface{}, 0)
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		for key, g := range groups {
-			if len(g.images) == 0 || len(g.videos) == 0 {
-				skippedItems = append(skippedItems, map[string]interface{}{"key": key, "reason": "pair not found"})
+	for key, g := range groups {
+		if len(g.images) == 0 || len(g.videos) == 0 {
+			skippedItems = append(skippedItems, map[string]interface{}{"key": key, "reason": "pair not found"})
+			continue
+		}
+
+		pairCount := len(g.images)
+		if len(g.videos) < pairCount {
+			pairCount = len(g.videos)
+		}
+
+		for i := 0; i < pairCount; i++ {
+			img := g.images[i]
+			vid := g.videos[i]
+
+			if boundImage[img.ID] || boundVideo[vid.ID] {
+				skippedItems = append(skippedItems, map[string]interface{}{"image_file_id": img.ID, "video_file_id": vid.ID, "reason": "already bound"})
 				continue
 			}
 
-			pairCount := len(g.images)
-			if len(g.videos) < pairCount {
-				pairCount = len(g.videos)
-			}
-
-			for i := 0; i < pairCount; i++ {
-				img := g.images[i]
-				vid := g.videos[i]
-
-				if boundImage[img.ID] || boundVideo[vid.ID] {
-					skippedItems = append(skippedItems, map[string]interface{}{"image_file_id": img.ID, "video_file_id": vid.ID, "reason": "already bound"})
-					continue
-				}
-
-				row := model.LivePhoto{ImageFileID: img.ID, VideoFileID: vid.ID}
-				if err := tx.Create(&row).Error; err != nil {
-					if strings.Contains(strings.ToLower(err.Error()), "duplicate") || strings.Contains(strings.ToLower(err.Error()), "1062") {
-						skippedItems = append(skippedItems, map[string]interface{}{"image_file_id": img.ID, "video_file_id": vid.ID, "reason": "already bound"})
-						continue
-					}
-					return err
-				}
-
-				boundImage[img.ID] = true
-				boundVideo[vid.ID] = true
-				createdItems = append(createdItems, map[string]interface{}{"id": row.ID, "image_file_id": row.ImageFileID, "video_file_id": row.VideoFileID, "create_time": row.CreateTime})
-			}
+			boundImage[img.ID] = true
+			boundVideo[vid.ID] = true
+			persistPairs = append(persistPairs, contract.LivePhotoBindPair{ImageFileID: img.ID, VideoFileID: vid.ID})
 		}
+	}
 
-		detail := fmt.Sprintf("auto_bind created=%d skipped=%d", len(createdItems), len(skippedItems))
-		if len(detail) > 500 {
-			detail = detail[:500]
-		}
-		return tx.Create(&model.OperationLog{UserID: &uid, Action: "live_photo_auto_bind", Status: "success", Detail: detail, ClientIP: clientIP}).Error
-	})
+	createdRows, duplicatePairs, err := s.repo.CreateAutoBindPairsWithLog(ctx, uid, persistPairs, clientIP)
 	if err != nil {
 		return LivePhotoAutoBindResult{}, err
+	}
+
+	createdItems := make([]map[string]interface{}, 0, len(createdRows))
+	for _, row := range createdRows {
+		createdItems = append(createdItems, map[string]interface{}{"id": row.ID, "image_file_id": row.ImageFileID, "video_file_id": row.VideoFileID, "create_time": row.CreateTime})
+	}
+	for _, pair := range duplicatePairs {
+		skippedItems = append(skippedItems, map[string]interface{}{"image_file_id": pair.ImageFileID, "video_file_id": pair.VideoFileID, "reason": "already bound"})
 	}
 
 	return LivePhotoAutoBindResult{TotalCandidates: len(candidates), CreatedItems: createdItems, SkippedItems: skippedItems}, nil
@@ -403,8 +337,7 @@ func (s *LivePhotoService) AutoBind(ctx context.Context, uid int64, req LivePhot
 
 // canAccessFile 复用 file + file_permission 的权限模型判断文件访问权限。
 func (s *LivePhotoService) canAccessFile(ctx context.Context, userID int64, fileID int64, requireWrite bool) (bool, error) {
-	var f model.File
-	err := s.db.WithContext(ctx).First(&f, "id = ? AND is_deleted = 0", fileID).Error
+	f, err := s.repo.GetActiveFileByID(ctx, fileID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return false, nil
@@ -421,8 +354,7 @@ func (s *LivePhotoService) canAccessFile(ctx context.Context, userID int64, file
 		permissions = []string{"write"}
 	}
 
-	var count int64
-	err = s.db.WithContext(ctx).Model(&model.FilePermission{}).Where("file_id = ? AND user_id = ? AND permission IN ?", fileID, userID, permissions).Count(&count).Error
+	count, err := s.repo.CountFilePermissionsByLevels(ctx, fileID, userID, permissions)
 	if err != nil {
 		return false, err
 	}
@@ -431,12 +363,12 @@ func (s *LivePhotoService) canAccessFile(ctx context.Context, userID int64, file
 
 // loadLivePhotoFiles 校验文件类型并返回图片文件和视频文件。
 func (s *LivePhotoService) loadLivePhotoFiles(ctx context.Context, imageFileID int64, videoFileID int64) (model.File, model.File, error) {
-	var imageFile model.File
-	if err := s.db.WithContext(ctx).First(&imageFile, "id = ? AND is_deleted = 0", imageFileID).Error; err != nil {
+	imageFile, err := s.repo.GetActiveFileByID(ctx, imageFileID)
+	if err != nil {
 		return model.File{}, model.File{}, err
 	}
-	var videoFile model.File
-	if err := s.db.WithContext(ctx).First(&videoFile, "id = ? AND is_deleted = 0", videoFileID).Error; err != nil {
+	videoFile, err := s.repo.GetActiveFileByID(ctx, videoFileID)
+	if err != nil {
 		return model.File{}, model.File{}, err
 	}
 
@@ -473,8 +405,8 @@ func (s *LivePhotoService) loadAutoBindCandidates(ctx context.Context, userID in
 			}
 		}
 
-		var rows []model.File
-		if err := s.db.WithContext(ctx).Where("id IN ? AND is_deleted = 0 AND is_folder = 0", ids).Order("parent_id ASC, filename ASC, id ASC").Find(&rows).Error; err != nil {
+		rows, err := s.repo.ListActiveFilesByIDs(ctx, ids)
+		if err != nil {
 			return nil, err
 		}
 		return rows, nil
@@ -494,16 +426,8 @@ func (s *LivePhotoService) loadAutoBindCandidates(ctx context.Context, userID in
 			}
 		}
 
-		query := s.db.WithContext(ctx).
-			Table("file f").
-			Select("f.*").
-			Joins("LEFT JOIN file_permission fp ON fp.file_id = f.id AND fp.user_id = ? AND fp.permission = ?", userID, "write").
-			Where("f.parent_id = ? AND f.is_deleted = 0 AND f.is_folder = 0", *req.ParentID).
-			Where("f.user_id = ? OR fp.id IS NOT NULL", userID).
-			Order("f.filename ASC, f.id ASC")
-
-		var rows []model.File
-		if err := query.Find(&rows).Error; err != nil {
+		rows, err := s.repo.ListWritableFilesByParent(ctx, userID, *req.ParentID)
+		if err != nil {
 			return nil, err
 		}
 		return rows, nil
