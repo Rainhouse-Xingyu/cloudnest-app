@@ -9,13 +9,45 @@ import SwiftUI
 
 struct ContentView: View {
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+        TabView {
+            NavigationStack {
+                HomeView()
+            }
+            .tabItem {
+                Label("首页", systemImage: "house.fill")
+            }
+
+            NavigationStack {
+                FilesView()
+            }
+            .tabItem {
+                Label("文件", systemImage: "folder.fill")
+            }
+
+            NavigationStack {
+                AuthView()
+            }
+            .tabItem {
+                Label("认证", systemImage: "lock.shield.fill")
+            }
+
+            NavigationStack {
+                ProfileView()
+            }
+            .tabItem {
+                Label("我的", systemImage: "person.crop.circle.fill")
+            }
+
+            NavigationStack {
+                SettingsView()
+            }
+            .tabItem {
+                Label("设置", systemImage: "gearshape.fill")
+            }
         }
-        .padding()
+        .font(.appBody)
+        .tint(.blue)
+        .liquidGlassPage()
     }
 }
 

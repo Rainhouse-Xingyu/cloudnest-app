@@ -12,6 +12,8 @@ struct cloudnest_iosApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .font(.appBody)
+                .tint(.blue)
         }
     }
 }
