@@ -77,7 +77,7 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 	frpService := service.NewFrpService(frpRepo, rdb)
 	livePhotoService := service.NewLivePhotoService(livePhotoRepo)
 	aiService := service.NewAIService(aiRepo, cfg, nil)
-	fileService := service.NewFileService(db, fileRepo)
+	fileService := service.NewFileService(fileRepo)
 
 	return &Container{
 		Cfg: cfg,
@@ -109,12 +109,12 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 
 		AuthHandler:          &handler.AuthHandler{Svc: authService},
 		AdminHandler:         &handler.AdminHandler{Svc: adminService},
-		FileHandler:          &handler.FileHandler{DB: db, RDB: rdb, Cfg: cfg, Svc: fileService},
+		FileHandler:          &handler.FileHandler{RDB: rdb, Cfg: cfg, AISvc: aiService, Svc: fileService},
 		SettingsHandler:      &handler.SettingsHandler{Svc: settingsService},
 		CollaborationHandler: &handler.CollaborationHandler{Svc: collaborationService},
-		AIHandler:            &handler.AIHandler{DB: db, Cfg: cfg, Svc: aiService},
-		FrpHandler:           &handler.FrpHandler{DB: db, RDB: rdb, Svc: frpService},
-		LivePhotoHandler:     &handler.LivePhotoHandler{DB: db, Svc: livePhotoService},
+		AIHandler:            &handler.AIHandler{Cfg: cfg, Svc: aiService},
+		FrpHandler:           &handler.FrpHandler{Svc: frpService},
+		LivePhotoHandler:     &handler.LivePhotoHandler{Svc: livePhotoService},
 	}
 }
 

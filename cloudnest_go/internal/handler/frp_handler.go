@@ -1,40 +1,21 @@
 package handler
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"cloudenest_go/internal/middleware"
 	"cloudenest_go/internal/service"
-	"cloudenest_go/model"
 
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
-)
-
-const (
-	// frp默认远程端口池范围，可按后续配置中心改为动态读取
-	defaultFrpRemotePortStart = 20000
-	defaultFrpRemotePortEnd   = 20999
-	maxAllocateRetries        = 5
-	frpStatusKeyPrefix        = "frp:device:status:"
-	frpCommandQueuePrefix     = "frp:device:cmd:"
-	frpLastCommandKeyPrefix   = "frp:device:last_command:"
-	frpCommandDataKeyPrefix   = "frp:command:data:"
-	frpCommandHistoryPrefix   = "frp:device:command:history:"
-	frpCommandHistoryLimit    = 200
 )
 
 // FrpHandler 负责 FRP 设备与映射相关接口。
 type FrpHandler struct {
-	DB  *gorm.DB
-	RDB *redis.Client
 	Svc *service.FrpService
 }
 
@@ -827,20 +808,6 @@ func (h *FrpHandler) ListDeviceCommands(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"items": items})
 }
 
-var errFrpForbidden = errors.New("frp permission denied")
-
-// findDeviceWithPermission 查询设备并校验当前用户是否有权限访问。
-func (h *FrpHandler) findDeviceWithPermission(c *gin.Context, userID int64, deviceID int64) (model.Device, error) {
-	var device model.Device
-	if err := h.DB.WithContext(c.Request.Context()).First(&device, "id = ?", deviceID).Error; err != nil {
-		return model.Device{}, err
-	}
-	if h.isAdmin(c) || device.UserID == userID {
-		return device, nil
-	}
-	return model.Device{}, errFrpForbidden
-}
-
 // isAdmin 判断当前登录用户是否管理员。
 func (h *FrpHandler) isAdmin(c *gin.Context) bool {
 	isAdminAny, ok := c.Get(middleware.ContextIsAdminKey)
@@ -849,223 +816,6 @@ func (h *FrpHandler) isAdmin(c *gin.Context) bool {
 	}
 	isAdmin, ok := isAdminAny.(bool)
 	return ok && isAdmin
-}
-
-// allocateRemotePort 在固定端口池中分配可用端口。
-func (h *FrpHandler) allocateRemotePort(tx *gorm.DB) (int, error) {
-	for i := 0; i < maxAllocateRetries; i++ {
-		var maxUsed int
-		if err := tx.Model(&model.FrpMapping{}).
-			Where("remote_port BETWEEN ? AND ?", defaultFrpRemotePortStart, defaultFrpRemotePortEnd).
-			Select("COALESCE(MAX(remote_port), 0)").
-			Scan(&maxUsed).Error; err != nil {
-			return 0, err
-		}
-
-		candidate := defaultFrpRemotePortStart
-		if maxUsed >= defaultFrpRemotePortStart && maxUsed < defaultFrpRemotePortEnd {
-			candidate = maxUsed + 1
-		}
-
-		// 如果尾部端口已满，则从起始端口寻找空洞。
-		if maxUsed >= defaultFrpRemotePortEnd {
-			for p := defaultFrpRemotePortStart; p <= defaultFrpRemotePortEnd; p++ {
-				var count int64
-				if err := tx.Model(&model.FrpMapping{}).Where("remote_port = ?", p).Count(&count).Error; err != nil {
-					return 0, err
-				}
-				if count == 0 {
-					candidate = p
-					break
-				}
-			}
-		}
-
-		if candidate < defaultFrpRemotePortStart || candidate > defaultFrpRemotePortEnd {
-			return 0, fmt.Errorf("remote port pool exhausted")
-		}
-
-		var occupied int64
-		if err := tx.Model(&model.FrpMapping{}).Where("remote_port = ?", candidate).Count(&occupied).Error; err != nil {
-			return 0, err
-		}
-		if occupied == 0 {
-			return candidate, nil
-		}
-	}
-
-	return 0, fmt.Errorf("allocate remote port failed after retries")
-}
-
-// isDuplicateKeyErr 判断是否为唯一键冲突。
-func isDuplicateKeyErr(err error) bool {
-	if err == nil {
-		return false
-	}
-	text := strings.ToLower(err.Error())
-	return strings.Contains(text, "duplicate") || strings.Contains(text, "1062")
-}
-
-var (
-	errFrpNoMapping  = errors.New("frp mapping not found")
-	errFrpBadConfig  = errors.New("frp config invalid")
-	errFrpNeedServer = errors.New("frp server_addr is required")
-)
-
-// findMappingWithPermission 查询映射并校验当前用户权限。
-func (h *FrpHandler) findMappingWithPermission(c *gin.Context, userID int64, mappingID int64) (model.FrpMapping, model.Device, error) {
-	var mapping model.FrpMapping
-	if err := h.DB.WithContext(c.Request.Context()).First(&mapping, "id = ?", mappingID).Error; err != nil {
-		return model.FrpMapping{}, model.Device{}, err
-	}
-	device, err := h.findDeviceWithPermission(c, userID, mapping.DeviceID)
-	if err != nil {
-		return model.FrpMapping{}, model.Device{}, err
-	}
-	return mapping, device, nil
-}
-
-// resolveConfigID 解析要下发的配置 ID；如果请求未指定则选择设备最新配置。
-func (h *FrpHandler) resolveConfigID(c *gin.Context, deviceID int64, requested *int64) (int64, error) {
-	var cfg model.FrpConfig
-	query := h.DB.WithContext(c.Request.Context()).Where("device_id = ?", deviceID)
-	if requested != nil && *requested > 0 {
-		query = query.Where("id = ?", *requested)
-	}
-	if err := query.Order("id DESC").First(&cfg).Error; err != nil {
-		return 0, err
-	}
-	return cfg.ID, nil
-}
-
-// enqueueDeviceCommand 将命令写入设备队列，供客户端轮询拉取后执行。
-func (h *FrpHandler) enqueueDeviceCommand(c *gin.Context, deviceID int64, payload map[string]interface{}) error {
-	raw, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-	commandID := strings.TrimSpace(fmt.Sprintf("%v", payload["command_id"]))
-	if commandID == "" || commandID == "<nil>" {
-		return fmt.Errorf("missing command_id")
-	}
-	action := strings.TrimSpace(fmt.Sprintf("%v", payload["action"]))
-	if action == "" || action == "<nil>" {
-		action = "unknown"
-	}
-	configID := int64(0)
-	if val, ok := payload["config_id"]; ok {
-		configID = parseAnyToInt64(val)
-	}
-	now := time.Now().Format(time.RFC3339)
-
-	queueKey := frpCommandQueuePrefix + strconv.FormatInt(deviceID, 10)
-	lastKey := frpLastCommandKeyPrefix + strconv.FormatInt(deviceID, 10)
-	historyKey := frpCommandHistoryPrefix + strconv.FormatInt(deviceID, 10)
-	if err := h.persistCommandData(c, commandID, deviceID, action, configID, "pending", string(raw), now); err != nil {
-		return err
-	}
-	if err := h.RDB.RPush(c.Request.Context(), queueKey, commandID).Err(); err != nil {
-		return err
-	}
-	if err := h.RDB.Expire(c.Request.Context(), queueKey, 7*24*time.Hour).Err(); err != nil {
-		return err
-	}
-	if err := h.RDB.LPush(c.Request.Context(), historyKey, commandID).Err(); err != nil {
-		return err
-	}
-	if err := h.RDB.LTrim(c.Request.Context(), historyKey, 0, frpCommandHistoryLimit-1).Err(); err != nil {
-		return err
-	}
-	if err := h.RDB.Expire(c.Request.Context(), historyKey, 7*24*time.Hour).Err(); err != nil {
-		return err
-	}
-	if err := h.RDB.Set(c.Request.Context(), lastKey, string(raw), 7*24*time.Hour).Err(); err != nil {
-		return err
-	}
-	return nil
-}
-
-// boolToInt 布尔值转整型，便于 Redis 字段存储。
-func boolToInt(v bool) int {
-	if v {
-		return 1
-	}
-	return 0
-}
-
-// convertLegacyQueuedCommand 兼容旧队列格式（整段 JSON），并转换为标准命令数据。
-func (h *FrpHandler) convertLegacyQueuedCommand(c *gin.Context, deviceID int64, raw string) (string, error) {
-	var payload map[string]interface{}
-	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
-		return "", err
-	}
-	commandID := strings.TrimSpace(fmt.Sprintf("%v", payload["command_id"]))
-	if commandID == "" || commandID == "<nil>" {
-		commandID = fmt.Sprintf("legacy-%d-%d", deviceID, time.Now().UnixNano())
-		payload["command_id"] = commandID
-	}
-	if _, ok := payload["device_id"]; !ok {
-		payload["device_id"] = deviceID
-	}
-	action := strings.TrimSpace(fmt.Sprintf("%v", payload["action"]))
-	if action == "" || action == "<nil>" {
-		action = "unknown"
-	}
-	configID := int64(0)
-	if val, ok := payload["config_id"]; ok {
-		configID = parseAnyToInt64(val)
-	}
-	now := time.Now().Format(time.RFC3339)
-	if err := h.persistCommandData(c, commandID, deviceID, action, configID, "pending", raw, now); err != nil {
-		return "", err
-	}
-	historyKey := frpCommandHistoryPrefix + strconv.FormatInt(deviceID, 10)
-	if err := h.RDB.LPush(c.Request.Context(), historyKey, commandID).Err(); err != nil {
-		return "", err
-	}
-	if err := h.RDB.LTrim(c.Request.Context(), historyKey, 0, frpCommandHistoryLimit-1).Err(); err != nil {
-		return "", err
-	}
-	if err := h.RDB.Expire(c.Request.Context(), historyKey, 7*24*time.Hour).Err(); err != nil {
-		return "", err
-	}
-	return commandID, nil
-}
-
-// persistCommandData 持久化命令基础信息，用于后续状态流转和历史查询。
-func (h *FrpHandler) persistCommandData(c *gin.Context, commandID string, deviceID int64, action string, configID int64, status string, payload string, now string) error {
-	commandDataKey := frpCommandDataKeyPrefix + commandID
-	if err := h.RDB.HSet(c.Request.Context(), commandDataKey, map[string]interface{}{
-		"command_id":     commandID,
-		"action":         action,
-		"device_id":      deviceID,
-		"config_id":      configID,
-		"status":         status,
-		"created_at":     now,
-		"updated_at":     now,
-		"payload":        payload,
-		"result_message": "",
-		"failure_reason": "",
-	}).Err(); err != nil {
-		return err
-	}
-	if err := h.RDB.Expire(c.Request.Context(), commandDataKey, 7*24*time.Hour).Err(); err != nil {
-		return err
-	}
-	return nil
-}
-
-// parseAnyToInt64 将任意常见数字类型转换为 int64。
-func parseAnyToInt64(v interface{}) int64 {
-	s := strings.TrimSpace(fmt.Sprintf("%v", v))
-	if s == "" || s == "<nil>" {
-		return 0
-	}
-	i, err := strconv.ParseInt(s, 10, 64)
-	if err != nil {
-		return 0
-	}
-	return i
 }
 
 // parseLimitWithDefault 解析分页 limit，包含默认值和最大值限制。
@@ -1082,94 +832,6 @@ func parseLimitWithDefault(raw string, defaultVal int, maxVal int) (int, error) 
 		val = maxVal
 	}
 	return val, nil
-}
-
-// buildConfigTextForDevice 根据设备和映射生成 frpc.yaml 文本。
-func (h *FrpHandler) buildConfigTextForDevice(c *gin.Context, userID int64, deviceID int64, serverAddr string, serverPort int, token string) (string, int64, error) {
-	if deviceID <= 0 {
-		return "", 0, errFrpBadConfig
-	}
-
-	_, err := h.findDeviceWithPermission(c, userID, deviceID)
-	if err != nil {
-		return "", 0, err
-	}
-
-	serverAddr = strings.TrimSpace(serverAddr)
-	if serverAddr == "" {
-		return "", 0, errFrpNeedServer
-	}
-	if serverPort <= 0 {
-		serverPort = 7000
-	}
-	if serverPort > 65535 {
-		return "", 0, errFrpBadConfig
-	}
-
-	var mappings []model.FrpMapping
-	if err := h.DB.WithContext(c.Request.Context()).Where("device_id = ? AND status = 1", deviceID).Order("id ASC").Find(&mappings).Error; err != nil {
-		return "", 0, err
-	}
-	if len(mappings) == 0 {
-		return "", 0, errFrpNoMapping
-	}
-
-	text := generateFRPCYaml(serverAddr, serverPort, token, mappings)
-	return text, deviceID, nil
-}
-
-// generateFRPCYaml 生成基础 frpc.yaml 文本，支持 tcp/http/https 三类代理。
-func generateFRPCYaml(serverAddr string, serverPort int, token string, mappings []model.FrpMapping) string {
-	b := strings.Builder{}
-	b.WriteString("serverAddr: ")
-	b.WriteString(serverAddr)
-	b.WriteString("\n")
-	b.WriteString("serverPort: ")
-	b.WriteString(strconv.Itoa(serverPort))
-	b.WriteString("\n")
-	if strings.TrimSpace(token) != "" {
-		b.WriteString("auth:\n")
-		b.WriteString("  token: ")
-		b.WriteString(token)
-		b.WriteString("\n")
-	}
-	b.WriteString("proxies:\n")
-
-	for _, m := range mappings {
-		proxyName := fmt.Sprintf("device_%d_map_%d", m.DeviceID, m.ID)
-		typeName := "tcp"
-		if m.Domain != "" {
-			if strings.HasPrefix(m.Domain, "https://") {
-				typeName = "https"
-			} else {
-				typeName = "http"
-			}
-		}
-
-		b.WriteString("  - name: ")
-		b.WriteString(proxyName)
-		b.WriteString("\n")
-		b.WriteString("    type: ")
-		b.WriteString(typeName)
-		b.WriteString("\n")
-		b.WriteString("    localPort: ")
-		b.WriteString(strconv.Itoa(m.LocalPort))
-		b.WriteString("\n")
-
-		if typeName == "tcp" {
-			b.WriteString("    remotePort: ")
-			b.WriteString(strconv.Itoa(m.RemotePort))
-			b.WriteString("\n")
-		} else {
-			domain := strings.TrimPrefix(strings.TrimPrefix(m.Domain, "https://"), "http://")
-			b.WriteString("    customDomains:\n")
-			b.WriteString("      - ")
-			b.WriteString(domain)
-			b.WriteString("\n")
-		}
-	}
-
-	return b.String()
 }
 
 // writeConfigError 统一处理配置相关错误码。
@@ -1197,36 +859,5 @@ func (h *FrpHandler) writeConfigError(c *gin.Context, err error) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid config parameters"})
 		return
 	}
-	if err == errFrpForbidden {
-		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-		return
-	}
-	if err == errFrpNoMapping {
-		c.JSON(http.StatusConflict, gin.H{"error": "no active mapping"})
-		return
-	}
-	if err == errFrpNeedServer {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "server_addr is required"})
-		return
-	}
-	if err == errFrpBadConfig {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid config parameters"})
-		return
-	}
 	c.JSON(http.StatusInternalServerError, gin.H{"error": "build config failed"})
-}
-
-// logFrpOperation 写入 FRP 关键操作日志。
-func (h *FrpHandler) logFrpOperation(c *gin.Context, userID int64, action string, detail string) error {
-	if len(detail) > 500 {
-		detail = detail[:500]
-	}
-	uid := userID
-	return h.DB.WithContext(c.Request.Context()).Create(&model.OperationLog{
-		UserID:   &uid,
-		Action:   action,
-		Status:   "success",
-		Detail:   detail,
-		ClientIP: c.ClientIP(),
-	}).Error
 }

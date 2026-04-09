@@ -299,6 +299,26 @@ func (s *AIService) ApplySetting(ctx context.Context, uid int64, key string, val
 	return s.repo.ApplySettingWithAudit(ctx, uid, key, value, description, clientIP)
 }
 
+// GetReadableFileAndStorage 获取用户可读文件及其存储记录。
+func (s *AIService) GetReadableFileAndStorage(ctx context.Context, userID int64, fileID int64) (model.File, model.Storage, error) {
+	return s.getReadableFileAndStorage(ctx, userID, fileID)
+}
+
+// CanAccessFile 判断用户是否具备文件访问权限。
+func (s *AIService) CanAccessFile(ctx context.Context, userID int64, fileID int64, requireWrite bool) (bool, error) {
+	return s.canAccessFile(ctx, userID, fileID, requireWrite)
+}
+
+// UpsertAIMetadata 写入或更新 AI 元数据。
+func (s *AIService) UpsertAIMetadata(ctx context.Context, fileID int64, tags string, desc string, ocrText string) (model.AiMetadata, error) {
+	return s.upsertAIMetadata(ctx, fileID, tags, desc, ocrText)
+}
+
+// CreateAITask 创建 AI 任务记录。
+func (s *AIService) CreateAITask(ctx context.Context, userID int64, fileID int64, taskType string, status string, result string) error {
+	return s.createAITask(ctx, userID, fileID, taskType, status, result)
+}
+
 func (s *AIService) executeAISearch(ctx context.Context, uid int64, q AISearchQuery) ([]map[string]interface{}, int64, error) {
 	var startAt *time.Time
 	if q.StartTime != "" {

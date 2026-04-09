@@ -551,6 +551,12 @@ func (r *FileRepo) CreateShare(ctx context.Context, uid int64, fileID int64, sha
 	return share, nil
 }
 
+func (r *FileRepo) CreateOperationLog(ctx context.Context, userID int64, fileID *int64, action string, status string, detail string, clientIP string) error {
+	uid := userID
+	row := model.OperationLog{UserID: &uid, FileID: fileID, Action: action, Status: status, Detail: detail, ClientIP: clientIP}
+	return r.db.WithContext(ctx).Create(&row).Error
+}
+
 func (r *FileRepo) ListShares(ctx context.Context, uid int64) ([]model.Share, error) {
 	var shares []model.Share
 	if err := r.db.WithContext(ctx).Where("user_id = ?", uid).Order("create_time DESC").Find(&shares).Error; err != nil {

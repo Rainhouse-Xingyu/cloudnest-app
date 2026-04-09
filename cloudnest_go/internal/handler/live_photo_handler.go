@@ -1,11 +1,8 @@
 package handler
 
 import (
-	"context"
 	"errors"
-	"fmt"
 	"net/http"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -19,7 +16,6 @@ import (
 
 // LivePhotoHandler 负责 Live Photo 绑定关系的管理接口。
 type LivePhotoHandler struct {
-	DB  *gorm.DB
 	Svc *service.LivePhotoService
 }
 
@@ -279,65 +275,6 @@ func (h *LivePhotoHandler) AutoBind(c *gin.Context) {
 	})
 }
 
-// canAccessFile 复用 file + file_permission 的权限模型判断文件访问权限。
-func (h *LivePhotoHandler) canAccessFile(ctx context.Context, userID int64, fileID int64, requireWrite bool) (bool, error) {
-	var f model.File
-	err := h.DB.WithContext(ctx).First(&f, "id = ? AND is_deleted = 0", fileID).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return false, nil
-		}
-		return false, err
-	}
-
-	if f.UserID == userID {
-		return true, nil
-	}
-
-	permissions := []string{"read", "write"}
-	if requireWrite {
-		permissions = []string{"write"}
-	}
-
-	var count int64
-	err = h.DB.WithContext(ctx).
-		Model(&model.FilePermission{}).
-		Where("file_id = ? AND user_id = ? AND permission IN ?", fileID, userID, permissions).
-		Count(&count).Error
-	if err != nil {
-		return false, err
-	}
-
-	return count > 0, nil
-}
-
-// loadLivePhotoFiles 校验文件类型并返回图片文件和视频文件。
-func (h *LivePhotoHandler) loadLivePhotoFiles(ctx context.Context, imageFileID int64, videoFileID int64) (model.File, model.File, error) {
-	var imageFile model.File
-	if err := h.DB.WithContext(ctx).First(&imageFile, "id = ? AND is_deleted = 0", imageFileID).Error; err != nil {
-		return model.File{}, model.File{}, err
-	}
-	var videoFile model.File
-	if err := h.DB.WithContext(ctx).First(&videoFile, "id = ? AND is_deleted = 0", videoFileID).Error; err != nil {
-		return model.File{}, model.File{}, err
-	}
-
-	if imageFile.IsFolder == 1 || videoFile.IsFolder == 1 {
-		return model.File{}, model.File{}, fmt.Errorf("folder cannot be bound")
-	}
-
-	imageExt := strings.ToLower(strings.TrimPrefix(filepath.Ext(imageFile.Filename), "."))
-	videoExt := strings.ToLower(strings.TrimPrefix(filepath.Ext(videoFile.Filename), "."))
-	if !isLivePhotoImageExt(imageExt) {
-		return model.File{}, model.File{}, fmt.Errorf("image file type not supported")
-	}
-	if !isLivePhotoVideoExt(videoExt) {
-		return model.File{}, model.File{}, fmt.Errorf("video file type not supported")
-	}
-
-	return imageFile, videoFile, nil
-}
-
 // isLivePhotoImageExt 判断 Live Photo 支持的图片扩展名。
 func isLivePhotoImageExt(ext string) bool {
 	allowed := map[string]bool{
@@ -369,69 +306,4 @@ func toSimpleFileView(f model.File) gin.H {
 		"create_time": f.CreateTime,
 		"update_time": f.UpdateTime,
 	}
-}
-
-// loadAutoBindCandidates 根据请求加载自动绑定候选文件。
-func (h *LivePhotoHandler) loadAutoBindCandidates(ctx context.Context, userID int64, req AutoBindLivePhotoRequest) ([]model.File, error) {
-	if len(req.FileIDs) > 0 {
-		ids := uniqueInt64(req.FileIDs)
-		for _, id := range ids {
-			if id <= 0 {
-				return nil, fmt.Errorf("invalid file id")
-			}
-			canWrite, err := h.canAccessFile(ctx, userID, id, true)
-			if err != nil {
-				return nil, err
-			}
-			if !canWrite {
-				return nil, fmt.Errorf("permission denied")
-			}
-		}
-
-		var rows []model.File
-		if err := h.DB.WithContext(ctx).Where("id IN ? AND is_deleted = 0 AND is_folder = 0", ids).Order("parent_id ASC, filename ASC, id ASC").Find(&rows).Error; err != nil {
-			return nil, err
-		}
-		return rows, nil
-	}
-
-	if req.ParentID != nil {
-		if *req.ParentID < 0 {
-			return nil, fmt.Errorf("invalid parent_id")
-		}
-		if *req.ParentID > 0 {
-			canWrite, err := h.canAccessFile(ctx, userID, *req.ParentID, true)
-			if err != nil {
-				return nil, err
-			}
-			if !canWrite {
-				return nil, fmt.Errorf("permission denied")
-			}
-		}
-
-		query := h.DB.WithContext(ctx).
-			Table("file f").
-			Select("f.*").
-			Joins("LEFT JOIN file_permission fp ON fp.file_id = f.id AND fp.user_id = ? AND fp.permission = ?", userID, "write").
-			Where("f.parent_id = ? AND f.is_deleted = 0 AND f.is_folder = 0", *req.ParentID).
-			Where("f.user_id = ? OR fp.id IS NOT NULL", userID).
-			Order("f.filename ASC, f.id ASC")
-
-		var rows []model.File
-		if err := query.Find(&rows).Error; err != nil {
-			return nil, err
-		}
-		return rows, nil
-	}
-
-	return []model.File{}, nil
-}
-
-// buildAutoBindKey 生成自动配对分组键：parent_id + 文件名主干（去扩展名）。
-func buildAutoBindKey(parentID int64, filename string) string {
-	base := strings.TrimSpace(strings.TrimSuffix(filename, filepath.Ext(filename)))
-	if base == "" {
-		return ""
-	}
-	return fmt.Sprintf("%d::%s", parentID, strings.ToLower(base))
 }

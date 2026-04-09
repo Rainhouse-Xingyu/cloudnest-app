@@ -41,10 +41,10 @@ import (
 
 // FileHandler handles file system related APIs.
 type FileHandler struct {
-	DB         *gorm.DB
 	RDB        *redis.Client
 	Cfg        config.Config
 	HTTPClient *http.Client
+	AISvc      *service.AIService
 	Svc        *service.FileService
 }
 
@@ -471,7 +471,7 @@ func (h *FileHandler) triggerAsyncAutoAnalyze(file model.File, userID int64, cli
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer cancel()
 
-		ai := &AIHandler{DB: h.DB, Cfg: h.Cfg, HTTPClient: h.HTTPClient}
+		ai := &AIHandler{Cfg: h.Cfg, HTTPClient: h.HTTPClient, Svc: h.AISvc}
 		_ = ai.createAITask(ctx, uid, f.ID, "auto_analyze", "processing", "queued")
 
 		tags, desc, ocrText, err := h.buildAutoAnalyzeResult(ctx, ai, f)
