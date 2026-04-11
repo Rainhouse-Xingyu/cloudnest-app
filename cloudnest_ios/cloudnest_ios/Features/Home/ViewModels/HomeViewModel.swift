@@ -5,6 +5,8 @@ import Combine
 @MainActor
 final class HomeViewModel: ObservableObject {
     @Published var title: String = "加载中..."
+    @Published var photoItems: [HomePhotoItem] = []
+    @Published var fileItems: [HomeFileItem] = []
 
     private let service: HomeServiceProtocol
 
@@ -14,5 +16,21 @@ final class HomeViewModel: ObservableObject {
 
     func onAppear() {
         title = service.loadTitle()
+        loadMockSections()
+    }
+
+    /// 首页分类数据（后续可替换为接口返回）
+    private func loadMockSections() {
+        photoItems = [
+            HomePhotoItem(title: "校园春景", capturedAt: "今天 09:10"),
+            HomePhotoItem(title: "实验室白板", capturedAt: "昨天 18:22"),
+            HomePhotoItem(title: "项目演示", capturedAt: "04-08 14:05")
+        ]
+
+        fileItems = [
+            HomeFileItem(name: "需求文档-v3.pdf", sizeText: "2.4 MB", updatedAt: "今天 11:30"),
+            HomeFileItem(name: "毕业答辩PPT.key", sizeText: "18.2 MB", updatedAt: "昨天 21:07"),
+            HomeFileItem(name: "云盘接口清单.xlsx", sizeText: "860 KB", updatedAt: "04-08 16:42")
+        ]
     }
 }

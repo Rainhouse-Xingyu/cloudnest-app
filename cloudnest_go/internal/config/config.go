@@ -12,6 +12,7 @@ Load函数从环境变量加载配置项，并提供默认值。JWTTTL方法计�
 */
 type Config struct {
 	AppPort         string
+	DataDir         string
 	MySQLDSN        string
 	RedisAddr       string
 	RedisPassword   string
@@ -28,6 +29,7 @@ type Config struct {
 func Load() Config {
 	return Config{
 		AppPort:         getEnv("APP_PORT", "8080"),
+		DataDir:         getEnv("DATA_DIR", "data"),
 		MySQLDSN:        getEnv("MYSQL_DSN", "root:root@tcp(127.0.0.1:3306)/cloudnest?charset=utf8mb4&parseTime=True&loc=Local"),
 		RedisAddr:       getEnv("REDIS_ADDR", "127.0.0.1:6379"),
 		RedisPassword:   getEnv("REDIS_PASSWORD", ""),

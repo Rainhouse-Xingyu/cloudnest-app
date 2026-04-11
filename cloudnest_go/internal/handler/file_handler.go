@@ -114,9 +114,10 @@ type FileSearchQuery struct {
 }
 
 const (
-	chunkBaseDir   = "data/chunks"
-	storageBaseDir = "data/storage"
-	thumbBaseDir   = "data/thumbnails"
+	defaultDataDir = "data"
+	chunkSubDir    = "chunks"
+	storageSubDir  = "storage"
+	thumbSubDir    = "thumbnails"
 
 	defaultUploadRateBytesPerSec int64 = 2 * 1024 * 1024
 	minUploadRateKbps            int64 = 64
@@ -367,7 +368,7 @@ func (h *FileHandler) UploadChunk(c *gin.Context) {
 		return
 	}
 
-	chunkDir := filepath.Join(chunkBaseDir, uploadID)
+	chunkDir := filepath.Join(h.chunkBaseDir(), uploadID)
 	if err := os.MkdirAll(chunkDir, 0o755); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "create chunk directory failed"})
 		return
@@ -444,7 +445,7 @@ func (h *FileHandler) CompleteUpload(c *gin.Context) {
 		}
 	}
 
-	storagePath, mergedSize, fileHash, err := mergeChunks(req.UploadID, snapshot.Task.Filename, snapshot.TotalChunk)
+	storagePath, mergedSize, fileHash, err := h.mergeChunks(req.UploadID, snapshot.Task.Filename, snapshot.TotalChunk)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "merge chunks failed"})
 		return
@@ -456,7 +457,7 @@ func (h *FileHandler) CompleteUpload(c *gin.Context) {
 		return
 	}
 
-	_ = os.RemoveAll(filepath.Join(chunkBaseDir, req.UploadID))
+	_ = os.RemoveAll(filepath.Join(h.chunkBaseDir(), req.UploadID))
 	// 上传成功后触发 AI 异步分析：自动生成 tags/description/ocr_text 并写入 ai_metadata。
 	h.triggerAsyncAutoAnalyze(createdFile, uid, c.ClientIP())
 	// 上传完成后尝试自动与同目录同名文件配对绑定 Live Photo（无阻塞失败）。
@@ -1512,9 +1513,29 @@ func (h *FileHandler) tryAutoBindLivePhotoForFile(ctx context.Context, userID in
 	return h.Svc.TryAutoBindLivePhotoForFile(ctx, userID, file, clientIP)
 }
 
-func mergeChunks(uploadID string, filename string, totalChunks int) (string, int64, string, error) {
+func (h *FileHandler) dataRootDir() string {
+	base := strings.TrimSpace(h.Cfg.DataDir)
+	if base == "" {
+		return defaultDataDir
+	}
+	return base
+}
+
+func (h *FileHandler) chunkBaseDir() string {
+	return filepath.Join(h.dataRootDir(), chunkSubDir)
+}
+
+func (h *FileHandler) storageBaseDir() string {
+	return filepath.Join(h.dataRootDir(), storageSubDir)
+}
+
+func (h *FileHandler) thumbBaseDir() string {
+	return filepath.Join(h.dataRootDir(), thumbSubDir)
+}
+
+func (h *FileHandler) mergeChunks(uploadID string, filename string, totalChunks int) (string, int64, string, error) {
 	dateDir := time.Now().Format("200601")
-	storageDir := filepath.Join(storageBaseDir, dateDir)
+	storageDir := filepath.Join(h.storageBaseDir(), dateDir)
 	if err := os.MkdirAll(storageDir, 0o755); err != nil {
 		return "", 0, "", err
 	}
@@ -1531,7 +1552,7 @@ func mergeChunks(uploadID string, filename string, totalChunks int) (string, int
 	writer := io.MultiWriter(outFile, hasher)
 
 	for i := 0; i < totalChunks; i++ {
-		chunkPath := filepath.Join(chunkBaseDir, uploadID, fmt.Sprintf("%d.part", i))
+		chunkPath := filepath.Join(h.chunkBaseDir(), uploadID, fmt.Sprintf("%d.part", i))
 		inFile, err := os.Open(chunkPath)
 		if err != nil {
 			return "", 0, "", err
@@ -1659,6 +1680,7 @@ func readTextFileWithLimit(path string, limit int64) (string, bool, error) {
 
 // buildOrGetThumbnail 根据源文件生成并缓存缩略图。
 func (h *FileHandler) buildOrGetThumbnail(sourcePath string, fileID int64, versionTag int64, size int) (string, error) {
+	thumbBaseDir := h.thumbBaseDir()
 	if err := os.MkdirAll(thumbBaseDir, 0o755); err != nil {
 		return "", err
 	}

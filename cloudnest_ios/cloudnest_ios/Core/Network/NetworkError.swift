@@ -14,7 +14,14 @@ enum NetworkError: Error, LocalizedError {
             return "无效的请求地址"
         case .invalidResponse:
             return "服务响应格式错误"
-        case let .httpStatus(code, _):
+        case let .httpStatus(code, data):
+            if
+                let data,
+                let payload = try? JSONDecoder().decode(ErrorResponse.self, from: data),
+                !payload.error.isEmpty
+            {
+                return payload.error
+            }
             return "服务请求失败，状态码: \(code)"
         case let .decoding(error):
             return "数据解析失败: \(error.localizedDescription)"
@@ -22,4 +29,9 @@ enum NetworkError: Error, LocalizedError {
             return "网络传输失败: \(error.localizedDescription)"
         }
     }
+}
+
+/// 后端错误响应体（通用）
+private struct ErrorResponse: Decodable {
+    let error: String
 }

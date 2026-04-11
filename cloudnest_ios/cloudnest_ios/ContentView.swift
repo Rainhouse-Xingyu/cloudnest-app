@@ -23,21 +23,6 @@ struct ContentView: View {
             .tabItem {
                 Label("文件", systemImage: "folder.fill")
             }
-
-            NavigationStack {
-                AuthView()
-            }
-            .tabItem {
-                Label("认证", systemImage: "lock.shield.fill")
-            }
-
-            NavigationStack {
-                ProfileView()
-            }
-            .tabItem {
-                Label("我的", systemImage: "person.crop.circle.fill")
-            }
-
             NavigationStack {
                 SettingsView()
             }
