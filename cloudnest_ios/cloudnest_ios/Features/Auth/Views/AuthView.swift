@@ -6,27 +6,44 @@ struct AuthView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 18) {
-                Image(systemName: "person.crop.circle.badge.checkmark")
-                    .font(.system(size: 44, weight: .semibold))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.blue)
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 32) {
+                Spacer().frame(height: 60)
+                
+                // Header Hero
+                VStack(spacing: 12) {
+                    Image(systemName: "cloud.fill")
+                        .font(.system(size: 64, weight: .semibold))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [Color.blue.opacity(0.8), Color.cyan.opacity(0.8)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .shadow(color: Color.blue.opacity(0.3), radius: 10, x: 0, y: 6)
 
-                Text("CloudNest 登录")
-                    .font(.appLargeTitle)
+                    Text("Rainhouse")
+                        .font(.system(size: 38, weight: .bold, design: .rounded))
+                        .foregroundStyle(.primary)
+                    
+                    Text("Your Data,Your Home")
+                        .font(.appBody)
+                        .foregroundStyle(.secondary)
+                        .tracking(1.2)
+                }
 
                 loginFormCard
 
                 if let errorMessage = viewModel.errorMessage {
                     messageRow(icon: "exclamationmark.triangle.fill", message: errorMessage, color: .red)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
-            .padding()
+            .padding(.horizontal, 24)
         }
         .liquidGlassPage()
-        .navigationTitle("认证")
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarHidden(true)
         .onAppear {
             viewModel.onAppear()
         }
@@ -80,45 +97,60 @@ struct AuthView: View {
                 HStack(spacing: 8) {
                     if viewModel.isLoading {
                         ProgressView()
-                            .progressViewStyle(.circular)
                             .tint(.white)
                     } else {
-                        Image(systemName: "arrow.right.circle.fill")
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 18, weight: .bold))
                     }
-                    Text(viewModel.isLoading ? "登录中..." : "登录")
-                        .font(.appBody)
-                        .fontWeight(.semibold)
+                    Text(viewModel.isLoading ? "登录中..." : "开启探索")
+                        .font(.system(size: 17, weight: .bold, design: .rounded))
                 }
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .background(Color.blue, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .padding(.vertical, 16)
+                .background(
+                    LinearGradient(
+                        colors: viewModel.canSubmit ? [Color.blue, Color.cyan] : [Color.gray.opacity(0.4), Color.gray.opacity(0.3)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                )
+                .shadow(color: viewModel.canSubmit ? Color.blue.opacity(0.4) : .clear, radius: 10, x: 0, y: 6)
             }
+            .buttonStyle(.plain)
             .disabled(!viewModel.canSubmit)
-            .opacity(viewModel.canSubmit ? 1.0 : 0.6)
+            .animation(.spring(), value: viewModel.canSubmit)
         }
         .liquidGlassCard()
     }
 
     private func inputRow(title: String, icon: String, text: Binding<String>, isSecure: Bool) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             Image(systemName: icon)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.blue.opacity(0.8))
+                .font(.system(size: 18, weight: .medium))
+                .frame(width: 24)
 
-            if isSecure {
-                SecureField(title, text: text)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled(true)
-            } else {
-                TextField(title, text: text)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled(true)
+            Group {
+                if isSecure {
+                    SecureField(title, text: text)
+                } else {
+                    TextField(title, text: text)
+                }
             }
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled(true)
+            .font(.system(size: 16, weight: .medium, design: .rounded))
         }
-        .font(.appBody)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(Color.white.opacity(0.42), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 16)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.white.opacity(0.6), lineWidth: 1)
+        )
+        .shadow(color: Color.blue.opacity(0.04), radius: 8, x: 0, y: 4)
     }
 
     private func messageRow(icon: String, message: String, color: Color) -> some View {

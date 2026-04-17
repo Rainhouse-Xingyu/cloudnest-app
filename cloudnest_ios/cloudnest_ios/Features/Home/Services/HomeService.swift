@@ -8,6 +8,6 @@ protocol HomeServiceProtocol {
 /// Home 模块服务默认实现（占位）
 final class HomeService: HomeServiceProtocol {
     func loadTitle() -> String {
-        "Home 页面"
+        "首页"
     }
 }

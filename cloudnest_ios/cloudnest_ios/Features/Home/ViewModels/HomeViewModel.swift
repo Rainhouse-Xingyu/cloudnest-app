@@ -4,9 +4,10 @@ import Combine
 /// Home 页面状态与交互逻辑
 @MainActor
 final class HomeViewModel: ObservableObject {
-    @Published var title: String = "加载中..."
+    @Published var title: String = "概览"
     @Published var photoItems: [HomePhotoItem] = []
     @Published var fileItems: [HomeFileItem] = []
+    @Published var capacityInfo: HomeCapacityInfo = HomeCapacityInfo(usedSpace: 0, totalSpace: 1, usedText: "0 MB", totalText: "0 GB")
 
     private let service: HomeServiceProtocol
 
@@ -32,5 +33,12 @@ final class HomeViewModel: ObservableObject {
             HomeFileItem(name: "毕业答辩PPT.key", sizeText: "18.2 MB", updatedAt: "昨天 21:07"),
             HomeFileItem(name: "云盘接口清单.xlsx", sizeText: "860 KB", updatedAt: "04-08 16:42")
         ]
+        
+        capacityInfo = HomeCapacityInfo(
+            usedSpace: 25_120_000_000,
+            totalSpace: 50_000_000_000,
+            usedText: "23.4 GB",
+            totalText: "50 GB"
+        )
     }
 }

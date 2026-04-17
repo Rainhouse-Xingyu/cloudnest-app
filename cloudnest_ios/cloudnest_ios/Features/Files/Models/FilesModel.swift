@@ -38,3 +38,40 @@ struct FileItemDTO: Decodable, Identifiable {
     }
 }
 
+// MARK: - Upload DTOs
+
+struct UploadInitRequestDTO: Encodable {
+    let parentId: Int64
+    let filename: String
+    let totalSize: Int64
+    let chunkSize: Int
+    let totalChunks: Int
+    
+    enum CodingKeys: String, CodingKey {
+        case parentId = "parent_id"
+        case filename
+        case totalSize = "total_size"
+        case chunkSize = "chunk_size"
+        case totalChunks = "total_chunks"
+    }
+}
+
+struct UploadInitResponseDTO: Decodable {
+    let uploadId: String
+    
+    enum CodingKeys: String, CodingKey {
+        case uploadId = "upload_id"
+    }
+}
+
+struct UploadCompleteRequestDTO: Encodable {
+    let uploadId: String
+    let parentId: Int64
+    
+    enum CodingKeys: String, CodingKey {
+        case uploadId = "upload_id"
+        case parentId = "parent_id"
+    }
+}
+
+

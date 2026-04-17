@@ -27,3 +27,20 @@ struct HomeFileItem: Identifiable {
         self.updatedAt = updatedAt
     }
 }
+
+/// 首页容量信息
+struct HomeCapacityInfo {
+    let usedSpace: Int64
+    let totalSpace: Int64
+    let usedText: String
+    let totalText: String
+    let percentage: Double
+    
+    init(usedSpace: Int64, totalSpace: Int64, usedText: String, totalText: String) {
+        self.usedSpace = usedSpace
+        self.totalSpace = totalSpace
+        self.usedText = usedText
+        self.totalText = totalText
+        self.percentage = totalSpace > 0 ? Double(usedSpace) / Double(totalSpace) : 0
+    }
+}

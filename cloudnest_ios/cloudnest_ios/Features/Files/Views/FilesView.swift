@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Files 模块主页面（浅色 LiquidGlass 风格）
 struct FilesView: View {
@@ -7,6 +8,7 @@ struct FilesView: View {
     @State private var isSelectionMode: Bool = false
     @State private var selectedItems: Set<Int64> = []
     @State private var showDeleteConfirm: Bool = false
+    @State private var showFileImporter: Bool = false
 
     private let folderColumns = [
         GridItem(.flexible(), spacing: 14),
@@ -86,6 +88,36 @@ struct FilesView: View {
         } message: {
             Text("确定要删除选中的 \(selectedItems.count) 个项目吗？")
         }
+        .fileImporter(
+            isPresented: $showFileImporter,
+            allowedContentTypes: [.data],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                if let url = urls.first {
+                    Task {
+                        await viewModel.uploadFile(url: url)
+                    }
+                }
+            case .failure(let error):
+                viewModel.errorMessage = "选择文件失败: \(error.localizedDescription)"
+            }
+        }
+        .overlay {
+            if viewModel.isUploading {
+                VStack(spacing: 16) {
+                    ProgressView(value: viewModel.uploadProgress)
+                        .progressViewStyle(.linear)
+                        .padding(.horizontal, 40)
+                    Text("上传中... \(Int(viewModel.uploadProgress * 100))%")
+                        .font(.appBody)
+                        .foregroundColor(.primary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(.ultraThinMaterial)
+            }
+        }
         .liquidGlassPage()
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -102,10 +134,11 @@ struct FilesView: View {
                 }
                 
                 Button {
-                    // 上传文件
+                    showFileImporter = true
                 } label: {
                     Image(systemName: "square.and.arrow.up")
                 }
+                .disabled(viewModel.isUploading)
                 
                 Button {
                     // 新建文件夹

@@ -22,71 +22,80 @@ struct HomeView: View {
             }
             .frame(height: 0)
 
-            VStack(spacing: 16) {
-                // 顶部信息卡
-                HStack(spacing: 10) {
-                    Text(viewModel.title)
-                        .font(.appBody)
-                        .foregroundStyle(.primary)
-                    Spacer()
+            VStack(spacing: 24) {
+                
+                // 1. 容量与状态卡片
+                capacityCard
+                
+                // 2. 快捷操作
+                quickActionsView
+                
+                // 3. 照片分类
+                VStack(spacing: 12) {
+                    sectionHeader(title: "最近照片", icon: "photo.on.rectangle.angled")
+                    
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            ForEach(viewModel.photoItems) { item in
+                                VStack(alignment: .leading, spacing: 8) {
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(Color.gray.opacity(0.1))
+                                        .frame(height: 100)
+                                        .overlay(
+                                            Image(systemName: "photo")
+                                                .font(.system(size: 24))
+                                                .foregroundStyle(.gray)
+                                        )
+                                    
+                                    Text(item.title)
+                                        .font(.footnote)
+                                        .lineLimit(1)
+                                    
+                                    Text(item.capturedAt)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                                .frame(width: 140)
+                                .liquidGlassCard()
+                            }
+                        }
+                        .padding(.horizontal, 1)
+                    }
                 }
-                .liquidGlassCard()
-                
-                // 照片分类
 
-                
-                ScrollView(.horizontal, showsIndicators: false) {
+                // 4. 文件分类
+                VStack(spacing: 12) {
+                    sectionHeader(title: "最近文件", icon: "doc.text")
 
-                        ForEach(viewModel.photoItems) { item in
-                            VStack(alignment: .leading, spacing: 8) {
-                                Image(systemName: "photo.fill")
-                                    .font(.system(size: 20, weight: .semibold))
-                                    .foregroundStyle(.cyan)
-                                
-                                Text(item.title)
+                    VStack(spacing: 10) {
+                        ForEach(viewModel.fileItems) { item in
+                            HStack(spacing: 14) {
+                                Image(systemName: "doc.fill")
+                                    .foregroundStyle(Color.blue.opacity(0.8))
+                                    .font(.system(size: 24))
 
-                                    .lineLimit(1)
-                                
-                                Text(item.capturedAt)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(item.name)
+                                        .font(.appBody)
+                                        .lineLimit(1)
+                                    Text("\(item.sizeText) · \(item.updatedAt)")
+                                        .font(.appCaption)
+                                        .foregroundStyle(.secondary)
+                                }
 
+                                Spacer()
+
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
-                            .frame(width: 150, alignment: .leading)
                             .liquidGlassCard()
                         }
                     }
-                    .padding(.horizontal, 1)
-
-                // 文件分类
-                sectionHeader(title: "文件", icon: "doc.text.fill")
-
-                VStack(spacing: 10) {
-                    ForEach(viewModel.fileItems) { item in
-                        HStack(spacing: 10) {
-//                            Image(systemName: "doc.fill")
-//                                .foregroundStyle(.blue)
-//                                .font(.system(size: 18, weight: .medium))
-
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(item.name)
-                                    .font(.appBody)
-                                    .lineLimit(1)
-                                Text("\(item.sizeText) · \(item.updatedAt)")
-                                    .font(.appCaption)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            Spacer()
-
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .liquidGlassCard()
-                    }
                 }
             }
-            .padding()
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
         }
         .coordinateSpace(name: "home_scroll_area")
         .liquidGlassPage()
@@ -98,15 +107,97 @@ struct HomeView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            // 左侧标题
             ToolbarItem(placement: .topBarLeading) {
-                Text("照片")
+                Text("首页")
                     .font(.appTitle)
-                    .fontWeight(.semibold)
+                    .fontWeight(.bold)
+            }
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button {
+                    // 进入全局搜索页
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                }
+
+                Button {
+                    // 进入智能搜索页
+                } label: {
+                    Image(systemName: "sparkles")
+                }
             }
         }
         .onAppear {
             viewModel.onAppear()
+        }
+    }
+    
+    // MARK: - Subviews
+    
+    /// 容量卡片
+    private var capacityCard: some View {
+        VStack(spacing: 16) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("存储空间")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Text("已用 \(viewModel.capacityInfo.usedText) / \(viewModel.capacityInfo.totalText)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "cloud.fill")
+                    .font(.system(size: 28))
+                    .foregroundStyle(.blue)
+            }
+            
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.gray.opacity(0.15))
+                        .frame(height: 8)
+                    
+                    Capsule()
+                        .fill(Color.blue)
+                        .frame(width: max(0, geo.size.width * CGFloat(viewModel.capacityInfo.percentage)), height: 8)
+                }
+            }
+            .frame(height: 8)
+        }
+        .liquidGlassCard()
+    }
+    
+    /// 快捷操作组
+    private var quickActionsView: some View {
+        HStack(spacing: 0) {
+            quickActionButton(icon: "square.and.arrow.up", title: "上传", color: .blue)
+            Spacer()
+            quickActionButton(icon: "folder.badge.plus", title: "新建", color: .blue)
+            Spacer()
+            quickActionButton(icon: "link", title: "分享", color: .blue)
+            Spacer()
+            quickActionButton(icon: "sparkles", title: "智能", color: .blue)
+        }
+        .padding(.horizontal, 10)
+    }
+    
+    private func quickActionButton(icon: String, title: String, color: Color) -> some View {
+        Button(action: {
+            // TODO: Action
+        }) {
+            VStack(spacing: 8) {
+                ZStack {
+                    Circle()
+                        .fill(color.opacity(0.1))
+                        .frame(width: 50, height: 50)
+                    Image(systemName: icon)
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundStyle(color)
+                }
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.primary)
+            }
         }
     }
 
@@ -114,14 +205,17 @@ struct HomeView: View {
     private func sectionHeader(title: String, icon: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
-                .foregroundStyle(.blue)
+                .foregroundStyle(.primary)
             Text(title)
-                .font(.appTitle)
+                .font(.headline)
             Spacer()
+            
+            Button("查看全部") { }
+                .font(.caption)
+                .foregroundStyle(.blue)
         }
-        .padding(.horizontal, 2)
+        .padding(.horizontal, 4)
     }
-
 }
 
 private struct HomeScrollOffsetPreferenceKey: PreferenceKey {
@@ -132,9 +226,10 @@ private struct HomeScrollOffsetPreferenceKey: PreferenceKey {
     }
 }
 
-
 struct HomeView_Previews: PreviewProvider {
     static var previews: some View {
-        HomeView()
+        NavigationView {
+            HomeView()
+        }
     }
 }

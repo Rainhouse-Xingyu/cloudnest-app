@@ -22,39 +22,11 @@ struct LiquidGlassCardModifier: ViewModifier {
     }
 }
 
-/// Liquid Glass 页面背景：渐变 + 柔和光斑
+/// 页面背景：纯白色
 struct LiquidGlassBackground: View {
     var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.88, green: 0.95, blue: 1.0),
-                    Color(red: 0.80, green: 0.92, blue: 1.0),
-                    Color(red: 0.94, green: 0.97, blue: 1.0)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+        Color.white
             .ignoresSafeArea()
-
-            Circle()
-                .fill(Color.white.opacity(0.30))
-                .frame(width: 280, height: 280)
-                .blur(radius: 8)
-                .offset(x: -120, y: -260)
-
-            Circle()
-                .fill(Color.cyan.opacity(0.18))
-                .frame(width: 240, height: 240)
-                .blur(radius: 10)
-                .offset(x: 140, y: -180)
-
-            Circle()
-                .fill(Color.blue.opacity(0.16))
-                .frame(width: 260, height: 260)
-                .blur(radius: 16)
-                .offset(x: 120, y: 300)
-        }
     }
 }
 

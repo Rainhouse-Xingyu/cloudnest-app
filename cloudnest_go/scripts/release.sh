@@ -48,6 +48,7 @@ for item in "${platforms[@]}"; do
       -o "${PKG_DIR}/${APP_NAME}" ./cmd/server)
 
   cp "${ROOT_DIR}/docs/部署打包与命令行启动.md" "${PKG_DIR}/"
+  cp "${ROOT_DIR}/.env.example" "${PKG_DIR}/.env.example"
 
   (cd "${DIST_DIR}" && tar -czf "${TAR_NAME}" "$(basename "${PKG_DIR}")")
   rm -rf "${PKG_DIR}"
