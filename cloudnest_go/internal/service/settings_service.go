@@ -102,7 +102,7 @@ func (s *SettingsService) UpsertSettings(ctx context.Context, items []SettingUps
 		if key == "" || value == "" {
 			return gorm.ErrInvalidData
 		}
-		if _, ok := allowedSystemSettingKeys[key]; !ok && !strings.HasPrefix(key, "storage_quota_bytes_user_") {
+		if _, ok := allowedSystemSettingKeys[key]; !ok {
 			return gorm.ErrInvalidField
 		}
 		if err := validateSettingValue(key, value); err != nil {
@@ -283,9 +283,6 @@ func validateSettingValue(key, value string) error {
 	case "storage_quota_bytes", "storage_default_quota_bytes":
 		return intInRange(1, 1<<62)
 	default:
-		if strings.HasPrefix(key, "storage_quota_bytes_user_") {
-			return intInRange(1, 1<<62)
-		}
 		return nil
 	}
 }

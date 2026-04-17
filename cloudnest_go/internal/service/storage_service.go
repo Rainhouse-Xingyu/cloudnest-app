@@ -41,7 +41,7 @@ func (s *StorageService) GetOverview(ctx context.Context, uid int64) (StorageOve
 		return StorageOverview{}, err
 	}
 
-	totalBytes, source, hasQuota, err := s.resolveQuotaBytes(ctx, uid)
+	totalBytes, source, hasQuota, err := s.resolveQuotaBytes(ctx)
 	if err != nil {
 		return StorageOverview{}, err
 	}
@@ -71,14 +71,7 @@ func (s *StorageService) GetOverview(ctx context.Context, uid int64) (StorageOve
 	return res, nil
 }
 
-func (s *StorageService) resolveQuotaBytes(ctx context.Context, uid int64) (int64, string, bool, error) {
-	userKey := "storage_quota_bytes_user_" + strconv.FormatInt(uid, 10)
-	if quota, ok, err := s.readPositiveInt64Setting(ctx, userKey); err != nil {
-		return 0, "", false, err
-	} else if ok {
-		return quota, userKey, true, nil
-	}
-
+func (s *StorageService) resolveQuotaBytes(ctx context.Context) (int64, string, bool, error) {
 	if quota, ok, err := s.readPositiveInt64Setting(ctx, globalStorageQuotaSettingKey); err != nil {
 		return 0, "", false, err
 	} else if ok {

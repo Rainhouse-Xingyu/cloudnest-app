@@ -74,4 +74,20 @@ struct UploadCompleteRequestDTO: Encodable {
     }
 }
 
+// MARK: - Directory Tree Models
+
+/// 文件目录树节点（仅目录）
+struct FileTreeNode: Identifiable {
+    let id: Int64
+    let name: String
+    let parentId: Int64
+    var children: [FileTreeNode]
+}
+
+/// 当前路径节点（用于面包屑展示）
+struct FilePathNode: Identifiable {
+    let id: Int64
+    let name: String
+}
+
 

@@ -150,9 +150,6 @@ final class HomeViewModel: ObservableObject {
     }
 
     private func readableQuotaSource(_ source: String) -> String {
-        if source.hasPrefix("storage_quota_bytes_user_") {
-            return "用户配额"
-        }
         switch source {
         case "storage_quota_bytes":
             return "全局配额"

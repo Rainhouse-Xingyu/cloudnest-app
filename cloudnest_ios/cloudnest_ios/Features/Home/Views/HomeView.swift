@@ -4,6 +4,7 @@ import SwiftUI
 struct HomeView: View {
     @StateObject private var viewModel = HomeViewModel()
     @State private var didCollapseActionIcon: Bool = false
+    @State private var showFRPSettingsPage: Bool = false
     let onScrollCollapsedChanged: (Bool) -> Void
 
     init(onScrollCollapsedChanged: @escaping (Bool) -> Void = { _ in }) {
@@ -132,6 +133,9 @@ struct HomeView: View {
         .refreshable {
             await viewModel.reload()
         }
+        .navigationDestination(isPresented: $showFRPSettingsPage) {
+            FRPSettingsView()
+        }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Text("首页")
@@ -201,25 +205,39 @@ struct HomeView: View {
 
     /// FRP 与限速时段状态卡片
     private var statusCard: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("FRP 设备")
-                    .font(.headline)
-                Text("启用 \(viewModel.statusInfo.frpDeviceEnabled) / \(viewModel.statusInfo.frpDeviceTotal)")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        Button {
+            showFRPSettingsPage = true
+        } label: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("FRP 设备")
+                        .font(.headline)
+                    Text("启用 \(viewModel.statusInfo.frpDeviceEnabled) / \(viewModel.statusInfo.frpDeviceTotal)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("高峰时段")
-                    .font(.headline)
-                Text(viewModel.statusInfo.rateWindowText)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("高峰时段")
+                        .font(.headline)
+                    Text(viewModel.statusInfo.rateWindowText)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("FRP设置")
+                        .font(.caption)
+                        .foregroundStyle(.blue)
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.blue)
+                }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .buttonStyle(.plain)
         .liquidGlassCard()
     }
     

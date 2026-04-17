@@ -243,7 +243,6 @@
 可用于容量卡片的推荐配置键：
 - storage_quota_bytes：全局容量上限（单位 bytes）
 - storage_default_quota_bytes：全局默认容量上限（单位 bytes，作为兜底）
-- storage_quota_bytes_user_{uid}：用户级容量上限（单位 bytes，优先级最高）
 
 2) PUT /api/settings/rate-window
 - enabled: bool 可选
@@ -257,7 +256,7 @@
   - item.remaining_bytes: int64，剩余容量（未配置时为 0）
   - item.usage_percent: float64，使用率百分比（0~100）
   - item.has_quota: bool，是否已配置容量上限
-  - item.quota_source: string，配额来源（如 storage_quota_bytes_user_xxx / storage_quota_bytes / storage_default_quota_bytes / none）
+  - item.quota_source: string，配额来源（如 storage_quota_bytes / storage_default_quota_bytes / none）
 
 ### 5.9 FRP
 1) POST /api/frp/devices
