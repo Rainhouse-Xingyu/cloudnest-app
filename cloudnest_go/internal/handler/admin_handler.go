@@ -21,6 +21,7 @@ type CreateUserRequest struct {
 	Username    string              `json:"username" binding:"required"`
 	Password    string              `json:"password" binding:"required"`
 	Email       string              `json:"email"`
+	RoleName    string              `json:"role_name"`
 	Permissions []PermissionRequest `json:"permissions"`
 }
 
@@ -57,10 +58,15 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 		Username:    req.Username,
 		Password:    req.Password,
 		Email:       req.Email,
+		RoleName:    req.RoleName,
 		Permissions: permissions,
 	})
 	//发生错误返回对应的http错误码。
 	if err != nil {
+		if err == contract.ErrInvalidInput {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid role_name, only user/admin are allowed"})
+			return
+		}
 		if err == contract.ErrConflict {
 			c.JSON(http.StatusConflict, gin.H{"error": "username already exists"})
 			return

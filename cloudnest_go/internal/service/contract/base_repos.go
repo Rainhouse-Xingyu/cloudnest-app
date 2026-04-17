@@ -37,7 +37,7 @@ type AuthRepository interface {
 
 // AdminRepository 定义管理员模块存储访问能力。
 type AdminRepository interface {
-	CreateUserWithPermissions(ctx context.Context, user model.User, permissions []MethodPathPermission) (model.User, error)
+	CreateUserWithPermissions(ctx context.Context, user model.User, roleName string, permissions []MethodPathPermission) (model.User, error)
 	ReplaceUserPermissionsWithAudit(ctx context.Context, adminID int64, userID int64, permissions []MethodPathPermission, clientIP string) error
 }
 

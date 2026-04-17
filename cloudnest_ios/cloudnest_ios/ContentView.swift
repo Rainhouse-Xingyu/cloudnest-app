@@ -60,6 +60,10 @@ struct ContentView: View {
             showAuth = false
             selectedTab = 0
         }
+        .onReceive(NotificationCenter.default.publisher(for: .authLogout)) { _ in
+            showAuth = true
+            selectedTab = 0
+        }
     }
     
     private func checkAuthStatus() {

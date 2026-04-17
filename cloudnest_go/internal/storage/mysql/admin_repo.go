@@ -22,7 +22,7 @@ func NewAdminRepo(db *gorm.DB) *AdminRepo {
 	return &AdminRepo{db: db}
 }
 
-func (r *AdminRepo) CreateUserWithPermissions(ctx context.Context, user model.User, permissions []contract.MethodPathPermission) (model.User, error) {
+func (r *AdminRepo) CreateUserWithPermissions(ctx context.Context, user model.User, roleName string, permissions []contract.MethodPathPermission) (model.User, error) {
 	created := user
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&created).Error; err != nil {
@@ -32,19 +32,28 @@ func (r *AdminRepo) CreateUserWithPermissions(ctx context.Context, user model.Us
 			return err
 		}
 
-		var normalRole model.Role
-		err := tx.Where("role_name = ?", "user").First(&normalRole).Error
+		selectedRole := strings.TrimSpace(strings.ToLower(roleName))
+		if selectedRole == "" {
+			selectedRole = "user"
+		}
+
+		var targetRole model.Role
+		err := tx.Where("role_name = ?", selectedRole).First(&targetRole).Error
 		if err != nil {
 			if !errors.Is(err, gorm.ErrRecordNotFound) {
 				return err
 			}
-			normalRole = model.Role{RoleName: "user", Description: "normal user"}
-			if err := tx.Create(&normalRole).Error; err != nil {
+			desc := "normal user"
+			if selectedRole == "admin" {
+				desc = "system administrator"
+			}
+			targetRole = model.Role{RoleName: selectedRole, Description: desc}
+			if err := tx.Create(&targetRole).Error; err != nil {
 				return err
 			}
 		}
 
-		if err := tx.Create(&model.UserRole{UserID: created.ID, RoleID: normalRole.ID}).Error; err != nil {
+		if err := tx.Create(&model.UserRole{UserID: created.ID, RoleID: targetRole.ID}).Error; err != nil {
 			return err
 		}
 

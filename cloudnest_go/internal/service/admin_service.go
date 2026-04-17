@@ -26,6 +26,7 @@ type CreateUserInput struct {
 	Username    string
 	Password    string
 	Email       string
+	RoleName    string
 	Permissions []PermissionInput
 }
 
@@ -41,6 +42,11 @@ func NewAdminService(repo contract.AdminRepository, rdb *redis.Client) *AdminSer
 
 // CreateUser 创建用户、绑定默认角色并按需写入权限。
 func (s *AdminService) CreateUser(ctx context.Context, req CreateUserInput) (model.User, error) {
+	roleName := normalizeRoleName(req.RoleName)
+	if roleName != "user" && roleName != "admin" {
+		return model.User{}, contract.ErrInvalidInput
+	}
+
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return model.User{}, contract.ErrInternal
@@ -57,7 +63,7 @@ func (s *AdminService) CreateUser(ctx context.Context, req CreateUserInput) (mod
 	for _, p := range req.Permissions {
 		perms = append(perms, contract.MethodPathPermission{Method: p.Method, Path: p.Path})
 	}
-	user, err = s.repo.CreateUserWithPermissions(ctx, user, perms)
+	user, err = s.repo.CreateUserWithPermissions(ctx, user, roleName, perms)
 	if err != nil {
 		if errors.Is(err, contract.ErrConflict) {
 			return model.User{}, contract.ErrConflict
@@ -90,4 +96,12 @@ func normalizeMethod(method string) string {
 		return "*"
 	}
 	return m
+}
+
+func normalizeRoleName(role string) string {
+	r := strings.TrimSpace(strings.ToLower(role))
+	if r == "" {
+		return "user"
+	}
+	return r
 }

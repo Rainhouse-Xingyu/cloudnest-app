@@ -14,6 +14,7 @@ struct EnvironmentConfig {
     let requestTimeout: TimeInterval
 
     private static let overrideBaseURLKey = "network.overrideBaseURL"
+    private static let lastExternalBaseURLKey = "network.lastExternalBaseURL"
 
     /// 从 Environment.plist 加载配置，缺省走安全默认值
     static func load(bundle: Bundle = .main) -> EnvironmentConfig {
@@ -45,6 +46,25 @@ struct EnvironmentConfig {
         }
     }
 
+    /// 保存最近一次有效的外网服务地址（用于登录页默认值与冷启动默认网络）。
+    static func saveLastExternalBaseURL(_ value: String?) {
+        let defaults = UserDefaults.standard
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if trimmed.isEmpty {
+            defaults.removeObject(forKey: lastExternalBaseURLKey)
+        } else {
+            defaults.set(trimmed, forKey: lastExternalBaseURLKey)
+        }
+    }
+
+    static func loadLastExternalBaseURL() -> String? {
+        guard let raw = UserDefaults.standard.string(forKey: lastExternalBaseURLKey) else {
+            return nil
+        }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
     private static func activeBaseURL(from dict: [String: Any]) -> String {
         if
             let override = UserDefaults.standard.string(forKey: overrideBaseURLKey),
@@ -52,6 +72,14 @@ struct EnvironmentConfig {
         {
             return override
         }
+
+        if
+            let external = loadLastExternalBaseURL(),
+            !external.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
+            return external
+        }
+
         return dict["API_BASE_URL"] as? String ?? "http://127.0.0.1:8080"
     }
 }

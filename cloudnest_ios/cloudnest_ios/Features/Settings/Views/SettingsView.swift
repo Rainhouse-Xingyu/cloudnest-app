@@ -1,22 +1,233 @@
 import SwiftUI
 
-/// Settings 模块主页面（模板）
+/// 设置页：账户管理与退出登录
 struct SettingsView: View {
     @StateObject private var viewModel = SettingsViewModel()
 
     var body: some View {
-        VStack {
-            FeatureGlassTemplateView(
-                icon: "slider.horizontal.3",
-                title: viewModel.title,
-                subtitle: "这里是 Settings 功能模板，请替换为真实业务 UI"
-            )
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 16) {
+                headerCard
+                accountFormCard
+                permissionCard
+                createButton
+                statusCard
+
+                // 页面底部退出按钮
+                logoutButton
+                    .padding(.top, 8)
+                    .padding(.bottom, 24)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
         }
-        .padding()
         .liquidGlassPage()
         .onAppear {
             viewModel.onAppear()
         }
+    }
+
+    private var headerCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(viewModel.title)
+                .font(.system(size: 28, weight: .bold, design: .rounded))
+            Text("账户管理")
+                .font(.system(size: 15, weight: .medium, design: .rounded))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(0.6), lineWidth: 1)
+        )
+    }
+
+    private var accountFormCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("添加新用户")
+            inputField(title: "用户名", text: $viewModel.username)
+            secureInputField(title: "密码", text: $viewModel.password)
+            inputField(title: "邮箱（可选）", text: $viewModel.email)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("角色分配")
+                    .font(.system(size: 14, weight: .semibold))
+
+                Picker("角色", selection: $viewModel.selectedRole) {
+                    ForEach(UserRoleOption.allCases) { role in
+                        Text(role.title).tag(role)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+        }
+        .padding(16)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(0.6), lineWidth: 1)
+        )
+    }
+
+    private var permissionCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("访问路径权限")
+
+            Picker("方法", selection: $viewModel.selectedMethod) {
+                ForEach(PermissionMethodOption.allCases) { method in
+                    Text(method.rawValue).tag(method)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            HStack(spacing: 8) {
+                TextField("输入路径，如 /api/files", text: $viewModel.permissionPathInput)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled(true)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color.white.opacity(0.35), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                Button("添加") {
+                    viewModel.addPermission()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!viewModel.canAddPermission)
+            }
+
+            if viewModel.permissions.isEmpty {
+                Text("未配置权限时，用户仍可登录，但仅拥有后端默认权限。")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(viewModel.permissions) { item in
+                        HStack {
+                            Text("\(item.method.rawValue)  \(item.path)")
+                                .font(.system(size: 13, weight: .medium, design: .monospaced))
+                                .lineLimit(1)
+                            Spacer()
+                            Button(role: .destructive) {
+                                viewModel.removePermission(id: item.id)
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(Color.white.opacity(0.28), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(0.6), lineWidth: 1)
+        )
+    }
+
+    private var createButton: some View {
+        Button {
+            Task {
+                await viewModel.createManagedUser()
+            }
+        } label: {
+            HStack {
+                if viewModel.isSubmitting {
+                    ProgressView().tint(.white)
+                }
+                Text(viewModel.isSubmitting ? "创建中..." : "创建用户")
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(
+                LinearGradient(
+                    colors: [.blue, .cyan],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                ),
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            )
+            .foregroundStyle(.white)
+        }
+        .buttonStyle(.plain)
+        .disabled(!viewModel.canCreateUser)
+        .opacity(viewModel.canCreateUser ? 1 : 0.6)
+    }
+
+    @ViewBuilder
+    private var statusCard: some View {
+        if let error = viewModel.errorMessage {
+            statusRow(text: error, color: .red, icon: "exclamationmark.triangle.fill")
+        }
+        if let success = viewModel.successMessage {
+            statusRow(text: success, color: .green, icon: "checkmark.circle.fill")
+        }
+    }
+
+    private var logoutButton: some View {
+        Button(role: .destructive) {
+            Task {
+                await viewModel.logout()
+            }
+        } label: {
+            HStack {
+                if viewModel.isLoggingOut {
+                    ProgressView().tint(.white)
+                } else {
+                    Image(systemName: "rectangle.portrait.and.arrow.right")
+                }
+                Text(viewModel.isLoggingOut ? "退出中..." : "退出账户")
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(Color.red, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .foregroundStyle(.white)
+        }
+        .buttonStyle(.plain)
+        .disabled(viewModel.isLoggingOut)
+    }
+
+    private func sectionTitle(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 17, weight: .bold, design: .rounded))
+    }
+
+    private func inputField(title: String, text: Binding<String>) -> some View {
+        TextField(title, text: text)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled(true)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color.white.opacity(0.35), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func secureInputField(title: String, text: Binding<String>) -> some View {
+        SecureField(title, text: text)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled(true)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color.white.opacity(0.35), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func statusRow(text: String, color: Color, icon: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+            Text(text)
+                .font(.system(size: 13, weight: .medium))
+            Spacer()
+        }
+        .foregroundStyle(color)
+        .padding(12)
+        .background(color.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }
 

@@ -25,9 +25,14 @@ final class AuthViewModel: ObservableObject {
         // 页面出现时仅清理错误态，不重置账号输入
         errorMessage = nil
 
-        // 将当前全局服务地址回填到输入框，方便真机反复联调。
+        // 默认优先回填最近一次外网地址，避免回落到 127.0.0.1。
         if externalIP.isEmpty {
-            externalIP = AppContainer.shared.networkClient.currentBaseURL()
+            if let lastExternal = EnvironmentConfig.loadLastExternalBaseURL() {
+                externalIP = lastExternal
+                useExternalConnection = true
+            } else {
+                externalIP = AppContainer.shared.networkClient.currentBaseURL()
+            }
         }
     }
 
@@ -87,13 +92,17 @@ final class AuthViewModel: ObservableObject {
             sessionManager.save(session: saved)
 
             if let overrideBaseURL, !overrideBaseURL.isEmpty {
+                // 记录外网地址作为默认网络，避免后续启动回落到 127.0.0.1。
+                EnvironmentConfig.saveLastExternalBaseURL(overrideBaseURL)
+
                 let resolved = await resolveLANBaseURLIfPossible(
                     from: response.serverHosts,
                     fallback: overrideBaseURL
                 )
                 AppContainer.shared.networkClient.updateBaseURL(resolved)
                 EnvironmentConfig.saveOverrideBaseURL(resolved)
-                externalIP = resolved
+                // 输入框保留外网地址，便于下次登录继续走外网入口。
+                externalIP = overrideBaseURL
             }
             return true
         } catch {
@@ -210,6 +219,12 @@ final class AuthViewModel: ObservableObject {
 
     func logout() {
         sessionManager.clear()
+        if let lastExternal = EnvironmentConfig.loadLastExternalBaseURL() {
+            AppContainer.shared.networkClient.updateBaseURL(lastExternal)
+            EnvironmentConfig.saveOverrideBaseURL(lastExternal)
+            externalIP = lastExternal
+            useExternalConnection = true
+        }
         password = ""
         errorMessage = nil
     }
