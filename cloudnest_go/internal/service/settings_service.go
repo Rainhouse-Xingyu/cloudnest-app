@@ -72,6 +72,8 @@ var allowedSystemSettingKeys = map[string]struct{}{
 	"peak_window_end":                {},
 	"upload_max_concurrency":         {},
 	"recycle_retention_days":         {},
+	"storage_quota_bytes":            {},
+	"storage_default_quota_bytes":    {},
 }
 
 // GetSettings 返回 system_setting 全量配置（非管理员脱敏）。
@@ -100,7 +102,7 @@ func (s *SettingsService) UpsertSettings(ctx context.Context, items []SettingUps
 		if key == "" || value == "" {
 			return gorm.ErrInvalidData
 		}
-		if _, ok := allowedSystemSettingKeys[key]; !ok {
+		if _, ok := allowedSystemSettingKeys[key]; !ok && !strings.HasPrefix(key, "storage_quota_bytes_user_") {
 			return gorm.ErrInvalidField
 		}
 		if err := validateSettingValue(key, value); err != nil {
@@ -278,7 +280,12 @@ func validateSettingValue(key, value string) error {
 		return intInRange(1, 32)
 	case "recycle_retention_days":
 		return intInRange(1, 3650)
+	case "storage_quota_bytes", "storage_default_quota_bytes":
+		return intInRange(1, 1<<62)
 	default:
+		if strings.HasPrefix(key, "storage_quota_bytes_user_") {
+			return intInRange(1, 1<<62)
+		}
 		return nil
 	}
 }

@@ -26,6 +26,7 @@ type Container struct {
 	AuthRepo          *storageMysql.AuthRepo
 	AdminRepo         *storageMysql.AdminRepo
 	SettingsRepo      *storageMysql.SettingsRepo
+	StorageRepo       *storageMysql.StorageRepo
 	FileRepo          *storageMysql.FileRepo
 	CollaborationRepo *storageMysql.CollaborationRepo
 	LivePhotoRepo     *storageMysql.LivePhotoRepo
@@ -38,6 +39,7 @@ type Container struct {
 	AdminService         *service.AdminService
 	CollaborationService *service.CollaborationService
 	SettingsService      *service.SettingsService
+	StorageService       *service.StorageService
 	OperationLogService  *service.OperationLogService
 	FrpService           *service.FrpService
 	LivePhotoService     *service.LivePhotoService
@@ -48,6 +50,7 @@ type Container struct {
 	AdminHandler         *handler.AdminHandler
 	FileHandler          *handler.FileHandler
 	SettingsHandler      *handler.SettingsHandler
+	StorageHandler       *handler.StorageHandler
 	CollaborationHandler *handler.CollaborationHandler
 	AIHandler            *handler.AIHandler
 	FrpHandler           *handler.FrpHandler
@@ -61,6 +64,7 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 	authRepo := storageMysql.NewAuthRepo(db)
 	adminRepo := storageMysql.NewAdminRepo(db)
 	settingsRepo := storageMysql.NewSettingsRepo(db)
+	storageRepo := storageMysql.NewStorageRepo(db)
 	fileRepo := storageMysql.NewFileRepo(db)
 	collaborationRepo := storageMysql.NewCollaborationRepo(db)
 	livePhotoRepo := storageMysql.NewLivePhotoRepo(db)
@@ -73,6 +77,7 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 	adminService := service.NewAdminService(adminRepo, rdb)
 	collaborationService := service.NewCollaborationService(collaborationRepo)
 	settingsService := service.NewSettingsService(settingsRepo)
+	storageService := service.NewStorageService(storageRepo)
 	operationLogService := service.NewOperationLogService(operationLogRepo)
 	frpService := service.NewFrpService(frpRepo, rdb)
 	livePhotoService := service.NewLivePhotoService(livePhotoRepo)
@@ -89,6 +94,7 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 		AuthRepo:          authRepo,
 		AdminRepo:         adminRepo,
 		SettingsRepo:      settingsRepo,
+		StorageRepo:       storageRepo,
 		FileRepo:          fileRepo,
 		CollaborationRepo: collaborationRepo,
 		LivePhotoRepo:     livePhotoRepo,
@@ -101,6 +107,7 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 		AdminService:         adminService,
 		CollaborationService: collaborationService,
 		SettingsService:      settingsService,
+		StorageService:       storageService,
 		OperationLogService:  operationLogService,
 		FrpService:           frpService,
 		LivePhotoService:     livePhotoService,
@@ -111,6 +118,7 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 		AdminHandler:         &handler.AdminHandler{Svc: adminService},
 		FileHandler:          &handler.FileHandler{RDB: rdb, Cfg: cfg, AISvc: aiService, Svc: fileService},
 		SettingsHandler:      &handler.SettingsHandler{Svc: settingsService},
+		StorageHandler:       &handler.StorageHandler{Svc: storageService},
 		CollaborationHandler: &handler.CollaborationHandler{Svc: collaborationService},
 		AIHandler:            &handler.AIHandler{Cfg: cfg, Svc: aiService},
 		FrpHandler:           &handler.FrpHandler{Svc: frpService},
@@ -184,6 +192,7 @@ func (c *Container) NewRouter() *gin.Engine {
 	api.GET("/settings/permissions", c.SettingsHandler.GetPermissionSummary)
 	api.GET("/settings/rate-window", c.SettingsHandler.GetMyRateWindow)
 	api.PUT("/settings/rate-window", c.SettingsHandler.UpdateMyRateWindow)
+	api.GET("/storage/overview", c.StorageHandler.GetOverview)
 	api.POST("/frp/devices", c.FrpHandler.CreateDevice)
 	api.GET("/frp/devices", c.FrpHandler.ListDevices)
 	api.GET("/frp/devices/:id", c.FrpHandler.GetDevice)
