@@ -26,6 +26,7 @@ struct HomeView: View {
                 
                 // 1. 容量与状态卡片
                 capacityCard
+                statusCard
                 
                 // 2. 快捷操作
                 quickActionsView
@@ -36,27 +37,31 @@ struct HomeView: View {
                     
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 12) {
-                            ForEach(viewModel.photoItems) { item in
-                                VStack(alignment: .leading, spacing: 8) {
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .fill(Color.gray.opacity(0.1))
-                                        .frame(height: 100)
-                                        .overlay(
-                                            Image(systemName: "photo")
-                                                .font(.system(size: 24))
-                                                .foregroundStyle(.gray)
-                                        )
-                                    
-                                    Text(item.title)
-                                        .font(.footnote)
-                                        .lineLimit(1)
-                                    
-                                    Text(item.capturedAt)
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
+                            if viewModel.photoItems.isEmpty {
+                                emptyHintCard(icon: "photo", text: "暂无最近照片")
+                            } else {
+                                ForEach(viewModel.photoItems) { item in
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(Color.gray.opacity(0.1))
+                                            .frame(height: 100)
+                                            .overlay(
+                                                Image(systemName: "photo")
+                                                    .font(.system(size: 24))
+                                                    .foregroundStyle(.gray)
+                                            )
+                                        
+                                        Text(item.title)
+                                            .font(.footnote)
+                                            .lineLimit(1)
+                                        
+                                        Text(item.capturedAt)
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .frame(width: 140)
+                                    .liquidGlassCard()
                                 }
-                                .frame(width: 140)
-                                .liquidGlassCard()
                             }
                         }
                         .padding(.horizontal, 1)
@@ -68,30 +73,41 @@ struct HomeView: View {
                     sectionHeader(title: "最近文件", icon: "doc.text")
 
                     VStack(spacing: 10) {
-                        ForEach(viewModel.fileItems) { item in
-                            HStack(spacing: 14) {
-                                Image(systemName: "doc.fill")
-                                    .foregroundStyle(Color.blue.opacity(0.8))
-                                    .font(.system(size: 24))
+                        if viewModel.fileItems.isEmpty {
+                            emptyHintCard(icon: "doc", text: "暂无最近文件")
+                        } else {
+                            ForEach(viewModel.fileItems) { item in
+                                HStack(spacing: 14) {
+                                    Image(systemName: "doc.fill")
+                                        .foregroundStyle(Color.blue.opacity(0.8))
+                                        .font(.system(size: 24))
 
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(item.name)
-                                        .font(.appBody)
-                                        .lineLimit(1)
-                                    Text("\(item.sizeText) · \(item.updatedAt)")
-                                        .font(.appCaption)
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(item.name)
+                                            .font(.appBody)
+                                            .lineLimit(1)
+                                        Text("\(item.sizeText) · \(item.updatedAt)")
+                                            .font(.appCaption)
+                                            .foregroundStyle(.secondary)
+                                    }
+
+                                    Spacer()
+
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
-
-                                Spacer()
-
-                                Image(systemName: "chevron.right")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                .liquidGlassCard()
                             }
-                            .liquidGlassCard()
                         }
                     }
+                }
+
+                if let errorMessage = viewModel.errorMessage {
+                    Text(errorMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .padding(.top, 4)
                 }
             }
             .padding(.horizontal, 20)
@@ -106,6 +122,16 @@ struct HomeView: View {
             onScrollCollapsedChanged(shouldCollapse)
         }
         .navigationBarTitleDisplayMode(.inline)
+        .overlay {
+            if viewModel.isLoading {
+                ProgressView("加载中...")
+                    .padding(14)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+            }
+        }
+        .refreshable {
+            await viewModel.reload()
+        }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Text("首页")
@@ -141,7 +167,7 @@ struct HomeView: View {
                     Text("存储空间")
                         .font(.headline)
                         .foregroundStyle(.primary)
-                    Text("已用 \(viewModel.capacityInfo.usedText) / \(viewModel.capacityInfo.totalText)")
+                    Text(viewModel.capacityInfoText)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -157,12 +183,42 @@ struct HomeView: View {
                         .fill(Color.gray.opacity(0.15))
                         .frame(height: 8)
                     
-                    Capsule()
-                        .fill(Color.blue)
-                        .frame(width: max(0, geo.size.width * CGFloat(viewModel.capacityInfo.percentage)), height: 8)
+                    if let percentage = viewModel.capacityInfo.percentage {
+                        Capsule()
+                            .fill(Color.blue)
+                            .frame(width: max(0, geo.size.width * CGFloat(percentage)), height: 8)
+                    }
                 }
             }
             .frame(height: 8)
+
+            Text(viewModel.capacityInfo.summaryText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .liquidGlassCard()
+    }
+
+    /// FRP 与限速时段状态卡片
+    private var statusCard: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("FRP 设备")
+                    .font(.headline)
+                Text("启用 \(viewModel.statusInfo.frpDeviceEnabled) / \(viewModel.statusInfo.frpDeviceTotal)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("高峰时段")
+                    .font(.headline)
+                Text(viewModel.statusInfo.rateWindowText)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .liquidGlassCard()
     }
@@ -215,6 +271,18 @@ struct HomeView: View {
                 .foregroundStyle(.blue)
         }
         .padding(.horizontal, 4)
+    }
+
+    private func emptyHintCard(icon: String, text: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .foregroundStyle(.secondary)
+            Text(text)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .liquidGlassCard()
     }
 }
 
