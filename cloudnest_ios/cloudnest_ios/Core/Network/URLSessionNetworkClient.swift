@@ -2,7 +2,7 @@ import Foundation
 
 /// 基于 URLSession 的网络客户端默认实现
 final class URLSessionNetworkClient: NetworkClient {
-    private let baseURL: String
+    private var baseURL: String
     private let session: URLSession
 
     init(baseURL: String, timeout: TimeInterval = 15, session: URLSession = .shared) {
@@ -44,6 +44,17 @@ final class URLSessionNetworkClient: NetworkClient {
         }
 
         return data
+    }
+
+    /// 登录后可动态切换服务地址，保证后续模块请求使用同一后端。
+    func updateBaseURL(_ value: String) {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        baseURL = trimmed
+    }
+
+    func currentBaseURL() -> String {
+        baseURL
     }
 
     /// 将 endpoint 转换成 URLRequest，统一处理 query、header、body

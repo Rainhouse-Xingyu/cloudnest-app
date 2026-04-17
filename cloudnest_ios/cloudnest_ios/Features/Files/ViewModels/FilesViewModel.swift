@@ -8,9 +8,13 @@ final class FilesViewModel: ObservableObject {
     @Published var title: String = "我的文件"
     @Published var folders: [FileItemDTO] = []
     @Published var files: [FileItemDTO] = []
+    @Published var treeNodes: [FileTreeNode] = []
+    @Published var currentPath: [FilePathNode] = [FilePathNode(id: 0, name: "Root")]
     @Published var isLoading: Bool = false
+    @Published var isTreeLoading: Bool = false
     @Published var currentParentId: Int64 = 0
     @Published var errorMessage: String? = nil
+    @Published var downloadMessage: String? = nil
 
     // 上传状态
     @Published var isUploading: Bool = false
@@ -25,6 +29,7 @@ final class FilesViewModel: ObservableObject {
     func onAppear() {
         Task {
             await loadData()
+            await loadTree()
         }
     }
     
@@ -37,10 +42,73 @@ final class FilesViewModel: ObservableObject {
             self.folders = allItems.filter { $0.isFolder == 1 }
             self.files = allItems.filter { $0.isFolder == 0 }
             self.currentParentId = pid
+            rebuildPathIfNeeded(targetParentId: pid)
         } catch {
             self.errorMessage = "加载失败: \(error.localizedDescription)"
         }
         isLoading = false
+    }
+
+    func loadTree() async {
+        isTreeLoading = true
+        defer { isTreeLoading = false }
+
+        do {
+            treeNodes = try await service.loadDirectoryTree()
+            rebuildPathIfNeeded(targetParentId: currentParentId)
+        } catch {
+            self.errorMessage = "目录树加载失败: \(error.localizedDescription)"
+        }
+    }
+
+    func enterFolder(_ folder: FileItemDTO) async {
+        currentPath.append(FilePathNode(id: folder.id, name: folder.filename))
+        await loadData(parentId: folder.id)
+    }
+
+    func enterFolderFromTree(folderId: Int64) async {
+        rebuildPathIfNeeded(targetParentId: folderId)
+        await loadData(parentId: folderId)
+    }
+
+    func navigateToPath(_ index: Int) async {
+        guard index >= 0, index < currentPath.count else {
+            return
+        }
+
+        let target = currentPath[index]
+        currentPath = Array(currentPath.prefix(index + 1))
+        await loadData(parentId: target.id)
+    }
+
+    func download(items: [FileItemDTO]) async {
+        guard !items.isEmpty else {
+            errorMessage = "请先选择要下载的文件或目录"
+            return
+        }
+
+        errorMessage = nil
+        downloadMessage = nil
+
+        var outputFiles: [String] = []
+        do {
+            for item in items {
+                let fileURL = try await service.downloadFile(
+                    fileId: item.id,
+                    filename: item.filename,
+                    isFolder: item.isFolder == 1
+                )
+                outputFiles.append(fileURL.lastPathComponent)
+            }
+
+            if outputFiles.count == 1, let only = outputFiles.first {
+                downloadMessage = "下载完成：\(only)"
+            } else {
+                downloadMessage = "下载完成，共 \(outputFiles.count) 个文件"
+            }
+        } catch {
+            errorMessage = "下载失败: \(error.localizedDescription)"
+        }
     }
 
     func uploadFile(url: URL) async {
@@ -106,6 +174,31 @@ final class FilesViewModel: ObservableObject {
         }
         
         isUploading = false
+    }
+
+    private func rebuildPathIfNeeded(targetParentId: Int64) {
+        if targetParentId == 0 {
+            currentPath = [FilePathNode(id: 0, name: "Root")]
+            return
+        }
+
+        if let path = findPath(targetId: targetParentId, nodes: treeNodes) {
+            currentPath = [FilePathNode(id: 0, name: "Root")] + path
+        }
+    }
+
+    private func findPath(targetId: Int64, nodes: [FileTreeNode]) -> [FilePathNode]? {
+        for node in nodes {
+            if node.id == targetId {
+                return [FilePathNode(id: node.id, name: node.name)]
+            }
+
+            if let sub = findPath(targetId: targetId, nodes: node.children) {
+                return [FilePathNode(id: node.id, name: node.name)] + sub
+            }
+        }
+
+        return nil
     }
 }
 

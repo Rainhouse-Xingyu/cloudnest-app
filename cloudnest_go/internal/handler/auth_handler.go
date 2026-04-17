@@ -1,7 +1,10 @@
 package handler
 
 import (
+	"net"
 	"net/http"
+	"sort"
+	"strings"
 
 	"cloudenest_go/internal/middleware"
 	"cloudenest_go/internal/service"
@@ -52,6 +55,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	requestHost := strings.TrimSpace(c.Request.Host)
+	lanIPs := detectServerLANIPv4()
+
 	c.JSON(http.StatusOK, gin.H{
 		"token":      res.Token,
 		"token_type": "Bearer",
@@ -62,7 +68,75 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			"email":    res.User.Email,
 			"is_admin": res.IsAdmin,
 		},
+		"server_hosts": gin.H{
+			"request_host": requestHost,
+			"lan_ips":      lanIPs,
+		},
 	})
+}
+
+// detectServerLANIPv4 收集服务端可用于内网直连的 IPv4 地址。
+func detectServerLANIPv4() []string {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return []string{}
+	}
+
+	set := make(map[string]struct{})
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, addrErr := iface.Addrs()
+		if addrErr != nil {
+			continue
+		}
+		for _, addr := range addrs {
+			ip, _, parseErr := net.ParseCIDR(addr.String())
+			if parseErr != nil || ip == nil {
+				continue
+			}
+			v4 := ip.To4()
+			if v4 == nil {
+				continue
+			}
+			if !isPrivateIPv4(v4) {
+				continue
+			}
+			set[v4.String()] = struct{}{}
+		}
+	}
+
+	rows := make([]string, 0, len(set))
+	for ip := range set {
+		rows = append(rows, ip)
+	}
+	sort.Strings(rows)
+	return rows
+}
+
+func isPrivateIPv4(ip net.IP) bool {
+	if ip == nil {
+		return false
+	}
+	if ip.IsLoopback() || ip.IsUnspecified() || ip.IsMulticast() {
+		return false
+	}
+
+	// RFC1918 私网段 + 链路本地地址
+	if ip[0] == 10 {
+		return true
+	}
+	if ip[0] == 172 && ip[1] >= 16 && ip[1] <= 31 {
+		return true
+	}
+	if ip[0] == 192 && ip[1] == 168 {
+		return true
+	}
+	if ip[0] == 169 && ip[1] == 254 {
+		return true
+	}
+	return false
 }
 
 // Logout方法处理注销的HTTP请求，首先从上下文中获取JWT字符串，然后删除Redis中的相关缓存，最后返回注销成功的消息给客户端。

@@ -24,6 +24,11 @@ final class AuthViewModel: ObservableObject {
     func onAppear() {
         // 页面出现时仅清理错误态，不重置账号输入
         errorMessage = nil
+
+        // 将当前全局服务地址回填到输入框，方便真机反复联调。
+        if externalIP.isEmpty {
+            externalIP = AppContainer.shared.networkClient.currentBaseURL()
+        }
     }
 
     var canSubmit: Bool {
@@ -80,6 +85,16 @@ final class AuthViewModel: ObservableObject {
             )
 
             sessionManager.save(session: saved)
+
+            if let overrideBaseURL, !overrideBaseURL.isEmpty {
+                let resolved = await resolveLANBaseURLIfPossible(
+                    from: response.serverHosts,
+                    fallback: overrideBaseURL
+                )
+                AppContainer.shared.networkClient.updateBaseURL(resolved)
+                EnvironmentConfig.saveOverrideBaseURL(resolved)
+                externalIP = resolved
+            }
             return true
         } catch {
             errorMessage = "登录失败：\(error.localizedDescription)"
@@ -105,6 +120,92 @@ final class AuthViewModel: ObservableObject {
             normalized += ":\(port)"
         }
         return normalized
+    }
+
+    /// 登录成功后优先探测局域网地址，命中后切换为局域网，失败则保留外网地址。
+    private func resolveLANBaseURLIfPossible(from hosts: ServerHostsDTO?, fallback: String) async -> String {
+        guard let base = URL(string: fallback) else {
+            return fallback
+        }
+
+        let currentPort = base.port ?? extractPort(from: hosts?.requestHost) ?? 8080
+
+        var candidates = [String]()
+
+        if let hosts {
+            // 优先使用后端回传的局域网 IP。
+            for ip in hosts.lanIPs {
+                guard !ip.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+                candidates.append("http://\(ip):\(currentPort)")
+            }
+
+            // request_host 可能是内网域名/IP，补充为候选。
+            if
+                let requestHost = hosts.requestHost,
+                let normalizedHost = normalizeHostOnly(from: requestHost),
+                !normalizedHost.isEmpty
+            {
+                candidates.append("http://\(normalizedHost):\(currentPort)")
+            }
+        }
+
+        // 去重并过滤掉 fallback 本身。
+        var seen = Set<String>()
+        let ordered = candidates.filter { value in
+            let item = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !item.isEmpty, item != fallback else { return false }
+            if seen.contains(item) { return false }
+            seen.insert(item)
+            return true
+        }
+
+        for candidate in ordered {
+            if await isHealthReachable(baseURL: candidate) {
+                return candidate
+            }
+        }
+        return fallback
+    }
+
+    private func extractPort(from host: String?) -> Int? {
+        guard let host, !host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        if let url = URL(string: "http://\(host)"), let port = url.port {
+            return port
+        }
+        return nil
+    }
+
+    private func normalizeHostOnly(from input: String) -> String? {
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        if let withScheme = URL(string: trimmed), let host = withScheme.host {
+            return host
+        }
+        if let prefixed = URL(string: "http://\(trimmed)"), let host = prefixed.host {
+            return host
+        }
+        return nil
+    }
+
+    private func isHealthReachable(baseURL: String) async -> Bool {
+        guard let url = URL(string: baseURL + "/api/resource/health") else {
+            return false
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 1.5
+
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else { return false }
+            return (200...299).contains(http.statusCode)
+        } catch {
+            return false
+        }
     }
 
     func logout() {

@@ -3,9 +3,11 @@ import Foundation
 /// Files 模块服务协议，对接真实 API
 protocol FilesServiceProtocol {
     func loadFiles(parentId: Int64) async throws -> [FileItemDTO]
+    func loadDirectoryTree() async throws -> [FileTreeNode]
     func initUpload(req: UploadInitRequestDTO) async throws -> UploadInitResponseDTO
     func uploadChunk(uploadId: String, chunkIndex: Int, chunkMd5: String, chunkData: Data) async throws
     func completeUpload(req: UploadCompleteRequestDTO) async throws
+    func downloadFile(fileId: Int64, filename: String, isFolder: Bool) async throws -> URL
 }
 
 /// Files 模块服务默认实现
@@ -29,6 +31,10 @@ final class FilesService: FilesServiceProtocol {
         let endpoint = FilesListEndpoint(parentId: parentId, token: try token)
         let response = try await networkClient.request(endpoint, decode: FileResponseDTO.self)
         return response.items
+    }
+
+    func loadDirectoryTree() async throws -> [FileTreeNode] {
+        try await fetchTree(parentId: 0, depth: 0, maxDepth: 8)
     }
 
     func initUpload(req: UploadInitRequestDTO) async throws -> UploadInitResponseDTO {
@@ -73,6 +79,85 @@ final class FilesService: FilesServiceProtocol {
         let body = try JSONEncoder().encode(req)
         let endpoint = GenericPostEndpoint(path: "/api/files/upload/complete", body: body, token: try token)
         let _ = try await networkClient.request(endpoint)
+    }
+
+    func downloadFile(fileId: Int64, filename: String, isFolder: Bool) async throws -> URL {
+        let endpoint = FilesDownloadEndpoint(fileId: fileId, token: try token, isFolder: isFolder)
+        let data = try await networkClient.request(endpoint)
+
+        let directory = try createDownloadDirectoryIfNeeded()
+        let normalizedName = normalizedDownloadName(filename: filename, isFolder: isFolder)
+        let outputURL = uniqueURL(in: directory, filename: normalizedName)
+        try data.write(to: outputURL)
+        return outputURL
+    }
+
+    private func fetchTree(parentId: Int64, depth: Int, maxDepth: Int) async throws -> [FileTreeNode] {
+        if depth > maxDepth {
+            return []
+        }
+
+        let folders = try await loadFiles(parentId: parentId)
+            .filter { $0.isFolder == 1 }
+            .sorted { $0.filename.localizedCompare($1.filename) == .orderedAscending }
+
+        var nodes: [FileTreeNode] = []
+        nodes.reserveCapacity(folders.count)
+
+        for folder in folders {
+            let children = try await fetchTree(parentId: folder.id, depth: depth + 1, maxDepth: maxDepth)
+            nodes.append(
+                FileTreeNode(
+                    id: folder.id,
+                    name: folder.filename,
+                    parentId: folder.parentId,
+                    children: children
+                )
+            )
+        }
+
+        return nodes
+    }
+
+    private func createDownloadDirectoryIfNeeded() throws -> URL {
+        let base = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        let folder = base.appendingPathComponent("Downloads", isDirectory: true)
+        if !FileManager.default.fileExists(atPath: folder.path) {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        }
+        return folder
+    }
+
+    private func normalizedDownloadName(filename: String, isFolder: Bool) -> String {
+        let trimmed = filename.trimmingCharacters(in: .whitespacesAndNewlines)
+        if isFolder {
+            if trimmed.lowercased().hasSuffix(".zip") {
+                return trimmed.isEmpty ? "folder.zip" : trimmed
+            }
+            return (trimmed.isEmpty ? "folder" : trimmed) + ".zip"
+        }
+        return trimmed.isEmpty ? "file" : trimmed
+    }
+
+    private func uniqueURL(in directory: URL, filename: String) -> URL {
+        let ext = (filename as NSString).pathExtension
+        let baseName = (filename as NSString).deletingPathExtension
+        var candidate = directory.appendingPathComponent(filename)
+        var index = 1
+
+        while FileManager.default.fileExists(atPath: candidate.path) {
+            let newName: String
+            if ext.isEmpty {
+                newName = "\(baseName)(\(index))"
+            } else {
+                newName = "\(baseName)(\(index)).\(ext)"
+            }
+            candidate = directory.appendingPathComponent(newName)
+            index += 1
+        }
+
+        return candidate
     }
 }
 
@@ -122,6 +207,29 @@ private struct FilesListEndpoint: APIEndpoint {
         [
             "Authorization": "Bearer \(token)",
             "Accept": "application/json"
+        ]
+    }
+}
+
+/// 下载接口 EndPoint（文件 / 目录 zip）
+private struct FilesDownloadEndpoint: APIEndpoint {
+    let fileId: Int64
+    let token: String
+    let isFolder: Bool
+
+    var path: String {
+        if isFolder {
+            return "/api/files/\(fileId)/download-zip"
+        }
+        return "/api/files/\(fileId)/download"
+    }
+
+    var method: HTTPMethod { .get }
+
+    var headers: [String : String] {
+        [
+            "Authorization": "Bearer \(token)",
+            "Accept": "application/octet-stream"
         ]
     }
 }

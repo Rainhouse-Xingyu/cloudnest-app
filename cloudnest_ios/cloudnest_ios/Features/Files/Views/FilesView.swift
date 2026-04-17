@@ -9,6 +9,7 @@ struct FilesView: View {
     @State private var selectedItems: Set<Int64> = []
     @State private var showDeleteConfirm: Bool = false
     @State private var showFileImporter: Bool = false
+    @State private var expandedTreeNodes: Set<Int64> = []
 
     private let folderColumns = [
         GridItem(.flexible(), spacing: 14),
@@ -20,6 +21,7 @@ struct FilesView: View {
             VStack(spacing: 16) {
                 headerBar
                 breadcrumbBar
+                directoryTreeSection
                 personalSection
 
                 if viewModel.isLoading {
@@ -118,6 +120,20 @@ struct FilesView: View {
                 .background(.ultraThinMaterial)
             }
         }
+        .alert("下载结果", isPresented: Binding(
+            get: { viewModel.downloadMessage != nil },
+            set: { newValue in
+                if !newValue {
+                    viewModel.downloadMessage = nil
+                }
+            }
+        )) {
+            Button("确定", role: .cancel) {
+                viewModel.downloadMessage = nil
+            }
+        } message: {
+            Text(viewModel.downloadMessage ?? "")
+        }
         .liquidGlassPage()
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -197,19 +213,56 @@ struct FilesView: View {
     private var breadcrumbBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                routeChip("Root", icon: "folder")
-                Image(systemName: "chevron.right")
-                    .foregroundStyle(.secondary)
-                routeChip("Home")
-                Image(systemName: "chevron.right")
-                    .foregroundStyle(.secondary)
-                routeChip("Team")
-                Image(systemName: "chevron.right")
-                    .foregroundStyle(.secondary)
-                routeChip("Project")
+                ForEach(Array(viewModel.currentPath.enumerated()), id: \.offset) { index, node in
+                    Button {
+                        Task {
+                            await viewModel.navigateToPath(index)
+                        }
+                    } label: {
+                        routeChip(node.name, icon: index == 0 ? "folder" : nil)
+                    }
+                    .buttonStyle(.plain)
+
+                    if index < viewModel.currentPath.count - 1 {
+                        Image(systemName: "chevron.right")
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
             .padding(.horizontal, 4)
         }
+    }
+
+    private var directoryTreeSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("目录树")
+                    .font(.headline)
+                Spacer()
+                if viewModel.isTreeLoading {
+                    ProgressView()
+                }
+            }
+
+            if viewModel.treeNodes.isEmpty {
+                Text("暂无目录")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(viewModel.treeNodes) { node in
+                        treeNodeView(node: node, level: 0)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.white.opacity(0.56), lineWidth: 1)
+        )
     }
 
     private var personalSection: some View {
@@ -280,7 +333,7 @@ struct FilesView: View {
             } else {
                 // 进入文件夹逻辑
                 Task {
-                    await viewModel.loadData(parentId: item.id)
+                    await viewModel.enterFolder(item)
                 }
             }
         } label: {
@@ -343,7 +396,9 @@ struct FilesView: View {
             if isSelectionMode {
                 toggleSelection(item.id)
             } else {
-                // 预览文件逻辑
+                Task {
+                    await viewModel.download(items: [item])
+                }
             }
         } label: {
             HStack(spacing: 12) {
@@ -393,7 +448,11 @@ struct FilesView: View {
     private var bottomActionBar: some View {
         HStack(spacing: 0) {
             actionButton(title: "下载", icon: "arrow.down.circle") {
-                // 下载逻辑
+                let allItems = viewModel.folders + viewModel.files
+                let toDownload = allItems.filter { selectedItems.contains($0.id) }
+                Task {
+                    await viewModel.download(items: toDownload)
+                }
             }
             Spacer()
             actionButton(title: "移动", icon: "folder") {
@@ -436,6 +495,59 @@ struct FilesView: View {
             .foregroundStyle(color)
             .frame(minWidth: 44)
         }
+    }
+
+    private func treeNodeView(node: FileTreeNode, level: Int) -> AnyView {
+        AnyView(
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    if !node.children.isEmpty {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                if expandedTreeNodes.contains(node.id) {
+                                    expandedTreeNodes.remove(node.id)
+                                } else {
+                                    expandedTreeNodes.insert(node.id)
+                                }
+                            }
+                        } label: {
+                            Image(systemName: expandedTreeNodes.contains(node.id) ? "chevron.down" : "chevron.right")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        Image(systemName: "circle.fill")
+                            .font(.system(size: 5))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Button {
+                        Task {
+                            await viewModel.enterFolderFromTree(folderId: node.id)
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "folder")
+                                .foregroundStyle(.blue)
+                            Text(node.name)
+                                .font(.footnote)
+                                .foregroundStyle(.primary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer()
+                }
+                .padding(.leading, CGFloat(level) * 14)
+
+                if expandedTreeNodes.contains(node.id), !node.children.isEmpty {
+                    ForEach(node.children) { child in
+                        treeNodeView(node: child, level: level + 1)
+                    }
+                }
+            }
+        )
     }
 }
 

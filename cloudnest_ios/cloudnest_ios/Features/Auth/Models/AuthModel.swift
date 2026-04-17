@@ -27,12 +27,25 @@ struct LoginResponseDTO: Decodable {
     let tokenType: String
     let expiresAt: String
     let user: LoginUserDTO
+    let serverHosts: ServerHostsDTO?
 
     enum CodingKeys: String, CodingKey {
         case token
         case tokenType = "token_type"
         case expiresAt = "expires_at"
         case user
+        case serverHosts = "server_hosts"
+    }
+}
+
+/// 登录返回的服务端地址候选信息（用于登录后自动切换局域网地址）。
+struct ServerHostsDTO: Decodable {
+    let requestHost: String?
+    let lanIPs: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case requestHost = "request_host"
+        case lanIPs = "lan_ips"
     }
 }
 
