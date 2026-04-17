@@ -5,20 +5,8 @@ struct FilesView: View {
     @StateObject private var viewModel = FilesViewModel()
 
     @State private var isSelectionMode: Bool = false
-    @State private var selectedItems: Set<UUID> = []
+    @State private var selectedItems: Set<Int64> = []
     @State private var showDeleteConfirm: Bool = false
-
-    private let folders: [FolderItem] = [
-        .init(name: "我的文档", date: "2026-04-09"),
-        .init(name: "下载", date: "2026-04-08"),
-        .init(name: "归档", date: "2026-04-05"),
-        .init(name: "项目", date: "2026-04-01")
-    ]
-
-    private let files: [FileItem] = [
-        .init(name: "Vacation Photos.jpg", meta: "8.5 MB • 2026-04-09", icon: "photo.fill"),
-        .init(name: "Presentation.pdf", meta: "4.2 MB • 2026-04-08", icon: "doc.richtext.fill")
-    ]
 
     private let folderColumns = [
         GridItem(.flexible(), spacing: 14),
@@ -32,15 +20,48 @@ struct FilesView: View {
                 breadcrumbBar
                 personalSection
 
-                LazyVGrid(columns: folderColumns, spacing: 14) {
-                    ForEach(folders) { folder in
-                        folderCard(folder)
+                if viewModel.isLoading {
+                    ProgressView("加载中...")
+                        .frame(maxWidth: .infinity, minHeight: 200)
+                } else if let errorMessage = viewModel.errorMessage {
+                    VStack {
+                        Text("获取列表失败")
+                            .font(.headline)
+                        Text(errorMessage)
+                            .font(.subheadline)
+                            .foregroundColor(.red)
+                        Button("重试") {
+                            Task { await viewModel.loadData() }
+                        }
+                        .padding()
                     }
-                }
+                    .frame(maxWidth: .infinity, minHeight: 200)
+                } else {
+                    if !viewModel.folders.isEmpty {
+                        LazyVGrid(columns: folderColumns, spacing: 14) {
+                            ForEach(viewModel.folders) { folder in
+                                folderCard(folder)
+                            }
+                        }
+                    }
 
-                VStack(spacing: 10) {
-                    ForEach(files) { item in
-                        fileRow(item)
+                    if !viewModel.files.isEmpty {
+                        VStack(spacing: 10) {
+                            ForEach(viewModel.files) { item in
+                                fileRow(item)
+                            }
+                        }
+                    }
+                    
+                    if viewModel.folders.isEmpty && viewModel.files.isEmpty {
+                        VStack(spacing: 16) {
+                            Image(systemName: "folder.badge.questionmark")
+                                .font(.system(size: 60))
+                                .foregroundColor(.secondary)
+                            Text("空空如也")
+                                .foregroundColor(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 200)
                     }
                 }
             }
@@ -93,6 +114,11 @@ struct FilesView: View {
                 }
                 
                 Menu {
+                    Button(action: {
+                        Task { await viewModel.loadData() }
+                    }) {
+                        Label("刷新", systemImage: "arrow.clockwise")
+                    }
                     Button(action: {}) {
                         Label("排序", systemImage: "arrow.up.arrow.down")
                     }
@@ -188,12 +214,41 @@ struct FilesView: View {
         )
     }
 
-    private func folderCard(_ item: FolderItem) -> some View {
+    private func formatFileSize(_ bytes: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useAll]
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: bytes)
+    }
+
+    private func getFileIcon(type: String) -> String {
+        let typeLower = type.lowercased()
+        if typeLower.contains("pdf") { return "doc.richtext.fill" }
+        if typeLower.contains("image") || typeLower.contains("jpg") || typeLower.contains("png") { return "photo.fill" }
+        if typeLower.contains("video") || typeLower.contains("mp4") { return "play.rectangle.fill" }
+        if typeLower.contains("audio") || typeLower.contains("mp3") { return "headphones" }
+        if typeLower.contains("zip") || typeLower.contains("tar") { return "doc.zipper" }
+        return "doc.fill"
+    }
+
+    private func formatDate(_ isoString: String) -> String {
+        // 后端 datetime `2026-04-09 12:34:56` 简单截取日期部分展示
+        let components = isoString.components(separatedBy: " ")
+        if let datePart = components.first {
+            return datePart
+        }
+        return isoString
+    }
+
+    private func folderCard(_ item: FileItemDTO) -> some View {
         Button {
             if isSelectionMode {
                 toggleSelection(item.id)
             } else {
                 // 进入文件夹逻辑
+                Task {
+                    await viewModel.loadData(parentId: item.id)
+                }
             }
         } label: {
             VStack(alignment: .leading, spacing: 14) {
@@ -215,13 +270,13 @@ struct FilesView: View {
                         )
                 }
 
-            Text(item.name)
+            Text(item.filename)
                 .font(.system(size: 33, weight: .semibold, design: .rounded))
                 .lineLimit(1)
                 .minimumScaleFactor(0.62)
                 .foregroundStyle(.primary)
 
-            Text(item.date)
+            Text(formatDate(item.updateTime))
                 .font(.appCaption)
                 .foregroundStyle(.secondary)
         }
@@ -250,7 +305,7 @@ struct FilesView: View {
         .buttonStyle(.plain)
     }
 
-    private func fileRow(_ item: FileItem) -> some View {
+    private func fileRow(_ item: FileItemDTO) -> some View {
         Button {
             if isSelectionMode {
                 toggleSelection(item.id)
@@ -263,16 +318,16 @@ struct FilesView: View {
                 .fill(Color.white.opacity(0.34))
                 .frame(width: 54, height: 54)
                 .overlay {
-                    Image(systemName: item.icon)
+                    Image(systemName: getFileIcon(type: item.fileType))
                         .font(.system(size: 22, weight: .semibold))
                         .foregroundStyle(Color.orange)
                 }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(item.name)
+                Text(item.filename)
                     .font(.system(size: 20, weight: .semibold, design: .rounded))
                     .lineLimit(1)
-                Text(item.meta)
+                Text("\(formatFileSize(item.size)) • \(formatDate(item.updateTime))")
                     .font(.appCaption)
                     .foregroundStyle(.secondary)
             }
@@ -292,7 +347,7 @@ struct FilesView: View {
         .buttonStyle(.plain)
     }
 
-    private func toggleSelection(_ id: UUID) {
+    private func toggleSelection(_ id: Int64) {
         withAnimation(.spring(response: 0.2)) {
             if selectedItems.contains(id) {
                 selectedItems.remove(id)
@@ -351,21 +406,9 @@ struct FilesView: View {
     }
 }
 
-private struct FolderItem: Identifiable {
-    let id = UUID()
-    let name: String
-    let date: String
-}
-
-private struct FileItem: Identifiable {
-    let id = UUID()
-    let name: String
-    let meta: String
-    let icon: String
-}
-
 struct FilesView_Previews: PreviewProvider {
     static var previews: some View {
         FilesView()
     }
 }
+
