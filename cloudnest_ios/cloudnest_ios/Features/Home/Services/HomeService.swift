@@ -46,12 +46,18 @@ final class HomeService: HomeServiceProtocol {
             HomeRateWindowEndpoint(token: authToken),
             decode: HomeRateWindowResponseDTO.self
         )
+        // 容量概览接口失败时不阻断首页其他信息展示。
+        async let storageOverviewResponse: HomeStorageOverviewResponseDTO? = try? networkClient.request(
+            HomeStorageOverviewEndpoint(token: authToken),
+            decode: HomeStorageOverviewResponseDTO.self
+        )
 
         return try await HomeDashboardDTO(
             files: fileResponse,
             livePhotos: livePhotoResponse,
             frpDevices: frpResponse,
-            rateWindow: rateWindowResponse
+            rateWindow: rateWindowResponse,
+            storageOverview: storageOverviewResponse
         )
     }
 }
@@ -63,6 +69,7 @@ struct HomeDashboardDTO {
     let livePhotos: HomeLivePhotosResponseDTO
     let frpDevices: HomeFrpDevicesResponseDTO
     let rateWindow: HomeRateWindowResponseDTO
+    let storageOverview: HomeStorageOverviewResponseDTO?
 }
 
 // MARK: - Files DTO
@@ -139,6 +146,30 @@ struct HomeRateWindowItemDTO: Decodable {
     let end: String
 }
 
+// MARK: - Storage DTO
+
+struct HomeStorageOverviewResponseDTO: Decodable {
+    let item: HomeStorageOverviewItemDTO
+}
+
+struct HomeStorageOverviewItemDTO: Decodable {
+    let usedBytes: Int64
+    let totalBytes: Int64
+    let remainingBytes: Int64
+    let usagePercent: Double
+    let hasQuota: Bool
+    let quotaSource: String
+
+    enum CodingKeys: String, CodingKey {
+        case usedBytes = "used_bytes"
+        case totalBytes = "total_bytes"
+        case remainingBytes = "remaining_bytes"
+        case usagePercent = "usage_percent"
+        case hasQuota = "has_quota"
+        case quotaSource = "quota_source"
+    }
+}
+
 // MARK: - Endpoints
 
 private struct HomeFilesEndpoint: APIEndpoint {
@@ -194,6 +225,19 @@ private struct HomeRateWindowEndpoint: APIEndpoint {
     let token: String
 
     var path: String { "/api/settings/rate-window" }
+    var method: HTTPMethod { .get }
+    var headers: [String : String] {
+        [
+            "Authorization": "Bearer \(token)",
+            "Accept": "application/json"
+        ]
+    }
+}
+
+private struct HomeStorageOverviewEndpoint: APIEndpoint {
+    let token: String
+
+    var path: String { "/api/storage/overview" }
     var method: HTTPMethod { .get }
     var headers: [String : String] {
         [

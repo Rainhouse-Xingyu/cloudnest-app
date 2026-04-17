@@ -39,15 +39,21 @@ struct HomeCapacityInfo {
     let usedText: String
     let totalText: String?
     let summaryText: String
+    let hasQuota: Bool
+    let quotaSource: String
     let percentage: Double?
     
-    init(usedSpace: Int64, totalSpace: Int64?, usedText: String, totalText: String?, summaryText: String) {
+    init(usedSpace: Int64, totalSpace: Int64?, usedText: String, totalText: String?, summaryText: String, hasQuota: Bool = false, quotaSource: String = "none", usagePercent: Double? = nil) {
         self.usedSpace = usedSpace
         self.totalSpace = totalSpace
         self.usedText = usedText
         self.totalText = totalText
         self.summaryText = summaryText
-        if let totalSpace, totalSpace > 0 {
+        self.hasQuota = hasQuota
+        self.quotaSource = quotaSource
+        if let usagePercent {
+            self.percentage = min(1, max(0, usagePercent / 100))
+        } else if let totalSpace, totalSpace > 0 {
             self.percentage = min(1, Double(usedSpace) / Double(totalSpace))
         } else {
             self.percentage = nil

@@ -12,7 +12,7 @@ final class HomeViewModel: ObservableObject {
         totalSpace: nil,
         usedText: "0 B",
         totalText: nil,
-        summaryText: "根目录文件统计"
+        summaryText: "容量概览"
     )
     @Published var statusInfo: HomeStatusInfo = HomeStatusInfo(frpDeviceTotal: 0, frpDeviceEnabled: 0, rateWindowText: "未配置")
     @Published var isLoading: Bool = false
@@ -87,19 +87,35 @@ final class HomeViewModel: ObservableObject {
             )
         }
 
-        let usedBytes = dto.files.items
-            .filter { $0.isFolder == 0 }
-            .reduce(Int64(0)) { partialResult, item in
-                partialResult + max(item.size, 0)
-            }
+        if let storage = dto.storageOverview?.item {
+            let totalSpace = storage.hasQuota && storage.totalBytes > 0 ? storage.totalBytes : nil
+            let sourceText = readableQuotaSource(storage.quotaSource)
+            capacityInfo = HomeCapacityInfo(
+                usedSpace: max(storage.usedBytes, 0),
+                totalSpace: totalSpace,
+                usedText: fileSizeFormatter.string(fromByteCount: max(storage.usedBytes, 0)),
+                totalText: totalSpace == nil ? nil : fileSizeFormatter.string(fromByteCount: max(storage.totalBytes, 0)),
+                summaryText: storage.hasQuota ? "容量来源：\(sourceText)" : "未配置总容量（仅展示已用）",
+                hasQuota: storage.hasQuota,
+                quotaSource: storage.quotaSource,
+                usagePercent: storage.usagePercent
+            )
+        } else {
+            // 兼容后端未发布/接口异常场景，回退到旧版根目录汇总。
+            let fallbackUsedBytes = dto.files.items
+                .filter { $0.isFolder == 0 }
+                .reduce(Int64(0)) { partialResult, item in
+                    partialResult + max(item.size, 0)
+                }
 
-        capacityInfo = HomeCapacityInfo(
-            usedSpace: usedBytes,
-            totalSpace: nil,
-            usedText: fileSizeFormatter.string(fromByteCount: usedBytes),
-            totalText: nil,
-            summaryText: "根目录文件大小汇总"
-        )
+            capacityInfo = HomeCapacityInfo(
+                usedSpace: fallbackUsedBytes,
+                totalSpace: nil,
+                usedText: fileSizeFormatter.string(fromByteCount: fallbackUsedBytes),
+                totalText: nil,
+                summaryText: "容量接口异常，已回退根目录汇总"
+            )
+        }
 
         let enabledDevices = dto.frpDevices.items.filter { $0.status == 1 }.count
         let rateWindow = dto.rateWindow.item
@@ -131,6 +147,22 @@ final class HomeViewModel: ObservableObject {
             return date
         }
         return .distantPast
+    }
+
+    private func readableQuotaSource(_ source: String) -> String {
+        if source.hasPrefix("storage_quota_bytes_user_") {
+            return "用户配额"
+        }
+        switch source {
+        case "storage_quota_bytes":
+            return "全局配额"
+        case "storage_default_quota_bytes":
+            return "默认配额"
+        case "none":
+            return "未配置"
+        default:
+            return source
+        }
     }
 
     private static let primaryDateFormatter: DateFormatter = {
