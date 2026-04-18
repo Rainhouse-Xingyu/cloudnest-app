@@ -21,11 +21,20 @@ final class FilesViewModel: ObservableObject {
     @Published var isTreeLoading: Bool = false
     @Published var currentParentId: Int64 = 0
     @Published var sortMode: FilesSortMode = .updatedDesc
+    @Published var searchKeyword: String = ""
+    @Published var filterFileType: String = ""
+    @Published var filterStartDate: Date?
+    @Published var filterEndDate: Date?
     @Published var errorMessage: String? = nil
     @Published var downloadMessage: String? = nil
     @Published var previewDocument: FilePreviewDocument?
-    @Published var livePlayerItem: LivePhotoPlayerItem?
+    @Published var imagePreviewItem: ImagePreviewItem?
+    @Published var mediaPlaybackItem: MediaPlaybackItem?
+    @Published var livePhotoDisplayItem: LivePhotoDisplayItem?
     @Published var activityItems: [URL] = []
+    @Published var shareItems: [ShareItemDTO] = []
+    @Published var recycleBinItems: [FileItemDTO] = []
+    @Published var latestCreatedShareLink: String?
     @Published private(set) var imageThumbnails: [Int64: UIImage] = [:]
 
     // 上传状态
@@ -54,7 +63,20 @@ final class FilesViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
         do {
-            let allItems = try await service.loadFiles(parentId: pid)
+            let allItems: [FileItemDTO]
+            if hasSearchOrFilter {
+                allItems = try await service.searchFiles(
+                    parentId: pid,
+                    name: searchKeyword.trimmingCharacters(in: .whitespacesAndNewlines),
+                    fileType: filterFileType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+                    startTime: formattedDate(filterStartDate),
+                    endTime: formattedDate(filterEndDate),
+                    page: 1,
+                    limit: 200
+                )
+            } else {
+                allItems = try await service.loadFiles(parentId: pid)
+            }
             self.folders = sortedItems(allItems.filter { $0.isFolder == 1 })
             self.files = sortedItems(allItems.filter { $0.isFolder == 0 })
             self.currentParentId = pid
@@ -66,6 +88,28 @@ final class FilesViewModel: ObservableObject {
             self.errorMessage = "加载失败: \(error.localizedDescription)"
         }
         isLoading = false
+    }
+
+    var hasSearchOrFilter: Bool {
+        let keyword = !searchKeyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let type = !filterFileType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return keyword || type || filterStartDate != nil || filterEndDate != nil
+    }
+
+    func applySearchAndFilter(keyword: String, fileType: String, startDate: Date?, endDate: Date?) async {
+        searchKeyword = keyword
+        filterFileType = fileType
+        filterStartDate = startDate
+        filterEndDate = endDate
+        await loadData(parentId: currentParentId)
+    }
+
+    func clearSearchAndFilter() async {
+        searchKeyword = ""
+        filterFileType = ""
+        filterStartDate = nil
+        filterEndDate = nil
+        await loadData(parentId: currentParentId)
     }
 
     func loadTree() async {
@@ -134,7 +178,17 @@ final class FilesViewModel: ObservableObject {
         errorMessage = nil
         do {
             let fileURL = try await service.downloadFile(fileId: item.id, filename: item.filename, isFolder: false)
-            previewDocument = FilePreviewDocument(url: fileURL, displayName: item.filename)
+            if isImageFile(item) {
+                imagePreviewItem = ImagePreviewItem(imageURL: fileURL, displayName: item.filename)
+            } else if isVideoFile(item) || isAudioFile(item) {
+                mediaPlaybackItem = MediaPlaybackItem(
+                    mediaURL: fileURL,
+                    displayName: item.filename,
+                    isAudio: isAudioFile(item)
+                )
+            } else {
+                previewDocument = FilePreviewDocument(url: fileURL, displayName: item.filename)
+            }
         } catch {
             errorMessage = "预览失败: \(error.localizedDescription)"
         }
@@ -151,14 +205,23 @@ final class FilesViewModel: ObservableObject {
 
         errorMessage = nil
         do {
+            let imageURL = try await service.downloadFile(
+                fileId: info.imageFileId,
+                filename: info.imageFile.filename,
+                isFolder: false
+            )
             let videoURL = try await service.downloadFile(
                 fileId: info.videoFileId,
                 filename: info.videoFile.filename,
                 isFolder: false
             )
-            livePlayerItem = LivePhotoPlayerItem(url: videoURL, displayName: info.videoFile.filename)
+            livePhotoDisplayItem = LivePhotoDisplayItem(
+                imageURL: imageURL,
+                videoURL: videoURL,
+                displayName: item.filename
+            )
         } catch {
-            errorMessage = "实况播放失败: \(error.localizedDescription)"
+            errorMessage = "实况加载失败: \(error.localizedDescription)"
         }
     }
 
@@ -384,6 +447,80 @@ final class FilesViewModel: ObservableObject {
         }
     }
 
+    func createShareForSelection(items: [FileItemDTO], expireHours: Int? = nil) async {
+        guard !items.isEmpty else {
+            errorMessage = "请先选择要分享的项目"
+            return
+        }
+
+        errorMessage = nil
+        do {
+            var links: [String] = []
+            for item in items {
+                let res = try await service.createShare(fileId: item.id, expireHours: expireHours)
+                links.append(res.accessURL)
+            }
+
+            if let first = links.first {
+                latestCreatedShareLink = first
+            }
+            downloadMessage = "已创建 \(links.count) 个分享链接"
+            await loadShares()
+        } catch {
+            errorMessage = "创建分享失败: \(error.localizedDescription)"
+        }
+    }
+
+    func loadShares() async {
+        errorMessage = nil
+        do {
+            shareItems = try await service.listShares()
+        } catch {
+            errorMessage = "加载分享列表失败: \(error.localizedDescription)"
+        }
+    }
+
+    func revokeShare(code: String) async {
+        errorMessage = nil
+        do {
+            try await service.revokeShare(code: code)
+            shareItems.removeAll { $0.shareCode == code }
+        } catch {
+            errorMessage = "撤销分享失败: \(error.localizedDescription)"
+        }
+    }
+
+    func loadRecycleBin() async {
+        errorMessage = nil
+        do {
+            recycleBinItems = try await service.listRecycleBin()
+        } catch {
+            errorMessage = "加载回收站失败: \(error.localizedDescription)"
+        }
+    }
+
+    func restoreFromRecycleBin(fileId: Int64) async {
+        errorMessage = nil
+        do {
+            try await service.restoreFromRecycleBin(fileId: fileId)
+            recycleBinItems.removeAll { $0.id == fileId }
+            await loadData(parentId: currentParentId)
+            await loadTree()
+        } catch {
+            errorMessage = "恢复失败: \(error.localizedDescription)"
+        }
+    }
+
+    func permanentDeleteFromRecycleBin(fileId: Int64) async {
+        errorMessage = nil
+        do {
+            try await service.permanentDelete(fileId: fileId)
+            recycleBinItems.removeAll { $0.id == fileId }
+        } catch {
+            errorMessage = "彻底删除失败: \(error.localizedDescription)"
+        }
+    }
+
     func clearShareItems() {
         activityItems = []
     }
@@ -461,6 +598,24 @@ final class FilesViewModel: ObservableObject {
         return lowerName.hasSuffix(".jpg") || lowerName.hasSuffix(".jpeg") || lowerName.hasSuffix(".png") || lowerName.hasSuffix(".heic") || lowerName.hasSuffix(".gif") || lowerName.hasSuffix(".webp")
     }
 
+    private func isVideoFile(_ file: FileItemDTO) -> Bool {
+        let lowerType = file.fileType.lowercased()
+        let lowerName = file.filename.lowercased()
+        if lowerType.contains("video") || lowerType.contains("mp4") || lowerType.contains("mov") || lowerType.contains("m4v") {
+            return true
+        }
+        return lowerName.hasSuffix(".mp4") || lowerName.hasSuffix(".mov") || lowerName.hasSuffix(".m4v") || lowerName.hasSuffix(".avi")
+    }
+
+    private func isAudioFile(_ file: FileItemDTO) -> Bool {
+        let lowerType = file.fileType.lowercased()
+        let lowerName = file.filename.lowercased()
+        if lowerType.contains("audio") || lowerType.contains("mp3") || lowerType.contains("m4a") || lowerType.contains("aac") || lowerType.contains("wav") {
+            return true
+        }
+        return lowerName.hasSuffix(".mp3") || lowerName.hasSuffix(".m4a") || lowerName.hasSuffix(".aac") || lowerName.hasSuffix(".wav") || lowerName.hasSuffix(".flac")
+    }
+
     private func sortedItems(_ items: [FileItemDTO]) -> [FileItemDTO] {
         switch sortMode {
         case .nameAsc:
@@ -470,6 +625,15 @@ final class FilesViewModel: ObservableObject {
         case .sizeDesc:
             return items.sorted { $0.size > $1.size }
         }
+    }
+
+    private func formattedDate(_ value: Date?) -> String? {
+        guard let value else { return nil }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.timeZone = TimeZone.current
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter.string(from: value)
     }
 }
 

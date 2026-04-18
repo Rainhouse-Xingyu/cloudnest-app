@@ -3,11 +3,18 @@ import Foundation
 /// Files 模块服务协议，对接真实 API
 protocol FilesServiceProtocol {
     func loadFiles(parentId: Int64) async throws -> [FileItemDTO]
+    func searchFiles(parentId: Int64, name: String, fileType: String, startTime: String?, endTime: String?, page: Int, limit: Int) async throws -> [FileItemDTO]
     func loadDirectoryTree() async throws -> [FileTreeNode]
     func createFolder(parentId: Int64, name: String) async throws
     func batchDelete(fileIds: [Int64]) async throws -> [Int64]
     func move(fileIds: [Int64], targetParentId: Int64) async throws
     func copy(fileIds: [Int64], targetParentId: Int64) async throws
+    func createShare(fileId: Int64, expireHours: Int?) async throws -> CreateShareResponseDTO
+    func listShares() async throws -> [ShareItemDTO]
+    func revokeShare(code: String) async throws
+    func listRecycleBin() async throws -> [FileItemDTO]
+    func restoreFromRecycleBin(fileId: Int64) async throws
+    func permanentDelete(fileId: Int64) async throws
     func initUpload(req: UploadInitRequestDTO) async throws -> UploadInitResponseDTO
     func uploadChunk(uploadId: String, chunkIndex: Int, chunkMd5: String, chunkData: Data) async throws
     func completeUpload(req: UploadCompleteRequestDTO) async throws
@@ -38,6 +45,21 @@ final class FilesService: FilesServiceProtocol {
         return response.items
     }
 
+    func searchFiles(parentId: Int64, name: String, fileType: String, startTime: String?, endTime: String?, page: Int, limit: Int) async throws -> [FileItemDTO] {
+        let endpoint = FilesSearchEndpoint(
+            parentId: parentId,
+            name: name,
+            fileType: fileType,
+            startTime: startTime,
+            endTime: endTime,
+            page: page,
+            limit: limit,
+            token: try token
+        )
+        let response = try await networkClient.request(endpoint, decode: SearchFilesResponseDTO.self)
+        return response.items
+    }
+
     func loadDirectoryTree() async throws -> [FileTreeNode] {
         try await fetchTree(parentId: 0, depth: 0, maxDepth: 8)
     }
@@ -64,6 +86,44 @@ final class FilesService: FilesServiceProtocol {
     func copy(fileIds: [Int64], targetParentId: Int64) async throws {
         let body = try JSONEncoder().encode(MoveOrCopyRequestDTO(fileIds: fileIds, targetParentId: targetParentId))
         let endpoint = GenericPostEndpoint(path: "/api/files/copy", body: body, token: try token)
+        let _ = try await networkClient.request(endpoint)
+    }
+
+    func createShare(fileId: Int64, expireHours: Int?) async throws -> CreateShareResponseDTO {
+        let body: Data?
+        if let expireHours {
+            body = try JSONSerialization.data(withJSONObject: ["expire_hours": expireHours])
+        } else {
+            body = nil
+        }
+        let endpoint = GenericPostEndpoint(path: "/api/files/\(fileId)/share", body: body, token: try token)
+        return try await networkClient.request(endpoint, decode: CreateShareResponseDTO.self)
+    }
+
+    func listShares() async throws -> [ShareItemDTO] {
+        let endpoint = GenericGetEndpoint(path: "/api/shares", token: try token)
+        let response = try await networkClient.request(endpoint, decode: ShareListResponseDTO.self)
+        return response.items
+    }
+
+    func revokeShare(code: String) async throws {
+        let endpoint = GenericDeleteEndpoint(path: "/api/shares/\(code)", token: try token)
+        let _ = try await networkClient.request(endpoint)
+    }
+
+    func listRecycleBin() async throws -> [FileItemDTO] {
+        let endpoint = GenericGetEndpoint(path: "/api/files/recycle-bin", token: try token)
+        let response = try await networkClient.request(endpoint, decode: FileResponseDTO.self)
+        return response.items
+    }
+
+    func restoreFromRecycleBin(fileId: Int64) async throws {
+        let endpoint = GenericPostEndpoint(path: "/api/files/\(fileId)/restore", body: nil, token: try token)
+        let _ = try await networkClient.request(endpoint)
+    }
+
+    func permanentDelete(fileId: Int64) async throws {
+        let endpoint = GenericDeleteEndpoint(path: "/api/files/\(fileId)/permanent", token: try token)
         let _ = try await networkClient.request(endpoint)
     }
 
@@ -213,6 +273,32 @@ private struct GenericPostEndpoint: APIEndpoint {
     }
 }
 
+private struct GenericGetEndpoint: APIEndpoint {
+    let path: String
+    let token: String
+
+    var method: HTTPMethod { .get }
+    var headers: [String: String] {
+        [
+            "Authorization": "Bearer \(token)",
+            "Accept": "application/json"
+        ]
+    }
+}
+
+private struct GenericDeleteEndpoint: APIEndpoint {
+    let path: String
+    let token: String
+
+    var method: HTTPMethod { .delete }
+    var headers: [String: String] {
+        [
+            "Authorization": "Bearer \(token)",
+            "Accept": "application/json"
+        ]
+    }
+}
+
 /// Multipart Endpoint
 private struct MultipartParamsEndpoint: APIEndpoint {
     let path: String
@@ -238,6 +324,42 @@ private struct FilesListEndpoint: APIEndpoint {
     var method: HTTPMethod { .get }
     var queryItems: [URLQueryItem] {
         [ URLQueryItem(name: "parent_id", value: "\(parentId)") ]
+    }
+    var headers: [String: String] {
+        [
+            "Authorization": "Bearer \(token)",
+            "Accept": "application/json"
+        ]
+    }
+}
+
+private struct FilesSearchEndpoint: APIEndpoint {
+    let parentId: Int64
+    let name: String
+    let fileType: String
+    let startTime: String?
+    let endTime: String?
+    let page: Int
+    let limit: Int
+    let token: String
+
+    var path: String { "/api/files/search" }
+    var method: HTTPMethod { .get }
+    var queryItems: [URLQueryItem] {
+        var items: [URLQueryItem] = [
+            URLQueryItem(name: "parent_id", value: "\(parentId)"),
+            URLQueryItem(name: "name", value: name),
+            URLQueryItem(name: "file_type", value: fileType),
+            URLQueryItem(name: "page", value: "\(page)"),
+            URLQueryItem(name: "limit", value: "\(limit)")
+        ]
+        if let startTime, !startTime.isEmpty {
+            items.append(URLQueryItem(name: "start_time", value: startTime))
+        }
+        if let endTime, !endTime.isEmpty {
+            items.append(URLQueryItem(name: "end_time", value: endTime))
+        }
+        return items
     }
     var headers: [String: String] {
         [

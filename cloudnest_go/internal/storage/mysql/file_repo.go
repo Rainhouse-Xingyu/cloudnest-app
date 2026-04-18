@@ -378,6 +378,26 @@ func (r *FileRepo) PermanentDeleteFromRecycleBin(ctx context.Context, uid int64,
 			return err
 		}
 
+		// 先清理依赖 file_id 的子表，避免 file 主表删除时触发外键约束失败。
+		if err := tx.Where("file_id IN ?", ids).Delete(&model.AiTask{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("file_id IN ?", ids).Delete(&model.AiMetadata{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("file_id IN ?", ids).Delete(&model.FilePermission{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("file_id IN ?", ids).Delete(&model.FileVersion{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("file_id IN ?", ids).Delete(&model.Share{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("file_id IN ?", ids).Delete(&model.OperationLog{}).Error; err != nil {
+			return err
+		}
+
 		return tx.Where("id IN ?", ids).Delete(&model.File{}).Error
 	})
 }

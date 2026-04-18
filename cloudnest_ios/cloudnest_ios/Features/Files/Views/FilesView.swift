@@ -17,13 +17,16 @@ struct FilesView: View {
     @State private var isSelectionMode: Bool = false
     @State private var selectedItems: Set<Int64> = []
     @State private var showDeleteConfirm: Bool = false
-    @State private var showFileImporter: Bool = false
     @State private var showUploadSourceDialog: Bool = false
-    @State private var showPhotoPicker: Bool = false
     @State private var showCreateFolderAlert: Bool = false
     @State private var newFolderName: String = ""
-    @State private var showTargetFolderPicker: Bool = false
     @State private var pendingOperation: PendingFileOperation?
+    @State private var tempFilterFileType: String = ""
+    @State private var tempStartDate: Date = Date()
+    @State private var tempEndDate: Date = Date()
+    @State private var useStartDate: Bool = false
+    @State private var useEndDate: Bool = false
+    @State private var activeSheet: FilesActiveSheet?
     @State private var expandedTreeNodes: Set<Int64> = []
     @AppStorage("files.layout.style") private var layoutStyleRaw: String = FilesLayoutStyle.icon.rawValue
 
@@ -39,6 +42,7 @@ struct FilesView: View {
                 breadcrumbBar
                 directoryTreeSection
                 personalSection
+                searchBarSection
 
                 if viewModel.isLoading {
                     ProgressView("加载中...")
@@ -132,43 +136,12 @@ struct FilesView: View {
         } message: {
             Text("将在当前目录创建新文件夹")
         }
-        .sheet(isPresented: $showPhotoPicker) {
-            PhotoLibraryPicker(
-                onPicked: { data, originalName in
-                    let filename = buildPhotoFilename(originalName: originalName, data: data)
-                    showPhotoPicker = false
-                    Task {
-                        await viewModel.uploadPhotoData(data, filename: filename)
-                    }
-                },
-                onError: { message in
-                    showPhotoPicker = false
-                    viewModel.errorMessage = message
-                }
-            )
-            .ignoresSafeArea()
-        }
-        .sheet(isPresented: $showFileImporter) {
-            DocumentFilePicker(
-                onPicked: { url in
-                    showFileImporter = false
-                    Task {
-                        await viewModel.uploadFile(url: url)
-                    }
-                },
-                onError: { message in
-                    showFileImporter = false
-                    viewModel.errorMessage = message
-                }
-            )
-            .ignoresSafeArea()
-        }
         .confirmationDialog("选择上传来源", isPresented: $showUploadSourceDialog, titleVisibility: .visible) {
             Button("照片 App") {
-                showPhotoPicker = true
+                activeSheet = .photoPicker
             }
             Button("文件 App") {
-                showFileImporter = true
+                activeSheet = .filePicker
             }
             Button("取消", role: .cancel) { }
         }
@@ -186,50 +159,160 @@ struct FilesView: View {
                 .background(.ultraThinMaterial)
             }
         }
-        .sheet(item: $viewModel.previewDocument) { doc in
-            FileQuickLookPreview(url: doc.url)
-        }
-        .sheet(item: $viewModel.livePlayerItem) { item in
-            LivePhotoPlayerView(url: item.url)
-        }
-        .sheet(isPresented: $showTargetFolderPicker) {
-            FolderTargetPickerView(
-                treeNodes: viewModel.treeNodes,
-                currentParentId: viewModel.currentParentId,
-                operation: pendingOperation,
-                onCancel: {
-                    showTargetFolderPicker = false
-                    pendingOperation = nil
-                },
-                onConfirm: { targetParentId in
-                    let op = pendingOperation
-                    let ids = Array(selectedItems)
-                    showTargetFolderPicker = false
-                    pendingOperation = nil
-
-                    Task {
-                        if op == .move {
-                            await viewModel.move(fileIds: ids, targetParentId: targetParentId)
-                        } else if op == .copy {
-                            await viewModel.copy(fileIds: ids, targetParentId: targetParentId)
+        .sheet(item: $activeSheet, onDismiss: {
+            if !viewModel.activityItems.isEmpty {
+                viewModel.clearShareItems()
+            }
+        }) { sheet in
+            switch sheet {
+            case .photoPicker:
+                PhotoLibraryPicker(
+                    onPicked: { data, originalName in
+                        let filename = buildPhotoFilename(originalName: originalName, data: data)
+                        activeSheet = nil
+                        Task {
+                            await viewModel.uploadPhotoData(data, filename: filename)
                         }
-                        withAnimation {
-                            selectedItems.removeAll()
-                            isSelectionMode = false
+                    },
+                    onError: { message in
+                        activeSheet = nil
+                        viewModel.errorMessage = message
+                    }
+                )
+                .ignoresSafeArea()
+
+            case .filePicker:
+                DocumentFilePicker(
+                    onPicked: { url in
+                        activeSheet = nil
+                        Task {
+                            await viewModel.uploadFile(url: url)
+                        }
+                    },
+                    onError: { message in
+                        activeSheet = nil
+                        viewModel.errorMessage = message
+                    }
+                )
+                .ignoresSafeArea()
+
+            case .targetFolder:
+                FolderTargetPickerView(
+                    treeNodes: viewModel.treeNodes,
+                    currentParentId: viewModel.currentParentId,
+                    operation: pendingOperation,
+                    onCancel: {
+                        activeSheet = nil
+                        pendingOperation = nil
+                    },
+                    onConfirm: { targetParentId in
+                        let op = pendingOperation
+                        let ids = Array(selectedItems)
+                        activeSheet = nil
+                        pendingOperation = nil
+
+                        Task {
+                            if op == .move {
+                                await viewModel.move(fileIds: ids, targetParentId: targetParentId)
+                            } else if op == .copy {
+                                await viewModel.copy(fileIds: ids, targetParentId: targetParentId)
+                            }
+                            withAnimation {
+                                selectedItems.removeAll()
+                                isSelectionMode = false
+                            }
                         }
                     }
-                }
-            )
-        }
-        .sheet(isPresented: Binding(
-            get: { !viewModel.activityItems.isEmpty },
-            set: { newValue in
-                if !newValue {
-                    viewModel.clearShareItems()
-                }
+                )
+
+            case .shareActivity:
+                ShareSheet(activityItems: viewModel.activityItems)
+
+            case .shareManage:
+                ShareManageSheetView(
+                    items: viewModel.shareItems,
+                    latestCreatedLink: viewModel.latestCreatedShareLink,
+                    onRefresh: {
+                        Task { await viewModel.loadShares() }
+                    },
+                    onRevoke: { code in
+                        Task { await viewModel.revokeShare(code: code) }
+                    }
+                )
+
+            case .recycleBin:
+                RecycleBinSheetView(
+                    items: viewModel.recycleBinItems,
+                    onRefresh: {
+                        Task { await viewModel.loadRecycleBin() }
+                    },
+                    onRestore: { id in
+                        Task { await viewModel.restoreFromRecycleBin(fileId: id) }
+                    },
+                    onPermanentDelete: { id in
+                        Task { await viewModel.permanentDeleteFromRecycleBin(fileId: id) }
+                    }
+                )
+
+            case .filter:
+                FilesFilterSheet(
+                    fileType: $tempFilterFileType,
+                    startDate: $tempStartDate,
+                    endDate: $tempEndDate,
+                    useStartDate: $useStartDate,
+                    useEndDate: $useEndDate,
+                    onReset: {
+                        tempFilterFileType = ""
+                        useStartDate = false
+                        useEndDate = false
+                        tempStartDate = Date()
+                        tempEndDate = Date()
+                    },
+                    onApply: {
+                        activeSheet = nil
+                        Task {
+                            await viewModel.applySearchAndFilter(
+                                keyword: viewModel.searchKeyword,
+                                fileType: tempFilterFileType,
+                                startDate: useStartDate ? tempStartDate : nil,
+                                endDate: useEndDate ? tempEndDate : nil
+                            )
+                        }
+                    }
+                )
+
+            case .quickLook(let doc):
+                FileQuickLookPreview(url: doc.url)
+
+            case .imagePreview(let item):
+                NativeImagePreviewSheet(item: item)
+
+            case .mediaPlayback(let item):
+                NativeMediaPlayerView(item: item)
+
+            case .livePhoto(let item):
+                LivePhotoSheetView(item: item)
             }
-        )) {
-            ShareSheet(activityItems: viewModel.activityItems)
+        }
+        .onChange(of: viewModel.previewDocument) { doc in
+            guard let doc, activeSheet == nil else { return }
+            activeSheet = .quickLook(doc)
+            viewModel.previewDocument = nil
+        }
+        .onChange(of: viewModel.imagePreviewItem) { item in
+            guard let item, activeSheet == nil else { return }
+            activeSheet = .imagePreview(item)
+            viewModel.imagePreviewItem = nil
+        }
+        .onChange(of: viewModel.mediaPlaybackItem) { item in
+            guard let item, activeSheet == nil else { return }
+            activeSheet = .mediaPlayback(item)
+            viewModel.mediaPlaybackItem = nil
+        }
+        .onChange(of: viewModel.livePhotoDisplayItem) { item in
+            guard let item, activeSheet == nil else { return }
+            activeSheet = .livePhoto(item)
+            viewModel.livePhotoDisplayItem = nil
         }
         .alert("下载结果", isPresented: Binding(
             get: { viewModel.downloadMessage != nil },
@@ -255,7 +338,14 @@ struct FilesView: View {
             }
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Button {
-                    // 全局/当前目录搜索
+                    Task {
+                        await viewModel.applySearchAndFilter(
+                            keyword: viewModel.searchKeyword,
+                            fileType: tempFilterFileType,
+                            startDate: useStartDate ? tempStartDate : nil,
+                            endDate: useEndDate ? tempEndDate : nil
+                        )
+                    }
                 } label: {
                     Image(systemName: "magnifyingglass")
                 }
@@ -318,11 +408,22 @@ struct FilesView: View {
                     } label: {
                         Label("排序", systemImage: "arrow.up.arrow.down")
                     }
-                    Button(action: {}) {
+                    Button(action: {
+                        activeSheet = .filter
+                    }) {
                         Label("筛选", systemImage: "line.3.horizontal.decrease.circle")
                     }
-                    Button(action: {}) {
+                    Button(action: {
+                        Task { await viewModel.loadRecycleBin() }
+                        activeSheet = .recycleBin
+                    }) {
                         Label("回收站", systemImage: "trash")
+                    }
+                    Button(action: {
+                        Task { await viewModel.loadShares() }
+                        activeSheet = .shareManage
+                    }) {
+                        Label("分享管理", systemImage: "link")
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -331,6 +432,83 @@ struct FilesView: View {
         }
         .onAppear {
             viewModel.onAppear()
+            tempFilterFileType = viewModel.filterFileType
+            if let start = viewModel.filterStartDate {
+                useStartDate = true
+                tempStartDate = start
+            }
+            if let end = viewModel.filterEndDate {
+                useEndDate = true
+                tempEndDate = end
+            }
+        }
+    }
+
+    private var searchBarSection: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+
+                TextField("按文件名搜索", text: $viewModel.searchKeyword)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled(true)
+                    .onSubmit {
+                        Task {
+                            await viewModel.applySearchAndFilter(
+                                keyword: viewModel.searchKeyword,
+                                fileType: tempFilterFileType,
+                                startDate: useStartDate ? tempStartDate : nil,
+                                endDate: useEndDate ? tempEndDate : nil
+                            )
+                        }
+                    }
+
+                if !viewModel.searchKeyword.isEmpty {
+                    Button {
+                        viewModel.searchKeyword = ""
+                        Task {
+                            await viewModel.applySearchAndFilter(
+                                keyword: "",
+                                fileType: tempFilterFileType,
+                                startDate: useStartDate ? tempStartDate : nil,
+                                endDate: useEndDate ? tempEndDate : nil
+                            )
+                        }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            HStack(spacing: 10) {
+                Button {
+                    activeSheet = .filter
+                } label: {
+                    Label(viewModel.hasSearchOrFilter ? "筛选中" : "筛选", systemImage: "line.3.horizontal.decrease.circle")
+                }
+                .buttonStyle(.bordered)
+
+                if viewModel.hasSearchOrFilter {
+                    Button {
+                        tempFilterFileType = ""
+                        useStartDate = false
+                        useEndDate = false
+                        tempStartDate = Date()
+                        tempEndDate = Date()
+                        Task { await viewModel.clearSearchAndFilter() }
+                    } label: {
+                        Label("清空条件", systemImage: "xmark")
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                Spacer()
+            }
         }
     }
 
@@ -595,7 +773,11 @@ struct FilesView: View {
                 toggleSelection(item.id)
             } else {
                 Task {
-                    await viewModel.openPreview(for: item)
+                    if viewModel.isLivePhoto(item.id) {
+                        await viewModel.playLivePhoto(for: item)
+                    } else {
+                        await viewModel.openPreview(for: item)
+                    }
                 }
             }
         }
@@ -612,7 +794,13 @@ struct FilesView: View {
             if isSelectionMode {
                 toggleSelection(item.id)
             } else {
-                Task { await viewModel.openPreview(for: item) }
+                Task {
+                    if viewModel.isLivePhoto(item.id) {
+                        await viewModel.playLivePhoto(for: item)
+                    } else {
+                        await viewModel.openPreview(for: item)
+                    }
+                }
             }
         } label: {
             VStack(alignment: .leading, spacing: 12) {
@@ -724,19 +912,21 @@ struct FilesView: View {
             Spacer()
             actionButton(title: "移动", icon: "folder") {
                 pendingOperation = .move
-                showTargetFolderPicker = true
+                activeSheet = .targetFolder
             }
             Spacer()
             actionButton(title: "复制", icon: "doc.on.doc") {
                 pendingOperation = .copy
-                showTargetFolderPicker = true
+                activeSheet = .targetFolder
             }
             Spacer()
             actionButton(title: "分享", icon: "square.and.arrow.up") {
                 let allItems = viewModel.folders + viewModel.files
                 let toShare = allItems.filter { selectedItems.contains($0.id) }
                 Task {
-                    await viewModel.prepareShare(items: toShare)
+                    await viewModel.createShareForSelection(items: toShare)
+                    await viewModel.loadShares()
+                    activeSheet = .shareManage
                 }
             }
             Spacer()
@@ -835,6 +1025,51 @@ private enum PendingFileOperation {
     case copy
 }
 
+private enum FilesActiveSheet: Identifiable, Equatable {
+    case photoPicker
+    case filePicker
+    case targetFolder
+    case shareActivity
+    case shareManage
+    case recycleBin
+    case filter
+    case quickLook(FilePreviewDocument)
+    case imagePreview(ImagePreviewItem)
+    case mediaPlayback(MediaPlaybackItem)
+    case livePhoto(LivePhotoDisplayItem)
+
+    var id: String {
+        switch self {
+        case .photoPicker:
+            return "photoPicker"
+        case .filePicker:
+            return "filePicker"
+        case .targetFolder:
+            return "targetFolder"
+        case .shareActivity:
+            return "shareActivity"
+        case .shareManage:
+            return "shareManage"
+        case .recycleBin:
+            return "recycleBin"
+        case .filter:
+            return "filter"
+        case .quickLook(let doc):
+            return "quickLook_\(doc.id.uuidString)"
+        case .imagePreview(let item):
+            return "imagePreview_\(item.id.uuidString)"
+        case .mediaPlayback(let item):
+            return "mediaPlayback_\(item.id.uuidString)"
+        case .livePhoto(let item):
+            return "livePhoto_\(item.id.uuidString)"
+        }
+    }
+
+    static func == (lhs: FilesActiveSheet, rhs: FilesActiveSheet) -> Bool {
+        lhs.id == rhs.id
+    }
+}
+
 private struct FolderTargetPickerView: View {
     let treeNodes: [FileTreeNode]
     let currentParentId: Int64
@@ -881,35 +1116,37 @@ private struct FolderTargetPickerView: View {
         return "选择目录"
     }
 
-    private func treeRow(node: FileTreeNode, level: Int) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                if !node.children.isEmpty {
-                    Button {
-                        if expandedNodeIDs.contains(node.id) {
-                            expandedNodeIDs.remove(node.id)
-                        } else {
-                            expandedNodeIDs.insert(node.id)
+    private func treeRow(node: FileTreeNode, level: Int) -> AnyView {
+        AnyView(
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 8) {
+                    if !node.children.isEmpty {
+                        Button {
+                            if expandedNodeIDs.contains(node.id) {
+                                expandedNodeIDs.remove(node.id)
+                            } else {
+                                expandedNodeIDs.insert(node.id)
+                            }
+                        } label: {
+                            Image(systemName: expandedNodeIDs.contains(node.id) ? "chevron.down" : "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
-                    } label: {
-                        Image(systemName: expandedNodeIDs.contains(node.id) ? "chevron.down" : "chevron.right")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        .buttonStyle(.plain)
+                    } else {
+                        Color.clear.frame(width: 16, height: 16)
                     }
-                    .buttonStyle(.plain)
-                } else {
-                    Color.clear.frame(width: 16, height: 16)
+
+                    folderRow(id: node.id, name: node.name, level: level)
                 }
 
-                folderRow(id: node.id, name: node.name, level: level)
-            }
-
-            if expandedNodeIDs.contains(node.id) {
-                ForEach(node.children) { child in
-                    treeRow(node: child, level: level + 1)
+                if expandedNodeIDs.contains(node.id) {
+                    ForEach(node.children) { child in
+                        treeRow(node: child, level: level + 1)
+                    }
                 }
             }
-        }
+        )
     }
 
     private func folderRow(id: Int64, name: String, level: Int) -> some View {
@@ -930,6 +1167,185 @@ private struct FolderTargetPickerView: View {
             .padding(.leading, CGFloat(level) * 10)
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct FilesFilterSheet: View {
+    @Binding var fileType: String
+    @Binding var startDate: Date
+    @Binding var endDate: Date
+    @Binding var useStartDate: Bool
+    @Binding var useEndDate: Bool
+
+    let onReset: () -> Void
+    let onApply: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("文件类型") {
+                    TextField("例如：jpg / png / mp4 / pdf", text: $fileType)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+                    Text("后端按 file_type 精确匹配")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section("更新时间") {
+                    Toggle("启用开始时间", isOn: $useStartDate)
+                    if useStartDate {
+                        DatePicker("开始时间", selection: $startDate, displayedComponents: [.date, .hourAndMinute])
+                    }
+
+                    Toggle("启用结束时间", isOn: $useEndDate)
+                    if useEndDate {
+                        DatePicker("结束时间", selection: $endDate, displayedComponents: [.date, .hourAndMinute])
+                    }
+                }
+            }
+            .navigationTitle("筛选")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("重置") {
+                        onReset()
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("应用") {
+                        onApply()
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct ShareManageSheetView: View {
+    let items: [ShareItemDTO]
+    let latestCreatedLink: String?
+    let onRefresh: () -> Void
+    let onRevoke: (String) -> Void
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if let latestCreatedLink, !latestCreatedLink.isEmpty {
+                    Section("最近创建") {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(latestCreatedLink)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+
+                            Button("复制链接") {
+                                UIPasteboard.general.string = latestCreatedLink
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+
+                Section("分享列表") {
+                    if items.isEmpty {
+                        Text("暂无分享链接")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(items) { item in
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(item.shareCode)
+                                    .font(.headline)
+                                Text("创建时间: \(item.createTime)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                if let expire = item.expireTime {
+                                    Text("过期时间: \(expire)")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                } else {
+                                    Text("永不过期")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .swipeActions(edge: .trailing) {
+                                Button(role: .destructive) {
+                                    onRevoke(item.shareCode)
+                                } label: {
+                                    Label("撤销", systemImage: "trash")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("分享管理")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        onRefresh()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct RecycleBinSheetView: View {
+    let items: [FileItemDTO]
+    let onRefresh: () -> Void
+    let onRestore: (Int64) -> Void
+    let onPermanentDelete: (Int64) -> Void
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if items.isEmpty {
+                    Text("回收站为空")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(items) { item in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(item.filename)
+                                .font(.headline)
+                            Text("删除时间: \(item.updateTime)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                onPermanentDelete(item.id)
+                            } label: {
+                                Label("彻底删除", systemImage: "trash.fill")
+                            }
+
+                            Button {
+                                onRestore(item.id)
+                            } label: {
+                                Label("恢复", systemImage: "arrow.uturn.backward")
+                            }
+                            .tint(.blue)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("回收站")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        onRefresh()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -979,19 +1395,140 @@ private struct FileQuickLookPreview: UIViewControllerRepresentable {
     }
 }
 
-private struct LivePhotoPlayerView: UIViewControllerRepresentable {
-    let url: URL
+private struct NativeImagePreviewSheet: View {
+    let item: ImagePreviewItem
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            VStack(spacing: 8) {
+                HStack {
+                    Text(item.displayName)
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+
+                GeometryReader { geo in
+                    if let image = UIImage(contentsOfFile: item.imageURL.path) {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: geo.size.width, height: geo.size.height)
+                    } else {
+                        VStack(spacing: 8) {
+                            Image(systemName: "photo")
+                                .font(.system(size: 42))
+                                .foregroundStyle(.white.opacity(0.7))
+                            Text("图片加载失败")
+                                .foregroundStyle(.white.opacity(0.85))
+                        }
+                        .frame(width: geo.size.width, height: geo.size.height)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct NativeMediaPlayerView: UIViewControllerRepresentable {
+    let item: MediaPlaybackItem
 
     func makeUIViewController(context: Context) -> AVPlayerViewController {
         let controller = AVPlayerViewController()
-        controller.player = AVPlayer(url: url)
+        controller.player = AVPlayer(url: item.mediaURL)
+        controller.showsPlaybackControls = true
         controller.player?.play()
         return controller
     }
 
     func updateUIViewController(_ uiViewController: AVPlayerViewController, context: Context) {
-        if uiViewController.player?.currentItem?.asset as? AVURLAsset == nil {
-            uiViewController.player = AVPlayer(url: url)
+        guard let current = (uiViewController.player?.currentItem?.asset as? AVURLAsset)?.url else {
+            uiViewController.player = AVPlayer(url: item.mediaURL)
+            if !item.isAudio {
+                uiViewController.player?.play()
+            }
+            return
+        }
+
+        if current != item.mediaURL {
+            uiViewController.player = AVPlayer(url: item.mediaURL)
+            if !item.isAudio {
+                uiViewController.player?.play()
+            }
+        }
+    }
+}
+
+private struct LivePhotoSheetView: View {
+    let item: LivePhotoDisplayItem
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Text(item.displayName)
+                    .font(.headline)
+                    .lineLimit(1)
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+
+            LivePhotoDisplayView(imageURL: item.imageURL, videoURL: item.videoURL)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.black.opacity(0.92))
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .padding(.horizontal, 12)
+                .padding(.bottom, 12)
+        }
+        .background(Color(.systemBackground))
+    }
+}
+
+private struct LivePhotoDisplayView: UIViewRepresentable {
+    let imageURL: URL
+    let videoURL: URL
+
+    func makeUIView(context: Context) -> PHLivePhotoView {
+        let view = PHLivePhotoView()
+        view.contentMode = .scaleAspectFit
+        context.coordinator.load(into: view, imageURL: imageURL, videoURL: videoURL)
+        return view
+    }
+
+    func updateUIView(_ uiView: PHLivePhotoView, context: Context) {
+        context.coordinator.load(into: uiView, imageURL: imageURL, videoURL: videoURL)
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    final class Coordinator {
+        private var lastKey: String?
+
+        func load(into view: PHLivePhotoView, imageURL: URL, videoURL: URL) {
+            let key = imageURL.path + "|" + videoURL.path
+            guard lastKey != key else { return }
+            lastKey = key
+
+            PHLivePhoto.request(
+                withResourceFileURLs: [imageURL, videoURL],
+                placeholderImage: nil,
+                targetSize: CGSize(width: 1200, height: 1200),
+                contentMode: .aspectFit
+            ) { livePhoto, _ in
+                DispatchQueue.main.async {
+                    view.livePhoto = livePhoto
+                    if livePhoto != nil {
+                        view.startPlayback(with: .full)
+                    }
+                }
+            }
         }
     }
 }

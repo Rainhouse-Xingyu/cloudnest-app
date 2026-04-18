@@ -112,6 +112,53 @@ struct BatchDeleteResponseDTO: Decodable {
     }
 }
 
+struct SearchFilesResponseDTO: Decodable {
+    let items: [FileItemDTO]
+    let pagination: SearchPaginationDTO?
+}
+
+struct SearchPaginationDTO: Decodable {
+    let page: Int
+    let limit: Int
+    let total: Int64
+}
+
+// MARK: - Share & Recycle DTOs
+
+struct CreateShareResponseDTO: Decodable {
+    let shareCode: String
+    let expireTime: String?
+    let accessURL: String
+
+    enum CodingKeys: String, CodingKey {
+        case shareCode = "share_code"
+        case expireTime = "expire_time"
+        case accessURL = "access_url"
+    }
+}
+
+struct ShareListResponseDTO: Decodable {
+    let items: [ShareItemDTO]
+}
+
+struct ShareItemDTO: Decodable, Identifiable {
+    let id: Int64
+    let fileId: Int64?
+    let userId: Int64?
+    let shareCode: String
+    let expireTime: String?
+    let createTime: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case fileId = "file_id"
+        case userId = "user_id"
+        case shareCode = "share_code"
+        case expireTime = "expire_time"
+        case createTime = "create_time"
+    }
+}
+
 // MARK: - Live Photo DTOs
 
 struct LivePhotoLookupResponseDTO: Decodable {
@@ -149,9 +196,23 @@ struct FilePreviewDocument: Identifiable {
     let displayName: String
 }
 
-struct LivePhotoPlayerItem: Identifiable {
+struct ImagePreviewItem: Identifiable {
     let id = UUID()
-    let url: URL
+    let imageURL: URL
+    let displayName: String
+}
+
+struct MediaPlaybackItem: Identifiable {
+    let id = UUID()
+    let mediaURL: URL
+    let displayName: String
+    let isAudio: Bool
+}
+
+struct LivePhotoDisplayItem: Identifiable {
+    let id = UUID()
+    let imageURL: URL
+    let videoURL: URL
     let displayName: String
 }
 
