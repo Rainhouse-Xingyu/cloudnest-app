@@ -47,6 +47,7 @@ struct ContentView: View {
         }
         .font(.appBody)
         .tint(.blue)
+        .enableGlobalKeyboardDismissOnTap()
         .liquidGlassPage()
         .onAppear {
             checkAuthStatus()
@@ -55,6 +56,7 @@ struct ContentView: View {
             NavigationStack {
                 AuthView()
             }
+            .enableGlobalKeyboardDismissOnTap()
         }
         .onReceive(NotificationCenter.default.publisher(for: .authLoginSuccess)) { _ in
             showAuth = false
