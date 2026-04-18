@@ -164,135 +164,7 @@ struct FilesView: View {
                 viewModel.clearShareItems()
             }
         }) { sheet in
-            switch sheet {
-            case .photoPicker:
-                PhotoLibraryPicker(
-                    onPicked: { data, originalName in
-                        let filename = buildPhotoFilename(originalName: originalName, data: data)
-                        activeSheet = nil
-                        Task {
-                            await viewModel.uploadPhotoData(data, filename: filename)
-                        }
-                    },
-                    onError: { message in
-                        activeSheet = nil
-                        viewModel.errorMessage = message
-                    }
-                )
-                .ignoresSafeArea()
-
-            case .filePicker:
-                DocumentFilePicker(
-                    onPicked: { url in
-                        activeSheet = nil
-                        Task {
-                            await viewModel.uploadFile(url: url)
-                        }
-                    },
-                    onError: { message in
-                        activeSheet = nil
-                        viewModel.errorMessage = message
-                    }
-                )
-                .ignoresSafeArea()
-
-            case .targetFolder:
-                FolderTargetPickerView(
-                    treeNodes: viewModel.treeNodes,
-                    currentParentId: viewModel.currentParentId,
-                    operation: pendingOperation,
-                    onCancel: {
-                        activeSheet = nil
-                        pendingOperation = nil
-                    },
-                    onConfirm: { targetParentId in
-                        let op = pendingOperation
-                        let ids = Array(selectedItems)
-                        activeSheet = nil
-                        pendingOperation = nil
-
-                        Task {
-                            if op == .move {
-                                await viewModel.move(fileIds: ids, targetParentId: targetParentId)
-                            } else if op == .copy {
-                                await viewModel.copy(fileIds: ids, targetParentId: targetParentId)
-                            }
-                            withAnimation {
-                                selectedItems.removeAll()
-                                isSelectionMode = false
-                            }
-                        }
-                    }
-                )
-
-            case .shareActivity:
-                ShareSheet(activityItems: viewModel.activityItems)
-
-            case .shareManage:
-                ShareManageSheetView(
-                    items: viewModel.shareItems,
-                    latestCreatedLink: viewModel.latestCreatedShareLink,
-                    onRefresh: {
-                        Task { await viewModel.loadShares() }
-                    },
-                    onRevoke: { code in
-                        Task { await viewModel.revokeShare(code: code) }
-                    }
-                )
-
-            case .recycleBin:
-                RecycleBinSheetView(
-                    items: viewModel.recycleBinItems,
-                    onRefresh: {
-                        Task { await viewModel.loadRecycleBin() }
-                    },
-                    onRestore: { id in
-                        Task { await viewModel.restoreFromRecycleBin(fileId: id) }
-                    },
-                    onPermanentDelete: { id in
-                        Task { await viewModel.permanentDeleteFromRecycleBin(fileId: id) }
-                    }
-                )
-
-            case .filter:
-                FilesFilterSheet(
-                    fileType: $tempFilterFileType,
-                    startDate: $tempStartDate,
-                    endDate: $tempEndDate,
-                    useStartDate: $useStartDate,
-                    useEndDate: $useEndDate,
-                    onReset: {
-                        tempFilterFileType = ""
-                        useStartDate = false
-                        useEndDate = false
-                        tempStartDate = Date()
-                        tempEndDate = Date()
-                    },
-                    onApply: {
-                        activeSheet = nil
-                        Task {
-                            await viewModel.applySearchAndFilter(
-                                keyword: viewModel.searchKeyword,
-                                fileType: tempFilterFileType,
-                                startDate: useStartDate ? tempStartDate : nil,
-                                endDate: useEndDate ? tempEndDate : nil
-                            )
-                        }
-                    }
-                )
-
-            case .quickLook(let doc):
-                FileQuickLookPreview(url: doc.url)
-
-            case .imagePreview(let item):
-                NativeImagePreviewSheet(item: item)
-
-            case .mediaPlayback(let item):
-                NativeMediaPlayerView(item: item)
-
-            case .livePhoto(let item):
-                LivePhotoSheetView(item: item)
-            }
+            activeSheetView(sheet)
         }
         .onChange(of: viewModel.previewDocument) { doc in
             guard let doc, activeSheet == nil else { return }
@@ -441,6 +313,139 @@ struct FilesView: View {
                 useEndDate = true
                 tempEndDate = end
             }
+        }
+    }
+
+    @ViewBuilder
+    private func activeSheetView(_ sheet: FilesActiveSheet) -> some View {
+        switch sheet {
+        case .photoPicker:
+            PhotoLibraryPicker(
+                onPicked: { data, originalName in
+                    let filename = buildPhotoFilename(originalName: originalName, data: data)
+                    activeSheet = nil
+                    Task {
+                        await viewModel.uploadPhotoData(data, filename: filename)
+                    }
+                },
+                onError: { message in
+                    activeSheet = nil
+                    viewModel.errorMessage = message
+                }
+            )
+            .ignoresSafeArea()
+
+        case .filePicker:
+            DocumentFilePicker(
+                onPicked: { url in
+                    activeSheet = nil
+                    Task {
+                        await viewModel.uploadFile(url: url)
+                    }
+                },
+                onError: { message in
+                    activeSheet = nil
+                    viewModel.errorMessage = message
+                }
+            )
+            .ignoresSafeArea()
+
+        case .targetFolder:
+            FolderTargetPickerView(
+                treeNodes: viewModel.treeNodes,
+                currentParentId: viewModel.currentParentId,
+                operation: pendingOperation,
+                onCancel: {
+                    activeSheet = nil
+                    pendingOperation = nil
+                },
+                onConfirm: { targetParentId in
+                    let op = pendingOperation
+                    let ids = Array(selectedItems)
+                    activeSheet = nil
+                    pendingOperation = nil
+
+                    Task {
+                        if op == .move {
+                            await viewModel.move(fileIds: ids, targetParentId: targetParentId)
+                        } else if op == .copy {
+                            await viewModel.copy(fileIds: ids, targetParentId: targetParentId)
+                        }
+                        withAnimation {
+                            selectedItems.removeAll()
+                            isSelectionMode = false
+                        }
+                    }
+                }
+            )
+
+        case .shareActivity:
+            ShareSheet(activityItems: viewModel.activityItems)
+
+        case .shareManage:
+            ShareManageSheetView(
+                items: viewModel.shareItems,
+                latestCreatedLink: viewModel.latestCreatedShareLink,
+                onRefresh: {
+                    Task { await viewModel.loadShares() }
+                },
+                onRevoke: { code in
+                    Task { await viewModel.revokeShare(code: code) }
+                }
+            )
+
+        case .recycleBin:
+            RecycleBinSheetView(
+                items: viewModel.recycleBinItems,
+                onRefresh: {
+                    Task { await viewModel.loadRecycleBin() }
+                },
+                onRestore: { id in
+                    Task { await viewModel.restoreFromRecycleBin(fileId: id) }
+                },
+                onPermanentDelete: { id in
+                    Task { await viewModel.permanentDeleteFromRecycleBin(fileId: id) }
+                }
+            )
+
+        case .filter:
+            FilesFilterSheet(
+                fileType: $tempFilterFileType,
+                startDate: $tempStartDate,
+                endDate: $tempEndDate,
+                useStartDate: $useStartDate,
+                useEndDate: $useEndDate,
+                onReset: {
+                    tempFilterFileType = ""
+                    useStartDate = false
+                    useEndDate = false
+                    tempStartDate = Date()
+                    tempEndDate = Date()
+                },
+                onApply: {
+                    activeSheet = nil
+                    Task {
+                        await viewModel.applySearchAndFilter(
+                            keyword: viewModel.searchKeyword,
+                            fileType: tempFilterFileType,
+                            startDate: useStartDate ? tempStartDate : nil,
+                            endDate: useEndDate ? tempEndDate : nil
+                        )
+                    }
+                }
+            )
+
+        case .quickLook(let doc):
+            FileQuickLookPreview(url: doc.url)
+
+        case .imagePreview(let item):
+            NativeImagePreviewSheet(item: item)
+
+        case .mediaPlayback(let item):
+            NativeMediaPlayerView(item: item)
+
+        case .livePhoto(let item):
+            LivePhotoSheetView(item: item)
         }
     }
 
