@@ -302,47 +302,89 @@ final class FilesViewModel: ObservableObject {
         errorMessage = nil
 
         do {
-            // 这里沿用分片上传，保证和文件上传链路一致。
-            let chunkSize = 5 * 1024 * 1024
-            let totalChunks = Int(ceil(Double(totalSize) / Double(chunkSize)))
-
-            let initReq = UploadInitRequestDTO(
-                parentId: currentParentId,
-                filename: filename,
-                totalSize: totalSize,
-                chunkSize: chunkSize,
-                totalChunks: totalChunks
-            )
-            let initRes = try await service.initUpload(req: initReq)
-            let uploadId = initRes.uploadId
-
-            for chunkIndex in 0..<totalChunks {
-                let start = chunkIndex * chunkSize
-                let end = min(start + chunkSize, data.count)
-                let chunkData = data.subdata(in: start..<end)
-                let md5 = Insecure.MD5.hash(data: chunkData).map { String(format: "%02hhx", $0) }.joined()
-
-                try await service.uploadChunk(
-                    uploadId: uploadId,
-                    chunkIndex: chunkIndex,
-                    chunkMd5: md5,
-                    chunkData: chunkData
-                )
-
-                uploadProgress = Double(chunkIndex + 1) / Double(totalChunks)
-            }
-
-            let completeReq = UploadCompleteRequestDTO(
-                uploadId: uploadId,
-                parentId: currentParentId
-            )
-            try await service.completeUpload(req: completeReq)
+            try await uploadDataInChunks(data, filename: filename, progressBase: 0.0, progressScale: 1.0)
             await loadData(parentId: currentParentId)
         } catch {
             self.errorMessage = "上传失败: \(error.localizedDescription)"
         }
 
         isUploading = false
+    }
+
+    func uploadLivePhotoPair(
+        imageData: Data,
+        imageFilename: String,
+        videoData: Data,
+        videoFilename: String
+    ) async {
+        guard !imageData.isEmpty, !videoData.isEmpty else {
+            errorMessage = "上传失败: Live Photo 资源不完整"
+            return
+        }
+
+        isUploading = true
+        uploadProgress = 0.0
+        errorMessage = nil
+
+        do {
+            // 先上传图片后上传视频，再触发后端 auto-bind，确保 live_photo 表生成绑定关系。
+            try await uploadDataInChunks(imageData, filename: imageFilename, progressBase: 0.0, progressScale: 0.5)
+            try await uploadDataInChunks(videoData, filename: videoFilename, progressBase: 0.5, progressScale: 0.5)
+            try await service.autoBindLivePhotos(parentId: currentParentId, fileIds: [])
+            await loadData(parentId: currentParentId)
+        } catch {
+            errorMessage = "上传 Live Photo 失败: \(error.localizedDescription)"
+        }
+
+        isUploading = false
+    }
+
+    private func uploadDataInChunks(
+        _ data: Data,
+        filename: String,
+        progressBase: Double,
+        progressScale: Double
+    ) async throws {
+        let totalSize = Int64(data.count)
+        guard totalSize > 0 else {
+            throw NSError(domain: "Upload", code: -1, userInfo: [NSLocalizedDescriptionKey: "文件数据为空"])
+        }
+
+        let chunkSize = 5 * 1024 * 1024
+        let totalChunks = Int(ceil(Double(totalSize) / Double(chunkSize)))
+
+        let initReq = UploadInitRequestDTO(
+            parentId: currentParentId,
+            filename: filename,
+            totalSize: totalSize,
+            chunkSize: chunkSize,
+            totalChunks: totalChunks
+        )
+        let initRes = try await service.initUpload(req: initReq)
+        let uploadId = initRes.uploadId
+
+        for chunkIndex in 0..<totalChunks {
+            let start = chunkIndex * chunkSize
+            let end = min(start + chunkSize, data.count)
+            let chunkData = data.subdata(in: start..<end)
+            let md5 = Insecure.MD5.hash(data: chunkData).map { String(format: "%02hhx", $0) }.joined()
+
+            try await service.uploadChunk(
+                uploadId: uploadId,
+                chunkIndex: chunkIndex,
+                chunkMd5: md5,
+                chunkData: chunkData
+            )
+
+            let currentRatio = Double(chunkIndex + 1) / Double(totalChunks)
+            uploadProgress = progressBase + (currentRatio * progressScale)
+        }
+
+        let completeReq = UploadCompleteRequestDTO(
+            uploadId: uploadId,
+            parentId: currentParentId
+        )
+        try await service.completeUpload(req: completeReq)
     }
 
     func thumbnail(for fileId: Int64) -> UIImage? {

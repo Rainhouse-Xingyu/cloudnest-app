@@ -69,3 +69,105 @@ struct CreateManagedUserResponseDTO: Decodable {
     let id: Int64
     let username: String
 }
+
+// MARK: - Collaboration DTOs
+
+/// 工作空间角色，与后端 owner/admin/member 对齐。
+enum WorkspaceRoleOption: String, CaseIterable, Identifiable {
+    case admin
+    case member
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .admin:
+            return "管理员"
+        case .member:
+            return "成员"
+        }
+    }
+}
+
+/// 文件协作者权限，与后端 read/write 对齐。
+enum FileCollaboratorPermissionOption: String, CaseIterable, Identifiable {
+    case read
+    case write
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .read:
+            return "只读"
+        case .write:
+            return "可写"
+        }
+    }
+}
+
+struct WorkspaceItemDTO: Decodable, Identifiable, Equatable {
+    let id: Int64
+    let name: String
+    let ownerId: Int64
+    let role: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case ownerId = "owner_id"
+        case role
+    }
+}
+
+struct WorkspaceMemberDTO: Decodable, Identifiable, Equatable {
+    var id: Int64 { userId }
+    let userId: Int64
+    let username: String
+    let role: String
+
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case username
+        case role
+    }
+}
+
+struct FileCollaboratorDTO: Decodable, Identifiable, Equatable {
+    var id: Int64 { userId }
+    let userId: Int64
+    let username: String
+    let permission: String
+
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case username
+        case permission
+    }
+}
+
+struct CreateWorkspaceRequestDTO: Encodable {
+    let name: String
+}
+
+struct UpsertWorkspaceMemberRequestDTO: Encodable {
+    let username: String
+    let role: String
+}
+
+struct GrantFileCollaboratorRequestDTO: Encodable {
+    let username: String
+    let permission: String
+}
+
+struct WorkspaceListResponseDTO: Decodable {
+    let items: [WorkspaceItemDTO]
+}
+
+struct WorkspaceMemberListResponseDTO: Decodable {
+    let items: [WorkspaceMemberDTO]
+}
+
+struct FileCollaboratorListResponseDTO: Decodable {
+    let items: [FileCollaboratorDTO]
+}

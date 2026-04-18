@@ -398,6 +398,8 @@
 				DEVELOPMENT_TEAM = T5B7TPXQ7R;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "需要保存实况照片到系统相册";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "需要访问照片库以读取实况照片原始资源并上传";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -430,6 +432,8 @@
 				DEVELOPMENT_TEAM = T5B7TPXQ7R;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "需要保存实况照片到系统相册";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "需要访问照片库以读取实况照片原始资源并上传";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

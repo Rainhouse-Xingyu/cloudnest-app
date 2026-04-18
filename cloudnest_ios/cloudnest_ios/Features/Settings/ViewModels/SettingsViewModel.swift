@@ -16,6 +16,22 @@ final class SettingsViewModel: ObservableObject {
 
     @Published var isSubmitting: Bool = false
     @Published var isLoggingOut: Bool = false
+    @Published var isCollaborationLoading: Bool = false
+
+    @Published var workspaceNameInput: String = ""
+    @Published var workspaces: [WorkspaceItemDTO] = []
+    @Published var selectedWorkspaceId: Int64?
+    @Published var workspaceMembers: [WorkspaceMemberDTO] = []
+    @Published var memberUsernameInput: String = ""
+    @Published var selectedWorkspaceRole: WorkspaceRoleOption = .member
+    @Published var removeMemberUserIdInput: String = ""
+
+    @Published var targetFileIdInput: String = ""
+    @Published var fileCollaborators: [FileCollaboratorDTO] = []
+    @Published var collaboratorUsernameInput: String = ""
+    @Published var selectedCollaboratorPermission: FileCollaboratorPermissionOption = .read
+    @Published var revokeCollaboratorUserIdInput: String = ""
+
     @Published var errorMessage: String?
     @Published var successMessage: String?
 
@@ -27,6 +43,9 @@ final class SettingsViewModel: ObservableObject {
 
     func onAppear() {
         title = service.loadTitle()
+        Task {
+            await loadWorkspaces()
+        }
     }
 
     var canCreateUser: Bool {
@@ -105,6 +124,185 @@ final class SettingsViewModel: ObservableObject {
 
         SessionManager.shared.clear()
         NotificationCenter.default.post(name: .authLogout, object: nil)
+    }
+
+    func loadWorkspaces() async {
+        isCollaborationLoading = true
+        defer { isCollaborationLoading = false }
+
+        do {
+            let rows = try await service.listWorkspaces()
+            workspaces = rows
+
+            if let selectedWorkspaceId, rows.contains(where: { $0.id == selectedWorkspaceId }) {
+                await loadWorkspaceMembers()
+            } else if let first = rows.first {
+                selectedWorkspaceId = first.id
+                await loadWorkspaceMembers()
+            } else {
+                selectedWorkspaceId = nil
+                workspaceMembers = []
+            }
+        } catch {
+            errorMessage = "加载工作空间失败：\(error.localizedDescription)"
+        }
+    }
+
+    func createWorkspace() async {
+        let name = workspaceNameInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else {
+            errorMessage = "工作空间名称不能为空"
+            return
+        }
+
+        isCollaborationLoading = true
+        defer { isCollaborationLoading = false }
+
+        do {
+            try await service.createWorkspace(CreateWorkspaceRequestDTO(name: name))
+            workspaceNameInput = ""
+            successMessage = "工作空间创建成功"
+            await loadWorkspaces()
+        } catch {
+            errorMessage = "创建工作空间失败：\(error.localizedDescription)"
+        }
+    }
+
+    func selectWorkspace(_ id: Int64) async {
+        selectedWorkspaceId = id
+        await loadWorkspaceMembers()
+    }
+
+    func loadWorkspaceMembers() async {
+        guard let workspaceId = selectedWorkspaceId else {
+            workspaceMembers = []
+            return
+        }
+
+        isCollaborationLoading = true
+        defer { isCollaborationLoading = false }
+
+        do {
+            workspaceMembers = try await service.listWorkspaceMembers(workspaceId: workspaceId)
+        } catch {
+            errorMessage = "加载成员失败：\(error.localizedDescription)"
+        }
+    }
+
+    func upsertWorkspaceMember() async {
+        guard let workspaceId = selectedWorkspaceId else {
+            errorMessage = "请先选择工作空间"
+            return
+        }
+        let username = memberUsernameInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !username.isEmpty else {
+            errorMessage = "成员用户名不能为空"
+            return
+        }
+
+        isCollaborationLoading = true
+        defer { isCollaborationLoading = false }
+
+        do {
+            try await service.upsertWorkspaceMember(
+                workspaceId: workspaceId,
+                request: UpsertWorkspaceMemberRequestDTO(username: username, role: selectedWorkspaceRole.rawValue)
+            )
+            memberUsernameInput = ""
+            successMessage = "成员已添加/更新"
+            await loadWorkspaceMembers()
+        } catch {
+            errorMessage = "更新成员失败：\(error.localizedDescription)"
+        }
+    }
+
+    func removeWorkspaceMember() async {
+        guard let workspaceId = selectedWorkspaceId else {
+            errorMessage = "请先选择工作空间"
+            return
+        }
+        guard let targetUserId = Int64(removeMemberUserIdInput.trimmingCharacters(in: .whitespacesAndNewlines)), targetUserId > 0 else {
+            errorMessage = "请输入正确的成员用户 ID"
+            return
+        }
+
+        isCollaborationLoading = true
+        defer { isCollaborationLoading = false }
+
+        do {
+            try await service.removeWorkspaceMember(workspaceId: workspaceId, userId: targetUserId)
+            removeMemberUserIdInput = ""
+            successMessage = "成员移除成功"
+            await loadWorkspaceMembers()
+        } catch {
+            errorMessage = "移除成员失败：\(error.localizedDescription)"
+        }
+    }
+
+    func loadFileCollaborators() async {
+        guard let fileId = Int64(targetFileIdInput.trimmingCharacters(in: .whitespacesAndNewlines)), fileId > 0 else {
+            errorMessage = "请输入正确的文件 ID"
+            return
+        }
+
+        isCollaborationLoading = true
+        defer { isCollaborationLoading = false }
+
+        do {
+            fileCollaborators = try await service.listFileCollaborators(fileId: fileId)
+        } catch {
+            errorMessage = "加载文件协作者失败：\(error.localizedDescription)"
+        }
+    }
+
+    func grantFileCollaborator() async {
+        guard let fileId = Int64(targetFileIdInput.trimmingCharacters(in: .whitespacesAndNewlines)), fileId > 0 else {
+            errorMessage = "请输入正确的文件 ID"
+            return
+        }
+        let username = collaboratorUsernameInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !username.isEmpty else {
+            errorMessage = "协作者用户名不能为空"
+            return
+        }
+
+        isCollaborationLoading = true
+        defer { isCollaborationLoading = false }
+
+        do {
+            try await service.grantFileCollaborator(
+                fileId: fileId,
+                request: GrantFileCollaboratorRequestDTO(username: username, permission: selectedCollaboratorPermission.rawValue)
+            )
+            collaboratorUsernameInput = ""
+            successMessage = "文件协作权限已更新"
+            await loadFileCollaborators()
+        } catch {
+            errorMessage = "授予协作权限失败：\(error.localizedDescription)"
+        }
+    }
+
+    func revokeFileCollaborator() async {
+        guard let fileId = Int64(targetFileIdInput.trimmingCharacters(in: .whitespacesAndNewlines)), fileId > 0 else {
+            errorMessage = "请输入正确的文件 ID"
+            return
+        }
+        guard let targetUserId = Int64(revokeCollaboratorUserIdInput.trimmingCharacters(in: .whitespacesAndNewlines)), targetUserId > 0 else {
+            errorMessage = "请输入正确的协作者用户 ID"
+            return
+        }
+
+        isCollaborationLoading = true
+        defer { isCollaborationLoading = false }
+
+        do {
+            try await service.revokeFileCollaborator(fileId: fileId, userId: targetUserId)
+            revokeCollaboratorUserIdInput = ""
+            successMessage = "协作者权限已撤销"
+            await loadFileCollaborators()
+        } catch {
+            errorMessage = "撤销协作权限失败：\(error.localizedDescription)"
+        }
     }
 
     private func resetFormForNextUser() {

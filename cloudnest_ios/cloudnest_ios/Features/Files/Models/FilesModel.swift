@@ -165,6 +165,16 @@ struct LivePhotoLookupResponseDTO: Decodable {
     let item: LivePhotoLookupItemDTO?
 }
 
+struct LivePhotoAutoBindRequestDTO: Encodable {
+    let parentId: Int64?
+    let fileIds: [Int64]
+
+    enum CodingKeys: String, CodingKey {
+        case parentId = "parent_id"
+        case fileIds = "file_ids"
+    }
+}
+
 struct LivePhotoLookupItemDTO: Decodable {
     let id: Int64
     let fileRole: String
@@ -190,26 +200,26 @@ struct LivePhotoSimpleFileDTO: Decodable {
 
 // MARK: - Preview Models
 
-struct FilePreviewDocument: Identifiable {
+struct FilePreviewDocument: Identifiable, Equatable {
     let id = UUID()
     let url: URL
     let displayName: String
 }
 
-struct ImagePreviewItem: Identifiable {
+struct ImagePreviewItem: Identifiable, Equatable {
     let id = UUID()
     let imageURL: URL
     let displayName: String
 }
 
-struct MediaPlaybackItem: Identifiable {
+struct MediaPlaybackItem: Identifiable, Equatable {
     let id = UUID()
     let mediaURL: URL
     let displayName: String
     let isAudio: Bool
 }
 
-struct LivePhotoDisplayItem: Identifiable {
+struct LivePhotoDisplayItem: Identifiable, Equatable {
     let id = UUID()
     let imageURL: URL
     let videoURL: URL

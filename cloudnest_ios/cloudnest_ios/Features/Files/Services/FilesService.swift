@@ -20,6 +20,7 @@ protocol FilesServiceProtocol {
     func completeUpload(req: UploadCompleteRequestDTO) async throws
     func downloadFile(fileId: Int64, filename: String, isFolder: Bool) async throws -> URL
     func getLivePhoto(byFileId fileId: Int64) async throws -> LivePhotoLookupItemDTO?
+    func autoBindLivePhotos(parentId: Int64?, fileIds: [Int64]) async throws
 }
 
 /// Files 模块服务默认实现
@@ -186,6 +187,14 @@ final class FilesService: FilesServiceProtocol {
         let endpoint = LivePhotoLookupEndpoint(fileId: fileId, token: try token)
         let response = try await networkClient.request(endpoint, decode: LivePhotoLookupResponseDTO.self)
         return response.item
+    }
+
+    func autoBindLivePhotos(parentId: Int64?, fileIds: [Int64]) async throws {
+        let body = try JSONEncoder().encode(
+            LivePhotoAutoBindRequestDTO(parentId: parentId, fileIds: fileIds)
+        )
+        let endpoint = GenericPostEndpoint(path: "/api/live-photos/auto-bind", body: body, token: try token)
+        let _ = try await networkClient.request(endpoint)
     }
 
     private func fetchTree(parentId: Int64, depth: Int, maxDepth: Int) async throws -> [FileTreeNode] {

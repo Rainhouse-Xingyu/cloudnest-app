@@ -11,6 +11,8 @@ struct SettingsView: View {
                 accountFormCard
                 permissionCard
                 createButton
+                collaborationWorkspaceCard
+                collaborationFilePermissionCard
                 statusCard
 
                 // 页面底部退出按钮
@@ -159,6 +161,184 @@ struct SettingsView: View {
         .buttonStyle(.plain)
         .disabled(!viewModel.canCreateUser)
         .opacity(viewModel.canCreateUser ? 1 : 0.6)
+    }
+
+    private var collaborationWorkspaceCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("协作空间")
+
+            HStack(spacing: 8) {
+                TextField("工作空间名称", text: $viewModel.workspaceNameInput)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled(true)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color.white.opacity(0.35), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                Button("创建") {
+                    Task { await viewModel.createWorkspace() }
+                }
+                .buttonStyle(.borderedProminent)
+            }
+
+            if !viewModel.workspaces.isEmpty {
+                Picker("选择空间", selection: Binding(
+                    get: { viewModel.selectedWorkspaceId ?? 0 },
+                    set: { newValue in
+                        Task { await viewModel.selectWorkspace(newValue) }
+                    }
+                )) {
+                    ForEach(viewModel.workspaces) { item in
+                        Text("\(item.name) (\(item.role))").tag(item.id)
+                    }
+                }
+                .pickerStyle(.menu)
+            } else {
+                Text("暂无工作空间")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: 8) {
+                TextField("成员用户名", text: $viewModel.memberUsernameInput)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled(true)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color.white.opacity(0.35), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                Picker("角色", selection: $viewModel.selectedWorkspaceRole) {
+                    ForEach(WorkspaceRoleOption.allCases) { role in
+                        Text(role.title).tag(role)
+                    }
+                }
+                .pickerStyle(.menu)
+
+                Button("保存") {
+                    Task { await viewModel.upsertWorkspaceMember() }
+                }
+                .buttonStyle(.borderedProminent)
+            }
+
+            HStack(spacing: 8) {
+                TextField("移除成员 user_id", text: $viewModel.removeMemberUserIdInput)
+                    .keyboardType(.numberPad)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color.white.opacity(0.35), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                Button("移除") {
+                    Task { await viewModel.removeWorkspaceMember() }
+                }
+                .buttonStyle(.bordered)
+                .tint(.red)
+            }
+
+            if viewModel.isCollaborationLoading {
+                ProgressView("协作数据加载中...")
+                    .font(.footnote)
+            }
+
+            if viewModel.workspaceMembers.isEmpty {
+                Text("暂无成员数据")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(viewModel.workspaceMembers) { item in
+                        Text("#\(item.userId)  \(item.username)  (\(item.role))")
+                            .font(.system(size: 13, weight: .medium, design: .monospaced))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .background(Color.white.opacity(0.28), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(0.6), lineWidth: 1)
+        )
+    }
+
+    private var collaborationFilePermissionCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("文件协作权限")
+
+            HStack(spacing: 8) {
+                TextField("文件 ID", text: $viewModel.targetFileIdInput)
+                    .keyboardType(.numberPad)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color.white.opacity(0.35), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                Button("加载协作者") {
+                    Task { await viewModel.loadFileCollaborators() }
+                }
+                .buttonStyle(.bordered)
+            }
+
+            HStack(spacing: 8) {
+                TextField("协作者用户名", text: $viewModel.collaboratorUsernameInput)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled(true)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color.white.opacity(0.35), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                Picker("权限", selection: $viewModel.selectedCollaboratorPermission) {
+                    ForEach(FileCollaboratorPermissionOption.allCases) { item in
+                        Text(item.title).tag(item)
+                    }
+                }
+                .pickerStyle(.menu)
+
+                Button("授权") {
+                    Task { await viewModel.grantFileCollaborator() }
+                }
+                .buttonStyle(.borderedProminent)
+            }
+
+            HStack(spacing: 8) {
+                TextField("撤销 user_id", text: $viewModel.revokeCollaboratorUserIdInput)
+                    .keyboardType(.numberPad)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color.white.opacity(0.35), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                Button("撤销") {
+                    Task { await viewModel.revokeFileCollaborator() }
+                }
+                .buttonStyle(.bordered)
+                .tint(.red)
+            }
+
+            if viewModel.fileCollaborators.isEmpty {
+                Text("暂无文件协作者")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(viewModel.fileCollaborators) { item in
+                        Text("#\(item.userId)  \(item.username)  [\(item.permission)]")
+                            .font(.system(size: 13, weight: .medium, design: .monospaced))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .background(Color.white.opacity(0.28), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(0.6), lineWidth: 1)
+        )
     }
 
     @ViewBuilder
