@@ -5,6 +5,8 @@ import Darwin
 /// Auth 页面状态与交互逻辑
 @MainActor
 final class AuthViewModel: ObservableObject {
+    private static let fixedScanPort = 7800
+
     @Published var username: String = ""
     @Published var password: String = ""
     @Published var useExternalConnection: Bool = false
@@ -79,6 +81,12 @@ final class AuthViewModel: ObservableObject {
 
         isLoading = true
         defer { isLoading = false }
+
+        let targetBaseURL = overrideBaseURL ?? AppContainer.shared.networkClient.currentBaseURL()
+        if !(await isHealthReachable(baseURL: targetBaseURL, timeout: 2.0)) {
+            errorMessage = "当前设备无法连接服务器：\(targetBaseURL)。请先点击“自动探测当前可达 IP”或检查同一 Wi-Fi/防火墙。"
+            return false
+        }
 
         do {
             let response = try await service.login(
@@ -190,7 +198,7 @@ final class AuthViewModel: ObservableObject {
 
         let base = useExternalConnection ? externalIP : AppContainer.shared.networkClient.currentBaseURL()
         let normalizedBase = normalizeExternalBaseURL(from: base) ?? AppContainer.shared.networkClient.currentBaseURL()
-        let port = URL(string: normalizedBase)?.port ?? 8080
+        let port = Self.fixedScanPort
 
         let quickCandidates = buildQuickCandidates(port: port, base: normalizedBase)
         if let found = await firstReachableBaseURL(from: quickCandidates, timeout: 1.0) {
@@ -204,7 +212,7 @@ final class AuthViewModel: ObservableObject {
             return
         }
 
-        errorMessage = "未探测到可达服务器，请确认手机与后端在同一局域网，端口为 \(port)"
+        errorMessage = "未探测到可达服务器，请确认手机与后端在同一局域网，端口为 \(Self.fixedScanPort)"
     }
 
     private func extractPort(from host: String?) -> Int? {

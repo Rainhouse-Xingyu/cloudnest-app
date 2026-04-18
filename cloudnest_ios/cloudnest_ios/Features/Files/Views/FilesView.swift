@@ -20,6 +20,10 @@ struct FilesView: View {
     @State private var showFileImporter: Bool = false
     @State private var showUploadSourceDialog: Bool = false
     @State private var showPhotoPicker: Bool = false
+    @State private var showCreateFolderAlert: Bool = false
+    @State private var newFolderName: String = ""
+    @State private var showTargetFolderPicker: Bool = false
+    @State private var pendingOperation: PendingFileOperation?
     @State private var expandedTreeNodes: Set<Int64> = []
     @AppStorage("files.layout.style") private var layoutStyleRaw: String = FilesLayoutStyle.icon.rawValue
 
@@ -101,14 +105,32 @@ struct FilesView: View {
         .alert("确认删除", isPresented: $showDeleteConfirm) {
             Button("取消", role: .cancel) { }
             Button("删除", role: .destructive) {
-                withAnimation {
-                    selectedItems.removeAll()
-                    isSelectionMode = false
+                let ids = Array(selectedItems)
+                Task {
+                    await viewModel.delete(fileIds: ids)
+                    withAnimation {
+                        selectedItems.removeAll()
+                        isSelectionMode = false
+                    }
                 }
-                // TODO: 请求删除接口
             }
         } message: {
             Text("确定要删除选中的 \(selectedItems.count) 个项目吗？")
+        }
+        .alert("新建文件夹", isPresented: $showCreateFolderAlert) {
+            TextField("请输入文件夹名称", text: $newFolderName)
+            Button("取消", role: .cancel) {
+                newFolderName = ""
+            }
+            Button("创建") {
+                let name = newFolderName
+                newFolderName = ""
+                Task {
+                    await viewModel.createFolder(name: name)
+                }
+            }
+        } message: {
+            Text("将在当前目录创建新文件夹")
         }
         .sheet(isPresented: $showPhotoPicker) {
             PhotoLibraryPicker(
@@ -170,6 +192,45 @@ struct FilesView: View {
         .sheet(item: $viewModel.livePlayerItem) { item in
             LivePhotoPlayerView(url: item.url)
         }
+        .sheet(isPresented: $showTargetFolderPicker) {
+            FolderTargetPickerView(
+                treeNodes: viewModel.treeNodes,
+                currentParentId: viewModel.currentParentId,
+                operation: pendingOperation,
+                onCancel: {
+                    showTargetFolderPicker = false
+                    pendingOperation = nil
+                },
+                onConfirm: { targetParentId in
+                    let op = pendingOperation
+                    let ids = Array(selectedItems)
+                    showTargetFolderPicker = false
+                    pendingOperation = nil
+
+                    Task {
+                        if op == .move {
+                            await viewModel.move(fileIds: ids, targetParentId: targetParentId)
+                        } else if op == .copy {
+                            await viewModel.copy(fileIds: ids, targetParentId: targetParentId)
+                        }
+                        withAnimation {
+                            selectedItems.removeAll()
+                            isSelectionMode = false
+                        }
+                    }
+                }
+            )
+        }
+        .sheet(isPresented: Binding(
+            get: { !viewModel.activityItems.isEmpty },
+            set: { newValue in
+                if !newValue {
+                    viewModel.clearShareItems()
+                }
+            }
+        )) {
+            ShareSheet(activityItems: viewModel.activityItems)
+        }
         .alert("下载结果", isPresented: Binding(
             get: { viewModel.downloadMessage != nil },
             set: { newValue in
@@ -213,7 +274,7 @@ struct FilesView: View {
                 }
                 
                 Button {
-                    // 新建文件夹
+                    showCreateFolderAlert = true
                 } label: {
                     Image(systemName: "folder.badge.plus")
                 }
@@ -224,7 +285,37 @@ struct FilesView: View {
                     }) {
                         Label("刷新", systemImage: "arrow.clockwise")
                     }
-                    Button(action: {}) {
+                    Menu {
+                        Button {
+                            viewModel.updateSortMode(.updatedDesc)
+                        } label: {
+                            if viewModel.sortMode == .updatedDesc {
+                                Label("按更新时间", systemImage: "checkmark")
+                            } else {
+                                Text("按更新时间")
+                            }
+                        }
+
+                        Button {
+                            viewModel.updateSortMode(.nameAsc)
+                        } label: {
+                            if viewModel.sortMode == .nameAsc {
+                                Label("按名称", systemImage: "checkmark")
+                            } else {
+                                Text("按名称")
+                            }
+                        }
+
+                        Button {
+                            viewModel.updateSortMode(.sizeDesc)
+                        } label: {
+                            if viewModel.sortMode == .sizeDesc {
+                                Label("按大小", systemImage: "checkmark")
+                            } else {
+                                Text("按大小")
+                            }
+                        }
+                    } label: {
                         Label("排序", systemImage: "arrow.up.arrow.down")
                     }
                     Button(action: {}) {
@@ -632,15 +723,21 @@ struct FilesView: View {
             }
             Spacer()
             actionButton(title: "移动", icon: "folder") {
-                // 移动逻辑
+                pendingOperation = .move
+                showTargetFolderPicker = true
             }
             Spacer()
             actionButton(title: "复制", icon: "doc.on.doc") {
-                // 复制逻辑
+                pendingOperation = .copy
+                showTargetFolderPicker = true
             }
             Spacer()
             actionButton(title: "分享", icon: "square.and.arrow.up") {
-                // 分享逻辑
+                let allItems = viewModel.folders + viewModel.files
+                let toShare = allItems.filter { selectedItems.contains($0.id) }
+                Task {
+                    await viewModel.prepareShare(items: toShare)
+                }
             }
             Spacer()
             actionButton(title: "删除", icon: "trash", color: .red) {
@@ -730,6 +827,120 @@ struct FilesView: View {
 struct FilesView_Previews: PreviewProvider {
     static var previews: some View {
         FilesView()
+    }
+}
+
+private enum PendingFileOperation {
+    case move
+    case copy
+}
+
+private struct FolderTargetPickerView: View {
+    let treeNodes: [FileTreeNode]
+    let currentParentId: Int64
+    let operation: PendingFileOperation?
+    let onCancel: () -> Void
+    let onConfirm: (Int64) -> Void
+
+    @State private var selectedTargetId: Int64 = 0
+    @State private var expandedNodeIDs: Set<Int64> = []
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("目标目录") {
+                    folderRow(id: 0, name: "Root", level: 0)
+                    ForEach(treeNodes) { node in
+                        treeRow(node: node, level: 1)
+                    }
+                }
+            }
+            .navigationTitle(operationTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("取消") {
+                        onCancel()
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("确定") {
+                        onConfirm(selectedTargetId)
+                    }
+                }
+            }
+            .onAppear {
+                selectedTargetId = currentParentId
+            }
+        }
+    }
+
+    private var operationTitle: String {
+        if operation == .move { return "移动到" }
+        if operation == .copy { return "复制到" }
+        return "选择目录"
+    }
+
+    private func treeRow(node: FileTreeNode, level: Int) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                if !node.children.isEmpty {
+                    Button {
+                        if expandedNodeIDs.contains(node.id) {
+                            expandedNodeIDs.remove(node.id)
+                        } else {
+                            expandedNodeIDs.insert(node.id)
+                        }
+                    } label: {
+                        Image(systemName: expandedNodeIDs.contains(node.id) ? "chevron.down" : "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Color.clear.frame(width: 16, height: 16)
+                }
+
+                folderRow(id: node.id, name: node.name, level: level)
+            }
+
+            if expandedNodeIDs.contains(node.id) {
+                ForEach(node.children) { child in
+                    treeRow(node: child, level: level + 1)
+                }
+            }
+        }
+    }
+
+    private func folderRow(id: Int64, name: String, level: Int) -> some View {
+        Button {
+            selectedTargetId = id
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "folder")
+                    .foregroundStyle(.blue)
+                Text(name)
+                    .foregroundStyle(.primary)
+                Spacer()
+                if selectedTargetId == id {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.blue)
+                }
+            }
+            .padding(.leading, CGFloat(level) * 10)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct ShareSheet: UIViewControllerRepresentable {
+    let activityItems: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {
     }
 }
 

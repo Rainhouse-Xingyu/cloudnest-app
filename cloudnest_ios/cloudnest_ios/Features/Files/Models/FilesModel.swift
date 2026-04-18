@@ -74,6 +74,44 @@ struct UploadCompleteRequestDTO: Encodable {
     }
 }
 
+// MARK: - File Manage DTOs
+
+struct CreateFolderRequestDTO: Encodable {
+    let parentId: Int64
+    let name: String
+
+    enum CodingKeys: String, CodingKey {
+        case parentId = "parent_id"
+        case name
+    }
+}
+
+struct BatchFileOperationRequestDTO: Encodable {
+    let fileIds: [Int64]
+
+    enum CodingKeys: String, CodingKey {
+        case fileIds = "file_ids"
+    }
+}
+
+struct MoveOrCopyRequestDTO: Encodable {
+    let fileIds: [Int64]
+    let targetParentId: Int64
+
+    enum CodingKeys: String, CodingKey {
+        case fileIds = "file_ids"
+        case targetParentId = "target_parent_id"
+    }
+}
+
+struct BatchDeleteResponseDTO: Decodable {
+    let deletedIds: [Int64]
+
+    enum CodingKeys: String, CodingKey {
+        case deletedIds = "deleted_ids"
+    }
+}
+
 // MARK: - Live Photo DTOs
 
 struct LivePhotoLookupResponseDTO: Decodable {

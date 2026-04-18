@@ -3,6 +3,12 @@ import Combine
 import CryptoKit
 import UIKit
 
+enum FilesSortMode: String, CaseIterable {
+    case nameAsc
+    case updatedDesc
+    case sizeDesc
+}
+
 /// Files 页面状态与交互逻辑
 @MainActor
 final class FilesViewModel: ObservableObject {
@@ -14,10 +20,12 @@ final class FilesViewModel: ObservableObject {
     @Published var isLoading: Bool = false
     @Published var isTreeLoading: Bool = false
     @Published var currentParentId: Int64 = 0
+    @Published var sortMode: FilesSortMode = .updatedDesc
     @Published var errorMessage: String? = nil
     @Published var downloadMessage: String? = nil
     @Published var previewDocument: FilePreviewDocument?
     @Published var livePlayerItem: LivePhotoPlayerItem?
+    @Published var activityItems: [URL] = []
     @Published private(set) var imageThumbnails: [Int64: UIImage] = [:]
 
     // 上传状态
@@ -47,8 +55,8 @@ final class FilesViewModel: ObservableObject {
         errorMessage = nil
         do {
             let allItems = try await service.loadFiles(parentId: pid)
-            self.folders = allItems.filter { $0.isFolder == 1 }
-            self.files = allItems.filter { $0.isFolder == 0 }
+            self.folders = sortedItems(allItems.filter { $0.isFolder == 1 })
+            self.files = sortedItems(allItems.filter { $0.isFolder == 0 })
             self.currentParentId = pid
             rebuildPathIfNeeded(targetParentId: pid)
 
@@ -278,6 +286,114 @@ final class FilesViewModel: ObservableObject {
         imageThumbnails[fileId]
     }
 
+    func createFolder(name: String) async {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            errorMessage = "文件夹名称不能为空"
+            return
+        }
+
+        errorMessage = nil
+        do {
+            try await service.createFolder(parentId: currentParentId, name: trimmed)
+            await loadData(parentId: currentParentId)
+            await loadTree()
+        } catch {
+            errorMessage = "新建文件夹失败: \(error.localizedDescription)"
+        }
+    }
+
+    func delete(fileIds: [Int64]) async {
+        let ids = Array(Set(fileIds))
+        guard !ids.isEmpty else {
+            errorMessage = "请先选择要删除的项目"
+            return
+        }
+
+        errorMessage = nil
+        do {
+            let deleted = try await service.batchDelete(fileIds: ids)
+            if deleted.isEmpty {
+                downloadMessage = "删除完成，但没有条目被删除"
+            } else {
+                downloadMessage = "已删除 \(deleted.count) 个项目"
+            }
+            await loadData(parentId: currentParentId)
+            await loadTree()
+        } catch {
+            errorMessage = "删除失败: \(error.localizedDescription)"
+        }
+    }
+
+    func move(fileIds: [Int64], targetParentId: Int64) async {
+        let ids = Array(Set(fileIds))
+        guard !ids.isEmpty else {
+            errorMessage = "请先选择要移动的项目"
+            return
+        }
+
+        errorMessage = nil
+        do {
+            try await service.move(fileIds: ids, targetParentId: targetParentId)
+            downloadMessage = "移动完成"
+            await loadData(parentId: currentParentId)
+            await loadTree()
+        } catch {
+            errorMessage = "移动失败: \(error.localizedDescription)"
+        }
+    }
+
+    func copy(fileIds: [Int64], targetParentId: Int64) async {
+        let ids = Array(Set(fileIds))
+        guard !ids.isEmpty else {
+            errorMessage = "请先选择要复制的项目"
+            return
+        }
+
+        errorMessage = nil
+        do {
+            try await service.copy(fileIds: ids, targetParentId: targetParentId)
+            downloadMessage = "复制完成"
+            await loadData(parentId: currentParentId)
+            await loadTree()
+        } catch {
+            errorMessage = "复制失败: \(error.localizedDescription)"
+        }
+    }
+
+    func prepareShare(items: [FileItemDTO]) async {
+        guard !items.isEmpty else {
+            errorMessage = "请先选择要分享的项目"
+            return
+        }
+
+        errorMessage = nil
+        do {
+            var urls: [URL] = []
+            for item in items {
+                let fileURL = try await service.downloadFile(
+                    fileId: item.id,
+                    filename: item.filename,
+                    isFolder: item.isFolder == 1
+                )
+                urls.append(fileURL)
+            }
+            activityItems = urls
+        } catch {
+            errorMessage = "准备分享失败: \(error.localizedDescription)"
+        }
+    }
+
+    func clearShareItems() {
+        activityItems = []
+    }
+
+    func updateSortMode(_ mode: FilesSortMode) {
+        sortMode = mode
+        folders = sortedItems(folders)
+        files = sortedItems(files)
+    }
+
     private func rebuildPathIfNeeded(targetParentId: Int64) {
         if targetParentId == 0 {
             currentPath = [FilePathNode(id: 0, name: "Root")]
@@ -343,6 +459,17 @@ final class FilesViewModel: ObservableObject {
             return true
         }
         return lowerName.hasSuffix(".jpg") || lowerName.hasSuffix(".jpeg") || lowerName.hasSuffix(".png") || lowerName.hasSuffix(".heic") || lowerName.hasSuffix(".gif") || lowerName.hasSuffix(".webp")
+    }
+
+    private func sortedItems(_ items: [FileItemDTO]) -> [FileItemDTO] {
+        switch sortMode {
+        case .nameAsc:
+            return items.sorted { $0.filename.localizedCompare($1.filename) == .orderedAscending }
+        case .updatedDesc:
+            return items.sorted { $0.updateTime > $1.updateTime }
+        case .sizeDesc:
+            return items.sorted { $0.size > $1.size }
+        }
     }
 }
 

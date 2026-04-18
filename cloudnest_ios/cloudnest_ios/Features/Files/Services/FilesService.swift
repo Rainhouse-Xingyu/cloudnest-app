@@ -4,6 +4,10 @@ import Foundation
 protocol FilesServiceProtocol {
     func loadFiles(parentId: Int64) async throws -> [FileItemDTO]
     func loadDirectoryTree() async throws -> [FileTreeNode]
+    func createFolder(parentId: Int64, name: String) async throws
+    func batchDelete(fileIds: [Int64]) async throws -> [Int64]
+    func move(fileIds: [Int64], targetParentId: Int64) async throws
+    func copy(fileIds: [Int64], targetParentId: Int64) async throws
     func initUpload(req: UploadInitRequestDTO) async throws -> UploadInitResponseDTO
     func uploadChunk(uploadId: String, chunkIndex: Int, chunkMd5: String, chunkData: Data) async throws
     func completeUpload(req: UploadCompleteRequestDTO) async throws
@@ -36,6 +40,31 @@ final class FilesService: FilesServiceProtocol {
 
     func loadDirectoryTree() async throws -> [FileTreeNode] {
         try await fetchTree(parentId: 0, depth: 0, maxDepth: 8)
+    }
+
+    func createFolder(parentId: Int64, name: String) async throws {
+        let body = try JSONEncoder().encode(CreateFolderRequestDTO(parentId: parentId, name: name))
+        let endpoint = GenericPostEndpoint(path: "/api/files/folders", body: body, token: try token)
+        let _ = try await networkClient.request(endpoint)
+    }
+
+    func batchDelete(fileIds: [Int64]) async throws -> [Int64] {
+        let body = try JSONEncoder().encode(BatchFileOperationRequestDTO(fileIds: fileIds))
+        let endpoint = GenericPostEndpoint(path: "/api/files/batch-delete", body: body, token: try token)
+        let response = try await networkClient.request(endpoint, decode: BatchDeleteResponseDTO.self)
+        return response.deletedIds
+    }
+
+    func move(fileIds: [Int64], targetParentId: Int64) async throws {
+        let body = try JSONEncoder().encode(MoveOrCopyRequestDTO(fileIds: fileIds, targetParentId: targetParentId))
+        let endpoint = GenericPostEndpoint(path: "/api/files/move", body: body, token: try token)
+        let _ = try await networkClient.request(endpoint)
+    }
+
+    func copy(fileIds: [Int64], targetParentId: Int64) async throws {
+        let body = try JSONEncoder().encode(MoveOrCopyRequestDTO(fileIds: fileIds, targetParentId: targetParentId))
+        let endpoint = GenericPostEndpoint(path: "/api/files/copy", body: body, token: try token)
+        let _ = try await networkClient.request(endpoint)
     }
 
     func initUpload(req: UploadInitRequestDTO) async throws -> UploadInitResponseDTO {
