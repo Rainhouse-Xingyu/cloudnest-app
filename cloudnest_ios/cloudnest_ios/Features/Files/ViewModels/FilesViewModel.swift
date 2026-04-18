@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import CryptoKit
+import UIKit
 
 /// Files 页面状态与交互逻辑
 @MainActor
@@ -15,10 +16,17 @@ final class FilesViewModel: ObservableObject {
     @Published var currentParentId: Int64 = 0
     @Published var errorMessage: String? = nil
     @Published var downloadMessage: String? = nil
+    @Published var previewDocument: FilePreviewDocument?
+    @Published var livePlayerItem: LivePhotoPlayerItem?
+    @Published private(set) var imageThumbnails: [Int64: UIImage] = [:]
 
     // 上传状态
     @Published var isUploading: Bool = false
     @Published var uploadProgress: Double = 0.0
+
+    @Published private(set) var livePhotoIDs: Set<Int64> = []
+
+    private var livePhotoCache: [Int64: LivePhotoLookupItemDTO?] = [:]
 
     private let service: FilesServiceProtocol
 
@@ -43,6 +51,9 @@ final class FilesViewModel: ObservableObject {
             self.files = allItems.filter { $0.isFolder == 0 }
             self.currentParentId = pid
             rebuildPathIfNeeded(targetParentId: pid)
+
+            await refreshLivePhotoFlags(for: self.files)
+            await refreshImageThumbnails(for: self.files)
         } catch {
             self.errorMessage = "加载失败: \(error.localizedDescription)"
         }
@@ -111,6 +122,38 @@ final class FilesViewModel: ObservableObject {
         }
     }
 
+    func openPreview(for item: FileItemDTO) async {
+        errorMessage = nil
+        do {
+            let fileURL = try await service.downloadFile(fileId: item.id, filename: item.filename, isFolder: false)
+            previewDocument = FilePreviewDocument(url: fileURL, displayName: item.filename)
+        } catch {
+            errorMessage = "预览失败: \(error.localizedDescription)"
+        }
+    }
+
+    func isLivePhoto(_ fileId: Int64) -> Bool {
+        livePhotoIDs.contains(fileId)
+    }
+
+    func playLivePhoto(for item: FileItemDTO) async {
+        guard let cached = livePhotoCache[item.id], let info = cached else {
+            return
+        }
+
+        errorMessage = nil
+        do {
+            let videoURL = try await service.downloadFile(
+                fileId: info.videoFileId,
+                filename: info.videoFile.filename,
+                isFolder: false
+            )
+            livePlayerItem = LivePhotoPlayerItem(url: videoURL, displayName: info.videoFile.filename)
+        } catch {
+            errorMessage = "实况播放失败: \(error.localizedDescription)"
+        }
+    }
+
     func uploadFile(url: URL) async {
         guard url.startAccessingSecurityScopedResource() else {
             self.errorMessage = "无法读取选择的文件权限"
@@ -176,6 +219,65 @@ final class FilesViewModel: ObservableObject {
         isUploading = false
     }
 
+    func uploadPhotoData(_ data: Data, filename: String) async {
+        let totalSize = Int64(data.count)
+        guard totalSize > 0 else {
+            self.errorMessage = "上传失败: 图片数据为空"
+            return
+        }
+
+        isUploading = true
+        uploadProgress = 0.0
+        errorMessage = nil
+
+        do {
+            // 这里沿用分片上传，保证和文件上传链路一致。
+            let chunkSize = 5 * 1024 * 1024
+            let totalChunks = Int(ceil(Double(totalSize) / Double(chunkSize)))
+
+            let initReq = UploadInitRequestDTO(
+                parentId: currentParentId,
+                filename: filename,
+                totalSize: totalSize,
+                chunkSize: chunkSize,
+                totalChunks: totalChunks
+            )
+            let initRes = try await service.initUpload(req: initReq)
+            let uploadId = initRes.uploadId
+
+            for chunkIndex in 0..<totalChunks {
+                let start = chunkIndex * chunkSize
+                let end = min(start + chunkSize, data.count)
+                let chunkData = data.subdata(in: start..<end)
+                let md5 = Insecure.MD5.hash(data: chunkData).map { String(format: "%02hhx", $0) }.joined()
+
+                try await service.uploadChunk(
+                    uploadId: uploadId,
+                    chunkIndex: chunkIndex,
+                    chunkMd5: md5,
+                    chunkData: chunkData
+                )
+
+                uploadProgress = Double(chunkIndex + 1) / Double(totalChunks)
+            }
+
+            let completeReq = UploadCompleteRequestDTO(
+                uploadId: uploadId,
+                parentId: currentParentId
+            )
+            try await service.completeUpload(req: completeReq)
+            await loadData(parentId: currentParentId)
+        } catch {
+            self.errorMessage = "上传失败: \(error.localizedDescription)"
+        }
+
+        isUploading = false
+    }
+
+    func thumbnail(for fileId: Int64) -> UIImage? {
+        imageThumbnails[fileId]
+    }
+
     private func rebuildPathIfNeeded(targetParentId: Int64) {
         if targetParentId == 0 {
             currentPath = [FilePathNode(id: 0, name: "Root")]
@@ -199,6 +301,48 @@ final class FilesViewModel: ObservableObject {
         }
 
         return nil
+    }
+
+    private func refreshLivePhotoFlags(for files: [FileItemDTO]) async {
+        livePhotoIDs = []
+        for file in files {
+            do {
+                if let info = try await service.getLivePhoto(byFileId: file.id) {
+                    livePhotoCache[file.id] = info
+                    livePhotoIDs.insert(file.id)
+                } else {
+                    livePhotoCache[file.id] = nil
+                }
+            } catch {
+                // 查询失败时不阻断文件列表展示。
+                livePhotoCache[file.id] = nil
+            }
+        }
+    }
+
+    private func refreshImageThumbnails(for files: [FileItemDTO]) async {
+        var updated = imageThumbnails
+        for file in files {
+            guard isImageFile(file), updated[file.id] == nil else { continue }
+            do {
+                let localURL = try await service.downloadFile(fileId: file.id, filename: file.filename, isFolder: false)
+                if let image = UIImage(contentsOfFile: localURL.path) {
+                    updated[file.id] = image
+                }
+            } catch {
+                // 缩略图加载失败不影响主流程。
+            }
+        }
+        imageThumbnails = updated
+    }
+
+    private func isImageFile(_ file: FileItemDTO) -> Bool {
+        let lowerType = file.fileType.lowercased()
+        let lowerName = file.filename.lowercased()
+        if lowerType.contains("image") || lowerType.contains("jpg") || lowerType.contains("jpeg") || lowerType.contains("png") || lowerType.contains("heic") || lowerType.contains("gif") || lowerType.contains("webp") {
+            return true
+        }
+        return lowerName.hasSuffix(".jpg") || lowerName.hasSuffix(".jpeg") || lowerName.hasSuffix(".png") || lowerName.hasSuffix(".heic") || lowerName.hasSuffix(".gif") || lowerName.hasSuffix(".webp")
     }
 }
 

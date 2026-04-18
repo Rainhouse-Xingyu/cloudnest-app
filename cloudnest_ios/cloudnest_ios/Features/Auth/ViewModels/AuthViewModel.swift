@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import Darwin
 
 /// Auth 页面状态与交互逻辑
 @MainActor
@@ -9,7 +10,9 @@ final class AuthViewModel: ObservableObject {
     @Published var useExternalConnection: Bool = false
     @Published var externalIP: String = ""
     @Published var isLoading: Bool = false
+    @Published var isDetectingServer: Bool = false
     @Published var errorMessage: String?
+    @Published var noticeMessage: String?
     private let service: AuthServiceProtocol
     private let sessionManager: SessionManager
 
@@ -24,6 +27,7 @@ final class AuthViewModel: ObservableObject {
     func onAppear() {
         // 页面出现时仅清理错误态，不重置账号输入
         errorMessage = nil
+        noticeMessage = nil
 
         // 默认优先回填最近一次外网地址，避免回落到 127.0.0.1。
         if externalIP.isEmpty {
@@ -50,6 +54,7 @@ final class AuthViewModel: ObservableObject {
     /// 执行登录，成功返回 true，失败返回 false
     func login() async -> Bool {
         errorMessage = nil
+        noticeMessage = nil
 
         let cleanedUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanedUsername.isEmpty, !password.isEmpty else {
@@ -169,11 +174,37 @@ final class AuthViewModel: ObservableObject {
         }
 
         for candidate in ordered {
-            if await isHealthReachable(baseURL: candidate) {
+            if await isHealthReachable(baseURL: candidate, timeout: 1.2) {
                 return candidate
             }
         }
         return fallback
+    }
+
+    /// 自动探测当前可达服务地址：先快速候选，再同网段扫描。
+    func autoDetectReachableServer() async {
+        errorMessage = nil
+        noticeMessage = nil
+        isDetectingServer = true
+        defer { isDetectingServer = false }
+
+        let base = useExternalConnection ? externalIP : AppContainer.shared.networkClient.currentBaseURL()
+        let normalizedBase = normalizeExternalBaseURL(from: base) ?? AppContainer.shared.networkClient.currentBaseURL()
+        let port = URL(string: normalizedBase)?.port ?? 8080
+
+        let quickCandidates = buildQuickCandidates(port: port, base: normalizedBase)
+        if let found = await firstReachableBaseURL(from: quickCandidates, timeout: 1.0) {
+            applyDetectedBaseURL(found)
+            return
+        }
+
+        let subnetCandidates = buildSubnetCandidates(port: port)
+        if let found = await firstReachableBaseURL(from: subnetCandidates, timeout: 0.9) {
+            applyDetectedBaseURL(found)
+            return
+        }
+
+        errorMessage = "未探测到可达服务器，请确认手机与后端在同一局域网，端口为 \(port)"
     }
 
     private func extractPort(from host: String?) -> Int? {
@@ -199,22 +230,149 @@ final class AuthViewModel: ObservableObject {
         return nil
     }
 
-    private func isHealthReachable(baseURL: String) async -> Bool {
+    private func isHealthReachable(baseURL: String, timeout: TimeInterval = 1.5) async -> Bool {
         guard let url = URL(string: baseURL + "/api/resource/health") else {
             return false
         }
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        request.timeoutInterval = 1.5
+        request.timeoutInterval = timeout
 
         do {
             let (_, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse else { return false }
-            return (200...299).contains(http.statusCode)
+            // health 接口在部分路由策略下会返回 401，但这代表服务可达。
+            return (200...299).contains(http.statusCode) || http.statusCode == 401
         } catch {
             return false
         }
+    }
+
+    private func applyDetectedBaseURL(_ baseURL: String) {
+        AppContainer.shared.networkClient.updateBaseURL(baseURL)
+        EnvironmentConfig.saveOverrideBaseURL(baseURL)
+        EnvironmentConfig.saveLastExternalBaseURL(baseURL)
+        externalIP = baseURL
+        useExternalConnection = true
+        noticeMessage = "已探测到可达地址：\(baseURL)"
+    }
+
+    private func buildQuickCandidates(port: Int, base: String) -> [String] {
+        var candidates: [String] = []
+
+        let current = AppContainer.shared.networkClient.currentBaseURL().trimmingCharacters(in: .whitespacesAndNewlines)
+        if !current.isEmpty {
+            candidates.append(current)
+        }
+
+        if let normalized = normalizeExternalBaseURL(from: externalIP) {
+            candidates.append(normalized)
+        }
+
+        if let last = EnvironmentConfig.loadLastExternalBaseURL() {
+            candidates.append(last)
+        }
+
+        candidates.append(base)
+
+        for ip in localIPv4Addresses() {
+            candidates.append("http://\(ip):\(port)")
+        }
+
+        return deduplicated(candidates)
+    }
+
+    private func buildSubnetCandidates(port: Int) -> [String] {
+        var candidates: [String] = []
+        for ip in localIPv4Addresses() {
+            let parts = ip.split(separator: ".")
+            guard parts.count == 4 else { continue }
+            let prefix = "\(parts[0]).\(parts[1]).\(parts[2])"
+            let selfHost = Int(parts[3]) ?? 0
+
+            // 先扫常见地址，再扫全段。
+            let priorityHosts = [selfHost, 1, 2, 10, 100, 200].filter { $0 >= 1 && $0 <= 254 }
+            for host in priorityHosts {
+                candidates.append("http://\(prefix).\(host):\(port)")
+            }
+            for host in 1...254 {
+                candidates.append("http://\(prefix).\(host):\(port)")
+            }
+        }
+        return deduplicated(candidates)
+    }
+
+    private func firstReachableBaseURL(from candidates: [String], timeout: TimeInterval) async -> String? {
+        guard !candidates.isEmpty else { return nil }
+
+        return await withTaskGroup(of: String?.self) { group in
+            for candidate in candidates {
+                group.addTask {
+                    if await self.isHealthReachable(baseURL: candidate, timeout: timeout) {
+                        return candidate
+                    }
+                    return nil
+                }
+            }
+
+            for await result in group {
+                if let hit = result {
+                    group.cancelAll()
+                    return hit
+                }
+            }
+            return nil
+        }
+    }
+
+    private func deduplicated(_ values: [String]) -> [String] {
+        var seen = Set<String>()
+        return values.compactMap { value in
+            let item = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !item.isEmpty else { return nil }
+            guard !seen.contains(item) else { return nil }
+            seen.insert(item)
+            return item
+        }
+    }
+
+    private func localIPv4Addresses() -> [String] {
+        var result: [String] = []
+        var addressPointer: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&addressPointer) == 0, let first = addressPointer else {
+            return []
+        }
+        defer { freeifaddrs(addressPointer) }
+
+        var pointer = first
+        while true {
+            let interface = pointer.pointee
+            let flags = Int32(interface.ifa_flags)
+            let isUp = (flags & IFF_UP) == IFF_UP
+            let isLoopback = (flags & IFF_LOOPBACK) == IFF_LOOPBACK
+
+            if
+                isUp,
+                !isLoopback,
+                let addr = interface.ifa_addr,
+                addr.pointee.sa_family == UInt8(AF_INET)
+            {
+                var hostBuffer = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                let len = socklen_t(addr.pointee.sa_len)
+                if getnameinfo(addr, len, &hostBuffer, socklen_t(hostBuffer.count), nil, 0, NI_NUMERICHOST) == 0 {
+                    let ip = String(cString: hostBuffer)
+                    if ip.hasPrefix("192.168.") || ip.hasPrefix("10.") || ip.hasPrefix("172.") {
+                        result.append(ip)
+                    }
+                }
+            }
+
+            guard let next = interface.ifa_next else { break }
+            pointer = next
+        }
+
+        return deduplicated(result)
     }
 
     func logout() {
@@ -227,5 +385,6 @@ final class AuthViewModel: ObservableObject {
         }
         password = ""
         errorMessage = nil
+        noticeMessage = nil
     }
 }

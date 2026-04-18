@@ -478,9 +478,9 @@ func (r *FileRepo) CompleteUploadPersist(ctx context.Context, uid int64, parentI
 			return err
 		}
 
-		finalName, err := ensureUniqueFilenameForFileRepo(tx, parentID, task.Filename)
-		if err != nil {
-			return err
+		finalName := strings.TrimSpace(task.Filename)
+		if finalName == "" {
+			return fmt.Errorf("empty filename")
 		}
 
 		fileType := strings.TrimPrefix(strings.ToLower(filepath.Ext(finalName)), ".")

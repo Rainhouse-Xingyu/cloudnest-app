@@ -1,5 +1,14 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import QuickLook
+import AVKit
+import PhotosUI
+import UIKit
+
+private enum FilesLayoutStyle: String {
+    case icon
+    case list
+}
 
 /// Files 模块主页面（浅色 LiquidGlass 风格）
 struct FilesView: View {
@@ -9,7 +18,10 @@ struct FilesView: View {
     @State private var selectedItems: Set<Int64> = []
     @State private var showDeleteConfirm: Bool = false
     @State private var showFileImporter: Bool = false
+    @State private var showUploadSourceDialog: Bool = false
+    @State private var showPhotoPicker: Bool = false
     @State private var expandedTreeNodes: Set<Int64> = []
+    @AppStorage("files.layout.style") private var layoutStyleRaw: String = FilesLayoutStyle.icon.rawValue
 
     private let folderColumns = [
         GridItem(.flexible(), spacing: 14),
@@ -41,15 +53,23 @@ struct FilesView: View {
                     }
                     .frame(maxWidth: .infinity, minHeight: 200)
                 } else {
-                    if !viewModel.folders.isEmpty {
-                        LazyVGrid(columns: folderColumns, spacing: 14) {
-                            ForEach(viewModel.folders) { folder in
-                                folderCard(folder)
+                    if currentLayoutStyle == .icon {
+                        if !viewModel.folders.isEmpty {
+                            LazyVGrid(columns: folderColumns, spacing: 14) {
+                                ForEach(viewModel.folders) { folder in
+                                    folderCard(folder)
+                                }
                             }
                         }
-                    }
 
-                    if !viewModel.files.isEmpty {
+                        if !viewModel.files.isEmpty {
+                            LazyVGrid(columns: folderColumns, spacing: 14) {
+                                ForEach(viewModel.files) { item in
+                                    fileIconCard(item)
+                                }
+                            }
+                        }
+                    } else if !viewModel.files.isEmpty {
                         VStack(spacing: 10) {
                             ForEach(viewModel.files) { item in
                                 fileRow(item)
@@ -90,21 +110,45 @@ struct FilesView: View {
         } message: {
             Text("确定要删除选中的 \(selectedItems.count) 个项目吗？")
         }
-        .fileImporter(
-            isPresented: $showFileImporter,
-            allowedContentTypes: [.data],
-            allowsMultipleSelection: false
-        ) { result in
-            switch result {
-            case .success(let urls):
-                if let url = urls.first {
+        .sheet(isPresented: $showPhotoPicker) {
+            PhotoLibraryPicker(
+                onPicked: { data, originalName in
+                    let filename = buildPhotoFilename(originalName: originalName, data: data)
+                    showPhotoPicker = false
+                    Task {
+                        await viewModel.uploadPhotoData(data, filename: filename)
+                    }
+                },
+                onError: { message in
+                    showPhotoPicker = false
+                    viewModel.errorMessage = message
+                }
+            )
+            .ignoresSafeArea()
+        }
+        .sheet(isPresented: $showFileImporter) {
+            DocumentFilePicker(
+                onPicked: { url in
+                    showFileImporter = false
                     Task {
                         await viewModel.uploadFile(url: url)
                     }
+                },
+                onError: { message in
+                    showFileImporter = false
+                    viewModel.errorMessage = message
                 }
-            case .failure(let error):
-                viewModel.errorMessage = "选择文件失败: \(error.localizedDescription)"
+            )
+            .ignoresSafeArea()
+        }
+        .confirmationDialog("选择上传来源", isPresented: $showUploadSourceDialog, titleVisibility: .visible) {
+            Button("照片 App") {
+                showPhotoPicker = true
             }
+            Button("文件 App") {
+                showFileImporter = true
+            }
+            Button("取消", role: .cancel) { }
         }
         .overlay {
             if viewModel.isUploading {
@@ -119,6 +163,12 @@ struct FilesView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(.ultraThinMaterial)
             }
+        }
+        .sheet(item: $viewModel.previewDocument) { doc in
+            FileQuickLookPreview(url: doc.url)
+        }
+        .sheet(item: $viewModel.livePlayerItem) { item in
+            LivePhotoPlayerView(url: item.url)
         }
         .alert("下载结果", isPresented: Binding(
             get: { viewModel.downloadMessage != nil },
@@ -150,11 +200,17 @@ struct FilesView: View {
                 }
                 
                 Button {
-                    showFileImporter = true
+                    showUploadSourceDialog = true
                 } label: {
                     Image(systemName: "square.and.arrow.up")
                 }
                 .disabled(viewModel.isUploading)
+
+                Button {
+                    toggleLayoutStyle()
+                } label: {
+                    Image(systemName: currentLayoutStyle == .icon ? "list.bullet" : "square.grid.2x2")
+                }
                 
                 Button {
                     // 新建文件夹
@@ -392,23 +448,34 @@ struct FilesView: View {
     }
 
     private func fileRow(_ item: FileItemDTO) -> some View {
-        Button {
-            if isSelectionMode {
-                toggleSelection(item.id)
-            } else {
-                Task {
-                    await viewModel.download(items: [item])
-                }
-            }
-        } label: {
-            HStack(spacing: 12) {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+        HStack(spacing: 12) {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Color.white.opacity(0.34))
                 .frame(width: 54, height: 54)
                 .overlay {
-                    Image(systemName: getFileIcon(type: item.fileType))
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(Color.orange)
+                    ZStack(alignment: .topLeading) {
+                        if let thumb = viewModel.thumbnail(for: item.id) {
+                            Image(uiImage: thumb)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 50, height: 50)
+                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        } else {
+                            Image(systemName: getFileIcon(type: item.fileType))
+                                .font(.system(size: 22, weight: .semibold))
+                                .foregroundStyle(Color.orange)
+                        }
+
+                        if viewModel.isLivePhoto(item.id) {
+                            Text("LIVE")
+                                .font(.system(size: 9, weight: .bold, design: .rounded))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 2)
+                                .background(Color.red, in: Capsule(style: .continuous))
+                                .offset(x: -16, y: -16)
+                        }
+                    }
                 }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -431,8 +498,117 @@ struct FilesView: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(selectedItems.contains(item.id) ? Color.blue.opacity(0.8) : Color.white.opacity(0.56), lineWidth: selectedItems.contains(item.id) ? 2.5 : 1)
         )
+        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .onTapGesture {
+            if isSelectionMode {
+                toggleSelection(item.id)
+            } else {
+                Task {
+                    await viewModel.openPreview(for: item)
+                }
+            }
+        }
+        .onLongPressGesture(minimumDuration: 0.45) {
+            guard !isSelectionMode, viewModel.isLivePhoto(item.id) else { return }
+            Task {
+                await viewModel.playLivePhoto(for: item)
+            }
+        }
+    }
+
+    private func fileIconCard(_ item: FileItemDTO) -> some View {
+        Button {
+            if isSelectionMode {
+                toggleSelection(item.id)
+            } else {
+                Task { await viewModel.openPreview(for: item) }
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 12) {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.white.opacity(0.28))
+                    .frame(height: 92)
+                    .overlay {
+                        ZStack(alignment: .topLeading) {
+                            if let thumb = viewModel.thumbnail(for: item.id) {
+                                Image(uiImage: thumb)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                    .padding(8)
+                            } else {
+                                Image(systemName: getFileIcon(type: item.fileType))
+                                    .font(.system(size: 38, weight: .semibold))
+                                    .foregroundStyle(Color.orange)
+                            }
+
+                            if viewModel.isLivePhoto(item.id) {
+                                Text("LIVE")
+                                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 2)
+                                    .background(Color.red, in: Capsule(style: .continuous))
+                                    .padding(8)
+                            }
+                        }
+                    }
+
+                Text(item.filename)
+                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    .lineLimit(1)
+                    .foregroundStyle(.primary)
+
+                Text(formatDate(item.updateTime))
+                    .font(.appCaption)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(.ultraThinMaterial)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(selectedItems.contains(item.id) ? Color.blue.opacity(0.8) : Color.white.opacity(0.56), lineWidth: selectedItems.contains(item.id) ? 2.5 : 1)
+            )
         }
         .buttonStyle(.plain)
+        .onLongPressGesture(minimumDuration: 0.45) {
+            guard !isSelectionMode, viewModel.isLivePhoto(item.id) else { return }
+            Task { await viewModel.playLivePhoto(for: item) }
+        }
+    }
+
+    private var currentLayoutStyle: FilesLayoutStyle {
+        FilesLayoutStyle(rawValue: layoutStyleRaw) ?? .icon
+    }
+
+    private func toggleLayoutStyle() {
+        layoutStyleRaw = (currentLayoutStyle == .icon) ? FilesLayoutStyle.list.rawValue : FilesLayoutStyle.icon.rawValue
+    }
+
+    private func buildPhotoFilename(originalName: String?, data: Data) -> String {
+        if let originalName, !originalName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return originalName
+        }
+
+        let ext: String
+        if data.starts(with: [0xFF, 0xD8, 0xFF]) {
+            ext = "jpg"
+        } else if data.starts(with: [0x89, 0x50, 0x4E, 0x47]) {
+            ext = "png"
+        } else if data.starts(with: [0x47, 0x49, 0x46, 0x38]) {
+            ext = "gif"
+        } else {
+            ext = "jpg"
+        }
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd_HHmmss"
+        return "photo_\(formatter.string(from: Date())).\(ext)"
     }
 
     private func toggleSelection(_ id: Int64) {
@@ -554,6 +730,160 @@ struct FilesView: View {
 struct FilesView_Previews: PreviewProvider {
     static var previews: some View {
         FilesView()
+    }
+}
+
+private struct FileQuickLookPreview: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> QLPreviewController {
+        let controller = QLPreviewController()
+        controller.dataSource = context.coordinator
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: QLPreviewController, context: Context) {
+        context.coordinator.url = url
+        uiViewController.reloadData()
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(url: url)
+    }
+
+    final class Coordinator: NSObject, QLPreviewControllerDataSource {
+        var url: URL
+
+        init(url: URL) {
+            self.url = url
+        }
+
+        func numberOfPreviewItems(in controller: QLPreviewController) -> Int {
+            1
+        }
+
+        func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> QLPreviewItem {
+            url as NSURL
+        }
+    }
+}
+
+private struct LivePhotoPlayerView: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> AVPlayerViewController {
+        let controller = AVPlayerViewController()
+        controller.player = AVPlayer(url: url)
+        controller.player?.play()
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: AVPlayerViewController, context: Context) {
+        if uiViewController.player?.currentItem?.asset as? AVURLAsset == nil {
+            uiViewController.player = AVPlayer(url: url)
+        }
+    }
+}
+
+private struct PhotoLibraryPicker: UIViewControllerRepresentable {
+    let onPicked: (Data, String?) -> Void
+    let onError: (String) -> Void
+
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var config = PHPickerConfiguration(photoLibrary: .shared())
+        config.filter = .any(of: [.images, .videos])
+        config.selectionLimit = 1
+        let picker = PHPickerViewController(configuration: config)
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    final class Coordinator: NSObject, PHPickerViewControllerDelegate {
+        private let parent: PhotoLibraryPicker
+
+        init(parent: PhotoLibraryPicker) {
+            self.parent = parent
+        }
+
+        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            guard let result = results.first else {
+                parent.onError("未选择照片")
+                return
+            }
+
+            let provider = result.itemProvider
+            let targetType = preferredTypeIdentifier(from: provider)
+
+            provider.loadDataRepresentation(forTypeIdentifier: targetType) { data, error in
+                DispatchQueue.main.async {
+                    if let error {
+                        self.parent.onError("选择照片失败: \(error.localizedDescription)")
+                        return
+                    }
+                    guard let data else {
+                        self.parent.onError("无法读取照片数据")
+                        return
+                    }
+                    self.parent.onPicked(data, provider.suggestedName)
+                }
+            }
+        }
+
+        private func preferredTypeIdentifier(from provider: NSItemProvider) -> String {
+            if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
+                return UTType.image.identifier
+            }
+            if provider.hasItemConformingToTypeIdentifier(UTType.movie.identifier) {
+                return UTType.movie.identifier
+            }
+            return provider.registeredTypeIdentifiers.first ?? UTType.data.identifier
+        }
+    }
+}
+
+private struct DocumentFilePicker: UIViewControllerRepresentable {
+    let onPicked: (URL) -> Void
+    let onError: (String) -> Void
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.data], asCopy: true)
+        picker.delegate = context.coordinator
+        picker.allowsMultipleSelection = false
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        private let parent: DocumentFilePicker
+
+        init(parent: DocumentFilePicker) {
+            self.parent = parent
+        }
+
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            guard let url = urls.first else {
+                parent.onError("未选择文件")
+                return
+            }
+            parent.onPicked(url)
+        }
+
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+            parent.onError("已取消文件选择")
+        }
     }
 }
 

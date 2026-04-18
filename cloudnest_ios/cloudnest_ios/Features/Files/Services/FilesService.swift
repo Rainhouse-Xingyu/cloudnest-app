@@ -8,6 +8,7 @@ protocol FilesServiceProtocol {
     func uploadChunk(uploadId: String, chunkIndex: Int, chunkMd5: String, chunkData: Data) async throws
     func completeUpload(req: UploadCompleteRequestDTO) async throws
     func downloadFile(fileId: Int64, filename: String, isFolder: Bool) async throws -> URL
+    func getLivePhoto(byFileId fileId: Int64) async throws -> LivePhotoLookupItemDTO?
 }
 
 /// Files 模块服务默认实现
@@ -90,6 +91,12 @@ final class FilesService: FilesServiceProtocol {
         let outputURL = uniqueURL(in: directory, filename: normalizedName)
         try data.write(to: outputURL)
         return outputURL
+    }
+
+    func getLivePhoto(byFileId fileId: Int64) async throws -> LivePhotoLookupItemDTO? {
+        let endpoint = LivePhotoLookupEndpoint(fileId: fileId, token: try token)
+        let response = try await networkClient.request(endpoint, decode: LivePhotoLookupResponseDTO.self)
+        return response.item
     }
 
     private func fetchTree(parentId: Int64, depth: Int, maxDepth: Int) async throws -> [FileTreeNode] {
@@ -230,6 +237,20 @@ private struct FilesDownloadEndpoint: APIEndpoint {
         [
             "Authorization": "Bearer \(token)",
             "Accept": "application/octet-stream"
+        ]
+    }
+}
+
+private struct LivePhotoLookupEndpoint: APIEndpoint {
+    let fileId: Int64
+    let token: String
+
+    var path: String { "/api/files/\(fileId)/live-photo" }
+    var method: HTTPMethod { .get }
+    var headers: [String: String] {
+        [
+            "Authorization": "Bearer \(token)",
+            "Accept": "application/json"
         ]
     }
 }

@@ -81,6 +81,35 @@ struct AuthView: View {
                     isSecure: false
                 )
                 .keyboardType(.URL)
+
+                Button {
+                    Task {
+                        await viewModel.autoDetectReachableServer()
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        if viewModel.isDetectingServer {
+                            ProgressView()
+                                .tint(.blue)
+                        } else {
+                            Image(systemName: "dot.radiowaves.left.and.right")
+                                .font(.system(size: 15, weight: .semibold))
+                        }
+                        Text(viewModel.isDetectingServer ? "探测中..." : "自动探测当前可达 IP")
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        Spacer()
+                    }
+                    .foregroundStyle(.blue)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(Color.blue.opacity(0.28), lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(viewModel.isDetectingServer || viewModel.isLoading)
             }
 
             Button {
@@ -121,6 +150,10 @@ struct AuthView: View {
             .buttonStyle(.plain)
             .disabled(!viewModel.canSubmit)
             .animation(.spring(), value: viewModel.canSubmit)
+
+            if let noticeMessage = viewModel.noticeMessage {
+                messageRow(icon: "checkmark.circle.fill", message: noticeMessage, color: .green)
+            }
         }
         .liquidGlassCard()
     }

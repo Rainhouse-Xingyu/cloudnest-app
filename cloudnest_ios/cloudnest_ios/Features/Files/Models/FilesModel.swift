@@ -74,6 +74,49 @@ struct UploadCompleteRequestDTO: Encodable {
     }
 }
 
+// MARK: - Live Photo DTOs
+
+struct LivePhotoLookupResponseDTO: Decodable {
+    let item: LivePhotoLookupItemDTO?
+}
+
+struct LivePhotoLookupItemDTO: Decodable {
+    let id: Int64
+    let fileRole: String
+    let imageFileId: Int64
+    let videoFileId: Int64
+    let imageFile: LivePhotoSimpleFileDTO
+    let videoFile: LivePhotoSimpleFileDTO
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case fileRole = "file_role"
+        case imageFileId = "image_file_id"
+        case videoFileId = "video_file_id"
+        case imageFile = "image_file"
+        case videoFile = "video_file"
+    }
+}
+
+struct LivePhotoSimpleFileDTO: Decodable {
+    let id: Int64
+    let filename: String
+}
+
+// MARK: - Preview Models
+
+struct FilePreviewDocument: Identifiable {
+    let id = UUID()
+    let url: URL
+    let displayName: String
+}
+
+struct LivePhotoPlayerItem: Identifiable {
+    let id = UUID()
+    let url: URL
+    let displayName: String
+}
+
 // MARK: - Directory Tree Models
 
 /// 文件目录树节点（仅目录）

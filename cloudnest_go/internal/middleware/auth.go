@@ -22,7 +22,8 @@ const (
 	redisTokenKeyPrefix = "auth:token:"
 	redisPermKeyPrefix  = "auth:perm:user:"
 )
-//Authenticate函数是一个Gin中间件，用于验证请求中的JWT并检查用户权限。它首先检查请求路径是否在跳过列表中，如果是则直接放行。然后从Authorization头中提取Bearer token，并使用auth.ParseToken函数解析JWT。如果解析失败，则返回401错误。接着检查Redis中是否存在该token的缓存，如果不存在则说明token已过期或已注销，返回401错误。最后将用户信息存储在上下文中，并根据用户是否为管理员来决定是否继续检查权限。
+
+// Authenticate函数是一个Gin中间件，用于验证请求中的JWT并检查用户权限。它首先检查请求路径是否在跳过列表中，如果是则直接放行。然后从Authorization头中提取Bearer token，并使用auth.ParseToken函数解析JWT。如果解析失败，则返回401错误。接着检查Redis中是否存在该token的缓存，如果不存在则说明token已过期或已注销，返回401错误。最后将用户信息存储在上下文中，并根据用户是否为管理员来决定是否继续检查权限。
 func Authenticate(rdb *redis.Client, jwtSecret string, loadPermissions func(context.Context, int64) ([]string, error), skipPaths map[string]bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if skipPaths[c.Request.URL.Path] {
@@ -77,7 +78,8 @@ func Authenticate(rdb *redis.Client, jwtSecret string, loadPermissions func(cont
 		c.Next()
 	}
 }
-//RequireAdmin函数是一个Gin中间件，用于检查当前用户是否具有管理员权限。它从上下文中获取管理员标志，如果不存在或为false，则返回403错误并终止请求处理，否则继续执行后续的处理函数。
+
+// RequireAdmin函数是一个Gin中间件，用于检查当前用户是否具有管理员权限。它从上下文中获取管理员标志，如果不存在或为false，则返回403错误并终止请求处理，否则继续执行后续的处理函数。
 func RequireAdmin() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		isAdmin, ok := c.Get(ContextIsAdminKey)
@@ -89,7 +91,8 @@ func RequireAdmin() gin.HandlerFunc {
 		c.Next()
 	}
 }
-//extractBearerToken函数用于从Authorization头中提取Bearer token，如果格式不正确则返回空字符串。
+
+// extractBearerToken函数用于从Authorization头中提取Bearer token，如果格式不正确则返回空字符串。
 func extractBearerToken(authHeader string) string {
 	parts := strings.SplitN(authHeader, " ", 2)
 	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
@@ -97,7 +100,8 @@ func extractBearerToken(authHeader string) string {
 	}
 	return strings.TrimSpace(parts[1])
 }
-//checkPathPermission函数用于检查用户是否具有访问特定路径和方法的权限。它首先尝试从Redis缓存中获取用户的权限列表，如果缓存不存在或为空，则调用loadPermissions函数从数据库加载权限并缓存到Redis中。然后遍历权限列表，使用matchPermission函数检查是否有匹配的权限，如果找到匹配的权限则返回true，否则返回false。
+
+// checkPathPermission函数用于检查用户是否具有访问特定路径和方法的权限。它首先尝试从Redis缓存中获取用户的权限列表，如果缓存不存在或为空，则调用loadPermissions函数从数据库加载权限并缓存到Redis中。然后遍历权限列表，使用matchPermission函数检查是否有匹配的权限，如果找到匹配的权限则返回true，否则返回false。
 func checkPathPermission(ctx context.Context, rdb *redis.Client, userID int64, method string, path string, loadPermissions func(context.Context, int64) ([]string, error)) bool {
 	key := fmt.Sprintf("%s%d", redisPermKeyPrefix, userID)
 	perms, err := rdb.SMembers(ctx, key).Result()
@@ -116,6 +120,12 @@ func checkPathPermission(ctx context.Context, rdb *redis.Client, userID int64, m
 		}
 	}
 
+	// 未配置任何自定义路径权限时，走默认放行策略：
+	// 普通业务接口可访问，管理端接口保持拦截。
+	if len(perms) == 0 {
+		return defaultAllowPath(method, path)
+	}
+
 	for _, perm := range perms {
 		if matchPermission(method, path, perm) {
 			return true
@@ -123,7 +133,28 @@ func checkPathPermission(ctx context.Context, rdb *redis.Client, userID int64, m
 	}
 	return false
 }
-//matchPermission函数用于检查一个权限字符串是否匹配给定的HTTP方法和路径。权限字符串的格式为"METHOD:PATH"，其中METHOD可以是具体的HTTP方法或通配符"*"，PATH可以是具体的路径、以"*"结尾的前缀路径或通配符"*"。函数首先解析权限字符串，然后根据规则进行匹配，如果权限方法不匹配则返回false，如果权限路径是通配符则返回true，如果权限路径以"*"结尾则检查前缀匹配，否则直接比较路径是否相等。
+
+func defaultAllowPath(method string, path string) bool {
+	_ = method // 预留：后续如需按方法限制可直接扩展。
+
+	if !strings.HasPrefix(path, "/api/") {
+		return false
+	}
+
+	// 管理端接口必须显式授权或管理员身份。
+	if strings.HasPrefix(path, "/api/admin") {
+		return false
+	}
+
+	// 系统权限汇总接口仅管理员场景使用，默认不放行。
+	if path == "/api/settings/permissions" {
+		return false
+	}
+
+	return true
+}
+
+// matchPermission函数用于检查一个权限字符串是否匹配给定的HTTP方法和路径。权限字符串的格式为"METHOD:PATH"，其中METHOD可以是具体的HTTP方法或通配符"*"，PATH可以是具体的路径、以"*"结尾的前缀路径或通配符"*"。函数首先解析权限字符串，然后根据规则进行匹配，如果权限方法不匹配则返回false，如果权限路径是通配符则返回true，如果权限路径以"*"结尾则检查前缀匹配，否则直接比较路径是否相等。
 func matchPermission(method string, path string, permission string) bool {
 	parts := strings.SplitN(permission, ":", 2)
 	if len(parts) != 2 {
