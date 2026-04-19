@@ -116,24 +116,24 @@ struct FilesView: View {
 
     private var stateObservationLayerView: some View {
         presentationLayerView
-            .onChange(of: viewModel.previewDocument) { doc in
-                guard let doc, activeSheet == nil else { return }
-                activeSheet = .quickLook(doc)
+            .onChange(of: viewModel.previewDocument) { _, newValue in
+                guard let newValue, activeSheet == nil else { return }
+                activeSheet = .quickLook(newValue)
                 viewModel.previewDocument = nil
             }
-            .onChange(of: viewModel.imagePreviewItem) { item in
-                guard let item, activeSheet == nil else { return }
-                activeSheet = .imagePreview(item)
+            .onChange(of: viewModel.imagePreviewItem) { _, newValue in
+                guard let newValue, activeSheet == nil else { return }
+                activeSheet = .imagePreview(newValue)
                 viewModel.imagePreviewItem = nil
             }
-            .onChange(of: viewModel.mediaPlaybackItem) { item in
-                guard let item, activeSheet == nil else { return }
-                activeSheet = .mediaPlayback(item)
+            .onChange(of: viewModel.mediaPlaybackItem) { _, newValue in
+                guard let newValue, activeSheet == nil else { return }
+                activeSheet = .mediaPlayback(newValue)
                 viewModel.mediaPlaybackItem = nil
             }
-            .onChange(of: viewModel.livePhotoDisplayItem) { item in
-                guard let item, activeSheet == nil else { return }
-                activeSheet = .livePhoto(item)
+            .onChange(of: viewModel.livePhotoDisplayItem) { _, newValue in
+                guard let newValue, activeSheet == nil else { return }
+                activeSheet = .livePhoto(newValue)
                 viewModel.livePhotoDisplayItem = nil
             }
     }
@@ -141,8 +141,6 @@ struct FilesView: View {
     private var styledPageView: some View {
         stateObservationLayerView
             .liquidGlassPage()
-            .navigationTitle("文件")
-            .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 filesToolbar
             }
@@ -151,18 +149,17 @@ struct FilesView: View {
 
     private var mainScrollView: some View {
         ScrollView(showsIndicators: false) {
-            GeometryReader { proxy in
-                Color.clear
-                    .preference(
-                        key: FilesScrollOffsetPreferenceKey.self,
-                        value: proxy.frame(in: .named("files_scroll_area")).minY
-                    )
-            }
-            .frame(height: 0)
-
             VStack(spacing: 16) {
+                GeometryReader { proxy in
+                    Color.clear
+                        .preference(
+                            key: FilesScrollOffsetPreferenceKey.self,
+                            value: proxy.frame(in: .named("files_scroll")).minY
+                        )
+                }
+                .frame(height: 0)
+
                 breadcrumbBar
-                directoryTreeSection
                 personalSection
                 mainContentSection
             }
@@ -170,9 +167,11 @@ struct FilesView: View {
             .padding(.top, 10)
             .padding(.bottom, 24)
         }
-        .coordinateSpace(name: "files_scroll_area")
+        .coordinateSpace(name: "files_scroll")
+        .navigationTitle("文件")
+        .navigationBarTitleDisplayMode(.large)
         .onPreferenceChange(FilesScrollOffsetPreferenceKey.self) { minY in
-            let shouldCollapse = minY < -22
+            let shouldCollapse = minY < -20 // 当向上滑动超过 20pt 时认为收起
             if shouldCollapse != isCollapsed {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     isCollapsed = shouldCollapse
@@ -219,7 +218,8 @@ struct FilesView: View {
         if currentLayoutStyle == .icon {
             if !viewModel.folders.isEmpty {
                 LazyVGrid(columns: folderColumns, spacing: 14) {
-                    ForEach(viewModel.folders) { folder in
+                    ForEach(viewModel.folders) { folder
+                        in
                         folderCard(folder)
                     }
                 }
@@ -233,7 +233,7 @@ struct FilesView: View {
                 }
             }
         } else if !viewModel.files.isEmpty {
-            VStack(spacing: 10) {
+            LazyVStack(spacing: 10) {
                 ForEach(viewModel.files) { item in
                     fileRow(item)
                 }
@@ -307,14 +307,32 @@ struct FilesView: View {
 
     @ToolbarContentBuilder
     private var filesToolbar: some ToolbarContent {
-        ToolbarItem(placement: .principal) {
-            // 当前目录展示：当没有收缩或我们需要专门在此展示
-            Text(viewModel.currentPath.last?.name ?? "/")
-                .font(.headline)
-                .foregroundStyle(.secondary)
+        ToolbarItem(placement: .topBarLeading) {
+            if !isCollapsed {
+                Button {
+                    toggleLayoutStyle()
+                } label: {
+                    Image(systemName: currentLayoutStyle == .icon ? "list.bullet" : "square.grid.2x2")
+                }
+            }
         }
 
         ToolbarItemGroup(placement: .topBarTrailing) {
+            if !isCollapsed {
+                Button {
+                    showUploadSourceDialog = true
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
+                }
+                .disabled(viewModel.isUploading)
+
+                Button {
+                    showCreateFolderAlert = true
+                } label: {
+                    Image(systemName: "folder.badge.plus")
+                }
+            }
+
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     showUnifiedSearchOverlay = true
@@ -323,41 +341,6 @@ struct FilesView: View {
                 isUnifiedSearchFocused = true
             } label: {
                 Image(systemName: "magnifyingglass")
-            }
-            .buttonStyle(.plain)
-
-            if !isCollapsed {
-                Button {
-                    showUploadSourceDialog = true
-                } label: {
-                    Image(systemName: "square.and.arrow.up")
-                }
-                .disabled(viewModel.isUploading)
-                .buttonStyle(.plain)
-
-                Button {
-                    showCreateFolderAlert = true
-                } label: {
-                    Image(systemName: "folder.badge.plus")
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    toggleLayoutStyle()
-                } label: {
-                    Image(systemName: currentLayoutStyle == .icon ? "list.bullet" : "square.grid.2x2")
-                }
-                .buttonStyle(.plain)
-                
-                Button(isSelectionMode ? "取消" : "选择") {
-                    withAnimation(.spring()) {
-                        isSelectionMode.toggle()
-                        if !isSelectionMode {
-                            selectedItems.removeAll()
-                        }
-                    }
-                }
-                .buttonStyle(.plain)
             }
 
             Menu {
@@ -370,55 +353,55 @@ struct FilesView: View {
                     Button {
                         viewModel.updateSortMode(.updatedDesc)
                     } label: {
-                        if viewModel.sortMode == .updatedDesc {
-                            Label("按更新时间", systemImage: "checkmark")
-                        } else {
-                            Text("按更新时间")
+                            if viewModel.sortMode == .updatedDesc {
+                                Label("按更新时间", systemImage: "checkmark")
+                            } else {
+                                Text("按更新时间")
+                            }
                         }
-                    }
 
-                    Button {
-                        viewModel.updateSortMode(.nameAsc)
-                    } label: {
-                        if viewModel.sortMode == .nameAsc {
-                            Label("按名称", systemImage: "checkmark")
-                        } else {
-                            Text("按名称")
+                        Button {
+                            viewModel.updateSortMode(.nameAsc)
+                        } label: {
+                            if viewModel.sortMode == .nameAsc {
+                                Label("按名称", systemImage: "checkmark")
+                            } else {
+                                Text("按名称")
+                            }
                         }
-                    }
 
-                    Button {
-                        viewModel.updateSortMode(.sizeDesc)
-                    } label: {
-                        if viewModel.sortMode == .sizeDesc {
-                            Label("按大小", systemImage: "checkmark")
-                        } else {
-                            Text("按大小")
+                        Button {
+                            viewModel.updateSortMode(.sizeDesc)
+                        } label: {
+                            if viewModel.sortMode == .sizeDesc {
+                                Label("按大小", systemImage: "checkmark")
+                            } else {
+                                Text("按大小")
+                            }
                         }
+                    } label: {
+                        Label("排序", systemImage: "arrow.up.arrow.down")
+                    }
+                    Button(action: {
+                        activeSheet = .filter
+                    }) {
+                        Label("筛选", systemImage: "line.3.horizontal.decrease.circle")
+                    }
+                    Button(action: {
+                        Task { await viewModel.loadRecycleBin() }
+                        activeSheet = .recycleBin
+                    }) {
+                        Label("回收站", systemImage: "trash")
+                    }
+                    Button(action: {
+                        Task { await viewModel.loadShares() }
+                        activeSheet = .shareManage
+                    }) {
+                        Label("分享管理", systemImage: "link")
                     }
                 } label: {
-                    Label("排序", systemImage: "arrow.up.arrow.down")
+                    Image(systemName: "ellipsis.circle")
                 }
-                Button(action: {
-                    activeSheet = .filter
-                }) {
-                    Label("筛选", systemImage: "line.3.horizontal.decrease.circle")
-                }
-                Button(action: {
-                    Task { await viewModel.loadRecycleBin() }
-                    activeSheet = .recycleBin
-                }) {
-                    Label("回收站", systemImage: "trash")
-                }
-                Button(action: {
-                    Task { await viewModel.loadShares() }
-                    activeSheet = .shareManage
-                }) {
-                    Label("分享管理", systemImage: "link")
-                }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-            }
         }
     }
 
@@ -866,37 +849,7 @@ struct FilesView: View {
         }
     }
 
-    private var directoryTreeSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("目录树")
-                    .font(.headline)
-                Spacer()
-                if viewModel.isTreeLoading {
-                    ProgressView()
-                }
-            }
 
-            if viewModel.treeNodes.isEmpty {
-                Text("暂无目录")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            } else {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(viewModel.treeNodes) { node in
-                        treeNodeView(node: node, level: 0)
-                    }
-                }
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 12)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.white.opacity(0.56), lineWidth: 1)
-        )
-    }
 
     private var personalSection: some View {
         HStack {
@@ -964,13 +917,12 @@ struct FilesView: View {
             if isSelectionMode {
                 toggleSelection(item.id)
             } else {
-                // 进入文件夹逻辑
                 Task {
                     await viewModel.enterFolder(item)
                 }
             }
         } label: {
-            VStack(alignment: .leading, spacing: 14) {
+            LazyVStack(alignment: .leading, spacing: 14) {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(Color.white.opacity(0.28))
                 .frame(height: 92)
@@ -1022,10 +974,27 @@ struct FilesView: View {
         .shadow(color: Color.blue.opacity(0.09), radius: 14, x: 0, y: 8)
         }
         .buttonStyle(.plain)
+        .onLongPressGesture(minimumDuration: 0.45) {
+            guard !isSelectionMode else { return }
+            toggleSelection(item.id)
+        }
+        .contextMenu {
+            contextMenuContent(for: item)
+        } preview: {
+            if let thumb = viewModel.thumbnail(for: item.id) {
+                Image(uiImage: thumb)
+                    .resizable()
+                    .scaledToFit()
+            } else {
+                Image(systemName: getFileIcon(type: item.fileType))
+                    .font(.system(size: 60))
+                    .padding()
+            }
+        }
     }
 
     private func fileRow(_ item: FileItemDTO) -> some View {
-        HStack(spacing: 12) {
+        LazyHStack(spacing: 12) {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Color.white.opacity(0.34))
                 .frame(width: 54, height: 54)
@@ -1035,8 +1004,8 @@ struct FilesView: View {
                             Image(uiImage: thumb)
                                 .resizable()
                                 .scaledToFill()
-                                .frame(width: 50, height: 50)
-                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                .frame(width: 54, height: 54)
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         } else {
                             Image(systemName: getFileIcon(type: item.fileType))
                                 .font(.system(size: 22, weight: .semibold))
@@ -1044,18 +1013,22 @@ struct FilesView: View {
                         }
 
                         if viewModel.isLivePhoto(item.id) {
-                            Text("LIVE")
-                                .font(.system(size: 9, weight: .bold, design: .rounded))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 4)
-                                .padding(.vertical, 2)
-                                .background(Color.red, in: Capsule(style: .continuous))
-                                .offset(x: -16, y: -16)
+                            HStack(spacing: 2) {
+                                Image(systemName: "livephoto")
+                                    .font(.system(size: 9))
+                                Text("实况")
+                                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                            }
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 2)
+                            .background(Color.red, in: Capsule(style: .continuous))
+                            .offset(x: -8, y: -8)
                         }
                     }
                 }
 
-            VStack(alignment: .leading, spacing: 4) {
+            LazyVStack(alignment: .leading, spacing: 4) {
                 Text(item.filename)
                     .font(.system(size: 20, weight: .semibold, design: .rounded))
                     .lineLimit(1)
@@ -1090,11 +1063,13 @@ struct FilesView: View {
             }
         }
         .onLongPressGesture(minimumDuration: 0.45) {
-            guard !isSelectionMode, viewModel.isLivePhoto(item.id) else { return }
-            Task {
-                await viewModel.playLivePhoto(for: item)
-            }
+            guard !isSelectionMode else { return }
+            toggleSelection(item.id)
         }
+        .contextMenu {
+            contextMenuContent(for: item)
+        }
+        
     }
 
     private func fileIconCard(_ item: FileItemDTO) -> some View {
@@ -1111,7 +1086,7 @@ struct FilesView: View {
                 }
             }
         } label: {
-            VStack(alignment: .leading, spacing: 12) {
+            LazyVStack(alignment: .leading, spacing: 12) {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(Color.white.opacity(0.28))
                     .frame(height: 92)
@@ -1122,8 +1097,7 @@ struct FilesView: View {
                                     .resizable()
                                     .scaledToFill()
                                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                    .padding(8)
+                                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                             } else {
                                 Image(systemName: getFileIcon(type: item.fileType))
                                     .font(.system(size: 38, weight: .semibold))
@@ -1131,13 +1105,17 @@ struct FilesView: View {
                             }
 
                             if viewModel.isLivePhoto(item.id) {
-                                Text("LIVE")
-                                    .font(.system(size: 9, weight: .bold, design: .rounded))
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 5)
-                                    .padding(.vertical, 2)
-                                    .background(Color.red, in: Capsule(style: .continuous))
-                                    .padding(8)
+                                HStack(spacing: 2) {
+                                    Image(systemName: "livephoto")
+                                        .font(.system(size: 9))
+                                    Text("实况")
+                                        .font(.system(size: 9, weight: .bold, design: .rounded))
+                                }
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(Color.red, in: Capsule(style: .continuous))
+                                .offset(x: -8, y: -8)
                             }
                         }
                     }
@@ -1164,8 +1142,45 @@ struct FilesView: View {
         }
         .buttonStyle(.plain)
         .onLongPressGesture(minimumDuration: 0.45) {
-            guard !isSelectionMode, viewModel.isLivePhoto(item.id) else { return }
-            Task { await viewModel.playLivePhoto(for: item) }
+            guard !isSelectionMode else { return }
+            toggleSelection(item.id)
+        }
+        .contextMenu {
+            contextMenuContent(for: item)
+        }
+        
+    }
+
+    @ViewBuilder
+    private func contextMenuContent(for item: FileItemDTO) -> some View {
+        Button {
+            isSelectionMode = true
+            selectedItems.insert(item.id)
+        } label: {
+            Label("选择", systemImage: "checkmark.circle")
+        }
+        
+        Button {
+            pendingOperation = .copy
+            selectedItems = [item.id]
+            activeSheet = .targetFolder
+        } label: {
+            Label("复制", systemImage: "doc.on.doc")
+        }
+        
+        Button {
+            pendingOperation = .move
+            selectedItems = [item.id]
+            activeSheet = .targetFolder
+        } label: {
+            Label("移动", systemImage: "folder")
+        }
+        
+        Button(role: .destructive) {
+            selectedItems = [item.id]
+            showDeleteConfirm = true
+        } label: {
+            Label("删除", systemImage: "trash")
         }
     }
 
@@ -1392,7 +1407,7 @@ private struct FolderTargetPickerView: View {
         NavigationStack {
             List {
                 Section("目标目录") {
-                    folderRow(id: 0, name: "Root", level: 0)
+                    folderRow(id: 0, name: "/", level: 0)
                     ForEach(treeNodes) { node in
                         treeRow(node: node, level: 1)
                     }
