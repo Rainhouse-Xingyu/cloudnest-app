@@ -4,4 +4,6 @@ import Foundation
 extension Notification.Name {
     static let authLoginSuccess = Notification.Name("authLoginSuccess")
     static let authLogout = Notification.Name("authLogout")
+    static let switchTabToFiles = Notification.Name("switchTabToFiles")
+    static let switchTabToPhotos = Notification.Name("switchTabToPhotos")
 }

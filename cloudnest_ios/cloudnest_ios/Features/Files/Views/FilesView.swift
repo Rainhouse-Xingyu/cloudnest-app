@@ -31,6 +31,7 @@ struct FilesView: View {
     @State private var expandedTreeNodes: Set<Int64> = []
     @State private var showUnifiedSearchOverlay: Bool = false
     @State private var unifiedSearchText: String = ""
+    @State private var isCollapsed: Bool = false
     @FocusState private var isUnifiedSearchFocused: Bool
     @AppStorage("files.layout.style") private var layoutStyleRaw: String = FilesLayoutStyle.icon.rawValue
 
@@ -140,7 +141,8 @@ struct FilesView: View {
     private var styledPageView: some View {
         stateObservationLayerView
             .liquidGlassPage()
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationTitle("文件")
+            .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 filesToolbar
             }
@@ -149,8 +151,16 @@ struct FilesView: View {
 
     private var mainScrollView: some View {
         ScrollView(showsIndicators: false) {
+            GeometryReader { proxy in
+                Color.clear
+                    .preference(
+                        key: FilesScrollOffsetPreferenceKey.self,
+                        value: proxy.frame(in: .named("files_scroll_area")).minY
+                    )
+            }
+            .frame(height: 0)
+
             VStack(spacing: 16) {
-                headerBar
                 breadcrumbBar
                 directoryTreeSection
                 personalSection
@@ -159,6 +169,15 @@ struct FilesView: View {
             .padding(.horizontal, 16)
             .padding(.top, 10)
             .padding(.bottom, 24)
+        }
+        .coordinateSpace(name: "files_scroll_area")
+        .onPreferenceChange(FilesScrollOffsetPreferenceKey.self) { minY in
+            let shouldCollapse = minY < -22
+            if shouldCollapse != isCollapsed {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isCollapsed = shouldCollapse
+                }
+            }
         }
     }
 
@@ -289,9 +308,10 @@ struct FilesView: View {
     @ToolbarContentBuilder
     private var filesToolbar: some ToolbarContent {
         ToolbarItem(placement: .principal) {
-            Text("文件")
-                .font(.appTitle)
-                .fontWeight(.semibold)
+            // 当前目录展示：当没有收缩或我们需要专门在此展示
+            Text(viewModel.currentPath.last?.name ?? "/")
+                .font(.headline)
+                .foregroundStyle(.secondary)
         }
 
         ToolbarItemGroup(placement: .topBarTrailing) {
@@ -304,24 +324,40 @@ struct FilesView: View {
             } label: {
                 Image(systemName: "magnifyingglass")
             }
+            .buttonStyle(.plain)
 
-            Button {
-                showUploadSourceDialog = true
-            } label: {
-                Image(systemName: "square.and.arrow.up")
-            }
-            .disabled(viewModel.isUploading)
+            if !isCollapsed {
+                Button {
+                    showUploadSourceDialog = true
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
+                }
+                .disabled(viewModel.isUploading)
+                .buttonStyle(.plain)
 
-            Button {
-                toggleLayoutStyle()
-            } label: {
-                Image(systemName: currentLayoutStyle == .icon ? "list.bullet" : "square.grid.2x2")
-            }
+                Button {
+                    showCreateFolderAlert = true
+                } label: {
+                    Image(systemName: "folder.badge.plus")
+                }
+                .buttonStyle(.plain)
 
-            Button {
-                showCreateFolderAlert = true
-            } label: {
-                Image(systemName: "folder.badge.plus")
+                Button {
+                    toggleLayoutStyle()
+                } label: {
+                    Image(systemName: currentLayoutStyle == .icon ? "list.bullet" : "square.grid.2x2")
+                }
+                .buttonStyle(.plain)
+                
+                Button(isSelectionMode ? "取消" : "选择") {
+                    withAnimation(.spring()) {
+                        isSelectionMode.toggle()
+                        if !isSelectionMode {
+                            selectedItems.removeAll()
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
             }
 
             Menu {
@@ -805,29 +841,6 @@ struct FilesView: View {
                 Spacer()
             }
         }
-    }
-
-    private var headerBar: some View {
-        HStack(spacing: 10) {
-            Text("文件")
-                .font(.system(size: 40, weight: .bold, design: .rounded))
-                .foregroundStyle(.primary)
-
-            Spacer()
-
-            Button(isSelectionMode ? "取消" : "选择") {
-                withAnimation(.spring()) {
-                    isSelectionMode.toggle()
-                    if !isSelectionMode {
-                        selectedItems.removeAll()
-                    }
-                }
-            }
-            .font(.system(size: 18, weight: .semibold, design: .rounded))
-            .foregroundStyle(Color.blue)
-
-        }
-        .padding(.horizontal, 2)
     }
 
     private var breadcrumbBar: some View {
@@ -2168,6 +2181,16 @@ private struct DocumentFilePicker: UIViewControllerRepresentable {
         func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
             parent.onError("已取消文件选择")
         }
+    }
+}
+
+
+
+private struct FilesScrollOffsetPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 

@@ -48,6 +48,12 @@ struct ContentView: View {
         .font(.appBody)
         .tint(.blue)
         .enableGlobalKeyboardDismissOnTap()
+        .onReceive(NotificationCenter.default.publisher(for: .switchTabToFiles)) { _ in
+            selectedTab = 1
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .switchTabToPhotos)) { _ in
+            selectedTab = 2
+        }
         .liquidGlassPage()
         .onAppear {
             checkAuthStatus()
