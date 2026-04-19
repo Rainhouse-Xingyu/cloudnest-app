@@ -171,3 +171,109 @@ struct WorkspaceMemberListResponseDTO: Decodable {
 struct FileCollaboratorListResponseDTO: Decodable {
     let items: [FileCollaboratorDTO]
 }
+
+// MARK: - Settings Summary & Rate Window
+
+struct PermissionSummaryResponseDTO: Decodable {
+    let scope: PermissionScopeDTO
+    let roles: [PermissionRoleDTO]
+    let userRoles: [PermissionUserRoleDTO]
+
+    enum CodingKeys: String, CodingKey {
+        case scope
+        case roles
+        case userRoles = "user_roles"
+    }
+}
+
+struct PermissionScopeDTO: Decodable {
+    let all: Bool
+    let currentUID: Int64
+
+    enum CodingKeys: String, CodingKey {
+        case all
+        case currentUID = "current_uid"
+    }
+}
+
+struct PermissionRoleDTO: Decodable, Identifiable {
+    let id: Int64
+    let roleName: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case roleName = "role_name"
+    }
+}
+
+struct PermissionUserRoleDTO: Decodable, Identifiable {
+    var id: Int64 { userId }
+    let userId: Int64
+    let username: String
+    let roleName: String
+
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case username
+        case roleName = "role_name"
+    }
+}
+
+struct MyRateWindowResponseDTO: Decodable {
+    let item: MyRateWindowItemDTO
+}
+
+struct MyRateWindowItemDTO: Decodable {
+    let enabled: Bool
+    let start: String
+    let end: String
+    let source: String
+}
+
+struct UpdateRateWindowRequestDTO: Encodable {
+    let enabled: Bool
+    let start: String
+    let end: String
+}
+
+// MARK: - System Settings DTOs
+
+struct SystemSettingListResponseDTO: Decodable {
+    let items: [SystemSettingDTO]
+}
+
+struct SystemSettingDTO: Decodable, Identifiable, Equatable {
+    var id: String { settingKey }
+    let settingKey: String
+    let settingValue: String
+    let description: String
+
+    enum CodingKeys: String, CodingKey {
+        case settingKey = "setting_key"
+        case settingValue = "setting_value"
+        case description
+    }
+}
+
+struct UpsertSystemSettingsRequestDTO: Encodable {
+    let items: [UpsertSystemSettingItemDTO]
+}
+
+struct UpsertSystemSettingItemDTO: Encodable {
+    let settingKey: String
+    let settingValue: String
+    let description: String
+
+    enum CodingKeys: String, CodingKey {
+        case settingKey = "setting_key"
+        case settingValue = "setting_value"
+        case description
+    }
+}
+
+struct EditableSystemSettingItem: Identifiable, Equatable {
+    var id: String { key }
+    let key: String
+    var value: String
+    let description: String
+}

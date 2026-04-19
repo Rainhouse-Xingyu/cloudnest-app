@@ -2,6 +2,12 @@ import Foundation
 
 protocol FRPServiceProtocol {
     func loadDevicesWithStatus() async throws -> [FRPDeviceStatusItem]
+    func createDevice(input: FRPCreateDeviceInput) async throws
+    func updateDeviceStatus(deviceID: Int64, enabled: Bool) async throws
+    func deleteDevice(deviceID: Int64) async throws
+    func loadMappings(deviceID: Int64) async throws -> [FRPMappingItem]
+    func createMapping(input: FRPCreateMappingInput) async throws
+    func deleteMapping(mappingID: Int64) async throws
     func saveConfigAndGenerateYAML(input: FRPConfigFormInput) async throws -> FRPYamlGenerateResult
 }
 
@@ -69,6 +75,73 @@ final class FRPService: FRPServiceProtocol {
             }
             return lhs.id > rhs.id
         }
+    }
+
+    func createDevice(input: FRPCreateDeviceInput) async throws {
+        let payload = FRPCreateDeviceRequestDTO(
+            deviceName: input.deviceName.trimmingCharacters(in: .whitespacesAndNewlines),
+            deviceIP: input.deviceIP.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+        let body = try JSONEncoder().encode(payload)
+        _ = try await networkClient.request(FRPCreateDeviceEndpoint(token: try token, body: body), decode: FRPSingleDeviceResponseDTO.self)
+    }
+
+    func updateDeviceStatus(deviceID: Int64, enabled: Bool) async throws {
+        let payload = FRPUpdateDeviceStatusRequestDTO(status: enabled ? 1 : 0)
+        let body = try JSONEncoder().encode(payload)
+        _ = try await networkClient.request(
+            FRPUpdateDeviceEndpoint(deviceID: deviceID, token: try token, body: body),
+            decode: FRPSingleDeviceResponseDTO.self
+        )
+    }
+
+    func deleteDevice(deviceID: Int64) async throws {
+        _ = try await networkClient.request(FRPDeleteDeviceEndpoint(deviceID: deviceID, token: try token), decode: FRPMessageResponseDTO.self)
+    }
+
+    func loadMappings(deviceID: Int64) async throws -> [FRPMappingItem] {
+        let response: FRPMappingListResponseDTO = try await networkClient.request(
+            FRPMappingListEndpoint(deviceID: deviceID, token: try token),
+            decode: FRPMappingListResponseDTO.self
+        )
+        return response.items.map {
+            FRPMappingItem(
+                id: $0.id,
+                deviceID: $0.deviceID,
+                localPort: $0.localPort,
+                remotePort: $0.remotePort,
+                domain: $0.domain,
+                enabled: $0.status == 1
+            )
+        }
+    }
+
+    func createMapping(input: FRPCreateMappingInput) async throws {
+        guard let deviceID = input.deviceID else {
+            throw NetworkError.invalidResponse
+        }
+        guard let localPort = Int(input.localPort.trimmingCharacters(in: .whitespacesAndNewlines)), (1...65535).contains(localPort) else {
+            throw NetworkError.invalidResponse
+        }
+        let cleanedRemote = input.remotePort.trimmingCharacters(in: .whitespacesAndNewlines)
+        let remotePort = cleanedRemote.isEmpty ? nil : Int(cleanedRemote)
+        if let remotePort, !(1...65535).contains(remotePort) {
+            throw NetworkError.invalidResponse
+        }
+
+        let payload = FRPCreateMappingRequestDTO(
+            deviceID: deviceID,
+            localPort: localPort,
+            remotePort: remotePort,
+            domain: input.domain.trimmingCharacters(in: .whitespacesAndNewlines),
+            status: 1
+        )
+        let body = try JSONEncoder().encode(payload)
+        _ = try await networkClient.request(FRPCreateMappingEndpoint(token: try token, body: body), decode: FRPMappingSingleResponseDTO.self)
+    }
+
+    func deleteMapping(mappingID: Int64) async throws {
+        _ = try await networkClient.request(FRPDeleteMappingEndpoint(mappingID: mappingID, token: try token), decode: FRPMessageResponseDTO.self)
     }
 
     func saveConfigAndGenerateYAML(input: FRPConfigFormInput) async throws -> FRPYamlGenerateResult {
@@ -170,6 +243,70 @@ private struct FRPSaveConfigRequestDTO: Encodable {
     }
 }
 
+private struct FRPCreateDeviceRequestDTO: Encodable {
+    let deviceName: String
+    let deviceIP: String
+
+    enum CodingKeys: String, CodingKey {
+        case deviceName = "device_name"
+        case deviceIP = "device_ip"
+    }
+}
+
+private struct FRPUpdateDeviceStatusRequestDTO: Encodable {
+    let status: Int8
+}
+
+private struct FRPCreateMappingRequestDTO: Encodable {
+    let deviceID: Int64
+    let localPort: Int
+    let remotePort: Int?
+    let domain: String
+    let status: Int8
+
+    enum CodingKeys: String, CodingKey {
+        case deviceID = "device_id"
+        case localPort = "local_port"
+        case remotePort = "remote_port"
+        case domain
+        case status
+    }
+}
+
+private struct FRPMappingListResponseDTO: Decodable {
+    let items: [FRPMappingItemDTO]
+}
+
+private struct FRPMappingSingleResponseDTO: Decodable {
+    let item: FRPMappingItemDTO
+}
+
+private struct FRPSingleDeviceResponseDTO: Decodable {
+    let item: FRPDeviceListItemDTO
+}
+
+private struct FRPMessageResponseDTO: Decodable {
+    let message: String?
+}
+
+private struct FRPMappingItemDTO: Decodable {
+    let id: Int64
+    let deviceID: Int64
+    let localPort: Int
+    let remotePort: Int
+    let domain: String
+    let status: Int8
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case deviceID = "device_id"
+        case localPort = "local_port"
+        case remotePort = "remote_port"
+        case domain
+        case status
+    }
+}
+
 private struct FRPSaveConfigResponseDTO: Decodable {
     let item: FRPConfigItemDTO
 }
@@ -225,6 +362,94 @@ private struct FRPSaveConfigEndpoint: APIEndpoint {
         [
             "Authorization": "Bearer \(token)",
             "Content-Type": "application/json",
+            "Accept": "application/json"
+        ]
+    }
+}
+
+private struct FRPCreateDeviceEndpoint: APIEndpoint {
+    let token: String
+    let body: Data?
+
+    var path: String { "/api/frp/devices" }
+    var method: HTTPMethod { .post }
+    var headers: [String : String] {
+        [
+            "Authorization": "Bearer \(token)",
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        ]
+    }
+}
+
+private struct FRPUpdateDeviceEndpoint: APIEndpoint {
+    let deviceID: Int64
+    let token: String
+    let body: Data?
+
+    var path: String { "/api/frp/devices/\(deviceID)" }
+    var method: HTTPMethod { .put }
+    var headers: [String : String] {
+        [
+            "Authorization": "Bearer \(token)",
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        ]
+    }
+}
+
+private struct FRPDeleteDeviceEndpoint: APIEndpoint {
+    let deviceID: Int64
+    let token: String
+
+    var path: String { "/api/frp/devices/\(deviceID)" }
+    var method: HTTPMethod { .delete }
+    var headers: [String : String] {
+        [
+            "Authorization": "Bearer \(token)",
+            "Accept": "application/json"
+        ]
+    }
+}
+
+private struct FRPMappingListEndpoint: APIEndpoint {
+    let deviceID: Int64
+    let token: String
+
+    var path: String { "/api/frp/devices/\(deviceID)/mappings" }
+    var method: HTTPMethod { .get }
+    var headers: [String : String] {
+        [
+            "Authorization": "Bearer \(token)",
+            "Accept": "application/json"
+        ]
+    }
+}
+
+private struct FRPCreateMappingEndpoint: APIEndpoint {
+    let token: String
+    let body: Data?
+
+    var path: String { "/api/frp/mappings" }
+    var method: HTTPMethod { .post }
+    var headers: [String : String] {
+        [
+            "Authorization": "Bearer \(token)",
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        ]
+    }
+}
+
+private struct FRPDeleteMappingEndpoint: APIEndpoint {
+    let mappingID: Int64
+    let token: String
+
+    var path: String { "/api/frp/mappings/\(mappingID)" }
+    var method: HTTPMethod { .delete }
+    var headers: [String : String] {
+        [
+            "Authorization": "Bearer \(token)",
             "Accept": "application/json"
         ]
     }

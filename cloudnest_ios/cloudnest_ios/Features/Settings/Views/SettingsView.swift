@@ -3,6 +3,7 @@ import SwiftUI
 /// 设置页：账户管理与退出登录
 struct SettingsView: View {
     @StateObject private var viewModel = SettingsViewModel()
+    @State private var showAdminLogs: Bool = false
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -11,6 +12,10 @@ struct SettingsView: View {
                 accountFormCard
                 permissionCard
                 createButton
+                rateWindowCard
+                systemSettingsCard
+                permissionSummaryCard
+                auditEntryCard
                 collaborationWorkspaceCard
                 collaborationFilePermissionCard
                 statusCard
@@ -27,6 +32,37 @@ struct SettingsView: View {
         .onAppear {
             viewModel.onAppear()
         }
+        .sheet(isPresented: $showAdminLogs) {
+            NavigationStack {
+                AdminLogView()
+            }
+        }
+        .refreshable {
+            await viewModel.refreshAllSettingsData()
+        }
+    }
+
+    private var auditEntryCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("日志与审计")
+            Text("用于查询系统操作日志、按条件筛选并导出 CSV。")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            Button {
+                showAdminLogs = true
+            } label: {
+                Label("打开日志与审计模块", systemImage: "doc.text.magnifyingglass")
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding(16)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(0.6), lineWidth: 1)
+        )
     }
 
     private var headerCard: some View {
@@ -161,6 +197,182 @@ struct SettingsView: View {
         .buttonStyle(.plain)
         .disabled(!viewModel.canCreateUser)
         .opacity(viewModel.canCreateUser ? 1 : 0.6)
+    }
+
+    private var rateWindowCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("速率高峰时段")
+
+            Toggle("启用个人高峰时段", isOn: $viewModel.rateWindowEnabled)
+
+            HStack(spacing: 8) {
+                TextField("开始时间（HH:MM）", text: $viewModel.rateWindowStart)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled(true)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color.white.opacity(0.35), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                TextField("结束时间（HH:MM）", text: $viewModel.rateWindowEnd)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled(true)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color.white.opacity(0.35), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+
+            HStack {
+                Text("来源：\(viewModel.rateWindowSource.isEmpty ? "-" : viewModel.rateWindowSource)")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button {
+                    Task { await viewModel.saveRateWindow() }
+                } label: {
+                    HStack(spacing: 6) {
+                        if viewModel.isRefreshingSummary {
+                            ProgressView()
+                        }
+                        Text("保存")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(16)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(0.6), lineWidth: 1)
+        )
+    }
+
+    private var permissionSummaryCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                sectionTitle("权限概览")
+                Spacer()
+                Button {
+                    Task {
+                        await viewModel.loadPermissionSummary()
+                    }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.plain)
+            }
+
+            if viewModel.permissionSummaryRoles.isEmpty {
+                Text("暂无角色数据")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("系统角色")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    ForEach(viewModel.permissionSummaryRoles) { role in
+                        Text("#\(role.id)  \(role.roleName)")
+                            .font(.system(size: 13, weight: .medium, design: .monospaced))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .background(Color.white.opacity(0.28), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                }
+            }
+
+            if !viewModel.permissionSummaryUserRoles.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("用户角色")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    ForEach(viewModel.permissionSummaryUserRoles.prefix(8)) { row in
+                        Text("#\(row.userId)  \(row.username)  (\(row.roleName))")
+                            .font(.system(size: 13, weight: .medium, design: .monospaced))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .background(Color.white.opacity(0.28), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(0.6), lineWidth: 1)
+        )
+    }
+
+    private var systemSettingsCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                sectionTitle("系统设置总表")
+                Spacer()
+                Button {
+                    Task { await viewModel.loadSystemSettings() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.plain)
+            }
+
+            if viewModel.editableSystemSettings.isEmpty {
+                if viewModel.isSystemSettingsLoading {
+                    ProgressView("加载系统设置中...")
+                        .font(.footnote)
+                } else {
+                    Text("暂无系统设置数据")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                ForEach($viewModel.editableSystemSettings) { $item in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(item.key)
+                            .font(.system(size: 13, weight: .bold, design: .monospaced))
+
+                        TextField("值", text: $item.value)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled(true)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(Color.white.opacity(0.35), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                        if !item.description.isEmpty {
+                            Text(item.description)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+
+                HStack {
+                    Spacer()
+                    Button {
+                        Task { await viewModel.saveSystemSettings() }
+                    } label: {
+                        HStack(spacing: 6) {
+                            if viewModel.isSystemSettingsLoading {
+                                ProgressView()
+                            }
+                            Text("保存系统设置")
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!viewModel.canSaveSystemSettings)
+                }
+            }
+        }
+        .padding(16)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(0.6), lineWidth: 1)
+        )
     }
 
     private var collaborationWorkspaceCard: some View {

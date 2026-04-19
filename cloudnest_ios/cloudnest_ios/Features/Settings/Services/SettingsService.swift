@@ -4,6 +4,11 @@ import Foundation
 protocol SettingsServiceProtocol {
     func loadTitle() -> String
     func createManagedUser(_ request: CreateManagedUserRequestDTO) async throws -> CreateManagedUserResponseDTO
+    func getSystemSettings() async throws -> [SystemSettingDTO]
+    func upsertSystemSettings(_ request: UpsertSystemSettingsRequestDTO) async throws
+    func getPermissionSummary() async throws -> PermissionSummaryResponseDTO
+    func getRateWindow() async throws -> MyRateWindowItemDTO
+    func updateRateWindow(_ request: UpdateRateWindowRequestDTO) async throws
     func createWorkspace(_ request: CreateWorkspaceRequestDTO) async throws
     func listWorkspaces() async throws -> [WorkspaceItemDTO]
     func listWorkspaceMembers(workspaceId: Int64) async throws -> [WorkspaceMemberDTO]
@@ -40,6 +45,35 @@ final class SettingsService: SettingsServiceProtocol {
         let body = try JSONEncoder().encode(request)
         let endpoint = AdminCreateUserEndpoint(body: body, token: try token)
         return try await networkClient.request(endpoint, decode: CreateManagedUserResponseDTO.self)
+    }
+
+    func getSystemSettings() async throws -> [SystemSettingDTO] {
+        let endpoint = GenericGetEndpoint(path: "/api/settings", token: try token)
+        let response = try await networkClient.request(endpoint, decode: SystemSettingListResponseDTO.self)
+        return response.items
+    }
+
+    func upsertSystemSettings(_ request: UpsertSystemSettingsRequestDTO) async throws {
+        let body = try JSONEncoder().encode(request)
+        let endpoint = GenericPutEndpoint(path: "/api/settings", body: body, token: try token)
+        _ = try await networkClient.request(endpoint)
+    }
+
+    func getPermissionSummary() async throws -> PermissionSummaryResponseDTO {
+        let endpoint = GenericGetEndpoint(path: "/api/settings/permissions", token: try token)
+        return try await networkClient.request(endpoint, decode: PermissionSummaryResponseDTO.self)
+    }
+
+    func getRateWindow() async throws -> MyRateWindowItemDTO {
+        let endpoint = GenericGetEndpoint(path: "/api/settings/rate-window", token: try token)
+        let response = try await networkClient.request(endpoint, decode: MyRateWindowResponseDTO.self)
+        return response.item
+    }
+
+    func updateRateWindow(_ request: UpdateRateWindowRequestDTO) async throws {
+        let body = try JSONEncoder().encode(request)
+        let endpoint = GenericPutEndpoint(path: "/api/settings/rate-window", body: body, token: try token)
+        _ = try await networkClient.request(endpoint)
     }
 
     func createWorkspace(_ request: CreateWorkspaceRequestDTO) async throws {
@@ -158,6 +192,21 @@ private struct GenericDeleteEndpoint: APIEndpoint {
     var headers: [String: String] {
         [
             "Authorization": "Bearer \(token)",
+            "Accept": "application/json"
+        ]
+    }
+}
+
+private struct GenericPutEndpoint: APIEndpoint {
+    let path: String
+    let body: Data?
+    let token: String
+
+    var method: HTTPMethod { .put }
+    var headers: [String: String] {
+        [
+            "Authorization": "Bearer \(token)",
+            "Content-Type": "application/json",
             "Accept": "application/json"
         ]
     }

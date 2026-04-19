@@ -29,6 +29,9 @@ struct FilesView: View {
     @State private var useEndDate: Bool = false
     @State private var activeSheet: FilesActiveSheet?
     @State private var expandedTreeNodes: Set<Int64> = []
+    @State private var showUnifiedSearchOverlay: Bool = false
+    @State private var unifiedSearchText: String = ""
+    @FocusState private var isUnifiedSearchFocused: Bool
     @AppStorage("files.layout.style") private var layoutStyleRaw: String = FilesLayoutStyle.icon.rawValue
 
     private let folderColumns = [
@@ -47,6 +50,9 @@ struct FilesView: View {
             }
             .overlay {
                 uploadingOverlay
+            }
+            .overlay {
+                unifiedSearchOverlay
             }
     }
 
@@ -148,7 +154,6 @@ struct FilesView: View {
                 breadcrumbBar
                 directoryTreeSection
                 personalSection
-                searchBarSection
                 mainContentSection
             }
             .padding(.horizontal, 16)
@@ -291,9 +296,11 @@ struct FilesView: View {
 
         ToolbarItemGroup(placement: .topBarTrailing) {
             Button {
-                Task {
-                    await applyCurrentSearchAndFilter()
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    showUnifiedSearchOverlay = true
                 }
+                unifiedSearchText = viewModel.searchKeyword
+                isUnifiedSearchFocused = true
             } label: {
                 Image(systemName: "magnifyingglass")
             }
@@ -377,6 +384,208 @@ struct FilesView: View {
                 Image(systemName: "ellipsis.circle")
             }
         }
+    }
+
+    @ViewBuilder
+    private var unifiedSearchOverlay: some View {
+        if showUnifiedSearchOverlay {
+            ZStack(alignment: .top) {
+                Color(.systemBackground)
+                    .ignoresSafeArea()
+
+                VStack(spacing: 12) {
+                    HStack {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                showUnifiedSearchOverlay = false
+                            }
+                            isUnifiedSearchFocused = false
+                        } label: {
+                            Label("返回", systemImage: "chevron.left")
+                                .font(.headline)
+                        }
+                        .buttonStyle(.bordered)
+
+                        Spacer()
+                    }
+
+                    HStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundStyle(.secondary)
+
+                        TextField("搜索文件名，或输入自然语言描述", text: $unifiedSearchText)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled(true)
+                            .focused($isUnifiedSearchFocused)
+                            .onSubmit {
+                                Task {
+                                    await runUnifiedSearch()
+                                }
+                            }
+
+                        if !unifiedSearchText.isEmpty {
+                            Button {
+                                unifiedSearchText = ""
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        Button("搜索") {
+                            Task {
+                                await runUnifiedSearch()
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(viewModel.isUnifiedSearching)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+                    if viewModel.isUnifiedSearching {
+                        ProgressView("搜索中...")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    if let message = viewModel.unifiedSearchErrorMessage {
+                        Text(message)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    ScrollView(showsIndicators: false) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            if !viewModel.unifiedFilenameResults.isEmpty {
+                                Text("文件名搜索结果")
+                                    .font(.headline)
+
+                                VStack(spacing: 8) {
+                                    ForEach(viewModel.unifiedFilenameResults) { item in
+                                        unifiedFilenameResultRow(item)
+                                    }
+                                }
+                            }
+
+                            if !viewModel.unifiedNLResults.isEmpty {
+                                Text("智能搜索结果")
+                                    .font(.headline)
+                                    .padding(.top, viewModel.unifiedFilenameResults.isEmpty ? 0 : 6)
+
+                                VStack(spacing: 8) {
+                                    ForEach(viewModel.unifiedNLResults) { item in
+                                        unifiedNLResultRow(item)
+                                    }
+                                }
+                            }
+
+                            if !viewModel.isUnifiedSearching,
+                               viewModel.unifiedFilenameResults.isEmpty,
+                               viewModel.unifiedNLResults.isEmpty,
+                               !unifiedSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Text("未搜索到结果")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.top, 10)
+                            }
+                        }
+                        .padding(.vertical, 8)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 14)
+                .padding(.bottom, 20)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            }
+            .transition(.opacity)
+            .zIndex(20)
+        }
+    }
+
+    private func runUnifiedSearch() async {
+        await viewModel.runUnifiedSearch(query: unifiedSearchText)
+    }
+
+    private func unifiedFilenameResultRow(_ item: FileItemDTO) -> some View {
+        Button {
+            Task {
+                if item.isFolder == 1 {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showUnifiedSearchOverlay = false
+                    }
+                    await viewModel.enterFolder(item)
+                } else {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showUnifiedSearchOverlay = false
+                    }
+                    await viewModel.openPreview(for: item)
+                }
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: item.isFolder == 1 ? "folder" : getFileIcon(type: item.fileType))
+                    .foregroundStyle(item.isFolder == 1 ? Color.blue : Color.orange)
+                    .frame(width: 22)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(item.filename)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                    Text(item.isFolder == 1 ? "文件夹" : "\(formatFileSize(item.size))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            .padding(10)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func unifiedNLResultRow(_ item: AISearchItemDTO) -> some View {
+        Button {
+            Task {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    showUnifiedSearchOverlay = false
+                }
+                await viewModel.openPreviewFromSearchResult(
+                    fileId: item.id,
+                    filename: item.filename,
+                    fileType: item.fileType,
+                    size: item.size
+                )
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 10) {
+                    Image(systemName: getFileIcon(type: item.fileType))
+                        .foregroundStyle(Color.orange)
+                    Text(item.filename)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                    Spacer()
+                }
+
+                if !item.ocrSnippet.isEmpty {
+                    Text(item.ocrSnippet)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                } else if !item.description.isEmpty {
+                    Text(item.description)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+            .padding(10)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder

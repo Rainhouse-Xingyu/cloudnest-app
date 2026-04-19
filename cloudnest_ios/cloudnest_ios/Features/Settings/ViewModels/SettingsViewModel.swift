@@ -17,6 +17,8 @@ final class SettingsViewModel: ObservableObject {
     @Published var isSubmitting: Bool = false
     @Published var isLoggingOut: Bool = false
     @Published var isCollaborationLoading: Bool = false
+    @Published var isRefreshingSummary: Bool = false
+    @Published var isSystemSettingsLoading: Bool = false
 
     @Published var workspaceNameInput: String = ""
     @Published var workspaces: [WorkspaceItemDTO] = []
@@ -32,6 +34,14 @@ final class SettingsViewModel: ObservableObject {
     @Published var selectedCollaboratorPermission: FileCollaboratorPermissionOption = .read
     @Published var revokeCollaboratorUserIdInput: String = ""
 
+    @Published var permissionSummaryRoles: [PermissionRoleDTO] = []
+    @Published var permissionSummaryUserRoles: [PermissionUserRoleDTO] = []
+    @Published var rateWindowEnabled: Bool = false
+    @Published var rateWindowStart: String = "09:00"
+    @Published var rateWindowEnd: String = "18:00"
+    @Published var rateWindowSource: String = ""
+    @Published var editableSystemSettings: [EditableSystemSettingItem] = []
+
     @Published var errorMessage: String?
     @Published var successMessage: String?
 
@@ -44,7 +54,22 @@ final class SettingsViewModel: ObservableObject {
     func onAppear() {
         title = service.loadTitle()
         Task {
-            await loadWorkspaces()
+            await refreshAllSettingsData()
+        }
+    }
+
+    func refreshAllSettingsData() async {
+        await loadWorkspaces()
+        await loadPermissionSummary()
+        await loadRateWindow()
+        await loadSystemSettings()
+    }
+
+    var canSaveSystemSettings: Bool {
+        guard !isSystemSettingsLoading, !editableSystemSettings.isEmpty else { return false }
+        return editableSystemSettings.allSatisfy {
+            !$0.key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            !$0.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
     }
 
@@ -55,12 +80,18 @@ final class SettingsViewModel: ObservableObject {
     }
 
     var canAddPermission: Bool {
-        !permissionPathInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let normalized = normalizePath(permissionPathInput)
+        guard !normalized.isEmpty else { return false }
+        return normalized.hasPrefix("/")
     }
 
     func addPermission() {
         let path = normalizePath(permissionPathInput)
         guard !path.isEmpty else { return }
+        guard isValidPermissionPath(path) else {
+            errorMessage = "路径格式不正确，请使用 /api/xxx"
+            return
+        }
 
         let exists = permissions.contains { $0.method == selectedMethod && $0.path == path }
         guard !exists else {
@@ -71,6 +102,110 @@ final class SettingsViewModel: ObservableObject {
         permissions.append(UserPermissionItem(method: selectedMethod, path: path))
         permissionPathInput = ""
         errorMessage = nil
+    }
+
+    func loadPermissionSummary() async {
+        isRefreshingSummary = true
+        defer { isRefreshingSummary = false }
+
+        do {
+            let response = try await service.getPermissionSummary()
+            permissionSummaryRoles = response.roles
+            permissionSummaryUserRoles = response.userRoles
+        } catch {
+            errorMessage = "加载权限概览失败：\(error.localizedDescription)"
+        }
+    }
+
+    func loadRateWindow() async {
+        isRefreshingSummary = true
+        defer { isRefreshingSummary = false }
+
+        do {
+            let item = try await service.getRateWindow()
+            rateWindowEnabled = item.enabled
+            rateWindowStart = item.start.isEmpty ? "09:00" : item.start
+            rateWindowEnd = item.end.isEmpty ? "18:00" : item.end
+            rateWindowSource = item.source
+        } catch {
+            errorMessage = "加载速率时段失败：\(error.localizedDescription)"
+        }
+    }
+
+    func saveRateWindow() async {
+        let start = rateWindowStart.trimmingCharacters(in: .whitespacesAndNewlines)
+        let end = rateWindowEnd.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if rateWindowEnabled {
+            guard isValidHHMM(start), isValidHHMM(end) else {
+                errorMessage = "时间格式需为 HH:MM，例如 09:30"
+                return
+            }
+        }
+
+        isRefreshingSummary = true
+        defer { isRefreshingSummary = false }
+
+        do {
+            try await service.updateRateWindow(
+                UpdateRateWindowRequestDTO(
+                    enabled: rateWindowEnabled,
+                    start: start,
+                    end: end
+                )
+            )
+            successMessage = "速率高峰时段已保存"
+            await loadRateWindow()
+        } catch {
+            errorMessage = "保存速率时段失败：\(error.localizedDescription)"
+        }
+    }
+
+    func loadSystemSettings() async {
+        isSystemSettingsLoading = true
+        defer { isSystemSettingsLoading = false }
+
+        do {
+            let rows = try await service.getSystemSettings()
+            editableSystemSettings = rows
+                .sorted { $0.settingKey < $1.settingKey }
+                .map {
+                    EditableSystemSettingItem(
+                        key: $0.settingKey,
+                        value: $0.settingValue,
+                        description: $0.description
+                    )
+                }
+        } catch {
+            errorMessage = "加载系统设置失败：\(error.localizedDescription)"
+        }
+    }
+
+    func saveSystemSettings() async {
+        guard canSaveSystemSettings else {
+            errorMessage = "存在空的设置项，请先补全"
+            return
+        }
+
+        isSystemSettingsLoading = true
+        defer { isSystemSettingsLoading = false }
+
+        do {
+            let payload = UpsertSystemSettingsRequestDTO(
+                items: editableSystemSettings.map {
+                    UpsertSystemSettingItemDTO(
+                        settingKey: $0.key.trimmingCharacters(in: .whitespacesAndNewlines),
+                        settingValue: $0.value.trimmingCharacters(in: .whitespacesAndNewlines),
+                        description: $0.description.trimmingCharacters(in: .whitespacesAndNewlines)
+                    )
+                }
+            )
+            try await service.upsertSystemSettings(payload)
+            successMessage = "系统设置已保存"
+            await loadSystemSettings()
+        } catch {
+            errorMessage = "保存系统设置失败：\(error.localizedDescription)"
+        }
     }
 
     func removePermission(id: UUID) {
@@ -322,5 +457,15 @@ final class SettingsViewModel: ObservableObject {
             return trimmed
         }
         return "/" + trimmed
+    }
+
+    private func isValidPermissionPath(_ path: String) -> Bool {
+        let pattern = "^/[A-Za-z0-9_\\-./{}:]*$"
+        return path.range(of: pattern, options: .regularExpression) != nil
+    }
+
+    private func isValidHHMM(_ value: String) -> Bool {
+        let pattern = "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+        return value.range(of: pattern, options: .regularExpression) != nil
     }
 }

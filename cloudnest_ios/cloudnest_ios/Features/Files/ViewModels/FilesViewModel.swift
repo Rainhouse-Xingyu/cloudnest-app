@@ -36,6 +36,10 @@ final class FilesViewModel: ObservableObject {
     @Published var recycleBinItems: [FileItemDTO] = []
     @Published var latestCreatedShareLink: String?
     @Published private(set) var imageThumbnails: [Int64: UIImage] = [:]
+    @Published var isUnifiedSearching: Bool = false
+    @Published var unifiedSearchErrorMessage: String?
+    @Published var unifiedFilenameResults: [FileItemDTO] = []
+    @Published var unifiedNLResults: [AISearchItemDTO] = []
 
     // 上传状态
     @Published var isUploading: Bool = false
@@ -46,9 +50,11 @@ final class FilesViewModel: ObservableObject {
     private var livePhotoCache: [Int64: LivePhotoLookupItemDTO?] = [:]
 
     private let service: FilesServiceProtocol
+    private let smartService: SmartServiceProtocol
 
-    init(service: FilesServiceProtocol = FilesService()) {
+    init(service: FilesServiceProtocol = FilesService(), smartService: SmartServiceProtocol = SmartService()) {
         self.service = service
+        self.smartService = smartService
     }
 
     func onAppear() {
@@ -110,6 +116,72 @@ final class FilesViewModel: ObservableObject {
         filterStartDate = nil
         filterEndDate = nil
         await loadData(parentId: currentParentId)
+    }
+
+    func runUnifiedSearch(query: String) async {
+        let keyword = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !keyword.isEmpty else {
+            unifiedSearchErrorMessage = "请输入搜索内容"
+            unifiedFilenameResults = []
+            unifiedNLResults = []
+            return
+        }
+
+        isUnifiedSearching = true
+        unifiedSearchErrorMessage = nil
+        unifiedFilenameResults = []
+        unifiedNLResults = []
+
+        var partialErrors: [String] = []
+
+        do {
+            unifiedFilenameResults = try await service.searchFiles(
+                parentId: currentParentId,
+                name: keyword,
+                fileType: "",
+                startTime: nil,
+                endTime: nil,
+                page: 1,
+                limit: 50
+            )
+        } catch {
+            partialErrors.append("文件名搜索失败")
+        }
+
+        do {
+            let nlResponse = try await smartService.nlSearch(
+                AINLSearchRequestDTO(question: keyword, page: 1, limit: 50)
+            )
+            unifiedNLResults = nlResponse.items
+        } catch {
+            partialErrors.append("智能搜索失败")
+        }
+
+        if !partialErrors.isEmpty {
+            unifiedSearchErrorMessage = partialErrors.joined(separator: "，")
+        }
+
+        isUnifiedSearching = false
+    }
+
+    func openPreviewFromSearchResult(fileId: Int64, filename: String, fileType: String, size: Int64) async {
+        errorMessage = nil
+        do {
+            let fileURL = try await service.downloadFile(fileId: fileId, filename: filename, isFolder: false)
+            if isImageFile(type: fileType, filename: filename) {
+                imagePreviewItem = ImagePreviewItem(imageURL: fileURL, displayName: filename)
+            } else if isVideoFile(type: fileType, filename: filename) || isAudioFile(type: fileType, filename: filename) {
+                mediaPlaybackItem = MediaPlaybackItem(
+                    mediaURL: fileURL,
+                    displayName: filename,
+                    isAudio: isAudioFile(type: fileType, filename: filename)
+                )
+            } else {
+                previewDocument = FilePreviewDocument(url: fileURL, displayName: filename)
+            }
+        } catch {
+            errorMessage = "预览失败: \(error.localizedDescription)"
+        }
     }
 
     func loadTree() async {
@@ -632,26 +704,38 @@ final class FilesViewModel: ObservableObject {
     }
 
     private func isImageFile(_ file: FileItemDTO) -> Bool {
-        let lowerType = file.fileType.lowercased()
-        let lowerName = file.filename.lowercased()
+        isImageFile(type: file.fileType, filename: file.filename)
+    }
+
+    private func isVideoFile(_ file: FileItemDTO) -> Bool {
+        isVideoFile(type: file.fileType, filename: file.filename)
+    }
+
+    private func isAudioFile(_ file: FileItemDTO) -> Bool {
+        isAudioFile(type: file.fileType, filename: file.filename)
+    }
+
+    private func isImageFile(type: String, filename: String) -> Bool {
+        let lowerType = type.lowercased()
+        let lowerName = filename.lowercased()
         if lowerType.contains("image") || lowerType.contains("jpg") || lowerType.contains("jpeg") || lowerType.contains("png") || lowerType.contains("heic") || lowerType.contains("gif") || lowerType.contains("webp") {
             return true
         }
         return lowerName.hasSuffix(".jpg") || lowerName.hasSuffix(".jpeg") || lowerName.hasSuffix(".png") || lowerName.hasSuffix(".heic") || lowerName.hasSuffix(".gif") || lowerName.hasSuffix(".webp")
     }
 
-    private func isVideoFile(_ file: FileItemDTO) -> Bool {
-        let lowerType = file.fileType.lowercased()
-        let lowerName = file.filename.lowercased()
+    private func isVideoFile(type: String, filename: String) -> Bool {
+        let lowerType = type.lowercased()
+        let lowerName = filename.lowercased()
         if lowerType.contains("video") || lowerType.contains("mp4") || lowerType.contains("mov") || lowerType.contains("m4v") {
             return true
         }
         return lowerName.hasSuffix(".mp4") || lowerName.hasSuffix(".mov") || lowerName.hasSuffix(".m4v") || lowerName.hasSuffix(".avi")
     }
 
-    private func isAudioFile(_ file: FileItemDTO) -> Bool {
-        let lowerType = file.fileType.lowercased()
-        let lowerName = file.filename.lowercased()
+    private func isAudioFile(type: String, filename: String) -> Bool {
+        let lowerType = type.lowercased()
+        let lowerName = filename.lowercased()
         if lowerType.contains("audio") || lowerType.contains("mp3") || lowerType.contains("m4a") || lowerType.contains("aac") || lowerType.contains("wav") {
             return true
         }

@@ -28,12 +28,12 @@ struct ContentView: View {
                 Label("文件", systemImage: "folder.fill")
             }
             .tag(1)
-            
+
             NavigationStack {
-                SmartView()
+                PhotosView()
             }
             .tabItem {
-                Label("照片", systemImage: "photo")
+                Label("照片", systemImage: "photo.on.rectangle")
             }
             .tag(2)
             
