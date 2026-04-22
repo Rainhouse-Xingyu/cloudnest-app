@@ -19,6 +19,8 @@ protocol FilesServiceProtocol {
     func uploadChunk(uploadId: String, chunkIndex: Int, chunkMd5: String, chunkData: Data) async throws
     func completeUpload(req: UploadCompleteRequestDTO) async throws
     func downloadFile(fileId: Int64, filename: String, isFolder: Bool) async throws -> URL
+    func downloadPreview(fileId: Int64, filename: String) async throws -> URL
+    func downloadThumbnail(fileId: Int64) async throws -> Data
     func getLivePhoto(byFileId fileId: Int64) async throws -> LivePhotoLookupItemDTO?
     func autoBindLivePhotos(parentId: Int64?, fileIds: [Int64]) async throws
 }
@@ -181,6 +183,22 @@ final class FilesService: FilesServiceProtocol {
         let outputURL = uniqueURL(in: directory, filename: normalizedName)
         try data.write(to: outputURL)
         return outputURL
+    }
+
+    func downloadPreview(fileId: Int64, filename: String) async throws -> URL {
+        let endpoint = FilesPreviewEndpoint(fileId: fileId, token: try token)
+        let data = try await networkClient.request(endpoint)
+
+        let directory = try createDownloadDirectoryIfNeeded()
+        let normalizedName = normalizedDownloadName(filename: filename, isFolder: false)
+        let outputURL = uniqueURL(in: directory, filename: normalizedName)
+        try data.write(to: outputURL)
+        return outputURL
+    }
+
+    func downloadThumbnail(fileId: Int64) async throws -> Data {
+        let endpoint = FilesThumbnailEndpoint(fileId: fileId, token: try token)
+        return try await networkClient.request(endpoint)
     }
 
     func getLivePhoto(byFileId fileId: Int64) async throws -> LivePhotoLookupItemDTO? {
@@ -397,6 +415,49 @@ private struct FilesDownloadEndpoint: APIEndpoint {
         [
             "Authorization": "Bearer \(token)",
             "Accept": "application/octet-stream"
+        ]
+    }
+}
+
+/// 预览接口 EndPoint（无全局限速，适用于大图或在线文档加载）
+private struct FilesPreviewEndpoint: APIEndpoint {
+    let fileId: Int64
+    let token: String
+
+    var path: String {
+        return "/api/files/\(fileId)/preview"
+    }
+
+    var method: HTTPMethod { .get }
+
+    var headers: [String : String] {
+        [
+            "Authorization": "Bearer \(token)",
+            "Accept": "application/octet-stream"
+        ]
+    }
+}
+
+/// 缩略图接口 EndPoint（小图加载，携带 size 参数请求后端即时裁剪）
+private struct FilesThumbnailEndpoint: APIEndpoint {
+    let fileId: Int64
+    let token: String
+    let size: Int = 256
+
+    var path: String {
+        return "/api/files/\(fileId)/thumbnail"
+    }
+    
+    var queryItems: [URLQueryItem] {
+        [URLQueryItem(name: "size", value: "\(size)")]
+    }
+
+    var method: HTTPMethod { .get }
+
+    var headers: [String : String] {
+        [
+            "Authorization": "Bearer \(token)",
+            "Accept": "image/*"
         ]
     }
 }

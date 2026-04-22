@@ -1624,8 +1624,8 @@ func isImageExt(ext string) bool {
 
 func isInlinePreviewExt(ext string) bool {
 	inlineExts := map[string]bool{
-		"png": true, "jpg": true, "jpeg": true, "gif": true, "webp": true,
-		"pdf": true,
+		"png": true, "jpg": true, "jpeg": true, "gif": true, "webp": true, "heic": true,
+		"pdf": true, "mp4": true, "mov": true, "m4v": true, "webm": true,
 	}
 	return inlineExts[ext]
 }

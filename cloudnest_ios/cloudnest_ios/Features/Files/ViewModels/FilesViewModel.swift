@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import CryptoKit
 import UIKit
+import QuickLookThumbnailing
 
 enum FilesSortMode: String, CaseIterable {
     case nameAsc
@@ -167,7 +168,7 @@ final class FilesViewModel: ObservableObject {
     func openPreviewFromSearchResult(fileId: Int64, filename: String, fileType: String, size: Int64) async {
         errorMessage = nil
         do {
-            let fileURL = try await service.downloadFile(fileId: fileId, filename: filename, isFolder: false)
+            let fileURL = try await service.downloadPreview(fileId: fileId, filename: filename)
             if isImageFile(type: fileType, filename: filename) {
                 imagePreviewItem = ImagePreviewItem(imageURL: fileURL, displayName: filename)
             } else if isVideoFile(type: fileType, filename: filename) || isAudioFile(type: fileType, filename: filename) {
@@ -249,7 +250,7 @@ final class FilesViewModel: ObservableObject {
     func openPreview(for item: FileItemDTO) async {
         errorMessage = nil
         do {
-            let fileURL = try await service.downloadFile(fileId: item.id, filename: item.filename, isFolder: false)
+            let fileURL = try await service.downloadPreview(fileId: item.id, filename: item.filename)
             if isImageFile(item) {
                 imagePreviewItem = ImagePreviewItem(imageURL: fileURL, displayName: item.filename)
             } else if isVideoFile(item) || isAudioFile(item) {
@@ -277,15 +278,13 @@ final class FilesViewModel: ObservableObject {
 
         errorMessage = nil
         do {
-            let imageURL = try await service.downloadFile(
+            let imageURL = try await service.downloadPreview(
                 fileId: info.imageFileId,
-                filename: info.imageFile.filename,
-                isFolder: false
+                filename: info.imageFile.filename
             )
-            let videoURL = try await service.downloadFile(
+            let videoURL = try await service.downloadPreview(
                 fileId: info.videoFileId,
-                filename: info.videoFile.filename,
-                isFolder: false
+                filename: info.videoFile.filename
             )
             livePhotoDisplayItem = LivePhotoDisplayItem(
                 imageURL: imageURL,
@@ -689,18 +688,44 @@ final class FilesViewModel: ObservableObject {
 
     private func refreshImageThumbnails(for files: [FileItemDTO]) async {
         var updated = imageThumbnails
+        let thumbnailSize = CGSize(width: 256, height: 256)
+        
         for file in files {
-            guard isImageFile(file), updated[file.id] == nil else { continue }
+            guard (isImageFile(file) || isDocumentFile(file)), updated[file.id] == nil else { continue }
             do {
-                let localURL = try await service.downloadFile(fileId: file.id, filename: file.filename, isFolder: false)
-                if let image = UIImage(contentsOfFile: localURL.path) {
-                    updated[file.id] = image
+                if isImageFile(file) {
+                    let data = try await service.downloadThumbnail(fileId: file.id)
+                    if let image = UIImage(data: data) {
+                        updated[file.id] = image
+                    }
+                } else if isDocumentFile(file) {
+                    let localURL = try await service.downloadPreview(fileId: file.id, filename: file.filename)
+                    
+                    let request = QLThumbnailGenerator.Request(fileAt: localURL, size: thumbnailSize, scale: UIScreen.main.scale, representationTypes: .all)
+                    do {
+                        let rep = try await QLThumbnailGenerator.shared.generateBestRepresentation(for: request)
+                        updated[file.id] = rep.uiImage
+                    } catch {
+                        if let image = UIImage(contentsOfFile: localURL.path) {
+                            updated[file.id] = image
+                        }
+                    }
                 }
             } catch {
                 // 缩略图加载失败不影响主流程。
             }
         }
         imageThumbnails = updated
+    }
+
+    private func isDocumentFile(_ file: FileItemDTO) -> Bool {
+        let lowerType = file.fileType.lowercased()
+        let lowerName = file.filename.lowercased()
+        if lowerType.contains("pdf") || lowerType.contains("docx") || lowerType.contains("xlsx") || lowerType.contains("pptx") || lowerType.contains("rtf") { return true }
+        if lowerName.hasSuffix(".pdf") || lowerName.hasSuffix(".doc") || lowerName.hasSuffix(".docx") || lowerName.hasSuffix(".xls") || lowerName.hasSuffix(".xlsx") || lowerName.hasSuffix(".ppt") || lowerName.hasSuffix(".pptx") || lowerName.hasSuffix(".pages") || lowerName.hasSuffix(".numbers") || lowerName.hasSuffix(".key") || lowerName.hasSuffix(".rtf") || lowerName.hasSuffix(".epub") {
+            return true
+        }
+        return false
     }
 
     private func isImageFile(_ file: FileItemDTO) -> Bool {
@@ -764,3 +789,17 @@ final class FilesViewModel: ObservableObject {
 }
 
 
+extension FilesViewModel {
+    func resolveLivePhotoPreview(for id: Int64) async throws -> (URL, URL)? {
+        guard let cached = livePhotoCache[id], let info = cached else {
+            return nil
+        }
+        let iURL = try await service.downloadPreview(fileId: info.imageFileId, filename: info.imageFile.filename)
+        let vURL = try await service.downloadPreview(fileId: info.videoFileId, filename: info.videoFile.filename)
+        return (iURL, vURL)
+    }
+    
+    func resolveImagePreview(for id: Int64, filename: String) async throws -> URL {
+        return try await service.downloadPreview(fileId: id, filename: filename)
+    }
+}

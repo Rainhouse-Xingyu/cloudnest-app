@@ -969,64 +969,49 @@ struct FilesView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(selectedItems.contains(item.id) ? Color.blue.opacity(0.8) : Color.white.opacity(0.60), lineWidth: selectedItems.contains(item.id) ? 2.5 : 1)
+                .stroke(selectedItems.contains(item.id) ? Color.blue.opacity(0.8) : Color.clear, lineWidth: selectedItems.contains(item.id) ? 2.5 : 0)
         )
         .shadow(color: Color.blue.opacity(0.09), radius: 14, x: 0, y: 8)
         }
         .buttonStyle(.plain)
-        .onLongPressGesture(minimumDuration: 0.45) {
-            guard !isSelectionMode else { return }
-            toggleSelection(item.id)
-        }
         .contextMenu {
             contextMenuContent(for: item)
         } preview: {
-            if let thumb = viewModel.thumbnail(for: item.id) {
-                Image(uiImage: thumb)
-                    .resizable()
-                    .scaledToFit()
-            } else {
-                Image(systemName: getFileIcon(type: item.fileType))
-                    .font(.system(size: 60))
-                    .padding()
-            }
+            contextMenuPreview(for: item)
         }
     }
 
     private func fileRow(_ item: FileItemDTO) -> some View {
         LazyHStack(spacing: 12) {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.white.opacity(0.34))
-                .frame(width: 54, height: 54)
-                .overlay {
-                    ZStack(alignment: .topLeading) {
-                        if let thumb = viewModel.thumbnail(for: item.id) {
-                            Image(uiImage: thumb)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 54, height: 54)
-                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        } else {
-                            Image(systemName: getFileIcon(type: item.fileType))
-                                .font(.system(size: 22, weight: .semibold))
-                                .foregroundStyle(Color.orange)
-                        }
-
-                        if viewModel.isLivePhoto(item.id) {
-                            HStack(spacing: 2) {
-                                Image(systemName: "livephoto")
-                                    .font(.system(size: 9))
-                                Text("实况")
-                                    .font(.system(size: 9, weight: .bold, design: .rounded))
-                            }
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 2)
-                            .background(Color.red, in: Capsule(style: .continuous))
-                            .offset(x: -8, y: -8)
-                        }
-                    }
+            ZStack(alignment: .topLeading) {
+                Color.white.opacity(0.34)
+                
+                if let thumb = viewModel.thumbnail(for: item.id) {
+                    Image(uiImage: thumb)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    Image(systemName: getFileIcon(type: item.fileType))
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(Color.orange)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
+
+                if viewModel.isLivePhoto(item.id) {
+                    HStack(spacing: 2) {
+                        Image(systemName: "livephoto")
+                            .font(.system(size: 9))
+                        Text("实况")
+                            .font(.system(size: 9, weight: .bold, design: .rounded))
+                    }
+                    .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.4), radius: 2, x: 0, y: 1)
+                    .padding(4)
+                }
+            }
+            .frame(width: 54, height: 54)
+            .clipped()
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
             LazyVStack(alignment: .leading, spacing: 4) {
                 Text(item.filename)
@@ -1046,7 +1031,7 @@ struct FilesView: View {
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(selectedItems.contains(item.id) ? Color.blue.opacity(0.8) : Color.white.opacity(0.56), lineWidth: selectedItems.contains(item.id) ? 2.5 : 1)
+                .stroke(selectedItems.contains(item.id) ? Color.blue.opacity(0.8) : Color.clear, lineWidth: selectedItems.contains(item.id) ? 2.5 : 0)
         )
         .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .onTapGesture {
@@ -1062,12 +1047,10 @@ struct FilesView: View {
                 }
             }
         }
-        .onLongPressGesture(minimumDuration: 0.45) {
-            guard !isSelectionMode else { return }
-            toggleSelection(item.id)
-        }
         .contextMenu {
             contextMenuContent(for: item)
+        } preview: {
+            contextMenuPreview(for: item)
         }
         
     }
@@ -1087,38 +1070,36 @@ struct FilesView: View {
             }
         } label: {
             LazyVStack(alignment: .leading, spacing: 12) {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.white.opacity(0.28))
-                    .frame(height: 92)
-                    .overlay {
-                        ZStack(alignment: .topLeading) {
-                            if let thumb = viewModel.thumbnail(for: item.id) {
-                                Image(uiImage: thumb)
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                            } else {
-                                Image(systemName: getFileIcon(type: item.fileType))
-                                    .font(.system(size: 38, weight: .semibold))
-                                    .foregroundStyle(Color.orange)
-                            }
-
-                            if viewModel.isLivePhoto(item.id) {
-                                HStack(spacing: 2) {
-                                    Image(systemName: "livephoto")
-                                        .font(.system(size: 9))
-                                    Text("实况")
-                                        .font(.system(size: 9, weight: .bold, design: .rounded))
-                                }
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 2)
-                                .background(Color.red, in: Capsule(style: .continuous))
-                                .offset(x: -8, y: -8)
-                            }
-                        }
+                ZStack(alignment: .topLeading) {
+                    Color.white.opacity(0.28)
+                    
+                    if let thumb = viewModel.thumbnail(for: item.id) {
+                        Image(uiImage: thumb)
+                            .resizable()
+                            .scaledToFill()
+                    } else {
+                        Image(systemName: getFileIcon(type: item.fileType))
+                            .font(.system(size: 38, weight: .semibold))
+                            .foregroundStyle(Color.orange)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
+
+                    if viewModel.isLivePhoto(item.id) {
+                        HStack(spacing: 2) {
+                            Image(systemName: "livephoto")
+                                .font(.system(size: 9))
+                            Text("实况")
+                                .font(.system(size: 9, weight: .bold, design: .rounded))
+                        }
+                        .foregroundStyle(.white)
+                        .shadow(color: .black.opacity(0.4), radius: 2, x: 0, y: 1)
+                        .padding(8)
+                    }
+                }
+                .frame(height: 92)
+                .frame(maxWidth: .infinity)
+                .clipped()
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
 
                 Text(item.filename)
                     .font(.system(size: 18, weight: .semibold, design: .rounded))
@@ -1137,16 +1118,14 @@ struct FilesView: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(selectedItems.contains(item.id) ? Color.blue.opacity(0.8) : Color.white.opacity(0.56), lineWidth: selectedItems.contains(item.id) ? 2.5 : 1)
+                    .stroke(selectedItems.contains(item.id) ? Color.blue.opacity(0.8) : Color.clear, lineWidth: selectedItems.contains(item.id) ? 2.5 : 0)
             )
         }
         .buttonStyle(.plain)
-        .onLongPressGesture(minimumDuration: 0.45) {
-            guard !isSelectionMode else { return }
-            toggleSelection(item.id)
-        }
         .contextMenu {
             contextMenuContent(for: item)
+        } preview: {
+            contextMenuPreview(for: item)
         }
         
     }
@@ -1182,6 +1161,11 @@ struct FilesView: View {
         } label: {
             Label("删除", systemImage: "trash")
         }
+    }
+
+    @ViewBuilder
+    private func contextMenuPreview(for item: FileItemDTO) -> some View {
+        ContextMenuLivePreview(item: item, viewModel: viewModel)
     }
 
     private var currentLayoutStyle: FilesLayoutStyle {
@@ -2209,3 +2193,89 @@ private struct FilesScrollOffsetPreferenceKey: PreferenceKey {
     }
 }
 
+struct ContextMenuLivePreview: View {
+    let item: FileItemDTO
+    @ObservedObject var viewModel: FilesViewModel
+    
+    @State private var imageURL: URL?
+    @State private var videoURL: URL?
+    @State private var isLoading = true
+
+    var body: some View {
+        Group {
+            if viewModel.isLivePhoto(item.id) {
+                if let iURL = imageURL, let vURL = videoURL {
+                    LivePhotoDisplayView(imageURL: iURL, videoURL: vURL)
+                } else {
+                    loadingOrThumb()
+                }
+            } else if viewModel.thumbnail(for: item.id) != nil {
+                if let iURL = imageURL, let uiImage = UIImage(contentsOfFile: iURL.path) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFit()
+                } else {
+                    loadingOrThumb()
+                }
+            } else {
+                Image(systemName: getFileIcon(type: item.fileType))
+                    .font(.system(size: 60))
+                    .padding()
+            }
+        }
+        .frame(minWidth: 200, minHeight: 200)
+        .task {
+            await loadRealContent()
+        }
+    }
+
+    @ViewBuilder
+    private func loadingOrThumb() -> some View {
+        ZStack {
+            if let thumb = viewModel.thumbnail(for: item.id) {
+                Image(uiImage: thumb)
+                    .resizable()
+                    .scaledToFit()
+                    .blur(radius: 2)
+            } else {
+                Color.gray.opacity(0.1)
+            }
+            ProgressView()
+        }
+    }
+
+    private func loadRealContent() async {
+        defer { isLoading = false }
+        if viewModel.isLivePhoto(item.id) {
+            do {
+                if let (iURL, vURL) = try await viewModel.resolveLivePhotoPreview(for: item.id) {
+                    if !Task.isCancelled {
+                        imageURL = iURL
+                        videoURL = vURL
+                    }
+                }
+            } catch {
+                 print("Failed Live Photo preview: \(error)")
+            }
+        } else if viewModel.thumbnail(for: item.id) != nil {
+            do {
+                let url = try await viewModel.resolveImagePreview(for: item.id, filename: item.filename)
+                if !Task.isCancelled {
+                    imageURL = url
+                }
+            } catch {
+                 print("Failed image preview: \(error)")
+            }
+        }
+    }
+    
+    private func getFileIcon(type: String) -> String {
+        let typeLower = type.lowercased()
+        if typeLower.contains("pdf") { return "doc.richtext.fill" }
+        if typeLower.contains("image") || typeLower.contains("jpg") || typeLower.contains("png") || typeLower.contains("heic") { return "photo.fill" }
+        if typeLower.contains("video") || typeLower.contains("mp4") || typeLower.contains("mov") { return "play.rectangle.fill" }
+        if typeLower.contains("audio") || typeLower.contains("mp3") { return "headphones" }
+        if typeLower.contains("text") || typeLower.contains("txt") || typeLower.contains("md") { return "doc.text.fill" }
+        return "doc.fill"
+    }
+}
