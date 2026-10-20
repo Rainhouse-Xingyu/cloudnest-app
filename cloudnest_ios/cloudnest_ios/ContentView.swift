@@ -30,10 +30,10 @@ struct ContentView: View {
             .tag(1)
 
             NavigationStack {
-                PhotosView()
+                TransfersView()
             }
             .tabItem {
-                Label("照片", systemImage: "photo.on.rectangle")
+                Label("传输", systemImage: "arrow.up.arrow.down")
             }
             .tag(2)
             
@@ -51,7 +51,7 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .switchTabToFiles)) { _ in
             selectedTab = 1
         }
-        .onReceive(NotificationCenter.default.publisher(for: .switchTabToPhotos)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .switchTabToTransfers)) { _ in
             selectedTab = 2
         }
         .liquidGlassPage()

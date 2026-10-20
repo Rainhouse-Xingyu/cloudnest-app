@@ -41,6 +41,7 @@ struct FileItemDTO: Decodable, Identifiable {
 // MARK: - Upload DTOs
 
 struct UploadInitRequestDTO: Encodable {
+    var uploadId: String? // 用于断点续传
     let parentId: Int64
     let filename: String
     let totalSize: Int64
@@ -48,6 +49,7 @@ struct UploadInitRequestDTO: Encodable {
     let totalChunks: Int
     
     enum CodingKeys: String, CodingKey {
+        case uploadId = "upload_id"
         case parentId = "parent_id"
         case filename
         case totalSize = "total_size"
@@ -58,9 +60,13 @@ struct UploadInitRequestDTO: Encodable {
 
 struct UploadInitResponseDTO: Decodable {
     let uploadId: String
+    let uploadedChunks: [Int]?
+    let uploadedCount: Int?
     
     enum CodingKeys: String, CodingKey {
         case uploadId = "upload_id"
+        case uploadedChunks = "uploaded_chunks"
+        case uploadedCount = "uploaded_count"
     }
 }
 

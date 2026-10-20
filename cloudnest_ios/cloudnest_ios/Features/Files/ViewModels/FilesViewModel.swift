@@ -42,9 +42,6 @@ final class FilesViewModel: ObservableObject {
     @Published var unifiedFilenameResults: [FileItemDTO] = []
     @Published var unifiedNLResults: [AISearchItemDTO] = []
 
-    // 上传状态
-    @Published var isUploading: Bool = false
-    @Published var uploadProgress: Double = 0.0
 
     @Published private(set) var livePhotoIDs: Set<Int64> = []
 
@@ -297,14 +294,13 @@ final class FilesViewModel: ObservableObject {
     }
 
     func uploadFile(url: URL) async {
-        guard url.startAccessingSecurityScopedResource() else {
-            self.errorMessage = "无法读取选择的文件权限"
-            return
+        let isSecurityScoped = url.startAccessingSecurityScopedResource()
+        defer {
+            if isSecurityScoped {
+                url.stopAccessingSecurityScopedResource()
+            }
         }
-        defer { url.stopAccessingSecurityScopedResource() }
 
-        isUploading = true
-        uploadProgress = 0.0
         errorMessage = nil
 
         do {
@@ -330,6 +326,8 @@ final class FilesViewModel: ObservableObject {
             let fileHandle = try FileHandle(forReadingFrom: url)
             defer { try? fileHandle.close() }
             
+            let taskId = TransferManager.shared.addTask(name: filename, type: .upload, totalSize: Int64(fileSize))
+            
             for chunkIndex in 0..<totalChunks {
                 try fileHandle.seek(toOffset: UInt64(chunkIndex * chunkSize))
                 let chunkData = try fileHandle.read(upToCount: chunkSize) ?? Data()
@@ -343,7 +341,8 @@ final class FilesViewModel: ObservableObject {
                     chunkData: chunkData
                 )
                 
-                self.uploadProgress = Double(chunkIndex + 1) / Double(totalChunks)
+                let currentProgress = Double(chunkIndex + 1) / Double(totalChunks)
+                TransferManager.shared.updateTaskProgress(id: taskId, progress: currentProgress)
             }
             
             let completeReq = UploadCompleteRequestDTO(
@@ -351,6 +350,7 @@ final class FilesViewModel: ObservableObject {
                 parentId: currentParentId
             )
             try await service.completeUpload(req: completeReq)
+            TransferManager.shared.completeTask(id: taskId)
             
             // 上传完成后重新加载当前目录
             await loadData(parentId: currentParentId)
@@ -358,7 +358,7 @@ final class FilesViewModel: ObservableObject {
             self.errorMessage = "上传失败: \(error.localizedDescription)"
         }
         
-        isUploading = false
+
     }
 
     func uploadPhotoData(_ data: Data, filename: String) async {
@@ -368,18 +368,55 @@ final class FilesViewModel: ObservableObject {
             return
         }
 
-        isUploading = true
-        uploadProgress = 0.0
         errorMessage = nil
+        let taskId = TransferManager.shared.addTask(name: filename, type: .upload, totalSize: totalSize)
+        let parentId = currentParentId
 
-        do {
-            try await uploadDataInChunks(data, filename: filename, progressBase: 0.0, progressScale: 1.0)
-            await loadData(parentId: currentParentId)
-        } catch {
-            self.errorMessage = "上传失败: \(error.localizedDescription)"
+        let uploadBlock: @Sendable () async -> Void = { [weak self] in
+            guard let self = self else { return }
+            do {
+                let chunkSize = 5 * 1024 * 1024
+                let totalChunks = Int(ceil(Double(totalSize) / Double(chunkSize)))
+                
+                let taskOpt = await TransferManager.shared.tasks.first(where: { $0.id == taskId })
+                var currentUploadId = taskOpt?.uploadId
+                
+                let initReq = UploadInitRequestDTO(uploadId: currentUploadId, parentId: parentId, filename: filename, totalSize: totalSize, chunkSize: chunkSize, totalChunks: totalChunks)
+                let initRes = try await self.service.initUpload(req: initReq)
+                currentUploadId = initRes.uploadId
+                DispatchQueue.main.async { TransferManager.shared.setUploadId(id: taskId, uploadId: currentUploadId ?? "") }
+                
+                let uploadedSet = Set(initRes.uploadedChunks ?? [])
+                var uploadedCount = uploadedSet.count
+                
+                for chunkIndex in 0..<totalChunks {
+                    try Task.checkCancellation()
+                    if uploadedSet.contains(chunkIndex) { continue }
+                    
+                    let start = chunkIndex * chunkSize
+                    let end = min(start + chunkSize, data.count)
+                    let chunkData = data.subdata(in: start..<end)
+                    let md5 = Insecure.MD5.hash(data: chunkData).map { String(format: "%02hhx", $0) }.joined()
+                    
+                    try await self.service.uploadChunk(uploadId: currentUploadId!, chunkIndex: chunkIndex, chunkMd5: md5, chunkData: chunkData)
+                    uploadedCount += 1
+                    let progress = Double(uploadedCount) / Double(totalChunks)
+                    DispatchQueue.main.async { TransferManager.shared.updateTaskProgress(id: taskId, progress: progress) }
+                }
+                
+                let completeReq = UploadCompleteRequestDTO(uploadId: currentUploadId!, parentId: parentId)
+                try await self.service.completeUpload(req: completeReq)
+                DispatchQueue.main.async { TransferManager.shared.completeTask(id: taskId) }
+                await self.loadData(parentId: parentId)
+            } catch is CancellationError {
+                print("Task paused.")
+            } catch {
+                DispatchQueue.main.async { TransferManager.shared.failTask(id: taskId, error: error.localizedDescription) }
+            }
         }
-
-        isUploading = false
+        
+        let newTask = Task { await uploadBlock() }
+        TransferManager.shared.registerTaskExecution(id: taskId, task: newTask, resumeBlock: uploadBlock)
     }
 
     func uploadLivePhotoPair(
@@ -393,70 +430,55 @@ final class FilesViewModel: ObservableObject {
             return
         }
 
-        isUploading = true
-        uploadProgress = 0.0
         errorMessage = nil
+        let taskId = TransferManager.shared.addTask(name: imageFilename + " (Live)", type: .upload, totalSize: Int64(imageData.count + videoData.count))
+        let parentId = currentParentId
 
-        do {
-            // 先上传图片后上传视频，再触发后端 auto-bind，确保 live_photo 表生成绑定关系。
-            try await uploadDataInChunks(imageData, filename: imageFilename, progressBase: 0.0, progressScale: 0.5)
-            try await uploadDataInChunks(videoData, filename: videoFilename, progressBase: 0.5, progressScale: 0.5)
-            try await service.autoBindLivePhotos(parentId: currentParentId, fileIds: [])
-            await loadData(parentId: currentParentId)
-        } catch {
-            errorMessage = "上传 Live Photo 失败: \(error.localizedDescription)"
+        let uploadBlock: @Sendable () async -> Void = { [weak self] in
+            guard let self = self else { return }
+            do {
+                func uploadPart(_ data: Data, _ filename: String, _ progressBase: Double, _ progressScale: Double) async throws {
+                    let totalSize = Int64(data.count)
+                    let chunkSize = 5 * 1024 * 1024
+                    let totalChunks = Int(ceil(Double(totalSize) / Double(chunkSize)))
+                    let initReq = UploadInitRequestDTO(uploadId: nil, parentId: parentId, filename: filename, totalSize: totalSize, chunkSize: chunkSize, totalChunks: totalChunks)
+                    let initRes = try await self.service.initUpload(req: initReq)
+                    let currentUploadId = initRes.uploadId
+                    
+                    for chunkIndex in 0..<totalChunks {
+                        try Task.checkCancellation()
+                        let start = chunkIndex * chunkSize
+                        let end = min(start + chunkSize, data.count)
+                        let chunkData = data.subdata(in: start..<end)
+                        let md5 = Insecure.MD5.hash(data: chunkData).map { String(format: "%02hhx", $0) }.joined()
+                        try await self.service.uploadChunk(uploadId: currentUploadId, chunkIndex: chunkIndex, chunkMd5: md5, chunkData: chunkData)
+                        let progress = progressBase + (Double(chunkIndex + 1) / Double(totalChunks) * progressScale)
+                        DispatchQueue.main.async { TransferManager.shared.updateTaskProgress(id: taskId, progress: progress) }
+                    }
+                    let completeReq = UploadCompleteRequestDTO(uploadId: currentUploadId, parentId: parentId)
+                    try await self.service.completeUpload(req: completeReq)
+                }
+                
+                try await uploadPart(imageData, imageFilename, 0.0, 0.5)
+                try await uploadPart(videoData, videoFilename, 0.5, 0.5)
+                try await self.service.autoBindLivePhotos(parentId: parentId, fileIds: [])
+                DispatchQueue.main.async { TransferManager.shared.completeTask(id: taskId) }
+                await self.loadData(parentId: parentId)
+            } catch is CancellationError {
+                print("Task paused.")
+            } catch {
+                DispatchQueue.main.async { TransferManager.shared.failTask(id: taskId, error: error.localizedDescription) }
+            }
         }
-
-        isUploading = false
+        
+        let newTask = Task { await uploadBlock() }
+        TransferManager.shared.registerTaskExecution(id: taskId, task: newTask, resumeBlock: uploadBlock)
     }
 
-    private func uploadDataInChunks(
-        _ data: Data,
-        filename: String,
-        progressBase: Double,
-        progressScale: Double
-    ) async throws {
-        let totalSize = Int64(data.count)
-        guard totalSize > 0 else {
-            throw NSError(domain: "Upload", code: -1, userInfo: [NSLocalizedDescriptionKey: "文件数据为空"])
-        }
-
-        let chunkSize = 5 * 1024 * 1024
-        let totalChunks = Int(ceil(Double(totalSize) / Double(chunkSize)))
-
-        let initReq = UploadInitRequestDTO(
-            parentId: currentParentId,
-            filename: filename,
-            totalSize: totalSize,
-            chunkSize: chunkSize,
-            totalChunks: totalChunks
-        )
-        let initRes = try await service.initUpload(req: initReq)
-        let uploadId = initRes.uploadId
-
-        for chunkIndex in 0..<totalChunks {
-            let start = chunkIndex * chunkSize
-            let end = min(start + chunkSize, data.count)
-            let chunkData = data.subdata(in: start..<end)
-            let md5 = Insecure.MD5.hash(data: chunkData).map { String(format: "%02hhx", $0) }.joined()
-
-            try await service.uploadChunk(
-                uploadId: uploadId,
-                chunkIndex: chunkIndex,
-                chunkMd5: md5,
-                chunkData: chunkData
-            )
-
-            let currentRatio = Double(chunkIndex + 1) / Double(totalChunks)
-            uploadProgress = progressBase + (currentRatio * progressScale)
-        }
-
-        let completeReq = UploadCompleteRequestDTO(
-            uploadId: uploadId,
-            parentId: currentParentId
-        )
-        try await service.completeUpload(req: completeReq)
-    }
+    // uploadDataInChunks 现在由调用方处理 task 注册，或者我们改成返回一个 closure 
+    // 这里把它改为直接返回一个 async throws 函数或者我们不在 uploadDataInChunks 里注册 task，而是将它改名为不要了？
+    // Wait, uploadPhotoData and uploadLivePhoto两者都用到。
+    // 我们直接把它并进闭包里。
 
     func thumbnail(for fileId: Int64) -> UIImage? {
         imageThumbnails[fileId]

@@ -17,16 +17,16 @@ struct HomeView: View {
                 capacityCard
                 statusCard
                 
-                // 3. 照片分类
+                // 3. 传输任务
                 VStack(spacing: 12) {
-                    sectionHeader(title: "最近照片", icon: "photo.on.rectangle.angled") {
-                        NotificationCenter.default.post(name: .switchTabToPhotos, object: nil)
+                    sectionHeader(title: "近期传输", icon: "arrow.up.arrow.down") {
+                        NotificationCenter.default.post(name: .switchTabToTransfers, object: nil)
                     }
                     
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 12) {
                             if viewModel.photoItems.isEmpty {
-                                emptyHintCard(icon: "photo", text: "暂无最近照片")
+                                emptyHintCard(icon: "doc.text", text: "暂无传输任务")
                             } else {
                                 ForEach(viewModel.photoItems) { item in
                                     VStack(alignment: .leading, spacing: 8) {

@@ -50,9 +50,6 @@ struct FilesView: View {
                 selectionBottomBar
             }
             .overlay {
-                uploadingOverlay
-            }
-            .overlay {
                 unifiedSearchOverlay
             }
     }
@@ -248,21 +245,7 @@ struct FilesView: View {
         }
     }
 
-    @ViewBuilder
-    private var uploadingOverlay: some View {
-        if viewModel.isUploading {
-            VStack(spacing: 16) {
-                ProgressView(value: viewModel.uploadProgress)
-                    .progressViewStyle(.linear)
-                    .padding(.horizontal, 40)
-                Text("上传中... \(Int(viewModel.uploadProgress * 100))%")
-                    .font(.appBody)
-                    .foregroundColor(.primary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(.ultraThinMaterial)
-        }
-    }
+    
 
     private var downloadAlertBinding: Binding<Bool> {
         Binding(
@@ -324,7 +307,6 @@ struct FilesView: View {
                 } label: {
                     Image(systemName: "square.and.arrow.up")
                 }
-                .disabled(viewModel.isUploading)
 
                 Button {
                     showCreateFolderAlert = true
@@ -647,27 +629,28 @@ struct FilesView: View {
 
     private var photoPickerSheet: some View {
         PhotoLibraryPicker(
-            onPicked: { data, originalName in
-                let filename = buildPhotoFilename(originalName: originalName, data: data)
+            onPickedMultiple: { normalPhotos, livePhotos in
                 activeSheet = nil
                 Task {
-                    await viewModel.uploadPhotoData(data, filename: filename)
-                }
-            },
-            onPickedLivePhoto: { payload in
-                activeSheet = nil
-                Task {
-                    await viewModel.uploadLivePhotoPair(
-                        imageData: payload.imageData,
-                        imageFilename: payload.imageFilename,
-                        videoData: payload.videoData,
-                        videoFilename: payload.videoFilename
-                    )
+                    for (data, originalName) in normalPhotos {
+                        let filename = buildPhotoFilename(originalName: originalName, data: data)
+                        await viewModel.uploadPhotoData(data, filename: filename)
+                    }
+                    for payload in livePhotos {
+                        await viewModel.uploadLivePhotoPair(
+                            imageData: payload.imageData,
+                            imageFilename: payload.imageFilename,
+                            videoData: payload.videoData,
+                            videoFilename: payload.videoFilename
+                        )
+                    }
                 }
             },
             onError: { message in
                 activeSheet = nil
-                viewModel.errorMessage = message
+                if message != "已取消选择照片" {
+                    viewModel.errorMessage = message
+                }
             }
         )
         .ignoresSafeArea()
@@ -675,15 +658,19 @@ struct FilesView: View {
 
     private var filePickerSheet: some View {
         DocumentFilePicker(
-            onPicked: { url in
+            onPicked: { urls in
                 activeSheet = nil
                 Task {
-                    await viewModel.uploadFile(url: url)
+                    for url in urls {
+                        await viewModel.uploadFile(url: url)
+                    }
                 }
             },
             onError: { message in
                 activeSheet = nil
-                viewModel.errorMessage = message
+                if message != "已取消文件选择" {
+                    viewModel.errorMessage = message
+                }
             }
         )
         .ignoresSafeArea()
@@ -1930,14 +1917,13 @@ private struct PhotoLibraryPicker: UIViewControllerRepresentable {
         let videoFilename: String
     }
 
-    let onPicked: (Data, String?) -> Void
-    let onPickedLivePhoto: (LivePhotoPayload) -> Void
+    let onPickedMultiple: ([(Data, String?)], [LivePhotoPayload]) -> Void
     let onError: (String) -> Void
 
     func makeUIViewController(context: Context) -> PHPickerViewController {
         var config = PHPickerConfiguration(photoLibrary: .shared())
         config.filter = .any(of: [.images, .videos])
-        config.selectionLimit = 1
+        config.selectionLimit = 0
         let picker = PHPickerViewController(configuration: config)
         picker.delegate = context.coordinator
         return picker
@@ -1958,30 +1944,33 @@ private struct PhotoLibraryPicker: UIViewControllerRepresentable {
         }
 
         func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
-            guard let result = results.first else {
-                parent.onError("未选择照片")
+            guard !results.isEmpty else {
+                parent.onError("已取消选择照片")
                 return
             }
 
             Task {
-                do {
-                    if let payload = try await self.extractLivePhotoPayload(from: result) {
-                        await MainActor.run {
-                            self.parent.onPickedLivePhoto(payload)
+                var normalPhotos: [(Data, String?)] = []
+                var livePhotos: [LivePhotoPayload] = []
+                
+                for result in results {
+                    do {
+                        if let payload = try await self.extractLivePhotoPayload(from: result) {
+                            livePhotos.append(payload)
+                            continue
                         }
-                        return
-                    }
 
-                    let provider = result.itemProvider
-                    let targetType = preferredTypeIdentifier(from: provider)
-                    let data = try await loadDataRepresentation(provider: provider, typeIdentifier: targetType)
-                    await MainActor.run {
-                        self.parent.onPicked(data, provider.suggestedName)
+                        let provider = result.itemProvider
+                        let targetType = preferredTypeIdentifier(from: provider)
+                        let data = try await loadDataRepresentation(provider: provider, typeIdentifier: targetType)
+                        normalPhotos.append((data, provider.suggestedName))
+                    } catch {
+                        print("Failed extracting one photo: \(error)")
                     }
-                } catch {
-                    await MainActor.run {
-                        self.parent.onError("选择照片失败: \(error.localizedDescription)")
-                    }
+                }
+                
+                await MainActor.run {
+                    self.parent.onPickedMultiple(normalPhotos, livePhotos)
                 }
             }
         }
@@ -2145,13 +2134,13 @@ private struct PhotoLibraryPicker: UIViewControllerRepresentable {
 }
 
 private struct DocumentFilePicker: UIViewControllerRepresentable {
-    let onPicked: (URL) -> Void
+    let onPicked: ([URL]) -> Void
     let onError: (String) -> Void
 
     func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
         let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.data], asCopy: true)
         picker.delegate = context.coordinator
-        picker.allowsMultipleSelection = false
+        picker.allowsMultipleSelection = true
         return picker
     }
 
@@ -2170,11 +2159,11 @@ private struct DocumentFilePicker: UIViewControllerRepresentable {
         }
 
         func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-            guard let url = urls.first else {
+            guard !urls.isEmpty else {
                 parent.onError("未选择文件")
                 return
             }
-            parent.onPicked(url)
+            parent.onPicked(urls)
         }
 
         func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {

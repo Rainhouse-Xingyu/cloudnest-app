@@ -1,0 +1,32 @@
+1.用户和权限
+-user 用户基础信息
+-role 系统角色
+-user_role 用户-角色映像
+
+2.文件系统
+-file 文件+文件夹（树结构）
+-storage （物理文件 支持去重/妙传）
+
+3.Live Photo
+-live_photo（视频+图片绑定）
+
+4.协作系统
+-workspace（团队空间）
+-workspace_user（成员+权限）
+
+5.文件权限
+-file_permission（文件权限）
+
+6.frp系统
+-device（用户设备）
+-frp_mapping（多端口映射）
+-frp_config（frpc配置）
+
+7.AI系统
+-ai_metadata（OCR/标签/摘要）
+-ai_task（异步任务）
+
+8.系统增强
+-share（文件分享）
+-recycle_bin（回收站）
+-system_setting（系统设置）
