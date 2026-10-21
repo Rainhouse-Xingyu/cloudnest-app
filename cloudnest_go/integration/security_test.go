@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
 	"cloudenest_go/internal/store"
 	"cloudenest_go/model"
@@ -184,4 +185,101 @@ func TestPathPermissionRevocationIsImmediate(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.json(t, "POST", "/api/files/folders", f.alice, map[string]string{"name": "revocation-test-2"}, http.StatusForbidden)
+}
+
+func TestCustomPermissionsKeepSelfSessionAccess(t *testing.T) {
+	f := newFixture(t)
+	permission := model.UserPathPermission{UserID: f.aliceID, Method: "GET", Path: "/api/files"}
+	if err := f.db.Create(&permission).Error; err != nil {
+		t.Fatal(err)
+	}
+	f.json(t, "GET", "/api/files", f.alice, nil, http.StatusOK)
+	f.json(t, "GET", "/api/settings", f.alice, nil, http.StatusForbidden)
+	f.json(t, "POST", "/api/files/folders", f.alice, map[string]string{"name": "not-granted"}, http.StatusForbidden)
+	f.json(t, "POST", "/api/admin/users", f.alice, nil, http.StatusForbidden)
+	me := f.json(t, "GET", "/api/auth/me", f.alice, nil, http.StatusOK)
+	var profile struct {
+		User struct {
+			ID int64 `json:"id"`
+		} `json:"user"`
+	}
+	decode(t, me, &profile)
+	if profile.User.ID != f.aliceID {
+		t.Fatal("self-session endpoint returned a different identity")
+	}
+	for _, endpoint := range []struct{ method, path string }{{"GET", "/api/auth/me"}, {"POST", "/api/auth/logout"}} {
+		f.json(t, endpoint.method, endpoint.path, "", nil, http.StatusUnauthorized)
+		f.json(t, endpoint.method, endpoint.path, "invalid-token", nil, http.StatusUnauthorized)
+	}
+	f.json(t, "POST", "/api/auth/logout", f.alice, nil, http.StatusOK)
+	f.json(t, "GET", "/api/auth/me", f.alice, nil, http.StatusUnauthorized)
+	if err := f.db.Model(&model.User{}).Where("id = ?", f.bobID).Update("status", 0).Error; err != nil {
+		t.Fatal(err)
+	}
+	f.json(t, "GET", "/api/auth/me", f.bob, nil, http.StatusUnauthorized)
+	f.json(t, "POST", "/api/auth/logout", f.bob, nil, http.StatusUnauthorized)
+}
+
+func TestLoginSessionsAreIndependent(t *testing.T) {
+	f := newFixture(t)
+	var user model.User
+	if err := f.db.First(&user, f.aliceID).Error; err != nil {
+		t.Fatal(err)
+	}
+	// Real logins, real Redis session entries, same user and credentials.
+	tokens := make([]string, 0, 4)
+	for range 4 {
+		resp := f.json(t, "POST", "/api/auth/login", "", map[string]string{"username": user.Username, "password": "disposable-fixture-password"}, http.StatusOK)
+		var session struct {
+			Token     string `json:"token"`
+			TokenType string `json:"token_type"`
+			ExpiresAt string `json:"expires_at"`
+			User      struct {
+				ID       int64   `json:"id"`
+				Username string  `json:"username"`
+				Email    *string `json:"email"`
+				IsAdmin  *bool   `json:"is_admin"`
+			} `json:"user"`
+		}
+		decode(t, resp, &session)
+		if session.Token == "" {
+			t.Fatal("login returned empty token")
+		}
+		if session.TokenType != "Bearer" || session.User.ID != f.aliceID || session.User.Username != user.Username || session.User.Email == nil || session.User.IsAdmin == nil {
+			t.Fatal("login response no longer satisfies the existing Swift LoginResponseDTO")
+		}
+		if _, err := time.Parse(time.RFC3339Nano, session.ExpiresAt); err != nil {
+			t.Fatal("invalid login expiry representation")
+		}
+		for _, previous := range tokens {
+			if session.Token == previous {
+				t.Fatal("separate logins returned the same token")
+			}
+		}
+		tokens = append(tokens, session.Token)
+	}
+	f.json(t, "POST", "/api/auth/logout", tokens[0], nil, http.StatusOK)
+	f.json(t, "GET", "/api/auth/me", tokens[0], nil, http.StatusUnauthorized)
+	for _, token := range tokens[1:] {
+		f.json(t, "GET", "/api/auth/me", token, nil, http.StatusOK)
+	}
+}
+
+func TestClientReadAPIsAndAdminBoundaries(t *testing.T) {
+	f := newFixture(t)
+	f.json(t, "GET", "/api/resource/health", "", nil, http.StatusUnauthorized)
+	for _, path := range []string{"/api/resource/health", "/api/files", "/api/live-photos", "/api/frp/devices", "/api/settings", "/api/settings/rate-window", "/api/storage/overview", "/api/workspaces", "/api/shares", "/api/operation-logs", "/api/ai/search"} {
+		f.json(t, "GET", path, f.alice, nil, http.StatusOK)
+	}
+	f.json(t, "GET", "/api/settings/permissions", f.alice, nil, http.StatusForbidden)
+	// Explicit business grants must not turn an ordinary account into an admin.
+	permission := model.UserPathPermission{UserID: f.aliceID, Method: "*", Path: "*"}
+	if err := f.db.Create(&permission).Error; err != nil {
+		t.Fatal(err)
+	}
+	f.json(t, "GET", "/api/settings/permissions", f.alice, nil, http.StatusOK)
+	f.json(t, "GET", "/api/settings/permissions?all=1", f.alice, nil, http.StatusForbidden)
+	f.json(t, "PUT", "/api/settings", f.alice, map[string]any{}, http.StatusForbidden)
+	f.json(t, "POST", "/api/admin/users", f.alice, map[string]any{}, http.StatusForbidden)
+	f.json(t, "POST", "/api/ai/assistant/settings", f.alice, map[string]any{}, http.StatusForbidden)
 }

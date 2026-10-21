@@ -81,7 +81,9 @@ func Authenticate(rdb *redis.Client, jwtSecret string, loadPermissions func(cont
 		c.Set(ContextIsAdminKey, identity.IsAdmin)
 		c.Set(ContextTokenKey, token)
 
-		if identity.IsAdmin {
+		// These exact routes only operate on the authenticated caller's session.
+		// Business grants must not prevent inspecting or revoking that session.
+		if identity.IsAdmin || isSelfSessionRoute(c.Request.Method, c.FullPath()) {
 			c.Next()
 			return
 		}
@@ -94,6 +96,11 @@ func Authenticate(rdb *redis.Client, jwtSecret string, loadPermissions func(cont
 
 		c.Next()
 	}
+}
+
+func isSelfSessionRoute(method, route string) bool {
+	return method == http.MethodGet && route == "/api/auth/me" ||
+		method == http.MethodPost && route == "/api/auth/logout"
 }
 
 // RequireAdmin函数是一个Gin中间件，用于检查当前用户是否具有管理员权限。它从上下文中获取管理员标志，如果不存在或为false，则返回403错误并终止请求处理，否则继续执行后续的处理函数。

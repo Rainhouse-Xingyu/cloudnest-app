@@ -9,7 +9,10 @@
 - [基线验证报告](BASELINE.md)
 - [测试执行方法](TESTING.md)
 - [G01 安全整改与升级边界](G01-SECURITY.md)
+- [现有客户端 API 权限兼容性](CLIENT-API-COMPATIBILITY.md)
 
 状态定义：待做、进行中、代码完成待审、验收完成、外部阻塞。代码存在、构建通过、单项测试通过均不等同于业务验收完成。每个后续 PR 必须更新问题、测试结果及本表，保留失败和未执行项。
 
-G00 已提交 [PR #1](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/1)，G01 首批安全整改进入验证与审查；G02–G11 未完成。所有生产数据迁移、旧凭据轮换、真实 FRP 服务器访问和最终发布必须在有相应凭据/授权后执行。
+G00 已提交 [PR #1](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/1)，G01 持续更新 [PR #2](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/2)，#2 的 base 是 #1 的分支，两者仍为未合并草稿。已核实 #1 的原始漏洞基线失败、#2 首批代码 `cee6db8` 的构建/测试/漏洞 CI 全通过；后续提交以对应 SHA 的 PR checks 为准。
+
+G01 本次补齐自定义权限下的会话查询/注销、随机 JTI 和客户端 API 契约测试。下一项是登录限流与受控密码恢复/会话撤销，随后完成设备身份边界设计，再按依赖推进 G02。G02–G11 未完成，整体目标保持进行中。所有生产数据迁移、旧凭据轮换、真实 FRP 服务器访问和最终发布必须在有相应凭据/授权后执行。

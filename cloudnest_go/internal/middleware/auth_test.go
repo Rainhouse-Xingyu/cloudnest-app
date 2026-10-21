@@ -49,3 +49,24 @@ func TestDefaultCapabilitiesDenyUnlistedRoutes(t *testing.T) {
 		}
 	}
 }
+
+func TestSelfSessionRoutesAreExactAndMethodBound(t *testing.T) {
+	for _, tc := range []struct {
+		method, route string
+		want          bool
+	}{
+		{"GET", "/api/auth/me", true},
+		{"POST", "/api/auth/logout", true},
+		{"POST", "/api/auth/me", false},
+		{"GET", "/api/auth/logout", false},
+		{"GET", "/api/auth/me/admin", false},
+		{"POST", "/api/auth/logout-all", false},
+		{"POST", "/api/auth/login", false},
+		{"GET", "/api/files", false},
+		{"GET", "", false},
+	} {
+		if got := isSelfSessionRoute(tc.method, tc.route); got != tc.want {
+			t.Errorf("%s %s: got %v, want %v", tc.method, tc.route, got, tc.want)
+		}
+	}
+}

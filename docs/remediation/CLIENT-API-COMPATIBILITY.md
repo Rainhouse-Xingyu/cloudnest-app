@@ -1,0 +1,81 @@
+# 现有 Apple 客户端 API 权限兼容性核对
+
+2026-10-21，以冻结的 iOS 客户端真实 Swift APIEndpoint 声明/调用为依据。未新增 iOS 功能，也未把尚未构建的 macOS 工程当作已支持。
+
+共 57 组不同方法/路径：51 个普通业务、1 个自身会话、1 个公开登录、3 个必须管理员、1 个需要显式授权的权限汇总。所有路径都在实际 Gin Router 注册。来源与权限预期保存于 `cloudnest_go/internal/middleware/testdata/apple_client_routes.json`，每条有 Swift 文件和行号；两个 Go 契约测试分别核对真实路由注册与默认权限策略。该快照不是完整端到端业务测试。
+
+## 规则和兼容性结果
+
+- `GET /api/auth/me`、`POST /api/auth/logout` 属于经过认证的用户自身会话操作，无需额外业务路径授权。仍先校验签名、有效期、Redis 会话归属和当前账号状态；不会放行未知/扩展 auth 路径。
+- 自定义权限仍替换默认业务授权集合，并保留方法/具体路径/已有通配符语义。仅授予 GET files 不会附带 settings 或文件写权限。
+- 新 JWT 的 JTI 使用 crypto/rand 生成 32 字节并以 base64url 编码。同一时间戳的 128 次签发均有独立 ID；真实重复登录与单会话注销测试验证 Redis 隔离。JWT 对客户端仍为不透明字符串，登录 JSON 字段、Bearer 头、日期表示均保持兼容。旧的已签名且在 Redis 有效的无 JTI 会话仍按原有效期处理；新增 JTI 不是撤销旧会话，部署密钥轮换要求仍有效。
+- `SettingsService.getPermissionSummary` 请求 `/api/settings/permissions`；该路径在此前基线就不是普通默认权限。显式授权仅允许本人范围，`all=1` 仍须管理员。现有设置页未按能力隐藏此项，普通用户会见到 403 错误提示，这是历史 UI 缺口，留给 G07/G09 能力展示，不放宽后端边界。
+- 创建用户、全局系统设置写入、AI 修改全局设置始终要求管理员；即使配置 `*:*` 也不能绕过 Handler/RequireAdmin 检查。
+- AuthViewModel 的健康探测无 Token，原逻辑将 401 视为服务可达；该接口仍需认证，没有为探测改为公开。
+- 旧 SettingsViewModel 会忽略服务器注销错误并清除本地会话。这不是后端契约变化；G07 应明确提示服务端撤销失败并保留可重试状态。
+
+## 方法/路由快照
+
+| 方法 | 路由模板 | 权限类别 |
+|---|---|---|
+| DELETE | `/api/files/:id/collaborators/:user_id` | 默认业务；自定义账号需授权 |
+| DELETE | `/api/files/:id/permanent` | 默认业务；自定义账号需授权 |
+| DELETE | `/api/frp/devices/:id` | 默认业务；自定义账号需授权 |
+| DELETE | `/api/frp/mappings/:id` | 默认业务；自定义账号需授权 |
+| DELETE | `/api/shares/:code` | 默认业务；自定义账号需授权 |
+| DELETE | `/api/workspaces/:id/members/:user_id` | 默认业务；自定义账号需授权 |
+| GET | `/api/ai/search` | 默认业务；自定义账号需授权 |
+| GET | `/api/files` | 默认业务；自定义账号需授权 |
+| GET | `/api/files/:id/collaborators` | 默认业务；自定义账号需授权 |
+| GET | `/api/files/:id/download` | 默认业务；自定义账号需授权 |
+| GET | `/api/files/:id/download-zip` | 默认业务；自定义账号需授权 |
+| GET | `/api/files/:id/live-photo` | 默认业务；自定义账号需授权 |
+| GET | `/api/files/:id/preview` | 默认业务；自定义账号需授权 |
+| GET | `/api/files/:id/thumbnail` | 默认业务；自定义账号需授权 |
+| GET | `/api/files/recycle-bin` | 默认业务；自定义账号需授权 |
+| GET | `/api/files/search` | 默认业务；自定义账号需授权 |
+| GET | `/api/frp/devices` | 默认业务；自定义账号需授权 |
+| GET | `/api/frp/devices/:id/mappings` | 默认业务；自定义账号需授权 |
+| GET | `/api/frp/devices/:id/status` | 默认业务；自定义账号需授权 |
+| GET | `/api/live-photos` | 默认业务；自定义账号需授权 |
+| GET | `/api/operation-logs` | 默认业务；自定义账号需授权 |
+| GET | `/api/operation-logs/export` | 默认业务；自定义账号需授权 |
+| GET | `/api/resource/health` | 默认业务；自定义账号需授权 |
+| GET | `/api/settings` | 默认业务；自定义账号需授权 |
+| GET | `/api/settings/permissions` | 显式授权；all=1 需管理员 |
+| GET | `/api/settings/rate-window` | 默认业务；自定义账号需授权 |
+| GET | `/api/shares` | 默认业务；自定义账号需授权 |
+| GET | `/api/storage/overview` | 默认业务；自定义账号需授权 |
+| GET | `/api/workspaces` | 默认业务；自定义账号需授权 |
+| GET | `/api/workspaces/:id/members` | 默认业务；自定义账号需授权 |
+| POST | `/api/admin/users` | 必须管理员 |
+| POST | `/api/ai/assistant/ask` | 默认业务；自定义账号需授权 |
+| POST | `/api/ai/assistant/settings` | 必须管理员 |
+| POST | `/api/ai/ocr` | 默认业务；自定义账号需授权 |
+| POST | `/api/ai/search/nl` | 默认业务；自定义账号需授权 |
+| POST | `/api/ai/summarize` | 默认业务；自定义账号需授权 |
+| POST | `/api/auth/login` | 公开 |
+| POST | `/api/auth/logout` | 认证后自己的会话 |
+| POST | `/api/files/:id/collaborators` | 默认业务；自定义账号需授权 |
+| POST | `/api/files/:id/restore` | 默认业务；自定义账号需授权 |
+| POST | `/api/files/:id/share` | 默认业务；自定义账号需授权 |
+| POST | `/api/files/batch-delete` | 默认业务；自定义账号需授权 |
+| POST | `/api/files/copy` | 默认业务；自定义账号需授权 |
+| POST | `/api/files/folders` | 默认业务；自定义账号需授权 |
+| POST | `/api/files/move` | 默认业务；自定义账号需授权 |
+| POST | `/api/files/upload/chunk` | 默认业务；自定义账号需授权 |
+| POST | `/api/files/upload/complete` | 默认业务；自定义账号需授权 |
+| POST | `/api/files/upload/init` | 默认业务；自定义账号需授权 |
+| POST | `/api/frp/configs/save` | 默认业务；自定义账号需授权 |
+| POST | `/api/frp/devices` | 默认业务；自定义账号需授权 |
+| POST | `/api/frp/mappings` | 默认业务；自定义账号需授权 |
+| POST | `/api/live-photos/auto-bind` | 默认业务；自定义账号需授权 |
+| POST | `/api/workspaces` | 默认业务；自定义账号需授权 |
+| POST | `/api/workspaces/:id/members` | 默认业务；自定义账号需授权 |
+| PUT | `/api/frp/devices/:id` | 默认业务；自定义账号需授权 |
+| PUT | `/api/settings` | 必须管理员 |
+| PUT | `/api/settings/rate-window` | 默认业务；自定义账号需授权 |
+
+## 验证范围
+
+真实集成测试覆盖首页/设置常用读取接口、权限汇总的显式授权和管理员边界、登录 DTO 字段、自定义权限下查询与注销、重复登录会话隔离。文件流程仍由已有上传/下载/分享/恢复/版本测试覆盖。57 路由契约通过不能推出所有按钮业务已完成，OCR/模型效果、FRP 隧道与 iOS UI 运行不在本次结论内。iOS SDK 缺失的原构建限制保持记录。

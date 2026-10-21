@@ -16,6 +16,10 @@
 | SEC-010 P1 | `service/frp_service.go:generateFRPCYaml/SaveConfig` 明文 token 拼入配置并持久化 | 隔离环境读取配置记录/响应；不要记录真实 token | G05 加密敏感配置、脱敏响应、最小 Agent 权限 | 已确认，待做 |
 | SEC-011 P1 | iOS `Shared/Managers/SessionManager.swift` 用 UserDefaults 存 token | 检查保存/读取路径 | G07 新 macOS 用 Keychain；冻结旧 iOS 开发 | 已确认，待做 |
 | SEC-012 P1 | `cmd/server/main.go` 用 `gin.Run` 无显式 HTTP 超时；上传入口缺少请求体总限额 | 慢请求/超大 multipart；需受限资源测试 | G01/G03 显式服务器超时、请求/分片尺寸上限、登录速率限制 | 静态发现，压测未执行 |
+| SEC-013 P1 | G01 初版自定义权限覆盖默认路由，导致 GET auth/me、POST auth/logout 被拒绝 | 真实 API 用户仅授予 GET files，me 返回 403；注销同受影响 | 在完整身份认证后独立允许精确方法/自身会话路由，业务与管理员权限不扩大 | 修复前已复现；修复后集成测试通过 |
+| SEC-014 P1 | JWT 仅含用户与秒级时间，相同用户同秒登录 token 相同，注销互相影响 | 真实重复登录返回同一 token；固定时刻签发测试 | crypto/rand 256-bit JTI；独立 Redis 会话与单会话注销验证 | 修复前已复现；修复后集成测试通过 |
+| CLIENT-001 P2 | 旧 SettingsViewModel 对普通用户也请求需显式授权的权限汇总，并展示管理员操作入口 | 57 路由契约核对；真实 GET settings/permissions 对普通用户 403 | G07/G09 按服务端能力展示；不放宽后端管理员/跨用户边界，冻结 iOS 功能开发 | 已记录兼容性边界，待新客户端实现 |
+| CLIENT-002 P2 | 旧 SettingsViewModel.logout 忽略服务端撤销错误，直接清本地会话 | 静态调用链证据；后端错误已正确返回 503 | G07 保留可重试的远端注销并展示失败状态 | 已记录，待新客户端实现 |
 | DEP-001 P1 | 初次 govulncheck 报告 x/net、x/text、quic-go 可达漏洞；旧 Go 标准库另查 | `make vuln`；见 BASELINE | G01 按公告最小升级依赖和工具链，重新构建/扫描 | 已升级；可达/导入包告警 0，另 1 项未调用 OpenPGP 模块告警 |
 | DATA-001 P1 | `internal/store/mysql.go:NewMySQL` 每次启动 AutoMigrate，无版本/审核开关 | 审查启动调用链；仅在测试库观察建表 | G01 关闭隐式生产迁移；G06/G10 版本化迁移、备份/回滚演练 | 普通启动不再迁移；显式迁移已测，版本化迁移待 G06/G10 |
 | FILE-001 P1 | `storage/mysql/file_repo.go:HasActiveNameConflict` 根目录 parent_id=0 未含 user_id | 两用户根目录创建同名目录；第二个不应冲突 | G02 对根按所有者作用域，非根按共享父目录；事务并发约束 | 已确认，待修 |

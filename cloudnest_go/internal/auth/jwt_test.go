@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"encoding/base64"
 	"testing"
 	"time"
 
@@ -23,6 +24,45 @@ func TestTokenRoundTrip(t *testing.T) {
 	}
 	if !claims.ExpiresAt.Time.Equal(expires.Truncate(time.Second)) {
 		t.Fatal("expiry mismatch")
+	}
+}
+
+func TestSameInstantLoginsHaveIndependentRandomTokenIDs(t *testing.T) {
+	now := time.Now().Truncate(time.Second)
+	seenIDs, seenTokens := map[string]bool{}, map[string]bool{}
+	for range 128 {
+		raw, _, err := generateTokenAt(testSecret, 42, "alice", false, time.Hour, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		claims, err := ParseToken(testSecret, raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		id, err := base64.RawURLEncoding.DecodeString(claims.ID)
+		if err != nil || len(id) != 32 {
+			t.Fatal("token must contain a 256-bit random JTI")
+		}
+		if seenIDs[claims.ID] || seenTokens[raw] {
+			t.Fatal("same-instant logins shared a session identifier")
+		}
+		seenIDs[claims.ID], seenTokens[raw] = true, true
+		if !claims.IssuedAt.Time.Equal(now) {
+			t.Fatal("test did not use the same timestamp")
+		}
+	}
+}
+
+func TestLegacySignedTokenRemainsReadableUntilExpiry(t *testing.T) {
+	// Adding JTI changes new token issuance, not the opaque token API or the
+	// validity of an existing signed session. Redis remains authoritative.
+	claims := Claims{UserID: 42, Username: "alice", RegisteredClaims: jwt.RegisteredClaims{Subject: "42", ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour))}}
+	raw, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(testSecret))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ParseToken(testSecret, raw); err != nil {
+		t.Fatal("compatible legacy token rejected")
 	}
 }
 

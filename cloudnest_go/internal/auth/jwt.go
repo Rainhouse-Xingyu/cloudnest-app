@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"time"
 
@@ -22,7 +24,16 @@ type Claims struct {
 
 // GenerateToken函数生成JWT，接收上述参数，返回JWT字符串、过期时间和错误信息
 func GenerateToken(secret string, userID int64, username string, isAdmin bool, ttl time.Duration) (string, time.Time, error) {
-	now := time.Now()
+	return generateTokenAt(secret, userID, username, isAdmin, ttl, time.Now())
+}
+
+func generateTokenAt(secret string, userID int64, username string, isAdmin bool, ttl time.Duration, now time.Time) (string, time.Time, error) {
+	// A timestamp is not a session identifier: logins in the same second must
+	// remain independently revocable in Redis. Never derive this ID from user data.
+	nonce := make([]byte, 32)
+	if _, err := rand.Read(nonce); err != nil {
+		return "", time.Time{}, fmt.Errorf("generate token ID: %w", err)
+	}
 	expiresAt := now.Add(ttl)
 	//Claims包含所需的用户信息和JWT声明。
 	claims := Claims{
@@ -30,6 +41,7 @@ func GenerateToken(secret string, userID int64, username string, isAdmin bool, t
 		Username: username,
 		IsAdmin:  isAdmin,
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        base64.RawURLEncoding.EncodeToString(nonce),
 			Subject:   fmt.Sprintf("%d", userID),
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
