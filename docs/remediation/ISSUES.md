@@ -12,10 +12,10 @@
 | SEC-006 P1 | `internal/middleware/auth.go:defaultAllowPath` 除两个排除项外放行全部 `/api/`，不区分方法 | 为新路径挂测试 handler，无权限用户也会获准 | G01 显式业务方法/路由模板清单，新增路由默认拒绝；资源级授权仍必需 | 已修：显式路由与即时权限读取，待审 |
 | SEC-007 P1 | `internal/auth/jwt.go:ParseToken` 不强制 exp，也未检查 user_id/subject 一致性 | 用测试密钥签无 exp/零 ID/不匹配 subject token | G01 必须过期时间及合法身份声明 | 已修：必需 exp/身份校验，待审 |
 | SEC-008 P1 | `auth_service.go:Logout` 忽略 Redis 删除错误；角色/禁用状态来自历史 JWT | Redis 断开后注销；登录后撤销角色/禁用再访问 | G01 注销错误传播、会话撤销/用户状态检查 | 已修：注销错误传播、实时身份与权限，待审 |
-| SEC-009 P1 | `app/container.go` FRP 上报/拉命令同用户 JWT 入口 | 用用户身份调用设备命令 API；无独立设备认证模型 | G05 设备 enrollment、独立凭据哈希/轮换/撤销与权限范围 | 已确认，待做 |
-| SEC-010 P1 | `service/frp_service.go:generateFRPCYaml/SaveConfig` 明文 token 拼入配置并持久化 | 隔离环境读取配置记录/响应；不要记录真实 token | G05 加密敏感配置、脱敏响应、最小 Agent 权限 | 已确认，待做 |
+| SEC-009 P1 | `app/container.go` FRP 上报/拉命令同用户 JWT 入口 | 用用户身份调用设备命令 API；无独立设备认证模型 | G05 设备 enrollment、独立凭据哈希/轮换/撤销与权限范围 | G01 已记录 [边界设计](DEVICE-IDENTITY-DESIGN.md)，G05 代码与实测待做 |
+| SEC-010 P1 | `service/frp_service.go:generateFRPCYaml/SaveConfig` 明文 token 拼入配置并持久化 | 隔离环境读取配置记录/响应；不要记录真实 token | G05 加密敏感配置、脱敏响应、最小 Agent 权限 | G01 已记录设计，明文风险仍在，G05 实施待做 |
 | SEC-011 P1 | iOS `Shared/Managers/SessionManager.swift` 用 UserDefaults 存 token | 检查保存/读取路径 | G07 新 macOS 用 Keychain；冻结旧 iOS 开发 | 已确认，待做 |
-| SEC-012 P1 | `cmd/server/main.go` 用 `gin.Run` 无显式 HTTP 超时；上传入口缺少请求体总限额 | 慢请求/超大 multipart；需受限资源测试 | G01/G03 显式服务器超时、请求/分片尺寸上限、登录速率限制 | 静态发现，压测未执行 |
+| SEC-012 P1 | `cmd/server/main.go` 用 `gin.Run` 无显式 HTTP 超时；上传入口缺少请求体总限额 | 慢请求/超大 multipart；需受限资源测试 | G01/G03 显式服务器超时、请求/分片尺寸上限、登录速率限制 | G01 请求头/空闲超时及登录体积/限流已修；G03 上传资源预算和慢请求压测待做 |
 | SEC-013 P1 | G01 初版自定义权限覆盖默认路由，导致 GET auth/me、POST auth/logout 被拒绝 | 真实 API 用户仅授予 GET files，me 返回 403；注销同受影响 | 在完整身份认证后独立允许精确方法/自身会话路由，业务与管理员权限不扩大 | 修复前已复现；修复后集成测试通过 |
 | SEC-014 P1 | JWT 仅含用户与秒级时间，相同用户同秒登录 token 相同，注销互相影响 | 真实重复登录返回同一 token；固定时刻签发测试 | crypto/rand 256-bit JTI；独立 Redis 会话与单会话注销验证 | 修复前已复现；修复后集成测试通过 |
 | SEC-015 P1 | 登录入口未限流，Gin 默认相信任意代理转发头 | 同一实际 IP 在两实例并发 40 次、变更转发头；Redis 不可用仍进入认证 | 登录前 Redis 原子窗口、规范化实际 IP、429/Retry-After、Redis 故障 503、关闭任意可信代理 | 修复前已复现；修复后完整 12 项集成回归通过；分布式撞库仍不在本限流覆盖范围 |

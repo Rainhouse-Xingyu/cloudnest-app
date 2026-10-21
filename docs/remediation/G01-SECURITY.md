@@ -68,4 +68,6 @@ FRP 独立设备身份、配置加密、密码自助重置/会话管理、完整
 
 修复前：40 个并发请求全部进入认证并返回 401；关闭测试 Redis 客户端后仍进入认证。修复后：同一 IP 在两实例并发请求中严格只放行剩余额度 28 次，另外 12 次返回 429；伪造转发头无效，Redis 错误返回 503。使用隔离 Redis 缩短该测试键 TTL 验证过期后可重新登录、拒绝不延长冷却、非登录会话仍可用。
 
-本地完整 **12 项**集成测试通过（真实 MySQL/Redis，race 开启）；`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...` 及仓库检查通过。此补充提交的远端 CI 待推送后独立核验。
+本地完整 **12 项**集成测试通过（真实 MySQL/Redis，race 开启）；`go test -race -count=1 ./...`、`go vet ./...`、`go build ./...` 及仓库检查通过。登录限流提交 `38416ad` 的远端 [PR CI](https://github.com/Rainhouse-Xingyu/cloudnest-app/actions/runs/39552409603) 与 push CI 的构建/测试/漏洞扫描全部通过。
+
+设备独立身份、注册/轮换/撤销、配置加密和命令执行边界已记录在 [G05 实施依据](DEVICE-IDENTITY-DESIGN.md)。这仅关闭 G01 的设计任务；SEC-009/010 保持未修复状态，等待 G05 代码和真实隧道验证。
