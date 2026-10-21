@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/md5"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -30,9 +31,10 @@ import (
 )
 
 type fixture struct {
-	db         *gorm.DB
-	router     http.Handler
-	alice, bob string
+	db             *gorm.DB
+	router         http.Handler
+	alice, bob     string
+	aliceID, bobID int64
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -52,6 +54,18 @@ func newFixture(t *testing.T) *fixture {
 		t.Fatal("test Redis must be on loopback")
 	}
 	cfg := config.Config{MySQLDSN: dsn, RedisAddr: redisAddr, JWTSecret: "test-only-signing-secret-with-at-least-32-bytes", JWTExpireHours: 1, DataDir: t.TempDir(), AIOllamaBaseURL: "http://127.0.0.1:1", AITimeoutSec: 1}
+	// Observe the schema before opening the application connection. In the first
+	// test this database is empty; NewMySQL must not create any tables.
+	probe, err := sql.Open("mysql", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var before int64
+	err = probe.QueryRow("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'cloudnest_test'").Scan(&before)
+	_ = probe.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
 	db, err := store.NewMySQL(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -61,6 +75,16 @@ func newFixture(t *testing.T) *fixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = sqlDB.Close() })
+	var after int64
+	if err := sqlDB.QueryRow("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'cloudnest_test'").Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if after != before {
+		t.Fatal("opening the application connection modified the schema")
+	}
+	if err := store.Migrate(db); err != nil {
+		t.Fatal(err)
+	}
 	rdb, err := store.NewRedis(context.Background(), cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -87,6 +111,11 @@ func newFixture(t *testing.T) *fixture {
 			t.Fatal("missing session token")
 		}
 		*dest = login.Token
+		if i == 0 {
+			f.aliceID = user.ID
+		} else {
+			f.bobID = user.ID
+		}
 	}
 	return f
 }

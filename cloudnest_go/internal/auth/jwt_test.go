@@ -47,3 +47,27 @@ func TestRejectInvalidTokens(t *testing.T) {
 		})
 	}
 }
+
+func TestRejectIncompleteIdentityClaims(t *testing.T) {
+	valid := Claims{UserID: 42, Username: "alice", RegisteredClaims: jwt.RegisteredClaims{Subject: "42", ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour))}}
+	cases := map[string]func(*Claims){
+		"missing expiry":     func(c *Claims) { c.ExpiresAt = nil },
+		"zero identity":      func(c *Claims) { c.UserID = 0 },
+		"negative identity":  func(c *Claims) { c.UserID = -1 },
+		"mismatched subject": func(c *Claims) { c.Subject = "43" },
+		"missing username":   func(c *Claims) { c.Username = "" },
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			claims := valid
+			mutate(&claims)
+			raw, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(testSecret))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := ParseToken(testSecret, raw); err == nil {
+				t.Fatal("incomplete claims accepted")
+			}
+		})
+	}
+}

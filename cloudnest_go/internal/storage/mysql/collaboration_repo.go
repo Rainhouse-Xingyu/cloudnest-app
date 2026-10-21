@@ -183,8 +183,35 @@ func (r *CollaborationRepo) CreateFileVersion(ctx context.Context, req contract.
 		if f.IsFolder == 1 {
 			return fmt.Errorf("folder does not support versioning")
 		}
+		// Recheck the target authorization under the transaction lock. A handler
+		// preflight alone can race with a collaborator being revoked.
+		if req.UserID <= 0 {
+			return contract.ErrForbidden
+		}
+		if f.UserID != req.UserID {
+			var permission model.FilePermission
+			err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("file_id = ? AND user_id = ? AND permission = ?", f.ID, req.UserID, "write").First(&permission).Error
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return contract.ErrForbidden
+			}
+			if err != nil {
+				return err
+			}
+		}
 		if req.BaseVersion != f.CurrentVersion {
 			return fmt.Errorf("version conflict")
+		}
+		// Storage is globally deduplicated and has no owner. Possessing an ID is
+		// not a capability: only a live file owned by this caller can supply bytes
+		// to this legacy endpoint. Shared-source/version uploads need a scoped
+		// upload ticket in the later transfer protocol.
+		var source model.File
+		err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("storage_id = ? AND user_id = ? AND is_deleted = 0 AND is_folder = 0", req.StorageID, req.UserID).First(&source).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return contract.ErrForbidden
+		}
+		if err != nil {
+			return err
 		}
 
 		var storage model.Storage
@@ -193,11 +220,12 @@ func (r *CollaborationRepo) CreateFileVersion(ctx context.Context, req contract.
 		}
 
 		nextVersion := f.CurrentVersion + 1
-		sizeVal := f.Size
-		if req.Size != nil {
-			sizeVal = *req.Size
-		} else if storage.FileSize != nil {
-			sizeVal = *storage.FileSize
+		if storage.FileSize == nil || *storage.FileSize < 0 {
+			return contract.ErrInvalidInput
+		}
+		sizeVal := *storage.FileSize
+		if req.Size != nil && *req.Size != sizeVal {
+			return contract.ErrInvalidInput
 		}
 
 		uidCopy := req.UserID

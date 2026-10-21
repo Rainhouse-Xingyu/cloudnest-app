@@ -22,7 +22,8 @@ var (
 	// ErrInvalidCredentials 表示用户名或密码错误。
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	// ErrUserDisabled 表示用户被禁用。
-	ErrUserDisabled = errors.New("user disabled")
+	ErrUserDisabled          = errors.New("user disabled")
+	ErrPasswordResetRequired = errors.New("password reset required")
 )
 
 // LoginResult 登录成功后返回的业务结果。
@@ -62,11 +63,8 @@ func (s *AuthService) Login(ctx context.Context, username, password string) (Log
 	if !verifyPassword(password, u.Password) {
 		return LoginResult{}, ErrInvalidCredentials
 	}
-
-	// 对历史明文密码做透明升级，保持与旧逻辑兼容。
-	if !isBcryptHash(u.Password) {
-		hash, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-		_ = s.repo.UpdateUserPassword(ctx, u.ID, string(hash))
+	if u.Username == "admin" && password == "admin" {
+		return LoginResult{}, ErrPasswordResetRequired
 	}
 
 	isAdmin, err := s.repo.CheckUserIsAdmin(ctx, u.ID)
@@ -92,8 +90,8 @@ func (s *AuthService) Login(ctx context.Context, username, password string) (Log
 }
 
 // Logout 删除 Redis token 缓存。
-func (s *AuthService) Logout(ctx context.Context, token string) {
-	_ = s.rdb.Del(ctx, redisTokenKeyPrefix+token).Err()
+func (s *AuthService) Logout(ctx context.Context, token string) error {
+	return s.rdb.Del(ctx, redisTokenKeyPrefix+token).Err()
 }
 
 // GetUserProfile 获取当前用户信息。
@@ -109,7 +107,7 @@ func verifyPassword(inputPassword string, storedPassword string) bool {
 	if isBcryptHash(storedPassword) {
 		return bcrypt.CompareHashAndPassword([]byte(storedPassword), []byte(inputPassword)) == nil
 	}
-	return inputPassword == storedPassword
+	return false
 }
 
 func isBcryptHash(raw string) bool {

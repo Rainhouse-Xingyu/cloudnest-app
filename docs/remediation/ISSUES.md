@@ -5,19 +5,19 @@
 | 编号/优先级 | 证据位置与当前风险 | 复现/验证方法 | 最小整改与阶段 | 状态 |
 |---|---|---|---|---|
 | SEC-001 P0 | `.env.example` 包含非占位 MySQL/Redis 凭据，已进入 Git 历史 | 只检查键是否为占位值，禁止输出值 | G00 清理示例/防回归；操作者轮换有效凭据，另行决定历史清理 | 示例已清理；轮换待人工 |
-| SEC-002 P0 | `internal/store/mysql.go:SeedAdminUser` 固定创建 admin/admin，既有同名用户还会被绑定管理员角色 | 空测试库启动后默认密码登录；预置同名普通用户再启动 | G01 移除启动自动播种，显式首次引导/强密码/事务/拒绝提升既有用户 | 已确认，待修 |
-| SEC-003 P0 | `internal/config/config.go:Load` 固定 JWT 默认密钥，未校验配置 | 未设置 JWT_SECRET 仍能启动认证路径；Redis 会话检查不能替代密钥保护 | G01 必填强随机密钥与 TTL 校验，在连接数据库之前失败 | 已确认，待修 |
-| SEC-004 P0 | `internal/storage/mysql/collaboration_repo.go:CreateFileVersion` 任意 storage_id，只有存在性检查 | A 用自己的文件创建版本，传 B 的存储 ID，然后下载；期望 403 且无写入 | G01 在事务中校验目标写权限和来源对象授权，尺寸取服务端；跨用户/并发测试 | 已确认，待回归复现及修复 |
-| SEC-005 P1 | `internal/service/auth_service.go:verifyPassword/Login` 接受明文密码，透明升级忽略错误 | 测试库插入明文密码；登录当前可成功 | G01 拒绝明文，提供明确重置路径，不静默写旧密码 | 已确认，待修 |
-| SEC-006 P1 | `internal/middleware/auth.go:defaultAllowPath` 除两个排除项外放行全部 `/api/`，不区分方法 | 为新路径挂测试 handler，无权限用户也会获准 | G01 显式业务方法/路由模板清单，新增路由默认拒绝；资源级授权仍必需 | 已确认，待修 |
-| SEC-007 P1 | `internal/auth/jwt.go:ParseToken` 不强制 exp，也未检查 user_id/subject 一致性 | 用测试密钥签无 exp/零 ID/不匹配 subject token | G01 必须过期时间及合法身份声明 | 已确认，待修 |
-| SEC-008 P1 | `auth_service.go:Logout` 忽略 Redis 删除错误；角色/禁用状态来自历史 JWT | Redis 断开后注销；登录后撤销角色/禁用再访问 | G01 注销错误传播、会话撤销/用户状态检查 | 已确认，待修 |
+| SEC-002 P0 | `internal/store/mysql.go:SeedAdminUser` 固定创建 admin/admin，既有同名用户还会被绑定管理员角色 | 空测试库启动后默认密码登录；预置同名普通用户再启动 | G01 移除启动自动播种，显式首次引导/强密码/事务/拒绝提升既有用户 | 已修代码/测试；旧账号密码重置与会话轮换待人工 |
+| SEC-003 P0 | `internal/config/config.go:Load` 固定 JWT 默认密钥，未校验配置 | 未设置 JWT_SECRET 仍能启动认证路径；Redis 会话检查不能替代密钥保护 | G01 必填强随机密钥与 TTL 校验，在连接数据库之前失败 | 已修代码/测试；实际密钥轮换待人工 |
+| SEC-004 P0 | `internal/storage/mysql/collaboration_repo.go:CreateFileVersion` 任意 storage_id，只有存在性检查 | A 用自己的文件创建版本，传 B 的存储 ID，然后下载；期望 403 且无写入 | G01 在事务中校验目标写权限和来源对象授权，尺寸取服务端；跨用户/并发测试 | 已复现 200 越权；修复后 403 且原文件不变，待 PR 审查 |
+| SEC-005 P1 | `internal/service/auth_service.go:verifyPassword/Login` 接受明文密码，透明升级忽略错误 | 测试库插入明文密码；登录当前可成功 | G01 拒绝明文，提供明确重置路径，不静默写旧密码 | 已修：拒绝明文；历史账号重置待人工 |
+| SEC-006 P1 | `internal/middleware/auth.go:defaultAllowPath` 除两个排除项外放行全部 `/api/`，不区分方法 | 为新路径挂测试 handler，无权限用户也会获准 | G01 显式业务方法/路由模板清单，新增路由默认拒绝；资源级授权仍必需 | 已修：显式路由与即时权限读取，待审 |
+| SEC-007 P1 | `internal/auth/jwt.go:ParseToken` 不强制 exp，也未检查 user_id/subject 一致性 | 用测试密钥签无 exp/零 ID/不匹配 subject token | G01 必须过期时间及合法身份声明 | 已修：必需 exp/身份校验，待审 |
+| SEC-008 P1 | `auth_service.go:Logout` 忽略 Redis 删除错误；角色/禁用状态来自历史 JWT | Redis 断开后注销；登录后撤销角色/禁用再访问 | G01 注销错误传播、会话撤销/用户状态检查 | 已修：注销错误传播、实时身份与权限，待审 |
 | SEC-009 P1 | `app/container.go` FRP 上报/拉命令同用户 JWT 入口 | 用用户身份调用设备命令 API；无独立设备认证模型 | G05 设备 enrollment、独立凭据哈希/轮换/撤销与权限范围 | 已确认，待做 |
 | SEC-010 P1 | `service/frp_service.go:generateFRPCYaml/SaveConfig` 明文 token 拼入配置并持久化 | 隔离环境读取配置记录/响应；不要记录真实 token | G05 加密敏感配置、脱敏响应、最小 Agent 权限 | 已确认，待做 |
 | SEC-011 P1 | iOS `Shared/Managers/SessionManager.swift` 用 UserDefaults 存 token | 检查保存/读取路径 | G07 新 macOS 用 Keychain；冻结旧 iOS 开发 | 已确认，待做 |
 | SEC-012 P1 | `cmd/server/main.go` 用 `gin.Run` 无显式 HTTP 超时；上传入口缺少请求体总限额 | 慢请求/超大 multipart；需受限资源测试 | G01/G03 显式服务器超时、请求/分片尺寸上限、登录速率限制 | 静态发现，压测未执行 |
-| DEP-001 P1 | 初次 govulncheck 报告 x/net、x/text、quic-go 可达漏洞；旧 Go 标准库另查 | `make vuln`；见 BASELINE | G01 按公告最小升级依赖和工具链，重新构建/扫描 | 已复现，待修 |
-| DATA-001 P1 | `internal/store/mysql.go:NewMySQL` 每次启动 AutoMigrate，无版本/审核开关 | 审查启动调用链；仅在测试库观察建表 | G01 关闭隐式生产迁移；G06/G10 版本化迁移、备份/回滚演练 | 已确认，待修 |
+| DEP-001 P1 | 初次 govulncheck 报告 x/net、x/text、quic-go 可达漏洞；旧 Go 标准库另查 | `make vuln`；见 BASELINE | G01 按公告最小升级依赖和工具链，重新构建/扫描 | 已升级；可达/导入包告警 0，另 1 项未调用 OpenPGP 模块告警 |
+| DATA-001 P1 | `internal/store/mysql.go:NewMySQL` 每次启动 AutoMigrate，无版本/审核开关 | 审查启动调用链；仅在测试库观察建表 | G01 关闭隐式生产迁移；G06/G10 版本化迁移、备份/回滚演练 | 普通启动不再迁移；显式迁移已测，版本化迁移待 G06/G10 |
 | FILE-001 P1 | `storage/mysql/file_repo.go:HasActiveNameConflict` 根目录 parent_id=0 未含 user_id | 两用户根目录创建同名目录；第二个不应冲突 | G02 对根按所有者作用域，非根按共享父目录；事务并发约束 | 已确认，待修 |
 | FILE-002 P1 | `service/file_service.go:InitUpload` 不比较声明分片数与计算值 | total_size=10, chunk_size=5, total_chunks=1 | G03 溢出安全计算、数量及每片/总字节校验 | 已确认，待修 |
 | FILE-003 P1 | `CompleteUploadPersist` 无任务行锁/CAS，无完成结果复用；mergeChunks 直接覆盖路径 | 两个完成请求并发/超时后重试；检查重复 file/物理路径损坏 | G02/G03 完成状态机、互斥/幂等结果、临时文件原子落盘 | 静态确认，并发实测待做 |
@@ -42,10 +42,10 @@
 | COLLAB-001 P1 | Workspace 成员管理存在；通用文件 ACL 主要用 owner/file_permission，空间角色链路不完整 | 空间 viewer/editor 对文件 CRUD 矩阵；禁止越级授权 | G06 明确空间/文件权限继承和管理员边界 | 待完整矩阵验证 |
 | LIVE-001 P2 | LivePhoto 绑定/解绑/查询存在；并发去重及实际播放未测 | 相同 image/video 并发绑定、跨用户配对与 macOS 播放 | G06/G09 唯一约束/权限与原生预览 | 静态审查，未验收 |
 | LOG-001 P1 | 多处 `_ = logOperation`，写操作可能无审计；SQL 日志策略未配置 | 注入日志写失败/数据库故障；确保无密钥与文件正文泄露 | G06 事务审计或可靠 outbox、结构化脱敏日志 | 已确认，待修 |
-| ENG-001 P1 | 原仓库无 Go 测试，Swift 测试仅模板 | 基线 go test 全部 no test files | G00 加真实测试/CI；后续随修复扩展 | 首批测试已加入 |
+| ENG-001 P1 | 原仓库无 Go 测试，Swift 测试仅模板 | 基线 go test 全部 no test files | G00 加真实测试/CI；后续随修复扩展 | 首批单元/真实 API 回归已通过；全业务覆盖待后续 |
 | ENG-002 P2 | 已跟踪 dist/main/*.o/xcuserdata | `git ls-files`；检查工作树文件仍在 | G00 取消跟踪并 ignore；历史 patch 需独立核对后归档 | 当前产物已取消跟踪 |
 | ENG-003 P2 | file handler 2165 行、service 1193 行；已有契约与仓储可复用 | 逐功能调用链审查和单元边界 | G02–G06 随业务拆模块，不全盘重写 | 待做 |
-| ENG-004 P1 | 无原有 CI/运行监控/备份恢复演练 | 检查 workflows/部署脚本，执行隔离发布演练 | G00 CI；G10 发布/指标/健康检查/备份恢复 | CI 已加入，运行治理待做 |
+| ENG-004 P1 | 无原有 CI/运行监控/备份恢复演练 | 检查 workflows/部署脚本，执行隔离发布演练 | G00 CI；G10 发布/指标/健康检查/备份恢复 | CI 已执行，G00 构建/测试通过、漏洞检查失败；运行治理待做 |
 | MAC-001 P1 | `cloudnest_macos/` 空目录 | 文件清单 | G07–G09 独立原生 SwiftUI/AppKit 应用与 Keychain；无 UIKit 依赖 | 未开始 |
 | ENV-001 P2 | iOS target 26.2，Xcode 无相应平台；模拟器仅 18.6 可用 | xcodebuild 返回 70，destination 不可用 | 保留失败证据；macOS 用可用 SDK 独立验证 | 环境阻塞；非代码编译结论 |
 

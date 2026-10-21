@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"cloudenest_go/internal/config"
@@ -134,14 +135,23 @@ func (c *Container) NewRouter() *gin.Engine {
 	r.GET("/api/public/shares/:code", c.FileHandler.PublicShareInfo)
 	r.GET("/api/public/shares/:code/download", c.FileHandler.PublicShareDownload)
 
-	skipPaths := map[string]bool{
-		"/api/auth/login": true,
-	}
-
 	api := r.Group("/api")
 	api.Use(middleware.Authenticate(c.RDB, c.Cfg.JWTSecret, func(ctx context.Context, userID int64) ([]string, error) {
 		return c.AuthzService.ResolveUserPermissions(ctx, userID)
-	}, skipPaths))
+	}, func(ctx context.Context, userID int64) (middleware.Identity, error) {
+		u, err := c.AuthRepo.GetUserProfile(ctx, userID)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return middleware.Identity{}, nil
+		}
+		if err != nil {
+			return middleware.Identity{}, err
+		}
+		isAdmin, err := c.AuthRepo.CheckUserIsAdmin(ctx, userID)
+		if err != nil {
+			return middleware.Identity{}, err
+		}
+		return middleware.Identity{Username: u.Username, Enabled: u.Status != 0, IsAdmin: isAdmin}, nil
+	}))
 
 	api.POST("/auth/logout", c.AuthHandler.Logout)
 	api.GET("/auth/me", c.AuthHandler.Me)

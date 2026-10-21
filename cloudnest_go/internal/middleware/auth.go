@@ -2,10 +2,9 @@ package middleware
 
 import (
 	"context"
-	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
-	"time"
 
 	"cloudenest_go/internal/auth"
 
@@ -18,19 +17,21 @@ const (
 	ContextUsernameKey  = "username"
 	ContextIsAdminKey   = "is_admin"
 	ContextTokenKey     = "token"
-	permissionCacheTTL  = 10 * time.Minute
 	redisTokenKeyPrefix = "auth:token:"
-	redisPermKeyPrefix  = "auth:perm:user:"
 )
 
-// Authenticate函数是一个Gin中间件，用于验证请求中的JWT并检查用户权限。它首先检查请求路径是否在跳过列表中，如果是则直接放行。然后从Authorization头中提取Bearer token，并使用auth.ParseToken函数解析JWT。如果解析失败，则返回401错误。接着检查Redis中是否存在该token的缓存，如果不存在则说明token已过期或已注销，返回401错误。最后将用户信息存储在上下文中，并根据用户是否为管理员来决定是否继续检查权限。
-func Authenticate(rdb *redis.Client, jwtSecret string, loadPermissions func(context.Context, int64) ([]string, error), skipPaths map[string]bool) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if skipPaths[c.Request.URL.Path] {
-			c.Next()
-			return
-		}
+// Identity is reloaded for each authenticated request so account/role changes
+// do not depend on the expiry of an already issued token.
+type Identity struct {
+	Username string
+	Enabled  bool
+	IsAdmin  bool
+}
 
+// Authenticate validates the signature, Redis session owner, current account
+// state and explicit method/path permissions. Public routes live outside it.
+func Authenticate(rdb *redis.Client, jwtSecret string, loadPermissions func(context.Context, int64) ([]string, error), loadIdentity func(context.Context, int64) (Identity, error)) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		token := extractBearerToken(c.GetHeader("Authorization"))
 		if token == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing bearer token"})
@@ -47,29 +48,45 @@ func Authenticate(rdb *redis.Client, jwtSecret string, loadPermissions func(cont
 
 		ctx := c.Request.Context()
 		tokenKey := redisTokenKeyPrefix + token
-		exists, err := rdb.Exists(ctx, tokenKey).Result()
+		owner, err := rdb.Get(ctx, tokenKey).Result()
+		if err == redis.Nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "token expired or logged out"})
+			c.Abort()
+			return
+		}
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "redis error"})
 			c.Abort()
 			return
 		}
-		if exists == 0 {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "token expired or logged out"})
+		if owner != strconv.FormatInt(claims.UserID, 10) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid session owner"})
+			c.Abort()
+			return
+		}
+		identity, err := loadIdentity(ctx, claims.UserID)
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "identity lookup failed"})
+			c.Abort()
+			return
+		}
+		if !identity.Enabled {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "user disabled or removed"})
 			c.Abort()
 			return
 		}
 
 		c.Set(ContextUserIDKey, claims.UserID)
-		c.Set(ContextUsernameKey, claims.Username)
-		c.Set(ContextIsAdminKey, claims.IsAdmin)
+		c.Set(ContextUsernameKey, identity.Username)
+		c.Set(ContextIsAdminKey, identity.IsAdmin)
 		c.Set(ContextTokenKey, token)
 
-		if claims.IsAdmin {
+		if identity.IsAdmin {
 			c.Next()
 			return
 		}
 
-		if !checkPathPermission(ctx, rdb, claims.UserID, c.Request.Method, c.Request.URL.Path, loadPermissions) {
+		if !checkPathPermission(ctx, claims.UserID, c.Request.Method, c.Request.URL.Path, c.FullPath(), loadPermissions) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
 			c.Abort()
 			return
@@ -101,29 +118,17 @@ func extractBearerToken(authHeader string) string {
 	return strings.TrimSpace(parts[1])
 }
 
-// checkPathPermission函数用于检查用户是否具有访问特定路径和方法的权限。它首先尝试从Redis缓存中获取用户的权限列表，如果缓存不存在或为空，则调用loadPermissions函数从数据库加载权限并缓存到Redis中。然后遍历权限列表，使用matchPermission函数检查是否有匹配的权限，如果找到匹配的权限则返回true，否则返回false。
-func checkPathPermission(ctx context.Context, rdb *redis.Client, userID int64, method string, path string, loadPermissions func(context.Context, int64) ([]string, error)) bool {
-	key := fmt.Sprintf("%s%d", redisPermKeyPrefix, userID)
-	perms, err := rdb.SMembers(ctx, key).Result()
-	if err != nil || len(perms) == 0 {
-		perms, err = loadPermissions(ctx, userID)
-		if err != nil {
-			return false
-		}
-		if len(perms) > 0 {
-			values := make([]interface{}, 0, len(perms))
-			for _, p := range perms {
-				values = append(values, p)
-			}
-			_ = rdb.SAdd(ctx, key, values...).Err()
-			_ = rdb.Expire(ctx, key, permissionCacheTTL).Err()
-		}
+// checkPathPermission uses the current database policy. A cached grant must not
+// remain effective after revocation or a failed Redis invalidation.
+func checkPathPermission(ctx context.Context, userID int64, method string, path string, route string, loadPermissions func(context.Context, int64) ([]string, error)) bool {
+	perms, err := loadPermissions(ctx, userID)
+	if err != nil {
+		return false
 	}
 
-	// 未配置任何自定义路径权限时，走默认放行策略：
-	// 普通业务接口可访问，管理端接口保持拦截。
+	// 未配置自定义权限时，只允许显式列出的业务方法和路由。
 	if len(perms) == 0 {
-		return defaultAllowPath(method, path)
+		return defaultAllowPath(method, route)
 	}
 
 	for _, perm := range perms {
@@ -134,24 +139,89 @@ func checkPathPermission(ctx context.Context, rdb *redis.Client, userID int64, m
 	return false
 }
 
-func defaultAllowPath(method string, path string) bool {
-	_ = method // 预留：后续如需按方法限制可直接扩展。
+// Explicit authenticated-user capabilities. Keys are Gin route templates, not
+// URL prefixes. Unlisted routes/methods are denied; resource ACLs still apply.
+var defaultUserRoutes = map[string]struct{}{
+	"POST /api/auth/logout":                        {},
+	"GET /api/auth/me":                             {},
+	"GET /api/resource/health":                     {},
+	"GET /api/files":                               {},
+	"POST /api/files/folders":                      {},
+	"PUT /api/files/:id/rename":                    {},
+	"DELETE /api/files/:id":                        {},
+	"POST /api/files/upload/init":                  {},
+	"POST /api/files/upload/chunk":                 {},
+	"POST /api/files/upload/complete":              {},
+	"GET /api/files/upload/progress":               {},
+	"GET /api/files/search":                        {},
+	"GET /api/files/:id/download":                  {},
+	"GET /api/files/:id/download-zip":              {},
+	"POST /api/files/batch-download":               {},
+	"POST /api/files/batch-delete":                 {},
+	"GET /api/files/:id/stream":                    {},
+	"GET /api/files/:id/thumbnail":                 {},
+	"POST /api/files/move":                         {},
+	"POST /api/files/copy":                         {},
+	"GET /api/files/recycle-bin":                   {},
+	"POST /api/files/:id/restore":                  {},
+	"DELETE /api/files/:id/permanent":              {},
+	"GET /api/files/:id/preview":                   {},
+	"POST /api/files/:id/share":                    {},
+	"POST /api/files/:id/collaborators":            {},
+	"GET /api/files/:id/collaborators":             {},
+	"DELETE /api/files/:id/collaborators/:user_id": {},
+	"POST /api/files/:id/versions":                 {},
+	"GET /api/files/:id/versions":                  {},
+	"POST /api/workspaces":                         {},
+	"GET /api/workspaces":                          {},
+	"POST /api/workspaces/:id/members":             {},
+	"GET /api/workspaces/:id/members":              {},
+	"PUT /api/workspaces/:id/members/:user_id":     {},
+	"DELETE /api/workspaces/:id/members/:user_id":  {},
+	"GET /api/shares":                              {},
+	"DELETE /api/shares/:code":                     {},
+	"GET /api/operation-logs":                      {},
+	"GET /api/operation-logs/export":               {},
+	"GET /api/settings":                            {},
+	"GET /api/settings/rate-window":                {},
+	"PUT /api/settings/rate-window":                {},
+	"GET /api/storage/overview":                    {},
+	"POST /api/frp/devices":                        {},
+	"GET /api/frp/devices":                         {},
+	"GET /api/frp/devices/:id":                     {},
+	"PUT /api/frp/devices/:id":                     {},
+	"DELETE /api/frp/devices/:id":                  {},
+	"POST /api/frp/mappings":                       {},
+	"GET /api/frp/devices/:id/mappings":            {},
+	"PUT /api/frp/mappings/:id":                    {},
+	"DELETE /api/frp/mappings/:id":                 {},
+	"POST /api/frp/configs/preview":                {},
+	"POST /api/frp/configs/save":                   {},
+	"GET /api/frp/devices/:id/configs":             {},
+	"POST /api/frp/configs/:id/rollback":           {},
+	"POST /api/frp/devices/:id/deploy-config":      {},
+	"POST /api/frp/devices/:id/reload":             {},
+	"POST /api/frp/devices/:id/status/report":      {},
+	"GET /api/frp/devices/:id/status":              {},
+	"GET /api/frp/devices/:id/commands/next":       {},
+	"POST /api/frp/commands/:command_id/result":    {},
+	"GET /api/frp/devices/:id/commands":            {},
+	"POST /api/live-photos/bind":                   {},
+	"POST /api/live-photos/auto-bind":              {},
+	"DELETE /api/live-photos/:id":                  {},
+	"GET /api/live-photos/:id":                     {},
+	"GET /api/live-photos":                         {},
+	"GET /api/files/:id/live-photo":                {},
+	"POST /api/ai/ocr":                             {},
+	"GET /api/ai/search":                           {},
+	"POST /api/ai/search/nl":                       {},
+	"POST /api/ai/summarize":                       {},
+	"POST /api/ai/assistant/ask":                   {},
+}
 
-	if !strings.HasPrefix(path, "/api/") {
-		return false
-	}
-
-	// 管理端接口必须显式授权或管理员身份。
-	if strings.HasPrefix(path, "/api/admin") {
-		return false
-	}
-
-	// 系统权限汇总接口仅管理员场景使用，默认不放行。
-	if path == "/api/settings/permissions" {
-		return false
-	}
-
-	return true
+func defaultAllowPath(method string, route string) bool {
+	_, allowed := defaultUserRoutes[method+" "+route]
+	return allowed
 }
 
 // matchPermission函数用于检查一个权限字符串是否匹配给定的HTTP方法和路径。权限字符串的格式为"METHOD:PATH"，其中METHOD可以是具体的HTTP方法或通配符"*"，PATH可以是具体的路径、以"*"结尾的前缀路径或通配符"*"。函数首先解析权限字符串，然后根据规则进行匹配，如果权限方法不匹配则返回false，如果权限路径是通配符则返回true，如果权限路径以"*"结尾则检查前缀匹配，否则直接比较路径是否相等。

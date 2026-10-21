@@ -1,8 +1,10 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -30,17 +32,33 @@ func Load() Config {
 	return Config{
 		AppPort:         getEnv("APP_PORT", "8080"),
 		DataDir:         getEnv("DATA_DIR", "data"),
-		MySQLDSN:        getEnv("MYSQL_DSN", "root:root@tcp(127.0.0.1:3306)/cloudnest?charset=utf8mb4&parseTime=True&loc=Local"),
+		MySQLDSN:        os.Getenv("MYSQL_DSN"),
 		RedisAddr:       getEnv("REDIS_ADDR", "127.0.0.1:6379"),
 		RedisPassword:   getEnv("REDIS_PASSWORD", ""),
 		RedisDB:         getEnvInt("REDIS_DB", 0),
-		JWTSecret:       getEnv("JWT_SECRET", "change-me-in-production"),
+		JWTSecret:       os.Getenv("JWT_SECRET"),
 		JWTExpireHours:  getEnvInt("JWT_EXPIRE_HOURS", 168), // 7 days
 		AIOllamaBaseURL: getEnv("AI_OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
 		AIOllamaModel:   getEnv("AI_OLLAMA_MODEL", "qwen3-vl:4b"),
 		AIGuideDocPath:  getEnv("AI_GUIDE_DOC_PATH", "../../项目功能汇总.md"),
 		AITimeoutSec:    getEnvInt("AI_TIMEOUT_SEC", 120),
 	}
+}
+
+// Validate fails before opening databases or creating application data. Never
+// include configuration values in errors: DSNs and signing keys are secrets.
+func (c Config) Validate() error {
+	secret := strings.TrimSpace(c.JWTSecret)
+	if len(secret) < 32 || secret != c.JWTSecret || strings.Contains(strings.ToLower(secret), "replace_with") || strings.Contains(strings.ToLower(secret), "change-me") {
+		return fmt.Errorf("JWT_SECRET must be a non-placeholder random secret of at least 32 bytes without surrounding whitespace")
+	}
+	if strings.TrimSpace(c.MySQLDSN) == "" || strings.Contains(c.MySQLDSN, "CHANGE_ME") {
+		return fmt.Errorf("MYSQL_DSN must be explicitly configured")
+	}
+	if c.JWTExpireHours <= 0 || c.JWTExpireHours > 8760 {
+		return fmt.Errorf("JWT_EXPIRE_HOURS must be between 1 and 8760")
+	}
+	return nil
 }
 
 // JWT计算过期时间，返回time.Duration的值

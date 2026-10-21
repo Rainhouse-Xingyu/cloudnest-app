@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"cloudenest_go/internal/app"
 	"cloudenest_go/internal/config"
@@ -27,12 +29,22 @@ func main() {
 	loadEnv()
 
 	cfg := config.Load()
-	if err := applyCLIOverrides(&cfg, os.Args[1:]); err != nil {
+	args := os.Args[1:]
+	maintenance := ""
+	if len(args) == 1 && (args[0] == "migrate" || args[0] == "bootstrap-admin") {
+		maintenance = args[0]
+		args = nil
+	}
+	if err := applyCLIOverrides(&cfg, args); err != nil {
 		log.Fatalf("启动参数错误: %v", err)
 	}
-
-	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
-		log.Fatalf("准备数据目录失败: %v", err)
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("配置错误: %v", err)
+	}
+	if maintenance == "bootstrap-admin" {
+		if err := store.ValidateBootstrapPassword(os.Getenv("CLOUDNEST_BOOTSTRAP_PASSWORD")); err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	db, err := store.NewMySQL(cfg)
@@ -40,8 +52,20 @@ func main() {
 		log.Fatalf("初始化 MySQL 失败: %s", explainStartupError(err))
 	}
 
-	if err := store.SeedAdminUser(db); err != nil {
-		log.Fatalf("初始化管理员账号失败: %s", explainStartupError(err))
+	if maintenance != "" {
+		if maintenance == "migrate" {
+			err = store.Migrate(db)
+		} else {
+			err = store.BootstrapAdminUser(db, os.Getenv("CLOUDNEST_BOOTSTRAP_PASSWORD"))
+		}
+		if err != nil {
+			log.Fatalf("维护命令失败: %s", explainStartupError(err))
+		}
+		log.Printf("维护命令 %s 完成", maintenance)
+		return
+	}
+	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
+		log.Fatalf("准备数据目录失败: %v", err)
 	}
 
 	rdb, err := store.NewRedis(context.Background(), cfg)
@@ -54,7 +78,8 @@ func main() {
 
 	addr := fmt.Sprintf(":%s", cfg.AppPort)
 	log.Printf("服务启动成功，监听地址: %s，数据目录: %s", addr, cfg.DataDir)
-	if err := r.Run(addr); err != nil {
+	server := &http.Server{Addr: addr, Handler: r, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 1 << 20}
+	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("启动 HTTP 服务失败: %s", explainStartupError(err))
 	}
 }
@@ -150,6 +175,8 @@ func printUsage() {
 	fmt.Println("  cloudnest <端口> <数据目录>")
 	fmt.Println("  cloudnest start <端口> <数据目录>")
 	fmt.Println("  cloudnest version")
+	fmt.Println("  cloudnest migrate              显式应用模型结构（先备份数据库）")
+	fmt.Println("  cloudnest bootstrap-admin      仅初始化空用户表，密码从 CLOUDNEST_BOOTSTRAP_PASSWORD 读取")
 	fmt.Println("")
 	fmt.Println("示例:")
 	fmt.Println("  ./cloudnest 8080 ./data")
