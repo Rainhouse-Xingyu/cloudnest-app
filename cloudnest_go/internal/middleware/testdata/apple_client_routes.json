@@ -1,0 +1,461 @@
+[
+  {
+    "method": "DELETE",
+    "path": "/api/files/:id/collaborators/:user_id",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Settings/Services/SettingsService.swift:121"
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/files/:id/permanent",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Files/Services/FilesService.swift:129"
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/frp/devices/:id",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/FRP/Services/FRPService.swift:405"
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/frp/mappings/:id",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/FRP/Services/FRPService.swift:448"
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/shares/:code",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Files/Services/FilesService.swift:113"
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/workspaces/:id/members/:user_id",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Settings/Services/SettingsService.swift:104"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/ai/search",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Smart/Services/SmartService.swift:102"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/files",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Files/Services/FilesService.swift:350",
+      "cloudnest_ios/cloudnest_ios/Features/Home/Services/HomeService.swift:179"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/files/:id/collaborators",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Settings/Services/SettingsService.swift:109"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/files/:id/download",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Files/Services/FilesService.swift:409"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/files/:id/download-zip",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Files/Services/FilesService.swift:407"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/files/:id/live-photo",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Files/Services/FilesService.swift:469"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/files/:id/preview",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Files/Services/FilesService.swift:428"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/files/:id/thumbnail",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Files/Services/FilesService.swift:448"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/files/recycle-bin",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Files/Services/FilesService.swift:118"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/files/search",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Files/Services/FilesService.swift:373"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/frp/devices",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/FRP/Services/FRPService.swift:331",
+      "cloudnest_ios/cloudnest_ios/Features/Home/Services/HomeService.swift:214"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/frp/devices/:id/mappings",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/FRP/Services/FRPService.swift:419"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/frp/devices/:id/status",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/FRP/Services/FRPService.swift:345"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/live-photos",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Home/Services/HomeService.swift:195"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/operation-logs",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/AdminLogs/Services/AdminLogService.swift:55"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/operation-logs/export",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/AdminLogs/Services/AdminLogService.swift:91"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/resource/health",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Auth/ViewModels/AuthViewModel.swift:242"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/settings",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Settings/Services/SettingsService.swift:51"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/settings/permissions",
+    "access": "explicit",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Settings/Services/SettingsService.swift:63"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/settings/rate-window",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Home/Services/HomeService.swift:227",
+      "cloudnest_ios/cloudnest_ios/Features/Settings/Services/SettingsService.swift:68"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/shares",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Files/Services/FilesService.swift:107"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/storage/overview",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Home/Services/HomeService.swift:240"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/workspaces",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Settings/Services/SettingsService.swift:86"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/workspaces/:id/members",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Settings/Services/SettingsService.swift:92"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/admin/users",
+    "access": "admin",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Settings/Services/SettingsService.swift:135"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/ai/assistant/ask",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Smart/Services/SmartService.swift:64"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/ai/assistant/settings",
+    "access": "admin",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Smart/Services/SmartService.swift:70"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/ai/ocr",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Smart/Services/SmartService.swift:30"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/ai/search/nl",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Smart/Services/SmartService.swift:52"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/ai/summarize",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Smart/Services/SmartService.swift:58"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/login",
+    "access": "public",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Auth/Services/AuthService.swift:36"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/logout",
+    "access": "self",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Settings/Services/SettingsService.swift:149"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/files/:id/collaborators",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Settings/Services/SettingsService.swift:116"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/files/:id/restore",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Files/Services/FilesService.swift:124"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/files/:id/share",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Files/Services/FilesService.swift:102"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/files/batch-delete",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Files/Services/FilesService.swift:78"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/files/copy",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Files/Services/FilesService.swift:91"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/files/folders",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Files/Services/FilesService.swift:72"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/files/move",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Files/Services/FilesService.swift:85"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/files/upload/chunk",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Files/Services/FilesService.swift:162"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/files/upload/complete",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Files/Services/FilesService.swift:173"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/files/upload/init",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Files/Services/FilesService.swift:135"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/frp/configs/save",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/FRP/Services/FRPService.swift:359"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/frp/devices",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/FRP/Services/FRPService.swift:374"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/frp/mappings",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/FRP/Services/FRPService.swift:433"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/live-photos/auto-bind",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Files/Services/FilesService.swift:214"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/workspaces",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Settings/Services/SettingsService.swift:81"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/workspaces/:id/members",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Settings/Services/SettingsService.swift:99"
+    ]
+  },
+  {
+    "method": "PUT",
+    "path": "/api/frp/devices/:id",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/FRP/Services/FRPService.swift:390"
+    ]
+  },
+  {
+    "method": "PUT",
+    "path": "/api/settings",
+    "access": "admin",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Settings/Services/SettingsService.swift:58"
+    ]
+  },
+  {
+    "method": "PUT",
+    "path": "/api/settings/rate-window",
+    "access": "user",
+    "sources": [
+      "cloudnest_ios/cloudnest_ios/Features/Settings/Services/SettingsService.swift:75"
+    ]
+  }
+]

@@ -26,6 +26,7 @@ type LoginRequest struct {
 
 // Login方法处理登录的HTTP请求，首先绑定请求数据并验证，然后查询数据库验证用户信息和状态，最后生成JWT并返回给客户端。
 func (h *AuthHandler) Login(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<10)
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
@@ -40,6 +41,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		}
 		if err == service.ErrUserDisabled {
 			c.JSON(http.StatusForbidden, gin.H{"error": "user disabled"})
+			return
+		}
+		if err == service.ErrPasswordResetRequired {
+			c.JSON(http.StatusForbidden, gin.H{"error": "legacy default administrator password must be reset by the operator"})
 			return
 		}
 		if err == contract.ErrInternal {
@@ -147,7 +152,10 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		return
 	}
 	token := tokenAny.(string)
-	h.Svc.Logout(c.Request.Context(), token)
+	if err := h.Svc.Logout(c.Request.Context(), token); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "could not revoke session; retry logout"})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"message": "logged out"})
 }
 
@@ -171,4 +179,13 @@ func (h *AuthHandler) Me(c *gin.Context) {
 		"update_time": u.UpdateTime,
 		"is_admin":    isAdmin,
 	}})
+}
+
+// LogoutAll only affects the authenticated account; never bind a target user ID.
+func (h *AuthHandler) LogoutAll(c *gin.Context) {
+	if err := h.Svc.LogoutAll(c.Request.Context(), c.GetInt64(middleware.ContextUserIDKey), c.ClientIP()); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "could not revoke all sessions; retry"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "all sessions revoked; sign in again"})
 }

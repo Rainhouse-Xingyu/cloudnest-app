@@ -22,7 +22,8 @@ var (
 	// ErrInvalidCredentials 表示用户名或密码错误。
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	// ErrUserDisabled 表示用户被禁用。
-	ErrUserDisabled = errors.New("user disabled")
+	ErrUserDisabled          = errors.New("user disabled")
+	ErrPasswordResetRequired = errors.New("password reset required")
 )
 
 // LoginResult 登录成功后返回的业务结果。
@@ -62,11 +63,8 @@ func (s *AuthService) Login(ctx context.Context, username, password string) (Log
 	if !verifyPassword(password, u.Password) {
 		return LoginResult{}, ErrInvalidCredentials
 	}
-
-	// 对历史明文密码做透明升级，保持与旧逻辑兼容。
-	if !isBcryptHash(u.Password) {
-		hash, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-		_ = s.repo.UpdateUserPassword(ctx, u.ID, string(hash))
+	if u.Username == "admin" && password == "admin" {
+		return LoginResult{}, ErrPasswordResetRequired
 	}
 
 	isAdmin, err := s.repo.CheckUserIsAdmin(ctx, u.ID)
@@ -74,7 +72,7 @@ func (s *AuthService) Login(ctx context.Context, username, password string) (Log
 		return LoginResult{}, contract.ErrInternal
 	}
 
-	token, expiresAt, err := auth.GenerateToken(s.cfg.JWTSecret, u.ID, u.Username, isAdmin, s.cfg.JWTTTL())
+	token, expiresAt, err := auth.GenerateToken(s.cfg.JWTSecret, u.ID, u.Username, isAdmin, u.AuthVersion, s.cfg.JWTTTL())
 	if err != nil {
 		return LoginResult{}, contract.ErrInternal
 	}
@@ -92,8 +90,8 @@ func (s *AuthService) Login(ctx context.Context, username, password string) (Log
 }
 
 // Logout 删除 Redis token 缓存。
-func (s *AuthService) Logout(ctx context.Context, token string) {
-	_ = s.rdb.Del(ctx, redisTokenKeyPrefix+token).Err()
+func (s *AuthService) Logout(ctx context.Context, token string) error {
+	return s.rdb.Del(ctx, redisTokenKeyPrefix+token).Err()
 }
 
 // GetUserProfile 获取当前用户信息。
@@ -109,7 +107,7 @@ func verifyPassword(inputPassword string, storedPassword string) bool {
 	if isBcryptHash(storedPassword) {
 		return bcrypt.CompareHashAndPassword([]byte(storedPassword), []byte(inputPassword)) == nil
 	}
-	return inputPassword == storedPassword
+	return false
 }
 
 func isBcryptHash(raw string) bool {
@@ -117,3 +115,25 @@ func isBcryptHash(raw string) bool {
 }
 
 // 管理员判断已下沉至 AuthRepository。
+
+// LogoutAll invalidates the caller's sessions durably, including old tokens and
+// tokens issued by a login that read an earlier account snapshot.
+func (s *AuthService) LogoutAll(ctx context.Context, userID int64, clientIP string) error {
+	return s.repo.RevokeUserSessions(ctx, userID, clientIP)
+}
+
+// ResetPasswordForOperator is used only by the local maintenance command. There
+// is no public HTTP password-recovery route or automatic legacy-password upgrade.
+func (s *AuthService) ResetPasswordForOperator(ctx context.Context, userID int64, expectedUsername, password string) error {
+	if userID <= 0 || expectedUsername == "" {
+		return errors.New("positive user ID and exact username are required")
+	}
+	if err := auth.ValidateNewPassword(password); err != nil {
+		return err
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return errors.New("password hashing failed")
+	}
+	return s.repo.ResetUserPassword(ctx, userID, expectedUsername, string(hash))
+}

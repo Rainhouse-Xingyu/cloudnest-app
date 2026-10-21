@@ -28,3 +28,47 @@ func TestExtractBearerToken(t *testing.T) {
 		}
 	}
 }
+
+func TestDefaultCapabilitiesDenyUnlistedRoutes(t *testing.T) {
+	for _, tc := range []struct {
+		method, route string
+		want          bool
+	}{
+		{"GET", "/api/files", true},
+		{"GET", "/api/files/:id/download", true},
+		{"POST", "/api/auth/logout", true},
+		{"DELETE", "/api/files", false},
+		{"POST", "/api/new-sensitive-action", false},
+		{"PUT", "/api/settings", false},
+		{"POST", "/api/ai/assistant/settings", false},
+		{"GET", "/api/admin/users", false},
+		{"GET", "", false},
+	} {
+		if got := defaultAllowPath(tc.method, tc.route); got != tc.want {
+			t.Errorf("%s %s: got %v, want %v", tc.method, tc.route, got, tc.want)
+		}
+	}
+}
+
+func TestSelfSessionRoutesAreExactAndMethodBound(t *testing.T) {
+	for _, tc := range []struct {
+		method, route string
+		want          bool
+	}{
+		{"GET", "/api/auth/me", true},
+		{"POST", "/api/auth/logout", true},
+		{"POST", "/api/auth/me", false},
+		{"GET", "/api/auth/logout", false},
+		{"GET", "/api/auth/me/admin", false},
+		{"POST", "/api/auth/logout-all", true},
+		{"GET", "/api/auth/logout-all", false},
+		{"POST", "/api/auth/logout-all/other", false},
+		{"POST", "/api/auth/login", false},
+		{"GET", "/api/files", false},
+		{"GET", "", false},
+	} {
+		if got := isSelfSessionRoute(tc.method, tc.route); got != tc.want {
+			t.Errorf("%s %s: got %v, want %v", tc.method, tc.route, got, tc.want)
+		}
+	}
+}

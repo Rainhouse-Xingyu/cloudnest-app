@@ -9,6 +9,7 @@ import (
 
 	"cloudenest_go/internal/middleware"
 	"cloudenest_go/internal/service"
+	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
 
 	"github.com/gin-gonic/gin"
@@ -455,6 +456,12 @@ func (h *CollaborationHandler) CreateFileVersion(c *gin.Context) {
 			return
 		case strings.Contains(msg, "version conflict"):
 			c.JSON(http.StatusConflict, gin.H{"error": "base_version is outdated"})
+			return
+		case errors.Is(err, contract.ErrForbidden):
+			c.JSON(http.StatusForbidden, gin.H{"error": "file or storage permission denied"})
+			return
+		case errors.Is(err, contract.ErrInvalidInput):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid storage size"})
 			return
 		default:
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "create file version failed"})
