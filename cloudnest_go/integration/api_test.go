@@ -16,6 +16,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,11 +27,17 @@ import (
 
 	"github.com/gin-gonic/gin"
 	mysqldriver "github.com/go-sql-driver/mysql"
+	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
+var fixtureIPSequence atomic.Uint64
+
 type fixture struct {
+	cfg            config.Config
+	rdb            *redis.Client
+	remoteAddr     string
 	db             *gorm.DB
 	router         http.Handler
 	alice, bob     string
@@ -91,7 +98,7 @@ func newFixture(t *testing.T) *fixture {
 	}
 	t.Cleanup(func() { _ = rdb.Close() })
 	gin.SetMode(gin.TestMode)
-	f := &fixture{db: db, router: app.NewContainer(cfg, db, rdb).NewRouter()}
+	f := &fixture{db: db, cfg: cfg, rdb: rdb, router: app.NewContainer(cfg, db, rdb).NewRouter(), remoteAddr: fmt.Sprintf("[2001:db8:1::%x]:12345", fixtureIPSequence.Add(1))}
 	password := "disposable-fixture-password"
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.MinCost)
 	if err != nil {
@@ -123,6 +130,7 @@ func newFixture(t *testing.T) *fixture {
 func (f *fixture) request(t *testing.T, method, path, token, contentType string, body io.Reader, want int) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(method, path, body)
+	req.RemoteAddr = f.remoteAddr
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}

@@ -130,8 +130,10 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 // NewRouter 统一构建路由与中间件。
 func (c *Container) NewRouter() *gin.Engine {
 	r := gin.Default()
+	// Forwarding headers are untrusted until an explicit ingress policy exists.
+	_ = r.SetTrustedProxies(nil)
 
-	r.POST("/api/auth/login", c.AuthHandler.Login)
+	r.POST("/api/auth/login", middleware.LoginRateLimit(c.RDB), c.AuthHandler.Login)
 	r.GET("/api/public/shares/:code", c.FileHandler.PublicShareInfo)
 	r.GET("/api/public/shares/:code/download", c.FileHandler.PublicShareDownload)
 
