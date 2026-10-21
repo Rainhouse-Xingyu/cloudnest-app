@@ -1,0 +1,13 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+*.o
+**/xcuserdata/
+**/DerivedData/
+**/.build/
+/cloudnest_go/main
+/cloudnest_go/dist/
+/cloudnest_go/data/
+/cloudnest_go/coverage.out
+/artifacts/

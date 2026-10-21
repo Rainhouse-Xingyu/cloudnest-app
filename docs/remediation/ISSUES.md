@@ -1,0 +1,56 @@
+# 持续问题登记
+
+日期：2026-10-21。路径均相对仓库根目录；Go 路径省略 `cloudnest_go/`。P0 表示上线阻断，P1 表示核心可靠性/安全问题，P2 表示体验/维护问题。下列复现仅限隔离环境。静态证据不冒充攻击实测。
+
+| 编号/优先级 | 证据位置与当前风险 | 复现/验证方法 | 最小整改与阶段 | 状态 |
+|---|---|---|---|---|
+| SEC-001 P0 | `.env.example` 包含非占位 MySQL/Redis 凭据，已进入 Git 历史 | 只检查键是否为占位值，禁止输出值 | G00 清理示例/防回归；操作者轮换有效凭据，另行决定历史清理 | 示例已清理；轮换待人工 |
+| SEC-002 P0 | `internal/store/mysql.go:SeedAdminUser` 固定创建 admin/admin，既有同名用户还会被绑定管理员角色 | 空测试库启动后默认密码登录；预置同名普通用户再启动 | G01 移除启动自动播种，显式首次引导/强密码/事务/拒绝提升既有用户 | 已确认，待修 |
+| SEC-003 P0 | `internal/config/config.go:Load` 固定 JWT 默认密钥，未校验配置 | 未设置 JWT_SECRET 仍能启动认证路径；Redis 会话检查不能替代密钥保护 | G01 必填强随机密钥与 TTL 校验，在连接数据库之前失败 | 已确认，待修 |
+| SEC-004 P0 | `internal/storage/mysql/collaboration_repo.go:CreateFileVersion` 任意 storage_id，只有存在性检查 | A 用自己的文件创建版本，传 B 的存储 ID，然后下载；期望 403 且无写入 | G01 在事务中校验目标写权限和来源对象授权，尺寸取服务端；跨用户/并发测试 | 已确认，待回归复现及修复 |
+| SEC-005 P1 | `internal/service/auth_service.go:verifyPassword/Login` 接受明文密码，透明升级忽略错误 | 测试库插入明文密码；登录当前可成功 | G01 拒绝明文，提供明确重置路径，不静默写旧密码 | 已确认，待修 |
+| SEC-006 P1 | `internal/middleware/auth.go:defaultAllowPath` 除两个排除项外放行全部 `/api/`，不区分方法 | 为新路径挂测试 handler，无权限用户也会获准 | G01 显式业务方法/路由模板清单，新增路由默认拒绝；资源级授权仍必需 | 已确认，待修 |
+| SEC-007 P1 | `internal/auth/jwt.go:ParseToken` 不强制 exp，也未检查 user_id/subject 一致性 | 用测试密钥签无 exp/零 ID/不匹配 subject token | G01 必须过期时间及合法身份声明 | 已确认，待修 |
+| SEC-008 P1 | `auth_service.go:Logout` 忽略 Redis 删除错误；角色/禁用状态来自历史 JWT | Redis 断开后注销；登录后撤销角色/禁用再访问 | G01 注销错误传播、会话撤销/用户状态检查 | 已确认，待修 |
+| SEC-009 P1 | `app/container.go` FRP 上报/拉命令同用户 JWT 入口 | 用用户身份调用设备命令 API；无独立设备认证模型 | G05 设备 enrollment、独立凭据哈希/轮换/撤销与权限范围 | 已确认，待做 |
+| SEC-010 P1 | `service/frp_service.go:generateFRPCYaml/SaveConfig` 明文 token 拼入配置并持久化 | 隔离环境读取配置记录/响应；不要记录真实 token | G05 加密敏感配置、脱敏响应、最小 Agent 权限 | 已确认，待做 |
+| SEC-011 P1 | iOS `Shared/Managers/SessionManager.swift` 用 UserDefaults 存 token | 检查保存/读取路径 | G07 新 macOS 用 Keychain；冻结旧 iOS 开发 | 已确认，待做 |
+| SEC-012 P1 | `cmd/server/main.go` 用 `gin.Run` 无显式 HTTP 超时；上传入口缺少请求体总限额 | 慢请求/超大 multipart；需受限资源测试 | G01/G03 显式服务器超时、请求/分片尺寸上限、登录速率限制 | 静态发现，压测未执行 |
+| DEP-001 P1 | 初次 govulncheck 报告 x/net、x/text、quic-go 可达漏洞；旧 Go 标准库另查 | `make vuln`；见 BASELINE | G01 按公告最小升级依赖和工具链，重新构建/扫描 | 已复现，待修 |
+| DATA-001 P1 | `internal/store/mysql.go:NewMySQL` 每次启动 AutoMigrate，无版本/审核开关 | 审查启动调用链；仅在测试库观察建表 | G01 关闭隐式生产迁移；G06/G10 版本化迁移、备份/回滚演练 | 已确认，待修 |
+| FILE-001 P1 | `storage/mysql/file_repo.go:HasActiveNameConflict` 根目录 parent_id=0 未含 user_id | 两用户根目录创建同名目录；第二个不应冲突 | G02 对根按所有者作用域，非根按共享父目录；事务并发约束 | 已确认，待修 |
+| FILE-002 P1 | `service/file_service.go:InitUpload` 不比较声明分片数与计算值 | total_size=10, chunk_size=5, total_chunks=1 | G03 溢出安全计算、数量及每片/总字节校验 | 已确认，待修 |
+| FILE-003 P1 | `CompleteUploadPersist` 无任务行锁/CAS，无完成结果复用；mergeChunks 直接覆盖路径 | 两个完成请求并发/超时后重试；检查重复 file/物理路径损坏 | G02/G03 完成状态机、互斥/幂等结果、临时文件原子落盘 | 静态确认，并发实测待做 |
+| FILE-004 P1 | `CompleteUploadPersist` 直接创建同名记录，CreateFolder/Rename 则拒绝 | 同用户同目录同名上传两次 | G02 统一命名/冲突策略，数据库约束及恢复规则 | 已确认，待修 |
+| FILE-005 P1 | `StorageService.GetOverview` 计算配额；InitUpload/CompleteUpload 无配额预留/核销 | 设置低配额后上传超限文件；并发超额 | G02/G03 配额账本/预留/释放，版本和回收站计量政策 | 已确认，待修 |
+| FILE-006 P1 | `ensureStorageForFileRepo` 以 hash 去重；PermanentDelete 只删逻辑记录 | 上传重复内容后永久删除，统计物理对象和引用 | G02 显式引用图/版本引用/安全 GC；不直接删未知对象 | 已确认，待设计 |
+| FILE-007 P1 | 递归 collectDescendantIDs/ListActiveChildren 仅按 parent_id 查询，授权集中在根 | 混合所有者子目录、共享只读子项、循环/异常目录树 | G02 定义继承语义，逐层授权与循环检测/深度上限 | 待行为复现 |
+| FILE-008 P1 | 上传任务无持久 parent_id/结果 file_id；恢复参数和完成目录可变化 | 用原 upload_id 带不同目录/文件元信息继续操作 | G03 固化任务契约并验证重试参数 | 已确认，待修 |
+| FILE-009 P2 | 文件搜索多列 LIKE、ListFiles/目录递归无分页/批量规划 | 数据规模测试、EXPLAIN、查询计数 | G02/G10 索引/游标分页/批量目录查询 | 结构已确认，性能未测 |
+| FILE-010 P2 | Go `sendFileWithRateLimit` 已 ServeContent/io.Copy/固定缓冲；客户端 NetworkClient 使用 data(for:) | 大文件峰值内存测试 | G03/G08 新客户端 URLSession 文件下载任务；不重写已流式 Go 普通下载 | 后端整文件内存假设未成立；性能未测 |
+| FILE-011 P1 | Share 模型及 CreateShare 只有 code/expiry，无提取码/访问次数约束 | 查看真实字段/API | G06 提取码哈希/访问计数、限速、撤销/到期测试 | 缺功能 |
+| FILE-012 P1 | 文件版本只创建/列出，没有专用恢复/上传完整协议；客户端可传 size | 版本覆盖/恢复与配额一致性测试 | G01 先保护 storage_id；G02 完整版本引用/恢复协议 | 缺功能 |
+| AI-001 P1 | `triggerAsyncAutoAnalyze` 内存 goroutine，AiTask 仅写状态记录 | 上传后杀进程重启；任务无恢复 worker | G04 事务 outbox、持久任务、租约/超时/重试/诊断 | 已确认，待做 |
+| AI-002 P1 | `service/ai_service.go:NLSearch` 解析条件后调用 `storage/mysql/ai_repo.go:Search` 的 LIKE；无 embedding/vector | 执行语义同义查询/带无关干扰的评估集 | G04 独立 embedding、chunk、向量索引、混合检索/文件级 ACL/片段 | 已确认，待做 |
+| AI-003 P1 | `buildAutoAnalyzeResult` 忽略 OCR/模型错误并写“分析完成”；照片标签描述请求仅文本 | 关闭 Ollama 上传图片；查看任务状态和描述 | G04 区分提取/OCR/视觉失败、真实视觉输入、可诊断降级 | 已确认，待修 |
+| AI-004 P1 | `os.ReadFile` 图片全量载入，PDF/OpenXML 提取有上限但无完整资源预算 | 大图/损坏 PDF/压缩炸弹，受限容器观察资源 | G04 文档解析隔离、页/像素/展开字节限额和取消 | 待安全实测 |
+| AI-005 P2 | `handler/ai_handler.go` 与 `service/ai_service.go` 重复提取/模型 helper | 函数清单对比；调用图核对 | G04 统一 provider/parser 接口，保留单一实现与测试 | 已确认，待重构 |
+| FRP-001 P1 | `PullNextCommand` LPop 后更新状态，没有租约回收任务 | 领取后 Agent 崩溃；队列命令丢失/卡 running | G05 持久命令/ACK/幂等/超时重发/终态约束 | 已确认，待做 |
+| FRP-002 P1 | 仓库没有设备 Agent/frpc 进程管理实现 | 检查 Go cmd 与 Swift 调用，不存在可启动 Agent | G05 官方 frpc、白名单 start/stop/reload/diagnose、自动恢复 | 缺功能；未测隧道 |
+| FRP-003 P1 | YAML 使用用户 serverAddr/token/domain 原文拼接 | 输入换行/冒号/特殊字符串，运行 frpc verify | G05 typed config 序列化+官方验证，拒绝注入 | 已确认，待修 |
+| FRP-004 P1 | 端口冲突先查后写，server 作用域/唯一性与心跳离线任务需核对 | 并发相同端口、设备失联、配置回滚 | G05 唯一索引/端口预留/周期判离线/版本关联 | 部分实现，未验收 |
+| COLLAB-001 P1 | Workspace 成员管理存在；通用文件 ACL 主要用 owner/file_permission，空间角色链路不完整 | 空间 viewer/editor 对文件 CRUD 矩阵；禁止越级授权 | G06 明确空间/文件权限继承和管理员边界 | 待完整矩阵验证 |
+| LIVE-001 P2 | LivePhoto 绑定/解绑/查询存在；并发去重及实际播放未测 | 相同 image/video 并发绑定、跨用户配对与 macOS 播放 | G06/G09 唯一约束/权限与原生预览 | 静态审查，未验收 |
+| LOG-001 P1 | 多处 `_ = logOperation`，写操作可能无审计；SQL 日志策略未配置 | 注入日志写失败/数据库故障；确保无密钥与文件正文泄露 | G06 事务审计或可靠 outbox、结构化脱敏日志 | 已确认，待修 |
+| ENG-001 P1 | 原仓库无 Go 测试，Swift 测试仅模板 | 基线 go test 全部 no test files | G00 加真实测试/CI；后续随修复扩展 | 首批测试已加入 |
+| ENG-002 P2 | 已跟踪 dist/main/*.o/xcuserdata | `git ls-files`；检查工作树文件仍在 | G00 取消跟踪并 ignore；历史 patch 需独立核对后归档 | 当前产物已取消跟踪 |
+| ENG-003 P2 | file handler 2165 行、service 1193 行；已有契约与仓储可复用 | 逐功能调用链审查和单元边界 | G02–G06 随业务拆模块，不全盘重写 | 待做 |
+| ENG-004 P1 | 无原有 CI/运行监控/备份恢复演练 | 检查 workflows/部署脚本，执行隔离发布演练 | G00 CI；G10 发布/指标/健康检查/备份恢复 | CI 已加入，运行治理待做 |
+| MAC-001 P1 | `cloudnest_macos/` 空目录 | 文件清单 | G07–G09 独立原生 SwiftUI/AppKit 应用与 Keychain；无 UIKit 依赖 | 未开始 |
+| ENV-001 P2 | iOS target 26.2，Xcode 无相应平台；模拟器仅 18.6 可用 | xcodebuild 返回 70，destination 不可用 | 保留失败证据；macOS 用可用 SDK 独立验证 | 环境阻塞；非代码编译结论 |
+
+## 审查边界
+
+本轮遍历了所有后端 Handler/Service/Repository/Middleware/Model 的清单与主要调用入口，深入追踪认证、上传完成、版本、AI、FRP 与客户端网络链路。不是逐行形式化审计，也没有读取生产库结构/索引/数据。真实库与模型差异、递归权限组合、外部模型效果、真实隧道及所有 UI 操作仍需后续实测。
+
+每个问题关闭必须关联代码/PR及测试。静态推断项先补复现；已通过的单文件生命周期不能推导批量/大文件/并发功能可靠。现有系统设置的管理员写检查、Live Photo 双文件权限检查、文件常规下载授权等应复用并补测试。

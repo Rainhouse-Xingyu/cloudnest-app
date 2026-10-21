@@ -1,1 +1,3 @@
-# Graduation-Project
+# CloudNest 项目文档
+
+当前整改入口：[整改工作台](remediation/README.md)。任务状态、问题证据及测试结果以该目录为准；其他历史设计文档不能作为功能已完成的证明。
