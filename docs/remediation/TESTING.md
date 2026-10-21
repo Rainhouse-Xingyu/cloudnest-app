@@ -1,0 +1,32 @@
+# 测试执行
+
+从仓库根目录运行：
+
+```sh
+python3 scripts/check-repository.py
+cd cloudnest_go
+make check
+make test
+make integration
+make vuln
+```
+
+`make integration` 需要 Docker，创建独立 MySQL 8.0 与 Redis 7.4 容器，使用随机本机端口、测试专用库和账号；不读取 `.env`，不挂载任何既有数据目录。退出时仅删除此次创建的容器及其匿名卷。测试中的文件位于 Go 的临时目录。脚本不会执行生产迁移、清库或启动生产服务器。
+
+集成测试使用 `integration` build tag。直接运行时必须通过测试专用环境变量，并检查 loopback、数据库名、账号和 disposable 标记；推荐始终使用脚本，禁止把已有数据库地址传入。测试失败返回非零；没有 Docker/依赖就标记未运行，不能算通过。
+
+单元测试覆盖 JWT 签名/过期和路径权限匹配；API 集成测试使用真实 MySQL/Redis/文件系统，覆盖登录、未认证/管理员拒绝、目录创建、分片上传、字节一致下载、跨用户隔离、分享撤销、回收站恢复、注销。
+
+AI 自动分析是当前实现的后台副作用。集成测试只等待其终态，Ollama 地址故意指向不可用端口，不返回假模型结果，也不将 AI 任务“success”当作语义能力证明。AI 实测与 FRP 隧道实测见各后续阶段。
+
+漏洞检查使用官方 [govulncheck](https://go.dev/doc/tutorial/govulncheck)，固定工具版本；其工具链需求与项目最低 Go 版本分开记录。工具下载失败、漏洞数据库不可达、发现可达漏洞分别记录，不能用忽略退出码制造成功。
+
+iOS 只做历史基线：
+
+```sh
+xcodebuild -project cloudnest_ios/cloudnest_ios.xcodeproj \
+  -scheme cloudnest_ios -destination 'generic/platform=iOS Simulator' \
+  -derivedDataPath /tmp/cloudnest-g00-ios-derived CODE_SIGNING_ALLOWED=NO build
+```
+
+当前所需 iOS 26.2 平台组件不可用；不得降低部署目标伪造通过。后续 macOS 工程使用独立构建/测试脚本。
