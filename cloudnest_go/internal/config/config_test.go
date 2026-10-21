@@ -42,3 +42,22 @@ func TestLoadDoesNotInventCredentials(t *testing.T) {
 		t.Fatal("missing credentials accepted")
 	}
 }
+
+func TestMalformedJWTExpiryFailsValidation(t *testing.T) {
+	t.Setenv("MYSQL_DSN", "app:test-fixture@tcp(127.0.0.1:3306)/test")
+	t.Setenv("JWT_SECRET", "test-only-random-key-at-least-thirty-two-bytes")
+	for _, input := range []string{"one-hour", "1h", "1.5", "999999999999999999999999999", "0", "-1", "8761"} {
+		t.Setenv("JWT_EXPIRE_HOURS", input)
+		if err := Load().Validate(); err == nil {
+			t.Fatalf("invalid JWT expiry accepted: %q", input)
+		}
+	}
+	t.Setenv("JWT_EXPIRE_HOURS", "")
+	if cfg := Load(); cfg.JWTExpireHours != 168 || cfg.Validate() != nil {
+		t.Fatal("default expiry changed")
+	}
+	t.Setenv("JWT_EXPIRE_HOURS", "24")
+	if cfg := Load(); cfg.JWTExpireHours != 24 || cfg.Validate() != nil {
+		t.Fatal("valid expiry rejected")
+	}
+}

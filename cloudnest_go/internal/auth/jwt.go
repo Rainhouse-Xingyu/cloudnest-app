@@ -16,18 +16,19 @@ GenerateToken函数用于生成JWT，接受密钥、用户ID、用户名、管�
 ParseToken函数用于解析JWT，接受密钥和JWT字符串作为参数，返回Claims结构体和错误信息。
 */
 type Claims struct {
-	UserID   int64  `json:"user_id"`
-	Username string `json:"username"`
-	IsAdmin  bool   `json:"is_admin"`
+	AuthVersion uint64 `json:"auth_version,omitempty"`
+	UserID      int64  `json:"user_id"`
+	Username    string `json:"username"`
+	IsAdmin     bool   `json:"is_admin"`
 	jwt.RegisteredClaims
 }
 
 // GenerateToken函数生成JWT，接收上述参数，返回JWT字符串、过期时间和错误信息
-func GenerateToken(secret string, userID int64, username string, isAdmin bool, ttl time.Duration) (string, time.Time, error) {
-	return generateTokenAt(secret, userID, username, isAdmin, ttl, time.Now())
+func GenerateToken(secret string, userID int64, username string, isAdmin bool, authVersion uint64, ttl time.Duration) (string, time.Time, error) {
+	return generateTokenAt(secret, userID, username, isAdmin, authVersion, ttl, time.Now())
 }
 
-func generateTokenAt(secret string, userID int64, username string, isAdmin bool, ttl time.Duration, now time.Time) (string, time.Time, error) {
+func generateTokenAt(secret string, userID int64, username string, isAdmin bool, authVersion uint64, ttl time.Duration, now time.Time) (string, time.Time, error) {
 	// A timestamp is not a session identifier: logins in the same second must
 	// remain independently revocable in Redis. Never derive this ID from user data.
 	nonce := make([]byte, 32)
@@ -37,9 +38,10 @@ func generateTokenAt(secret string, userID int64, username string, isAdmin bool,
 	expiresAt := now.Add(ttl)
 	//Claims包含所需的用户信息和JWT声明。
 	claims := Claims{
-		UserID:   userID,
-		Username: username,
-		IsAdmin:  isAdmin,
+		AuthVersion: authVersion,
+		UserID:      userID,
+		Username:    username,
+		IsAdmin:     isAdmin,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        base64.RawURLEncoding.EncodeToString(nonce),
 			Subject:   fmt.Sprintf("%d", userID),

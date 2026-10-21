@@ -30,7 +30,8 @@ type UserRoleRow struct {
 // AuthRepository 定义认证模块存储访问能力。
 type AuthRepository interface {
 	GetUserByUsername(ctx context.Context, username string) (model.User, error)
-	UpdateUserPassword(ctx context.Context, userID int64, password string) error
+	RevokeUserSessions(ctx context.Context, userID int64, clientIP string) error
+	ResetUserPassword(ctx context.Context, userID int64, expectedUsername, passwordHash string) error
 	CheckUserIsAdmin(ctx context.Context, userID int64) (bool, error)
 	GetUserProfile(ctx context.Context, userID int64) (model.User, error)
 }

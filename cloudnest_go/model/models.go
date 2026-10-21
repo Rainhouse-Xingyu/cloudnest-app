@@ -6,13 +6,14 @@ import (
 
 // User 用户表
 type User struct {
-	ID         int64     `gorm:"primaryKey;autoIncrement" json:"id"`
-	Username   string    `gorm:"type:varchar(50);not null;unique" json:"username"`
-	Password   string    `gorm:"type:varchar(255);not null" json:"-"`
-	Email      string    `gorm:"type:varchar(100)" json:"email"`
-	Status     int8      `gorm:"type:tinyint;default:1;comment:1正常 0禁用" json:"status"`
-	CreateTime time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP" json:"create_time"`
-	UpdateTime time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP" json:"update_time"`
+	AuthVersion uint64    `gorm:"not null;default:0" json:"-"`
+	ID          int64     `gorm:"primaryKey;autoIncrement" json:"id"`
+	Username    string    `gorm:"type:varchar(50);not null;unique" json:"username"`
+	Password    string    `gorm:"type:varchar(255);not null" json:"-"`
+	Email       string    `gorm:"type:varchar(100)" json:"email"`
+	Status      int8      `gorm:"type:tinyint;default:1;comment:1正常 0禁用" json:"status"`
+	CreateTime  time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP" json:"create_time"`
+	UpdateTime  time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP" json:"update_time"`
 }
 
 func (User) TableName() string {

@@ -23,9 +23,10 @@ const (
 // Identity is reloaded for each authenticated request so account/role changes
 // do not depend on the expiry of an already issued token.
 type Identity struct {
-	Username string
-	Enabled  bool
-	IsAdmin  bool
+	AuthVersion uint64
+	Username    string
+	Enabled     bool
+	IsAdmin     bool
 }
 
 // Authenticate validates the signature, Redis session owner, current account
@@ -76,6 +77,11 @@ func Authenticate(rdb *redis.Client, jwtSecret string, loadPermissions func(cont
 			return
 		}
 
+		if claims.AuthVersion != identity.AuthVersion {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "session revoked"})
+			return
+		}
+
 		c.Set(ContextUserIDKey, claims.UserID)
 		c.Set(ContextUsernameKey, identity.Username)
 		c.Set(ContextIsAdminKey, identity.IsAdmin)
@@ -100,7 +106,7 @@ func Authenticate(rdb *redis.Client, jwtSecret string, loadPermissions func(cont
 
 func isSelfSessionRoute(method, route string) bool {
 	return method == http.MethodGet && route == "/api/auth/me" ||
-		method == http.MethodPost && route == "/api/auth/logout"
+		method == http.MethodPost && (route == "/api/auth/logout" || route == "/api/auth/logout-all")
 }
 
 // RequireAdmin函数是一个Gin中间件，用于检查当前用户是否具有管理员权限。它从上下文中获取管理员标志，如果不存在或为false，则返回403错误并终止请求处理，否则继续执行后续的处理函数。
@@ -149,6 +155,7 @@ func checkPathPermission(ctx context.Context, userID int64, method string, path 
 // Explicit authenticated-user capabilities. Keys are Gin route templates, not
 // URL prefixes. Unlisted routes/methods are denied; resource ACLs still apply.
 var defaultUserRoutes = map[string]struct{}{
+	"POST /api/auth/logout-all":                    {},
 	"POST /api/auth/logout":                        {},
 	"GET /api/auth/me":                             {},
 	"GET /api/resource/health":                     {},

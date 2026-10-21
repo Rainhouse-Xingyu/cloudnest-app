@@ -152,10 +152,11 @@ func (c *Container) NewRouter() *gin.Engine {
 		if err != nil {
 			return middleware.Identity{}, err
 		}
-		return middleware.Identity{Username: u.Username, Enabled: u.Status != 0, IsAdmin: isAdmin}, nil
+		return middleware.Identity{AuthVersion: u.AuthVersion, Username: u.Username, Enabled: u.Status != 0, IsAdmin: isAdmin}, nil
 	}))
 
 	api.POST("/auth/logout", c.AuthHandler.Logout)
+	api.POST("/auth/logout-all", c.AuthHandler.LogoutAll)
 	api.GET("/auth/me", c.AuthHandler.Me)
 
 	api.GET("/resource/health", func(ctx *gin.Context) {

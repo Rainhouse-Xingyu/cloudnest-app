@@ -29,6 +29,16 @@ type Config struct {
 
 // MySQL、Redis、JWT等配置项，提供默认值并从环境变量加载
 func Load() Config {
+	jwtExpireHours := 168
+	if raw := os.Getenv("JWT_EXPIRE_HOURS"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil {
+			// Zero is rejected by Validate; never silently widen a mistyped TTL.
+			jwtExpireHours = 0
+		} else {
+			jwtExpireHours = parsed
+		}
+	}
 	return Config{
 		AppPort:         getEnv("APP_PORT", "8080"),
 		DataDir:         getEnv("DATA_DIR", "data"),
@@ -37,7 +47,7 @@ func Load() Config {
 		RedisPassword:   getEnv("REDIS_PASSWORD", ""),
 		RedisDB:         getEnvInt("REDIS_DB", 0),
 		JWTSecret:       os.Getenv("JWT_SECRET"),
-		JWTExpireHours:  getEnvInt("JWT_EXPIRE_HOURS", 168), // 7 days
+		JWTExpireHours:  jwtExpireHours,
 		AIOllamaBaseURL: getEnv("AI_OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
 		AIOllamaModel:   getEnv("AI_OLLAMA_MODEL", "qwen3-vl:4b"),
 		AIGuideDocPath:  getEnv("AI_GUIDE_DOC_PATH", "../../项目功能汇总.md"),

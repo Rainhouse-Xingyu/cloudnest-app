@@ -11,7 +11,7 @@ import (
 const testSecret = "test-only-signing-secret-with-at-least-32-bytes"
 
 func TestTokenRoundTrip(t *testing.T) {
-	raw, expires, err := GenerateToken(testSecret, 42, "alice", false, time.Hour)
+	raw, expires, err := GenerateToken(testSecret, 42, "alice", false, 0, time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +31,7 @@ func TestSameInstantLoginsHaveIndependentRandomTokenIDs(t *testing.T) {
 	now := time.Now().Truncate(time.Second)
 	seenIDs, seenTokens := map[string]bool{}, map[string]bool{}
 	for range 128 {
-		raw, _, err := generateTokenAt(testSecret, 42, "alice", false, time.Hour, now)
+		raw, _, err := generateTokenAt(testSecret, 42, "alice", false, 0, time.Hour, now)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -67,11 +67,11 @@ func TestLegacySignedTokenRemainsReadableUntilExpiry(t *testing.T) {
 }
 
 func TestRejectInvalidTokens(t *testing.T) {
-	expired, _, err := GenerateToken(testSecret, 42, "alice", false, -time.Hour)
+	expired, _, err := GenerateToken(testSecret, 42, "alice", false, 0, -time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
-	wrongKey, _, err := GenerateToken("another-test-only-secret-with-at-least-32-bytes", 42, "alice", false, time.Hour)
+	wrongKey, _, err := GenerateToken("another-test-only-secret-with-at-least-32-bytes", 42, "alice", false, 0, time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -8,7 +8,7 @@
 | SEC-002 P0 | `internal/store/mysql.go:SeedAdminUser` 固定创建 admin/admin，既有同名用户还会被绑定管理员角色 | 空测试库启动后默认密码登录；预置同名普通用户再启动 | G01 移除启动自动播种，显式首次引导/强密码/事务/拒绝提升既有用户 | 已修代码/测试；旧账号密码重置与会话轮换待人工 |
 | SEC-003 P0 | `internal/config/config.go:Load` 固定 JWT 默认密钥，未校验配置 | 未设置 JWT_SECRET 仍能启动认证路径；Redis 会话检查不能替代密钥保护 | G01 必填强随机密钥与 TTL 校验，在连接数据库之前失败 | 已修代码/测试；实际密钥轮换待人工 |
 | SEC-004 P0 | `internal/storage/mysql/collaboration_repo.go:CreateFileVersion` 任意 storage_id，只有存在性检查 | A 用自己的文件创建版本，传 B 的存储 ID，然后下载；期望 403 且无写入 | G01 在事务中校验目标写权限和来源对象授权，尺寸取服务端；跨用户/并发测试 | 已复现 200 越权；修复后 403 且原文件不变，待 PR 审查 |
-| SEC-005 P1 | `internal/service/auth_service.go:verifyPassword/Login` 接受明文密码，透明升级忽略错误 | 测试库插入明文密码；登录当前可成功 | G01 拒绝明文，提供明确重置路径，不静默写旧密码 | 已修：拒绝明文；历史账号重置待人工 |
+| SEC-005 P1 | `internal/service/auth_service.go:verifyPassword/Login` 接受明文密码，透明升级忽略错误 | 测试库插入明文密码；登录当前可成功 | G01 拒绝明文，提供明确重置路径，不静默写旧密码 | 已修：拒绝明文并提供事务化维护命令恢复；真实账号重置待人工 |
 | SEC-006 P1 | `internal/middleware/auth.go:defaultAllowPath` 除两个排除项外放行全部 `/api/`，不区分方法 | 为新路径挂测试 handler，无权限用户也会获准 | G01 显式业务方法/路由模板清单，新增路由默认拒绝；资源级授权仍必需 | 已修：显式路由与即时权限读取，待审 |
 | SEC-007 P1 | `internal/auth/jwt.go:ParseToken` 不强制 exp，也未检查 user_id/subject 一致性 | 用测试密钥签无 exp/零 ID/不匹配 subject token | G01 必须过期时间及合法身份声明 | 已修：必需 exp/身份校验，待审 |
 | SEC-008 P1 | `auth_service.go:Logout` 忽略 Redis 删除错误；角色/禁用状态来自历史 JWT | Redis 断开后注销；登录后撤销角色/禁用再访问 | G01 注销错误传播、会话撤销/用户状态检查 | 已修：注销错误传播、实时身份与权限，待审 |
@@ -19,6 +19,8 @@
 | SEC-013 P1 | G01 初版自定义权限覆盖默认路由，导致 GET auth/me、POST auth/logout 被拒绝 | 真实 API 用户仅授予 GET files，me 返回 403；注销同受影响 | 在完整身份认证后独立允许精确方法/自身会话路由，业务与管理员权限不扩大 | 修复前已复现；修复后集成测试通过 |
 | SEC-014 P1 | JWT 仅含用户与秒级时间，相同用户同秒登录 token 相同，注销互相影响 | 真实重复登录返回同一 token；固定时刻签发测试 | crypto/rand 256-bit JTI；独立 Redis 会话与单会话注销验证 | 修复前已复现；修复后集成测试通过 |
 | SEC-015 P1 | 登录入口未限流，Gin 默认相信任意代理转发头 | 同一实际 IP 在两实例并发 40 次、变更转发头；Redis 不可用仍进入认证 | 登录前 Redis 原子窗口、规范化实际 IP、429/Retry-After、Redis 故障 503、关闭任意可信代理 | 修复前已复现；修复后完整 12 项集成回归通过；分布式撞库仍不在本限流覆盖范围 |
+| SEC-016 P1 | 无密码恢复命令及用户全部会话撤销入口，无法安全处理历史账号或丢失设备登录 | 历史明文恢复、当前/旧/延迟签发 Token、多用户隔离、审计故障、旧结构迁移 | G01 auth_version + 受控密码恢复命令 + 精确 logout-all；密码/版本/审计同事务 | 代码已实现，详见 [账号恢复](ACCOUNT-RECOVERY.md)，真实账号未操作 |
+| SEC-017 P1 | config.Load 的 JWT_EXPIRE_HOURS 非数字输入静默回退为 168 小时 | 设置 one-hour，Validate 原先通过 | G01 错误文本/溢出转为无效值，由 Validate 在连接前拒绝 | 修复前测试失败，修复后通过；未设置仍为 168 小时 |
 | CLIENT-001 P2 | 旧 SettingsViewModel 对普通用户也请求需显式授权的权限汇总，并展示管理员操作入口 | 57 路由契约核对；真实 GET settings/permissions 对普通用户 403 | G07/G09 按服务端能力展示；不放宽后端管理员/跨用户边界，冻结 iOS 功能开发 | 已记录兼容性边界，待新客户端实现 |
 | CLIENT-002 P2 | 旧 SettingsViewModel.logout 忽略服务端撤销错误，直接清本地会话 | 静态调用链证据；后端错误已正确返回 503 | G07 保留可重试的远端注销并展示失败状态 | 已记录，待新客户端实现 |
 | DEP-001 P1 | 初次 govulncheck 报告 x/net、x/text、quic-go 可达漏洞；旧 Go 标准库另查 | `make vuln`；见 BASELINE | G01 按公告最小升级依赖和工具链，重新构建/扫描 | 已升级；可达/导入包告警 0，另 1 项未调用 OpenPGP 模块告警 |

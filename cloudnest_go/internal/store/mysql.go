@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strings"
 	"time"
 
+	"cloudenest_go/internal/auth"
 	"cloudenest_go/internal/config"
 	"cloudenest_go/model"
 
@@ -101,8 +101,18 @@ func BootstrapAdminUser(db *gorm.DB, password string) error {
 }
 
 func ValidateBootstrapPassword(password string) error {
-	if len(password) < 14 || len(password) > 72 || strings.TrimSpace(password) != password || strings.Contains(strings.ToLower(password), "change_me") {
-		return errors.New("CLOUDNEST_BOOTSTRAP_PASSWORD must contain 14 to 72 bytes without surrounding whitespace; use a unique random password")
+	return auth.ValidateNewPassword(password)
+}
+
+// CheckAuthSchema is read-only. Older schemas must be explicitly migrated before
+// serving requests; never issue sessions with a silently missing version column.
+func CheckAuthSchema(db *gorm.DB) error {
+	var count int64
+	if err := db.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'user' AND column_name = 'auth_version'").Scan(&count).Error; err != nil {
+		return err
+	}
+	if count != 1 {
+		return errors.New("authentication schema missing auth_version; back up and run the explicit migrate command before starting")
 	}
 	return nil
 }

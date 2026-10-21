@@ -180,3 +180,12 @@ func (h *AuthHandler) Me(c *gin.Context) {
 		"is_admin":    isAdmin,
 	}})
 }
+
+// LogoutAll only affects the authenticated account; never bind a target user ID.
+func (h *AuthHandler) LogoutAll(c *gin.Context) {
+	if err := h.Svc.LogoutAll(c.Request.Context(), c.GetInt64(middleware.ContextUserIDKey), c.ClientIP()); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "could not revoke all sessions; retry"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "all sessions revoked; sign in again"})
+}

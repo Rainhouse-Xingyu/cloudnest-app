@@ -72,7 +72,7 @@ func (s *AuthService) Login(ctx context.Context, username, password string) (Log
 		return LoginResult{}, contract.ErrInternal
 	}
 
-	token, expiresAt, err := auth.GenerateToken(s.cfg.JWTSecret, u.ID, u.Username, isAdmin, s.cfg.JWTTTL())
+	token, expiresAt, err := auth.GenerateToken(s.cfg.JWTSecret, u.ID, u.Username, isAdmin, u.AuthVersion, s.cfg.JWTTTL())
 	if err != nil {
 		return LoginResult{}, contract.ErrInternal
 	}
@@ -115,3 +115,25 @@ func isBcryptHash(raw string) bool {
 }
 
 // 管理员判断已下沉至 AuthRepository。
+
+// LogoutAll invalidates the caller's sessions durably, including old tokens and
+// tokens issued by a login that read an earlier account snapshot.
+func (s *AuthService) LogoutAll(ctx context.Context, userID int64, clientIP string) error {
+	return s.repo.RevokeUserSessions(ctx, userID, clientIP)
+}
+
+// ResetPasswordForOperator is used only by the local maintenance command. There
+// is no public HTTP password-recovery route or automatic legacy-password upgrade.
+func (s *AuthService) ResetPasswordForOperator(ctx context.Context, userID int64, expectedUsername, password string) error {
+	if userID <= 0 || expectedUsername == "" {
+		return errors.New("positive user ID and exact username are required")
+	}
+	if err := auth.ValidateNewPassword(password); err != nil {
+		return err
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return errors.New("password hashing failed")
+	}
+	return s.repo.ResetUserPassword(ctx, userID, expectedUsername, string(hash))
+}
