@@ -43,7 +43,8 @@ func main() {
 	if err := applyCLIOverrides(&cfg, args); err != nil {
 		log.Fatalf("启动参数错误: %v", err)
 	}
-	if maintenance.kind == "audit-file-names" || maintenance.kind == "migrate-file-names" {
+	databaseOnly := maintenance.kind == "audit-file-names" || maintenance.kind == "migrate-file-names" || maintenance.kind == "audit-storage-references" || maintenance.kind == "migrate-storage-references"
+	if databaseOnly {
 		err = cfg.ValidateDatabase()
 	} else {
 		err = cfg.Validate()
@@ -74,7 +75,7 @@ func main() {
 		log.Fatalf("初始化 MySQL 失败: %s", explainStartupError(err))
 	}
 
-	if maintenance.kind != "migrate" && maintenance.kind != "audit-file-names" && maintenance.kind != "migrate-file-names" {
+	if maintenance.kind != "migrate" && !databaseOnly {
 		if err := store.CheckAuthSchema(db); err != nil {
 			log.Fatal(err)
 		}
@@ -94,6 +95,23 @@ func main() {
 					err = store.ErrFileNameAuditFindings
 				}
 			}
+		case "audit-storage-references":
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
+			var report store.StorageReferenceAudit
+			report, err = store.AuditStorageReferences(ctx, db)
+			if err == nil {
+				encoder := json.NewEncoder(os.Stdout)
+				encoder.SetIndent("", "  ")
+				err = encoder.Encode(report)
+				if err == nil && report.HasFindings() {
+					err = store.ErrStorageReferenceFindings
+				}
+			}
+		case "migrate-storage-references":
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+			defer cancel()
+			err = store.MigrateStorageReferences(ctx, db)
 		case "migrate-file-names":
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 			defer cancel()
@@ -231,6 +249,8 @@ func printUsage() {
 	fmt.Println("  cloudnest reset-password <用户ID> <精确用户名>   从标准输入读取新密码并撤销该用户全部会话")
 	fmt.Println("  cloudnest audit-file-names      只读 JSON 名称冲突审计；发现问题时非零退出，不修改数据")
 	fmt.Println("  cloudnest migrate-file-names    审计通过后显式安装版本化活动文件名唯一约束（先备份并停旧实例）")
+	fmt.Println("  cloudnest audit-storage-references   只读 JSON 存储引用审计；包括回收站与旧版本，不读取或删除物理文件")
+	fmt.Println("  cloudnest migrate-storage-references 显式安装文件/版本到存储的 RESTRICT 外键（先备份并停旧实例）")
 	fmt.Println("  cloudnest migrate              显式应用模型结构（先备份数据库）")
 	fmt.Println("  cloudnest bootstrap-admin      仅初始化空用户表，密码从 CLOUDNEST_BOOTSTRAP_PASSWORD 读取")
 	fmt.Println("")

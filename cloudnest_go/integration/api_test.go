@@ -95,6 +95,9 @@ func newFixture(t *testing.T) *fixture {
 	if err := store.MigrateFileNames(context.Background(), db); err != nil {
 		t.Fatal(err)
 	}
+	if err := store.MigrateStorageReferences(context.Background(), db); err != nil {
+		t.Fatal(err)
+	}
 	if err := store.CheckFileSchema(db); err != nil {
 		t.Fatal(err)
 	}
