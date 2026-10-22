@@ -3,6 +3,7 @@ package mysql
 import (
 	"context"
 
+	"cloudenest_go/internal/quota"
 	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
 
@@ -28,6 +29,9 @@ func (r *SettingsRepo) ListSystemSettings(ctx context.Context) ([]model.SystemSe
 
 func (r *SettingsRepo) UpsertSystemSettings(ctx context.Context, items []contract.SettingUpsertItem) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := quota.LockPolicy(tx, true); err != nil {
+			return err
+		}
 		for _, item := range items {
 			var row model.SystemSetting
 			err := tx.Where("setting_key = ?", item.SettingKey).First(&row).Error
@@ -112,6 +116,9 @@ func (r *SettingsRepo) GetSystemSettingValue(ctx context.Context, key string) (s
 
 func (r *SettingsRepo) UpsertSystemSetting(ctx context.Context, key string, value string, desc string) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := quota.LockPolicy(tx, true); err != nil {
+			return err
+		}
 		var row model.SystemSetting
 		err := tx.Where("setting_key = ?", key).First(&row).Error
 		if err != nil {

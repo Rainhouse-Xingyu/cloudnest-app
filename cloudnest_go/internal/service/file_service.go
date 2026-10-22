@@ -5,12 +5,14 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
+	"cloudenest_go/internal/blob"
 	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
 
@@ -128,18 +130,10 @@ type FileUploadTaskSnapshot struct {
 }
 
 // FileBatchDownloadEntry 表示批量下载中一个可下载条目。
-type FileBatchDownloadEntry struct {
-	File        model.File
-	IsFolderZip bool
-	StoragePath string
-}
+type FileBatchDownloadEntry = contract.BatchDownloadEntry
 
 // FileFolderZipEntry 表示目录打包中的单个条目。
-type FileFolderZipEntry struct {
-	RelPath     string
-	StoragePath string
-	IsDir       bool
-}
+type FileFolderZipEntry = contract.FolderZipEntry
 
 // ListFiles 返回指定目录下可读文件列表。
 func (s *FileService) ListFiles(ctx context.Context, uid int64, parentID int64) ([]model.File, error) {
@@ -195,17 +189,9 @@ func (s *FileService) CreateFolder(ctx context.Context, uid int64, name string, 
 		}
 	}
 
-	existed, err := s.fileRepo.HasActiveNameConflict(ctx, parentID, name, nil)
-	if err != nil {
-		return model.File{}, err
-	}
-	if existed {
-		return model.File{}, ErrFileNameConflict
-	}
-
 	folder, err := s.fileRepo.CreateFolderRecord(ctx, uid, name, parentID)
 	if err != nil {
-		return model.File{}, err
+		return model.File{}, translateFileMutationError(err)
 	}
 	_ = s.logOperation(ctx, uid, &folder.ID, "create_folder", "success", fmt.Sprintf("parent_id=%d", parentID), clientIP)
 	return folder, nil
@@ -234,19 +220,11 @@ func (s *FileService) RenameFile(ctx context.Context, uid int64, fileID int64, n
 		return model.File{}, err
 	}
 
-	excludeID := f.ID
-	existed, err := s.fileRepo.HasActiveNameConflict(ctx, f.ParentID, name, &excludeID)
+	renamed, err := s.fileRepo.RenameFile(ctx, uid, f.ID, name)
 	if err != nil {
-		return model.File{}, err
+		return model.File{}, translateFileMutationError(err)
 	}
-	if existed {
-		return model.File{}, ErrFileNameConflict
-	}
-
-	if err := s.fileRepo.UpdateFileName(ctx, f.ID, name); err != nil {
-		return model.File{}, err
-	}
-	f.Filename = name
+	f = renamed
 	_ = s.logOperation(ctx, uid, &f.ID, "rename", "success", "renamed file", clientIP)
 	return f, nil
 }
@@ -279,8 +257,8 @@ func (s *FileService) DeleteFile(ctx context.Context, uid int64, fileID int64, c
 		}
 	}
 
-	if err := s.fileRepo.SoftDeleteFileWithLivePhotoCleanup(ctx, f.ID); err != nil {
-		return err
+	if err := s.fileRepo.SoftDeleteFileWithLivePhotoCleanup(ctx, uid, f.ID); err != nil {
+		return translateFileMutationError(err)
 	}
 	_ = s.logOperation(ctx, uid, &f.ID, "delete", "success", "moved to recycle bin", clientIP)
 	return nil
@@ -289,15 +267,24 @@ func (s *FileService) DeleteFile(ctx context.Context, uid int64, fileID int64, c
 // InitUpload 初始化上传任务，支持续传查询。
 func (s *FileService) InitUpload(ctx context.Context, uid int64, in FileUploadInitInput) (FileUploadInitResult, error) {
 	in.Filename = strings.TrimSpace(in.Filename)
+	if err := contract.ValidateFileName(in.Filename); err != nil {
+		return FileUploadInitResult{}, err
+	}
 	in.UploadID = strings.TrimSpace(in.UploadID)
 	if in.Filename == "" || in.TotalSize <= 0 || in.ParentID < 0 {
 		return FileUploadInitResult{}, fmt.Errorf("invalid upload parameters")
 	}
 
+	if in.ChunkSize < 0 || in.TotalChunks < 0 {
+		return FileUploadInitResult{}, contract.ErrInvalidInput
+	}
 	if in.ChunkSize <= 0 {
 		if v, ok, err := s.getSystemSettingInt64(ctx, "upload_default_chunk_size_mb"); err != nil {
 			return FileUploadInitResult{}, err
 		} else if ok && v > 0 {
+			if v > 1024 {
+				return FileUploadInitResult{}, contract.ErrQuotaAccounting
+			}
 			in.ChunkSize = int(v * 1024 * 1024)
 		}
 	}
@@ -305,12 +292,19 @@ func (s *FileService) InitUpload(ctx context.Context, uid int64, in FileUploadIn
 		in.ChunkSize = 4 * 1024 * 1024
 	}
 
-	calculatedTotalChunks := int((in.TotalSize + int64(in.ChunkSize) - 1) / int64(in.ChunkSize))
+	if in.ChunkSize > math.MaxInt32 {
+		return FileUploadInitResult{}, contract.ErrInvalidInput
+	}
+	calculated := 1 + (in.TotalSize-1)/int64(in.ChunkSize)
+	if calculated > math.MaxInt32 {
+		return FileUploadInitResult{}, contract.ErrInvalidInput
+	}
+	calculatedTotalChunks := int(calculated)
 	if in.TotalChunks <= 0 {
 		in.TotalChunks = calculatedTotalChunks
 	}
-	if in.TotalChunks <= 0 {
-		return FileUploadInitResult{}, fmt.Errorf("invalid total_chunks")
+	if in.TotalChunks != calculatedTotalChunks {
+		return FileUploadInitResult{}, contract.ErrInvalidInput
 	}
 
 	if in.ParentID > 0 {
@@ -331,6 +325,9 @@ func (s *FileService) InitUpload(ctx context.Context, uid int64, in FileUploadIn
 			}
 			return FileUploadInitResult{}, err
 		}
+		if task.ParentID != in.ParentID || task.Filename != in.Filename || task.TotalSize == nil || *task.TotalSize != in.TotalSize || task.ChunkSize == nil || *task.ChunkSize != in.ChunkSize || task.TotalChunks == nil || *task.TotalChunks != in.TotalChunks {
+			return FileUploadInitResult{}, contract.ErrUploadContract
+		}
 		return FileUploadInitResult{
 			UploadID:       task.UploadID,
 			UploadedChunks: chunkIndexes,
@@ -345,6 +342,7 @@ func (s *FileService) InitUpload(ctx context.Context, uid int64, in FileUploadIn
 	chunkSizeCopy := in.ChunkSize
 	totalChunksCopy := in.TotalChunks
 	task := model.UploadTask{
+		ContractVersion: 1, ReservedBytes: in.TotalSize, ParentID: in.ParentID,
 		UploadID:    uploadID,
 		UserID:      &uidCopy,
 		Filename:    in.Filename,
@@ -361,8 +359,11 @@ func (s *FileService) InitUpload(ctx context.Context, uid int64, in FileUploadIn
 
 // ValidateUploadChunk 校验分片上传任务归属与状态。
 func (s *FileService) ValidateUploadChunk(ctx context.Context, uid int64, uploadID string, chunkIndex int) (model.UploadTask, error) {
-	task, err := s.fileRepo.GetUploadTaskByUploadID(ctx, uploadID)
+	task, err := s.fileRepo.GetUploadTaskByUploadID(ctx, uid, uploadID)
 	if err != nil {
+		if errors.Is(err, contract.ErrForbidden) {
+			return model.UploadTask{}, ErrFilePermissionDenied
+		}
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return model.UploadTask{}, ErrUploadTaskNotFound
 		}
@@ -373,6 +374,9 @@ func (s *FileService) ValidateUploadChunk(ctx context.Context, uid int64, upload
 	}
 	if task.Status == 1 {
 		return model.UploadTask{}, ErrUploadTaskCompleted
+	}
+	if task.Status != 0 {
+		return model.UploadTask{}, contract.ErrUploadContract
 	}
 	if task.TotalChunks != nil && chunkIndex >= *task.TotalChunks {
 		return model.UploadTask{}, ErrChunkIndexOutOfRange
@@ -401,8 +405,11 @@ func (s *FileService) PrepareCompleteUpload(ctx context.Context, uid int64, uplo
 		}
 	}
 
-	task, err := s.fileRepo.GetUploadTaskByUploadID(ctx, uploadID)
+	task, err := s.fileRepo.GetUploadTaskByUploadID(ctx, uid, uploadID)
 	if err != nil {
+		if errors.Is(err, contract.ErrForbidden) {
+			return FileUploadTaskSnapshot{}, ErrFilePermissionDenied
+		}
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return FileUploadTaskSnapshot{}, ErrUploadTaskNotFound
 		}
@@ -413,6 +420,12 @@ func (s *FileService) PrepareCompleteUpload(ctx context.Context, uid int64, uplo
 	}
 	if task.Status == 1 {
 		return FileUploadTaskSnapshot{}, ErrUploadTaskCompleted
+	}
+	if task.Status != 0 {
+		return FileUploadTaskSnapshot{}, contract.ErrUploadContract
+	}
+	if task.ParentID != parentID {
+		return FileUploadTaskSnapshot{}, contract.ErrUploadContract
 	}
 	if task.TotalChunks == nil || task.ChunkSize == nil || task.TotalSize == nil {
 		return FileUploadTaskSnapshot{}, ErrUploadMetaIncomplete
@@ -430,14 +443,23 @@ func (s *FileService) PrepareCompleteUpload(ctx context.Context, uid int64, uplo
 }
 
 // CompleteUpload 完成上传后写入 storage/file 及任务状态。
-func (s *FileService) CompleteUpload(ctx context.Context, uid int64, parentID int64, uploadID string, snapshot FileUploadTaskSnapshot, storagePath string, mergedSize int64, fileHash string, clientIP string) (model.File, error) {
-	createdFile, err := s.fileRepo.CompleteUploadPersist(ctx, uid, parentID, uploadID, snapshot.Task, snapshot.TotalChunk, storagePath, mergedSize, fileHash)
-	if err != nil {
-		return model.File{}, err
-	}
+func (s *FileService) CompleteUpload(ctx context.Context, uid int64, parentID int64, uploadID string, snapshot FileUploadTaskSnapshot, storagePath, storageRoot string, mergedSize int64, fileHash string, clientIP string) (contract.UploadCommit, error) {
+	return s.fileRepo.CompleteUploadPersist(ctx, uid, parentID, uploadID, snapshot.Task, snapshot.TotalChunk, storagePath, storageRoot, mergedSize, fileHash, clientIP)
+}
 
-	_ = s.logOperation(ctx, uid, &createdFile.ID, "upload_complete", "success", fmt.Sprintf("upload_id=%s", uploadID), clientIP)
-	return createdFile, nil
+func (s *FileService) ResolveFileVersion(ctx context.Context, uid, fileID int64, version int) (model.File, model.Storage, error) {
+	file, storage, err := s.fileRepo.ResolveFileVersion(ctx, uid, fileID, version)
+	if err != nil {
+		return model.File{}, model.Storage{}, err
+	}
+	storage, err = blob.Pin(ctx, storage)
+	if err != nil {
+		return model.File{}, model.Storage{}, err
+	}
+	if err := blob.VerifyStorageObject(ctx, storage); err != nil {
+		return model.File{}, model.Storage{}, err
+	}
+	return file, storage, nil
 }
 
 // UploadProgress 查询上传进度。
@@ -512,6 +534,10 @@ func (s *FileService) GetAccessibleFileAndStorage(ctx context.Context, uid int64
 	}
 
 	storage, err := s.fileRepo.GetStorageByID(ctx, *f.StorageID)
+	if err != nil {
+		return model.File{}, model.Storage{}, err
+	}
+	storage, err = blob.Pin(ctx, storage)
 	if err != nil {
 		return model.File{}, model.Storage{}, err
 	}
@@ -598,7 +624,7 @@ func (s *FileService) RestoreFromRecycleBin(ctx context.Context, uid int64, file
 
 // PermanentDeleteFromRecycleBin 彻底删除回收站条目。
 func (s *FileService) PermanentDeleteFromRecycleBin(ctx context.Context, uid int64, fileID int64, clientIP string) error {
-	err := s.fileRepo.PermanentDeleteFromRecycleBin(ctx, uid, fileID)
+	err := s.fileRepo.PermanentDeleteFromRecycleBin(ctx, uid, fileID, clientIP)
 	if err != nil {
 		switch {
 		case errors.Is(err, contract.ErrRecycleItemNotFound):
@@ -610,7 +636,6 @@ func (s *FileService) PermanentDeleteFromRecycleBin(ctx context.Context, uid int
 		}
 	}
 
-	_ = s.logOperation(ctx, uid, &fileID, "permanent_delete", "success", "delete from recycle bin", clientIP)
 	return nil
 }
 
@@ -682,41 +707,58 @@ func (s *FileService) GetPublicShareInfo(ctx context.Context, code string) (mode
 }
 
 // ResolvePublicShareDownload 获取公开分享下载目标（文件或目录）。
-func (s *FileService) ResolvePublicShareDownload(ctx context.Context, code string) (model.File, *model.Storage, error) {
-	_, file, err := s.resolveValidShare(ctx, code)
+func (s *FileService) ResolvePublicShareDownload(ctx context.Context, code string) (model.File, *model.Storage, int64, error) {
+	share, file, err := s.resolveValidShare(ctx, code)
 	if err != nil {
-		return model.File{}, nil, err
+		return model.File{}, nil, 0, err
 	}
 	if file.IsFolder == 1 {
-		return file, nil, nil
+		return file, nil, *share.UserID, nil
 	}
 	if file.StorageID == nil {
-		return model.File{}, nil, ErrStorageNotFound
+		return model.File{}, nil, 0, ErrStorageNotFound
 	}
 
 	storage, storageErr := s.fileRepo.GetStorageByID(ctx, *file.StorageID)
 	if storageErr != nil {
 		if errors.Is(storageErr, gorm.ErrRecordNotFound) {
-			return model.File{}, nil, ErrStorageNotFound
+			return model.File{}, nil, 0, ErrStorageNotFound
 		}
-		return model.File{}, nil, storageErr
+		return model.File{}, nil, 0, storageErr
+	}
+	storage, storageErr = blob.Pin(ctx, storage)
+	if storageErr != nil {
+		return model.File{}, nil, 0, storageErr
 	}
 	if _, err := os.Stat(storage.FilePath); err != nil {
-		return model.File{}, nil, ErrPhysicalFileNotFound
+		return model.File{}, nil, 0, ErrPhysicalFileNotFound
 	}
 
-	return file, &storage, nil
+	return file, &storage, *share.UserID, nil
 }
 
-// CollectBatchDownloadEntries 收集批量下载的可下载条目（无权限或异常条目会被跳过）。
+// CollectBatchDownloadEntries 在一致快照中验证批量下载清单，任何失败均中止。
 func (s *FileService) CollectBatchDownloadEntries(ctx context.Context, uid int64, fileIDs []int64) ([]FileBatchDownloadEntry, error) {
-	rows, err := s.fileRepo.CollectBatchDownloadEntries(ctx, uid, fileIDs)
+	entries, err := s.fileRepo.CollectBatchDownloadEntries(ctx, uid, fileIDs)
 	if err != nil {
 		return nil, err
 	}
-	entries := make([]FileBatchDownloadEntry, 0, len(rows))
-	for _, row := range rows {
-		entries = append(entries, FileBatchDownloadEntry{File: row.File, IsFolderZip: row.IsFolderZip, StoragePath: row.StoragePath})
+	for i := range entries {
+		entry := &entries[i]
+		if entry.IsFolderZip {
+			if err := s.pinArchiveEntries(ctx, entry.FolderEntries); err != nil {
+				return nil, err
+			}
+		} else {
+			if entry.File.StorageID == nil {
+				return nil, gorm.ErrRecordNotFound
+			}
+			path, err := s.pinnedRegularPath(ctx, *entry.File.StorageID)
+			if err != nil {
+				return nil, err
+			}
+			entry.StoragePath = path
+		}
 	}
 	return entries, nil
 }
@@ -781,7 +823,7 @@ func (s *FileService) GetStorageByID(ctx context.Context, storageID int64) (mode
 		}
 		return model.Storage{}, err
 	}
-	return storage, nil
+	return blob.Pin(ctx, storage)
 }
 
 // RecordOperation 写入操作日志。
@@ -824,59 +866,14 @@ func (s *FileService) BatchDeleteFiles(ctx context.Context, uid int64, fileIDs [
 }
 
 // CollectFolderZipEntries 收集目录下载所需的 zip 条目。
-func (s *FileService) CollectFolderZipEntries(ctx context.Context, root model.File) ([]FileFolderZipEntry, error) {
-	type queueNode struct {
-		FolderID int64
-		RelPath  string
+func (s *FileService) CollectFolderZipEntries(ctx context.Context, uid, rootID int64) ([]FileFolderZipEntry, error) {
+	entries, err := s.fileRepo.CollectFolderZipEntries(ctx, uid, rootID)
+	if err != nil {
+		return nil, err
 	}
-
-	entries := make([]FileFolderZipEntry, 0)
-	storageCache := make(map[int64]model.Storage)
-	queue := []queueNode{{FolderID: root.ID, RelPath: sanitizeFileNameInService(root.Filename)}}
-
-	for len(queue) > 0 {
-		node := queue[0]
-		queue = queue[1:]
-
-		children, err := s.fileRepo.ListActiveChildrenByParent(ctx, node.FolderID)
-		if err != nil {
-			return nil, err
-		}
-
-		if len(children) == 0 {
-			entries = append(entries, FileFolderZipEntry{RelPath: node.RelPath, IsDir: true})
-			continue
-		}
-
-		for _, child := range children {
-			childRelPath := filepath.ToSlash(filepath.Join(node.RelPath, sanitizeFileNameInService(child.Filename)))
-			if child.IsFolder == 1 {
-				queue = append(queue, queueNode{FolderID: child.ID, RelPath: childRelPath})
-				continue
-			}
-			if child.StorageID == nil {
-				continue
-			}
-
-			storage, ok := storageCache[*child.StorageID]
-			if !ok {
-				storage, err = s.GetStorageByID(ctx, *child.StorageID)
-				if err != nil {
-					if errors.Is(err, ErrStorageNotFound) {
-						continue
-					}
-					return nil, err
-				}
-				storageCache[*child.StorageID] = storage
-			}
-
-			if _, err := os.Stat(storage.FilePath); err != nil {
-				continue
-			}
-			entries = append(entries, FileFolderZipEntry{RelPath: childRelPath, StoragePath: storage.FilePath})
-		}
+	if err := s.pinArchiveEntries(ctx, entries); err != nil {
+		return nil, err
 	}
-
 	return entries, nil
 }
 
@@ -1173,15 +1170,6 @@ func parseHHMMToMinuteInService(v string) (int, bool) {
 	return h*60 + m, true
 }
 
-func sanitizeFileNameInService(name string) string {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return "unnamed.bin"
-	}
-	replacer := strings.NewReplacer("/", "_", "\\", "_", "..", "_", " ", "_")
-	return replacer.Replace(name)
-}
-
 func isLivePhotoImageExtInService(ext string) bool {
 	images := map[string]bool{"jpg": true, "jpeg": true, "heic": true}
 	return images[ext]
@@ -1190,4 +1178,58 @@ func isLivePhotoImageExtInService(ext string) bool {
 func isLivePhotoVideoExtInService(ext string) bool {
 	videos := map[string]bool{"mov": true, "mp4": true, "m4v": true}
 	return videos[ext]
+}
+
+// Consistent transport errors for mutations that recheck state under a DB lock.
+func translateFileMutationError(err error) error {
+	switch {
+	case errors.Is(err, contract.ErrForbidden):
+		return ErrFilePermissionDenied
+	case errors.Is(err, contract.ErrConflict):
+		return ErrFileNameConflict
+	case errors.Is(err, contract.ErrTargetNotFound):
+		return ErrTargetFolderNotFound
+	case errors.Is(err, contract.ErrTargetNotFolder):
+		return ErrTargetNotFolder
+	case errors.Is(err, contract.ErrFolderNotEmpty):
+		return ErrFileFolderNotEmpty
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		return ErrFileNotFound
+	default:
+		return err
+	}
+}
+
+// Metadata/ACL snapshots finish before lease transactions begin. This avoids
+// holding one pool connection while waiting for another, including pool size 1.
+func (s *FileService) pinArchiveEntries(ctx context.Context, entries []FileFolderZipEntry) error {
+	for i := range entries {
+		if entries[i].IsDir {
+			continue
+		}
+		path, err := s.pinnedRegularPath(ctx, entries[i].StorageID)
+		if err != nil {
+			return err
+		}
+		entries[i].StoragePath = path
+	}
+	return nil
+}
+func (s *FileService) pinnedRegularPath(ctx context.Context, id int64) (string, error) {
+	storage, err := s.GetStorageByID(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Stat(storage.FilePath)
+	if err != nil {
+		return "", err
+	}
+	if !info.Mode().IsRegular() {
+		return "", contract.ErrConflict
+	}
+	return storage.FilePath, nil
+}
+
+func (s *FileService) CancelUpload(ctx context.Context, uid int64, id, ip string) error {
+	return s.fileRepo.CancelUploadTask(ctx, uid, id, ip)
 }

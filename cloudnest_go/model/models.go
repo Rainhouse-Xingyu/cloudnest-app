@@ -44,16 +44,50 @@ func (UserRole) TableName() string {
 
 // Storage 存储表
 type Storage struct {
-	ID         int64     `gorm:"primaryKey;autoIncrement" json:"id"`
-	FileHash   string    `gorm:"type:char(64);not null;unique" json:"file_hash"`
-	FilePath   string    `gorm:"type:varchar(500);not null" json:"file_path"`
-	FileSize   *int64    `gorm:"type:bigint" json:"file_size"`
-	CreateTime time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP" json:"create_time"`
+	Managed       bool       `gorm:"not null;default:false;index:idx_storage_gc,priority:1" json:"-"`
+	ManagedRoot   string     `gorm:"type:varchar(500);not null;default:''" json:"-"`
+	ManagedPath   string     `gorm:"type:varchar(500);not null;default:''" json:"-"`
+	OrphanedAt    *time.Time `gorm:"type:datetime(6)" json:"-"`
+	GCToken       string     `gorm:"type:char(64);not null;default:''" json:"-"`
+	GCPath        string     `gorm:"type:varchar(500);not null;default:''" json:"-"`
+	QuarantinedAt *time.Time `gorm:"type:datetime(6)" json:"-"`
+	State         string     `gorm:"type:varchar(24);not null;default:active;index:idx_storage_gc,priority:2" json:"-"`
+	ID            int64      `gorm:"primaryKey;autoIncrement" json:"id"`
+	FileHash      string     `gorm:"type:char(64);not null;unique" json:"file_hash"`
+	FilePath      string     `gorm:"type:varchar(500);not null" json:"file_path"`
+	FileSize      *int64     `gorm:"type:bigint" json:"file_size"`
+	CreateTime    time.Time  `gorm:"type:datetime;default:CURRENT_TIMESTAMP" json:"create_time"`
 }
 
 func (Storage) TableName() string {
 	return "storage"
 }
+
+// StorageReadLease is internal retention metadata, never a client capability.
+type StorageReadLease struct {
+	Token     string    `gorm:"type:char(64);primaryKey" json:"-"`
+	StorageID int64     `gorm:"not null;index" json:"-"`
+	ExpiresAt time.Time `gorm:"type:datetime(6);not null;index" json:"-"`
+	Storage   Storage   `gorm:"foreignKey:StorageID;references:ID;constraint:OnUpdate:RESTRICT,OnDelete:RESTRICT" json:"-"`
+}
+
+func (StorageReadLease) TableName() string { return "storage_read_lease" }
+
+// StorageGarbage survives parent removal. Retained entries are never unlinked.
+type StorageGarbage struct {
+	Token        string     `gorm:"type:char(64);primaryKey" json:"-"`
+	StorageID    int64      `gorm:"not null;index" json:"-"`
+	Root         string     `gorm:"type:varchar(500);not null" json:"-"`
+	OriginalPath string     `gorm:"type:varchar(500);not null" json:"-"`
+	TrashPath    string     `gorm:"type:varchar(500);not null" json:"-"`
+	FileHash     string     `gorm:"type:char(64);not null" json:"-"`
+	FileSize     int64      `gorm:"not null" json:"-"`
+	Status       string     `gorm:"type:varchar(24);not null;index" json:"-"`
+	CreatedAt    time.Time  `gorm:"type:datetime(6);not null;default:CURRENT_TIMESTAMP(6)" json:"-"`
+	CompletedAt  *time.Time `gorm:"type:datetime(6)" json:"-"`
+}
+
+func (StorageGarbage) TableName() string { return "storage_garbage" }
 
 // Workspace 工作区
 type Workspace struct {
@@ -105,21 +139,46 @@ func (UploadChunk) TableName() string {
 
 // UploadTask 分片上传任务
 type UploadTask struct {
-	ID             int64     `gorm:"primaryKey;autoIncrement" json:"id"`
-	UploadID       string    `gorm:"type:varchar(100);not null;unique" json:"upload_id"`
-	UserID         *int64    `gorm:"type:bigint" json:"user_id"`
-	Filename       string    `gorm:"type:varchar(255)" json:"filename"`
-	TotalSize      *int64    `gorm:"type:bigint" json:"total_size"`
-	ChunkSize      *int      `gorm:"type:int" json:"chunk_size"`
-	TotalChunks    *int      `gorm:"type:int" json:"total_chunks"`
-	UploadedChunks int       `gorm:"type:int;default:0" json:"uploaded_chunks"`
-	Status         int8      `gorm:"type:tinyint;default:0;comment:0上传中 1完成" json:"status"`
-	CreateTime     time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP" json:"create_time"`
+	ContractVersion int16      `gorm:"type:smallint;not null;default:0;index:idx_upload_quota,priority:2" json:"-"`
+	ReservedBytes   int64      `gorm:"not null;default:0" json:"-"`
+	ParentID        int64      `gorm:"not null;default:0" json:"parent_id"`
+	ExpiresAt       *time.Time `gorm:"type:datetime(6);index;index:idx_upload_quota,priority:4" json:"expires_at,omitempty"`
+	ID              int64      `gorm:"primaryKey;autoIncrement" json:"id"`
+	UploadID        string     `gorm:"type:varchar(100);not null;unique" json:"upload_id"`
+	UserID          *int64     `gorm:"type:bigint;index:idx_upload_quota,priority:1" json:"user_id"`
+	Filename        string     `gorm:"type:varchar(255)" json:"filename"`
+	TotalSize       *int64     `gorm:"type:bigint" json:"total_size"`
+	ChunkSize       *int       `gorm:"type:int" json:"chunk_size"`
+	TotalChunks     *int       `gorm:"type:int" json:"total_chunks"`
+	UploadedChunks  int        `gorm:"type:int;default:0" json:"uploaded_chunks"`
+	Status          int8       `gorm:"type:tinyint;default:0;index:idx_upload_quota,priority:3;comment:0上传中 1完成 2暂停 3取消 4过期" json:"status"`
+	CreateTime      time.Time  `gorm:"type:datetime;default:CURRENT_TIMESTAMP" json:"create_time"`
 }
 
 func (UploadTask) TableName() string {
 	return "upload_task"
 }
+
+// StorageQuotaPolicy serializes policy edits with concurrent allocations.
+type StorageQuotaPolicy struct {
+	ID int8 `gorm:"type:tinyint;primaryKey;autoIncrement:false"`
+}
+
+func (StorageQuotaPolicy) TableName() string { return "storage_quota_policy" }
+
+// UserStorageLedger is a transactional cache, recomputed from retained refs and
+// live reservations. It is not an ownership authority or a physical disk meter.
+type UserStorageLedger struct {
+	UserID          int64     `gorm:"type:bigint;primaryKey;autoIncrement:false" json:"-"`
+	UsedBytes       int64     `gorm:"not null;default:0" json:"-"`
+	ReservedBytes   int64     `gorm:"not null;default:0" json:"-"`
+	UnmeteredRefs   int64     `gorm:"not null;default:0" json:"-"`
+	AccountingValid bool      `gorm:"not null;default:false" json:"-"`
+	Revision        uint64    `gorm:"type:bigint unsigned;not null;default:0" json:"-"`
+	UpdatedAt       time.Time `gorm:"type:datetime(6);not null;default:CURRENT_TIMESTAMP(6)" json:"-"`
+}
+
+func (UserStorageLedger) TableName() string { return "user_storage_ledger" }
 
 // UserPathPermission 用户路径权限
 type UserPathPermission struct {
@@ -136,14 +195,16 @@ func (UserPathPermission) TableName() string {
 
 // FileVersion 文件版本
 type FileVersion struct {
-	ID         int64     `gorm:"primaryKey;autoIncrement" json:"id"`
-	FileID     int64     `gorm:"not null;uniqueIndex:idx_file_version" json:"file_id"` // Combined unique index simulation
-	Version    int       `gorm:"not null;uniqueIndex:idx_file_version" json:"version"`
-	StorageID  int64     `gorm:"not null" json:"storage_id"`
-	Size       *int64    `gorm:"type:bigint" json:"size"`
-	CreateUser *int64    `gorm:"type:bigint" json:"create_user"`
-	Comment    string    `gorm:"type:varchar(255)" json:"comment"`
-	CreateTime time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP" json:"create_time"`
+	ID             int64     `gorm:"primaryKey;autoIncrement" json:"id"`
+	FileID         int64     `gorm:"not null;uniqueIndex:idx_file_version" json:"file_id"` // Combined unique index simulation
+	Version        int       `gorm:"not null;uniqueIndex:idx_file_version" json:"version"`
+	SourceVerified bool      `gorm:"not null;default:false" json:"source_verified"`
+	FileType       string    `gorm:"type:varchar(50)" json:"file_type"`
+	StorageID      int64     `gorm:"not null" json:"storage_id"`
+	Size           *int64    `gorm:"type:bigint" json:"size"`
+	CreateUser     *int64    `gorm:"type:bigint" json:"create_user"`
+	Comment        string    `gorm:"type:varchar(255)" json:"comment"`
+	CreateTime     time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP" json:"create_time"`
 }
 
 func (FileVersion) TableName() string {
@@ -297,3 +358,11 @@ type SystemSetting struct {
 func (SystemSetting) TableName() string {
 	return "system_setting"
 }
+
+// FileNamespace is a persistent mutex row, not a file or a user-visible directory.
+// Every name-creating mutation must lock the same root-owner or parent-folder key.
+type FileNamespace struct {
+	Key string `gorm:"column:namespace_key;type:varchar(64);primaryKey" json:"-"`
+}
+
+func (FileNamespace) TableName() string { return "file_namespace" }

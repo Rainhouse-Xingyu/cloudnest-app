@@ -17,6 +17,7 @@ import (
 	"image/draw"
 	"image/jpeg"
 	"io"
+	"log"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -26,9 +27,11 @@ import (
 	"strings"
 	"time"
 
+	"cloudenest_go/internal/blob"
 	"cloudenest_go/internal/config"
 	"cloudenest_go/internal/middleware"
 	"cloudenest_go/internal/service"
+	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
 
 	"github.com/gin-gonic/gin"
@@ -41,6 +44,7 @@ import (
 
 // FileHandler handles file system related APIs.
 type FileHandler struct {
+	Blobs      *blob.Manager
 	RDB        *redis.Client
 	Cfg        config.Config
 	HTTPClient *http.Client
@@ -173,23 +177,8 @@ func (h *FileHandler) CreateFolder(c *gin.Context) {
 
 	folder, err := h.Svc.CreateFolder(c.Request.Context(), uid, req.Name, req.ParentID, c.ClientIP())
 	if err != nil {
-		switch {
-		case errors.Is(err, service.ErrFilePermissionDenied):
-			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-			return
-		case errors.Is(err, service.ErrFileParentNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "parent not found"})
-			return
-		case errors.Is(err, service.ErrFileParentNotFolder):
-			c.JSON(http.StatusBadRequest, gin.H{"error": "parent is not folder"})
-			return
-		case errors.Is(err, service.ErrFileNameConflict):
-			c.JSON(http.StatusConflict, gin.H{"error": "name already exists in this folder"})
-			return
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "create folder failed"})
-			return
-		}
+		writeFileMutationError(c, err, "create folder failed")
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"item": folder})
@@ -216,20 +205,8 @@ func (h *FileHandler) Rename(c *gin.Context) {
 
 	f, err := h.Svc.RenameFile(c.Request.Context(), uid, fileID, req.Name, c.ClientIP())
 	if err != nil {
-		switch {
-		case errors.Is(err, service.ErrFilePermissionDenied):
-			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-			return
-		case errors.Is(err, service.ErrFileNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
-			return
-		case errors.Is(err, service.ErrFileNameConflict):
-			c.JSON(http.StatusConflict, gin.H{"error": "name already exists in this folder"})
-			return
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "rename failed"})
-			return
-		}
+		writeFileMutationError(c, err, "rename failed")
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"item": f})
@@ -245,20 +222,8 @@ func (h *FileHandler) Delete(c *gin.Context) {
 
 	err = h.Svc.DeleteFile(c.Request.Context(), uid, fileID, c.ClientIP())
 	if err != nil {
-		switch {
-		case errors.Is(err, service.ErrFilePermissionDenied):
-			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-			return
-		case errors.Is(err, service.ErrFileNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
-			return
-		case errors.Is(err, service.ErrFileFolderNotEmpty):
-			c.JSON(http.StatusConflict, gin.H{"error": "folder is not empty"})
-			return
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "delete failed"})
-			return
-		}
+		writeFileMutationError(c, err, "delete failed")
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
@@ -289,6 +254,14 @@ func (h *FileHandler) InitUpload(c *gin.Context) {
 		TotalChunks: req.TotalChunks,
 	})
 	if err != nil {
+		if isUploadContractError(err) {
+			writeFileMutationError(c, err, "upload rejected")
+			return
+		}
+		if errors.Is(err, contract.ErrInvalidInput) {
+			writeFileMutationError(c, err, "invalid upload name")
+			return
+		}
 		switch {
 		case errors.Is(err, service.ErrFilePermissionDenied):
 			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
@@ -343,6 +316,10 @@ func (h *FileHandler) UploadChunk(c *gin.Context) {
 
 	task, err := h.Svc.ValidateUploadChunk(c.Request.Context(), uid, uploadID, chunkIndex)
 	if err != nil {
+		if isUploadContractError(err) {
+			writeFileMutationError(c, err, "upload rejected")
+			return
+		}
 		switch {
 		case errors.Is(err, service.ErrUploadTaskNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "upload task not found"})
@@ -395,6 +372,10 @@ func (h *FileHandler) UploadChunk(c *gin.Context) {
 
 	err = h.Svc.MarkChunkUploaded(c.Request.Context(), task, uploadID, chunkIndex, chunkFile.Size, chunkPath)
 	if err != nil {
+		if isUploadContractError(err) {
+			writeFileMutationError(c, err, "chunk rejected")
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "update chunk status failed"})
 		return
 	}
@@ -419,6 +400,10 @@ func (h *FileHandler) CompleteUpload(c *gin.Context) {
 
 	snapshot, err := h.Svc.PrepareCompleteUpload(c.Request.Context(), uid, req.UploadID, req.ParentID)
 	if err != nil {
+		if isUploadContractError(err) {
+			writeFileMutationError(c, err, "upload rejected")
+			return
+		}
 		switch {
 		case errors.Is(err, service.ErrFilePermissionDenied):
 			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
@@ -445,19 +430,28 @@ func (h *FileHandler) CompleteUpload(c *gin.Context) {
 		}
 	}
 
-	storagePath, mergedSize, fileHash, err := h.mergeChunks(req.UploadID, snapshot.Task.Filename, snapshot.TotalChunk)
+	storagePath, mergedSize, fileHash, err := h.mergeChunks(c.Request.Context(), req.UploadID, snapshot.TotalChunk)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "merge chunks failed"})
 		return
 	}
 
-	createdFile, err := h.Svc.CompleteUpload(c.Request.Context(), uid, req.ParentID, req.UploadID, snapshot, storagePath, mergedSize, fileHash, c.ClientIP())
+	committed, err := h.Svc.CompleteUpload(c.Request.Context(), uid, req.ParentID, req.UploadID, snapshot, storagePath, h.storageBaseDir(), mergedSize, fileHash, c.ClientIP())
+	if committed.CandidateDisposable {
+		if cleanupErr := os.Remove(storagePath); cleanupErr != nil && !errors.Is(cleanupErr, os.ErrNotExist) {
+			h.recordUploadCleanupFailure(c.Request.Context(), uid, nil, "upload_candidate_cleanup", c.ClientIP())
+		}
+	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "complete upload failed"})
+		writeFileMutationError(c, err, "complete upload failed")
 		return
 	}
 
-	_ = os.RemoveAll(filepath.Join(h.chunkBaseDir(), req.UploadID))
+	createdFile := committed.File
+
+	if err := os.RemoveAll(filepath.Join(h.chunkBaseDir(), req.UploadID)); err != nil {
+		h.recordUploadCleanupFailure(c.Request.Context(), uid, &createdFile.ID, "upload_chunk_cleanup", c.ClientIP())
+	}
 	// 上传成功后触发 AI 异步分析：自动生成 tags/description/ocr_text 并写入 ai_metadata。
 	h.triggerAsyncAutoAnalyze(createdFile, uid, c.ClientIP())
 	// 上传完成后尝试自动与同目录同名文件配对绑定 Live Photo（无阻塞失败）。
@@ -466,11 +460,25 @@ func (h *FileHandler) CompleteUpload(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"item": createdFile})
 }
 
+// Cleanup cannot undo a committed upload. Persist or report a pending cleanup
+// without including private paths or turning committed bytes into a failed task.
+func (h *FileHandler) recordUploadCleanupFailure(ctx context.Context, uid int64, fileID *int64, action, clientIP string) {
+	if err := h.Svc.RecordOperation(ctx, uid, fileID, action, "failed", "temporary upload cleanup pending", clientIP); err != nil {
+		log.Printf("upload cleanup pending action=%s user_id=%d audit_unavailable=true", action, uid)
+	}
+}
+
 // triggerAsyncAutoAnalyze 在后台执行文件自动分析，不阻塞上传接口响应。
 func (h *FileHandler) triggerAsyncAutoAnalyze(file model.File, userID int64, clientIP string) {
 	go func(f model.File, uid int64, ip string) {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer cancel()
+		ctx, scope := h.Blobs.Begin(ctx)
+		defer func() {
+			if err := scope.Close(); err != nil {
+				log.Print("background storage read lease cleanup pending")
+			}
+		}()
 
 		ai := &AIHandler{Cfg: h.Cfg, HTTPClient: h.HTTPClient, Svc: h.AISvc}
 		_ = ai.createAITask(ctx, uid, f.ID, "auto_analyze", "processing", "queued")
@@ -633,6 +641,10 @@ func (h *FileHandler) UploadProgress(c *gin.Context) {
 
 	res, err := h.Svc.UploadProgress(c.Request.Context(), uid, uploadID)
 	if err != nil {
+		if isUploadContractError(err) {
+			writeFileMutationError(c, err, "upload unavailable")
+			return
+		}
 		if errors.Is(err, service.ErrUploadTaskNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "upload task not found"})
 			return
@@ -693,6 +705,24 @@ func (h *FileHandler) Download(c *gin.Context) {
 	}
 }
 
+func (h *FileHandler) DownloadVersion(c *gin.Context) {
+	uid := c.GetInt64(middleware.ContextUserIDKey)
+	fileID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	version, parseErr := strconv.Atoi(c.Param("version"))
+	if err != nil || parseErr != nil || fileID <= 0 || version <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid version parameters"})
+		return
+	}
+	file, storage, err := h.Svc.ResolveFileVersion(c.Request.Context(), uid, fileID, version)
+	if err != nil {
+		writeFileMutationError(c, err, "download version failed")
+		return
+	}
+	if err := h.sendFileWithRateLimit(c, storage.FilePath, file.Filename, h.getDownloadRateBytesPerSec(c)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "download failed"})
+	}
+}
+
 // DownloadFolderZip 将文件夹递归打包为 zip 并下载。
 func (h *FileHandler) DownloadFolderZip(c *gin.Context) {
 	uid := c.GetInt64(middleware.ContextUserIDKey)
@@ -720,9 +750,9 @@ func (h *FileHandler) DownloadFolderZip(c *gin.Context) {
 		return
 	}
 
-	zipPath, err := h.createFolderZip(c.Request.Context(), folder)
+	zipPath, err := h.createFolderZip(c.Request.Context(), uid, folder)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "create zip failed"})
+		writeFileMutationError(c, err, "create zip failed")
 		return
 	}
 	defer os.Remove(zipPath)
@@ -775,6 +805,11 @@ func (h *FileHandler) BatchDownload(c *gin.Context) {
 		return
 	}
 
+	entries, err := h.Svc.CollectBatchDownloadEntries(c.Request.Context(), uid, ids)
+	if err != nil {
+		writeFileMutationError(c, err, "create zip failed")
+		return
+	}
 	tmpFile, err := os.CreateTemp("", "cloudnest-batch-*.zip")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "create zip failed"})
@@ -784,61 +819,38 @@ func (h *FileHandler) BatchDownload(c *gin.Context) {
 	defer os.Remove(zipPath)
 
 	zw := zip.NewWriter(tmpFile)
-
-	addFileToZip := func(entryName string, filePath string) error {
-		r, err := os.Open(filePath)
-		if err != nil {
-			return err
+	defer tmpFile.Close()
+	defer zw.Close()
+	usedNames := make(map[string]bool)
+	nextEntryName := func(name string) string {
+		ext := filepath.Ext(name)
+		stem := strings.TrimSuffix(name, ext)
+		candidate := name
+		for n := 1; usedNames[candidate]; n++ {
+			candidate = fmt.Sprintf("%s (%d)%s", stem, n, ext)
 		}
-		defer r.Close()
-
-		w, err := zw.Create(entryName)
-		if err != nil {
-			return err
-		}
-		_, err = io.Copy(w, r)
-		return err
+		usedNames[candidate] = true
+		return candidate
 	}
-
-	usedNames := make(map[string]int)
-	nextEntryName := func(raw string) string {
-		name := sanitizeFileName(raw)
-		if name == "" {
-			name = "item"
-		}
-		if n, ok := usedNames[name]; !ok {
-			usedNames[name] = 1
-			return name
-		} else {
-			usedNames[name] = n + 1
-			ext := filepath.Ext(name)
-			base := strings.TrimSuffix(name, ext)
-			return fmt.Sprintf("%s(%d)%s", base, n, ext)
-		}
-	}
-
-	entries, err := h.Svc.CollectBatchDownloadEntries(c.Request.Context(), uid, ids)
-	if err != nil {
-		_ = zw.Close()
-		_ = tmpFile.Close()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "create zip failed"})
-		return
-	}
-
 	for _, entry := range entries {
+		name := entry.File.Filename
+		source := entry.StoragePath
 		if entry.IsFolderZip {
-			folderZipPath, err := h.createFolderZip(c.Request.Context(), entry.File)
+			name += ".zip"
+			source, err = createFolderZipFromEntries(entry.FolderEntries)
 			if err != nil {
-				continue
+				writeFileMutationError(c, err, "create zip failed")
+				return
 			}
-			entryName := nextEntryName(entry.File.Filename) + ".zip"
-			_ = addFileToZip(entryName, folderZipPath)
-			_ = os.Remove(folderZipPath)
-			continue
 		}
-
-		entryName := nextEntryName(entry.File.Filename)
-		_ = addFileToZip(entryName, entry.StoragePath)
+		err = addZipFileFromPath(zw, nextEntryName(name), source)
+		if entry.IsFolderZip {
+			_ = os.Remove(source)
+		}
+		if err != nil {
+			writeFileMutationError(c, err, "create zip failed")
+			return
+		}
 	}
 
 	if err := zw.Close(); err != nil {
@@ -1316,7 +1328,7 @@ func (h *FileHandler) PublicShareDownload(c *gin.Context) {
 		return
 	}
 
-	file, storage, err := h.Svc.ResolvePublicShareDownload(c.Request.Context(), shareCode)
+	file, storage, creatorID, err := h.Svc.ResolvePublicShareDownload(c.Request.Context(), shareCode)
 	if err != nil {
 		if errors.Is(err, service.ErrStorageNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "storage record not found"})
@@ -1331,9 +1343,9 @@ func (h *FileHandler) PublicShareDownload(c *gin.Context) {
 	}
 
 	if file.IsFolder == 1 {
-		zipPath, err := h.createFolderZip(c.Request.Context(), file)
+		zipPath, err := h.createFolderZip(c.Request.Context(), creatorID, file)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "create zip failed"})
+			writeFileMutationError(c, err, "create zip failed")
 			return
 		}
 		defer os.Remove(zipPath)
@@ -1369,26 +1381,8 @@ func (h *FileHandler) Move(c *gin.Context) {
 
 	updated, err := h.Svc.MoveFiles(c.Request.Context(), uid, req.FileIDs, req.TargetParentID, c.ClientIP())
 	if err != nil {
-		switch {
-		case errors.Is(err, service.ErrFilePermissionDenied):
-			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-			return
-		case errors.Is(err, service.ErrTargetFolderNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "target folder not found"})
-			return
-		case errors.Is(err, service.ErrTargetNotFolder):
-			c.JSON(http.StatusBadRequest, gin.H{"error": "target is not folder"})
-			return
-		case errors.Is(err, service.ErrCannotMoveToItself), errors.Is(err, service.ErrCannotMoveToDesc):
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-			return
-		case errors.Is(err, service.ErrFileNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
-			return
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "move failed"})
-			return
-		}
+		writeFileMutationError(c, err, "move failed")
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"updated_ids": updated})
@@ -1411,17 +1405,8 @@ func (h *FileHandler) Copy(c *gin.Context) {
 
 	newIDs, err := h.Svc.CopyFiles(c.Request.Context(), uid, req.FileIDs, req.TargetParentID, c.ClientIP())
 	if err != nil {
-		switch {
-		case errors.Is(err, service.ErrFilePermissionDenied):
-			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-			return
-		case errors.Is(err, service.ErrFileNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
-			return
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "copy failed"})
-			return
-		}
+		writeFileMutationError(c, err, "copy failed")
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"new_ids": newIDs})
@@ -1451,17 +1436,8 @@ func (h *FileHandler) Restore(c *gin.Context) {
 
 	restored, err := h.Svc.RestoreFromRecycleBin(c.Request.Context(), uid, fileID, c.ClientIP())
 	if err != nil {
-		switch {
-		case errors.Is(err, service.ErrFilePermissionDenied):
-			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-			return
-		case errors.Is(err, service.ErrRecycleItemNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "recycle item not found"})
-			return
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "restore failed"})
-			return
-		}
+		writeFileMutationError(c, err, "restore failed")
+		return
 	}
 	// 恢复后尝试按同目录同名规则自动重建 Live Photo 绑定（无阻塞失败）。
 	_ = h.tryAutoBindLivePhotoForFile(c.Request.Context(), uid, restored, c.ClientIP())
@@ -1480,17 +1456,8 @@ func (h *FileHandler) PermanentDelete(c *gin.Context) {
 
 	err = h.Svc.PermanentDeleteFromRecycleBin(c.Request.Context(), uid, fileID, c.ClientIP())
 	if err != nil {
-		switch {
-		case errors.Is(err, service.ErrFilePermissionDenied):
-			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-			return
-		case errors.Is(err, service.ErrRecycleItemNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "recycle item not found"})
-			return
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "permanent delete failed"})
-			return
-		}
+		writeFileMutationError(c, err, "permanent delete failed")
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "permanently deleted"})
@@ -1533,43 +1500,98 @@ func (h *FileHandler) thumbBaseDir() string {
 	return filepath.Join(h.dataRootDir(), thumbSubDir)
 }
 
-func (h *FileHandler) mergeChunks(uploadID string, filename string, totalChunks int) (string, int64, string, error) {
-	dateDir := time.Now().Format("200601")
-	storageDir := filepath.Join(h.storageBaseDir(), dateDir)
-	if err := os.MkdirAll(storageDir, 0o755); err != nil {
+func (h *FileHandler) mergeChunks(ctx context.Context, uploadID string, totalChunks int) (path string, size int64, digest string, result error) {
+	if err := os.MkdirAll(h.storageBaseDir(), 0700); err != nil {
 		return "", 0, "", err
 	}
-
-	outputName := fmt.Sprintf("%s_%s", uploadID, sanitizeFileName(filename))
-	outputPath := filepath.Join(storageDir, outputName)
-	outFile, err := os.Create(outputPath)
+	root, err := blob.CanonicalRoot(h.storageBaseDir())
 	if err != nil {
 		return "", 0, "", err
 	}
-	defer outFile.Close()
-
-	hasher := sha256.New()
-	writer := io.MultiWriter(outFile, hasher)
-
+	relativeDir := filepath.Join(".managed-v1", time.Now().Format("200601"))
+	storageDir := filepath.Join(root, relativeDir)
+	anchored, err := os.OpenRoot(root)
+	if err != nil {
+		return "", 0, "", err
+	}
+	defer anchored.Close()
+	if err := blob.EnsurePrivateDir(anchored, relativeDir); err != nil {
+		return "", 0, "", err
+	}
+	token, err := blob.RandomToken()
+	if err != nil {
+		return "", 0, "", err
+	}
+	relativeCandidate := filepath.Join(relativeDir, "blob-"+token)
+	out, err := anchored.OpenFile(relativeCandidate, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		return "", 0, "", err
+	}
+	candidate := filepath.Join(root, relativeCandidate)
+	complete := false
+	closed := false
+	defer func() {
+		if !closed {
+			result = errors.Join(result, out.Close())
+		}
+		// Before any database call this path belongs only to this request.
+		if !complete {
+			if err := anchored.Remove(relativeCandidate); err != nil && !errors.Is(err, os.ErrNotExist) {
+				result = errors.Join(result, err)
+			}
+		}
+	}()
+	hash := sha256.New()
+	writer := io.MultiWriter(out, hash)
 	for i := 0; i < totalChunks; i++ {
-		chunkPath := filepath.Join(h.chunkBaseDir(), uploadID, fmt.Sprintf("%d.part", i))
-		inFile, err := os.Open(chunkPath)
+		in, err := os.Open(filepath.Join(h.chunkBaseDir(), uploadID, fmt.Sprintf("%d.part", i)))
 		if err != nil {
 			return "", 0, "", err
 		}
-		if _, err := io.Copy(writer, inFile); err != nil {
-			_ = inFile.Close()
-			return "", 0, "", err
+		n, copyErr := io.Copy(writer, &uploadContextReader{ctx: ctx, in: in})
+		closeErr := in.Close()
+		size += n
+		if copyErr != nil {
+			return "", 0, "", copyErr
 		}
-		_ = inFile.Close()
+		if closeErr != nil {
+			return "", 0, "", closeErr
+		}
 	}
-
-	stat, err := outFile.Stat()
-	if err != nil {
+	if err := out.Sync(); err != nil {
 		return "", 0, "", err
 	}
+	closeOutputErr := out.Close()
+	closed = true
+	if closeOutputErr != nil {
+		return "", 0, "", closeOutputErr
+	}
+	// Persist both the candidate entry and newly created namespace directories.
+	for _, path := range []string{storageDir, filepath.Dir(storageDir), root, filepath.Dir(root)} {
+		dir, err := os.Open(path)
+		if err != nil {
+			return "", 0, "", err
+		}
+		syncErr := dir.Sync()
+		closeErr := dir.Close()
+		if err := errors.Join(syncErr, closeErr); err != nil {
+			return "", 0, "", err
+		}
+	}
+	complete = true
+	return candidate, size, hex.EncodeToString(hash.Sum(nil)), nil
+}
 
-	return outputPath, stat.Size(), hex.EncodeToString(hasher.Sum(nil)), nil
+type uploadContextReader struct {
+	ctx context.Context
+	in  io.Reader
+}
+
+func (r *uploadContextReader) Read(p []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return r.in.Read(p)
 }
 
 func sanitizeFileName(name string) string {
@@ -2055,7 +2077,13 @@ func (h *FileHandler) sendFileWithRateLimit(c *gin.Context, filePath string, dow
 			expectedElapsed := time.Duration(float64(sent) / float64(bytesPerSec) * float64(time.Second))
 			actualElapsed := time.Since(start)
 			if expectedElapsed > actualElapsed {
-				time.Sleep(expectedElapsed - actualElapsed)
+				timer := time.NewTimer(expectedElapsed - actualElapsed)
+				select {
+				case <-c.Request.Context().Done():
+					timer.Stop()
+					return c.Request.Context().Err()
+				case <-timer.C:
+				}
 			}
 
 			if flusher, ok := c.Writer.(http.Flusher); ok {
@@ -2088,14 +2116,16 @@ func computeFileMD5Hex(filePath string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// zipQueueNode 用于文件夹广度遍历时保存节点路径信息。
-type zipQueueNode struct {
-	FolderID int64
-	RelPath  string
+// createFolderZip validates a complete authorized manifest before opening a ZIP.
+func (h *FileHandler) createFolderZip(ctx context.Context, uid int64, root model.File) (string, error) {
+	entries, err := h.Svc.CollectFolderZipEntries(ctx, uid, root.ID)
+	if err != nil {
+		return "", err
+	}
+	return createFolderZipFromEntries(entries)
 }
 
-// createFolderZip 递归读取目录树并生成临时 zip 文件。
-func (h *FileHandler) createFolderZip(ctx context.Context, root model.File) (string, error) {
+func createFolderZipFromEntries(entries []service.FileFolderZipEntry) (string, error) {
 	tmpFile, err := os.CreateTemp("", "cloudnest-folder-*.zip")
 	if err != nil {
 		return "", err
@@ -2107,12 +2137,6 @@ func (h *FileHandler) createFolderZip(ctx context.Context, root model.File) (str
 		_ = zw.Close()
 		_ = tmpFile.Close()
 	}()
-
-	entries, err := h.Svc.CollectFolderZipEntries(ctx, root)
-	if err != nil {
-		_ = os.Remove(zipPath)
-		return "", err
-	}
 
 	for _, entry := range entries {
 		if entry.IsDir {
@@ -2162,4 +2186,45 @@ func addZipFileFromPath(zw *zip.Writer, relPath string, sourcePath string) error
 
 	_, err = io.Copy(w, in)
 	return err
+}
+
+func writeFileMutationError(c *gin.Context, err error, fallback string) {
+	status, message := http.StatusInternalServerError, fallback
+	switch {
+	case errors.Is(err, contract.ErrQuotaExceeded):
+		status, message = http.StatusInsufficientStorage, "storage quota exceeded"
+	case errors.Is(err, contract.ErrQuotaAccounting):
+		status, message = http.StatusServiceUnavailable, "storage accounting unavailable"
+	case errors.Is(err, contract.ErrUploadContract):
+		status, message = http.StatusConflict, "upload contract changed, expired or not reserved"
+	case errors.Is(err, contract.ErrStorageIntegrity):
+		status, message = http.StatusConflict, "stored content failed integrity verification"
+	case errors.Is(err, contract.ErrForbidden), errors.Is(err, service.ErrFilePermissionDenied):
+		status, message = http.StatusForbidden, "permission denied"
+	case errors.Is(err, contract.ErrInvalidInput), errors.Is(err, contract.ErrTargetNotFolder), errors.Is(err, service.ErrTargetNotFolder), errors.Is(err, service.ErrFileParentNotFolder):
+		status, message = http.StatusBadRequest, "invalid name or target folder"
+	case errors.Is(err, os.ErrNotExist), errors.Is(err, gorm.ErrRecordNotFound), errors.Is(err, contract.ErrNotFound), errors.Is(err, contract.ErrTargetNotFound), errors.Is(err, service.ErrFileParentNotFound), errors.Is(err, service.ErrFileNotFound), errors.Is(err, service.ErrTargetFolderNotFound), errors.Is(err, service.ErrRecycleItemNotFound):
+		status, message = http.StatusNotFound, "file or folder not found"
+	case errors.Is(err, contract.ErrConflict), errors.Is(err, contract.ErrCannotMoveToItself), errors.Is(err, contract.ErrCannotMoveToDesc), errors.Is(err, contract.ErrFolderNotEmpty), errors.Is(err, service.ErrFileNameConflict), errors.Is(err, service.ErrCannotMoveToItself), errors.Is(err, service.ErrCannotMoveToDesc), errors.Is(err, service.ErrFileFolderNotEmpty):
+		status, message = http.StatusConflict, "file conflict; refresh and retry"
+	}
+	c.JSON(status, gin.H{"error": message})
+}
+
+func isUploadContractError(err error) bool {
+	return errors.Is(err, contract.ErrQuotaExceeded) || errors.Is(err, contract.ErrQuotaAccounting) || errors.Is(err, contract.ErrUploadContract)
+}
+func (h *FileHandler) CancelUpload(c *gin.Context) {
+	var req struct {
+		UploadID string `json:"upload_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.UploadID) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "upload_id required"})
+		return
+	}
+	if err := h.Svc.CancelUpload(c.Request.Context(), c.GetInt64(middleware.ContextUserIDKey), strings.TrimSpace(req.UploadID), c.ClientIP()); err != nil {
+		writeFileMutationError(c, err, "cancel upload failed")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": 3, "message": "upload canceled"})
 }

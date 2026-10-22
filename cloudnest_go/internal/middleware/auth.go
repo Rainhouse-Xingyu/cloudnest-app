@@ -163,6 +163,7 @@ var defaultUserRoutes = map[string]struct{}{
 	"POST /api/files/folders":                      {},
 	"PUT /api/files/:id/rename":                    {},
 	"DELETE /api/files/:id":                        {},
+	"POST /api/files/upload/cancel":                {},
 	"POST /api/files/upload/init":                  {},
 	"POST /api/files/upload/chunk":                 {},
 	"POST /api/files/upload/complete":              {},
@@ -231,6 +232,9 @@ var defaultUserRoutes = map[string]struct{}{
 	"POST /api/ai/search/nl":                       {},
 	"POST /api/ai/summarize":                       {},
 	"POST /api/ai/assistant/ask":                   {},
+
+	"GET /api/files/:id/versions/:version/download": {},
+	"POST /api/files/:id/versions/:version/restore": {},
 }
 
 func defaultAllowPath(method string, route string) bool {

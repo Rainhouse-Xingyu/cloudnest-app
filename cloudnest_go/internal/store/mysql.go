@@ -14,6 +14,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"gorm.io/gorm/logger"
 )
 
@@ -32,7 +33,8 @@ func NewMySQL(cfg config.Config) (*gorm.DB, error) {
 }
 
 // Migrate applies the legacy model schema only when explicitly requested.
-// Versioned migrations and upgrade/rollback rehearsal remain a separate milestone.
+// File-name and storage-reference constraints use separate explicit versioned migrations. Other
+// model migrations and real-data upgrade/rollback rehearsal remain later work.
 func Migrate(db *gorm.DB) error {
 	if err := db.AutoMigrate(
 		&model.User{},
@@ -40,12 +42,17 @@ func Migrate(db *gorm.DB) error {
 		&model.UserRole{},
 		&model.UserPathPermission{},
 		&model.Storage{},
+		&model.StorageReadLease{},
+		&model.StorageGarbage{},
 		&model.Workspace{},
 		&model.WorkspaceUser{},
 		&model.File{},
+		&model.FileNamespace{},
 		&model.FileVersion{},
 		&model.FilePermission{},
 		&model.UploadTask{},
+		&model.StorageQuotaPolicy{},
+		&model.UserStorageLedger{},
 		&model.UploadChunk{},
 		&model.Share{},
 		&model.OperationLog{},
@@ -60,7 +67,7 @@ func Migrate(db *gorm.DB) error {
 		return fmt.Errorf("migrate schema failed: %w", err)
 	}
 
-	return nil
+	return db.Clauses(clause.OnConflict{DoNothing: true}).Create(&model.StorageQuotaPolicy{ID: 1}).Error
 }
 
 // BootstrapAdminUser only initializes an empty user table. It never upgrades an
@@ -115,4 +122,33 @@ func CheckAuthSchema(db *gorm.DB) error {
 		return errors.New("authentication schema missing auth_version; back up and run the explicit migrate command before starting")
 	}
 	return nil
+}
+
+func CheckFileSchema(db *gorm.DB) error {
+	var count int64
+	if err := db.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'file_namespace' AND column_name = 'namespace_key'").Scan(&count).Error; err != nil {
+		return err
+	}
+	if count != 1 {
+		return errors.New("file namespace schema missing; back up and run the explicit migrate command before starting")
+	}
+	if err := CheckFileNameSchema(db); err != nil {
+		return err
+	}
+	if err := db.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='file_version' AND column_name IN ('file_type','source_verified')").Scan(&count).Error; err != nil {
+		return err
+	}
+	if count != 2 {
+		return errors.New("version metadata schema missing file_type/source_verified; back up and run explicit migrate before starting")
+	}
+	if err := CheckStorageReferenceSchema(db); err != nil {
+		return err
+	}
+	if err := CheckStorageLeaseSchema(db); err != nil {
+		return err
+	}
+	if err := CheckStorageGCSchema(db); err != nil {
+		return err
+	}
+	return CheckQuotaSchema(db)
 }

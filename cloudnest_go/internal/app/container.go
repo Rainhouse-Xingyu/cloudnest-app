@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"cloudenest_go/internal/blob"
 	"cloudenest_go/internal/config"
 	"cloudenest_go/internal/handler"
 	"cloudenest_go/internal/middleware"
@@ -18,9 +19,10 @@ import (
 
 // Container 统一管理仓储、服务、处理器依赖。
 type Container struct {
-	Cfg config.Config
-	DB  *gorm.DB
-	RDB *redis.Client
+	Cfg   config.Config
+	DB    *gorm.DB
+	RDB   *redis.Client
+	Blobs *blob.Manager
 
 	PermissionRepo    *storageMysql.PermissionRepo
 	OperationLogRepo  *storageMysql.OperationLogRepo
@@ -60,6 +62,7 @@ type Container struct {
 
 // NewContainer 负责集中构造依赖。
 func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container {
+	blobs := blob.NewManager(db)
 	permissionRepo := storageMysql.NewPermissionRepo(db)
 	operationLogRepo := storageMysql.NewOperationLogRepo(db)
 	authRepo := storageMysql.NewAuthRepo(db)
@@ -86,9 +89,10 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 	fileService := service.NewFileService(fileRepo)
 
 	return &Container{
-		Cfg: cfg,
-		DB:  db,
-		RDB: rdb,
+		Cfg:   cfg,
+		DB:    db,
+		RDB:   rdb,
+		Blobs: blobs,
 
 		PermissionRepo:    permissionRepo,
 		OperationLogRepo:  operationLogRepo,
@@ -117,7 +121,7 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 
 		AuthHandler:          &handler.AuthHandler{Svc: authService},
 		AdminHandler:         &handler.AdminHandler{Svc: adminService},
-		FileHandler:          &handler.FileHandler{RDB: rdb, Cfg: cfg, AISvc: aiService, Svc: fileService},
+		FileHandler:          &handler.FileHandler{Blobs: blobs, RDB: rdb, Cfg: cfg, AISvc: aiService, Svc: fileService},
 		SettingsHandler:      &handler.SettingsHandler{Svc: settingsService},
 		StorageHandler:       &handler.StorageHandler{Svc: storageService},
 		CollaborationHandler: &handler.CollaborationHandler{Svc: collaborationService},
@@ -130,6 +134,7 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 // NewRouter 统一构建路由与中间件。
 func (c *Container) NewRouter() *gin.Engine {
 	r := gin.Default()
+	r.Use(middleware.ProtectBlobReads(c.Blobs))
 	// Forwarding headers are untrusted until an explicit ingress policy exists.
 	_ = r.SetTrustedProxies(nil)
 
@@ -169,6 +174,7 @@ func (c *Container) NewRouter() *gin.Engine {
 	api.DELETE("/files/:id", c.FileHandler.Delete)
 	api.POST("/files/upload/init", c.FileHandler.InitUpload)
 	api.POST("/files/upload/chunk", c.FileHandler.UploadChunk)
+	api.POST("/files/upload/cancel", c.FileHandler.CancelUpload)
 	api.POST("/files/upload/complete", c.FileHandler.CompleteUpload)
 	api.GET("/files/upload/progress", c.FileHandler.UploadProgress)
 	api.GET("/files/search", c.FileHandler.SearchFiles)
@@ -190,6 +196,8 @@ func (c *Container) NewRouter() *gin.Engine {
 	api.DELETE("/files/:id/collaborators/:user_id", c.CollaborationHandler.RevokeFilePermission)
 	api.POST("/files/:id/versions", c.CollaborationHandler.CreateFileVersion)
 	api.GET("/files/:id/versions", c.CollaborationHandler.ListFileVersions)
+	api.GET("/files/:id/versions/:version/download", c.FileHandler.DownloadVersion)
+	api.POST("/files/:id/versions/:version/restore", c.CollaborationHandler.RestoreFileVersion)
 	api.POST("/workspaces", c.CollaborationHandler.CreateWorkspace)
 	api.GET("/workspaces", c.CollaborationHandler.ListWorkspaces)
 	api.POST("/workspaces/:id/members", c.CollaborationHandler.AddWorkspaceMember)
