@@ -27,6 +27,7 @@ import (
 	"strings"
 	"time"
 
+	"cloudenest_go/internal/blob"
 	"cloudenest_go/internal/config"
 	"cloudenest_go/internal/middleware"
 	"cloudenest_go/internal/service"
@@ -43,6 +44,7 @@ import (
 
 // FileHandler handles file system related APIs.
 type FileHandler struct {
+	Blobs      *blob.Manager
 	RDB        *redis.Client
 	Cfg        config.Config
 	HTTPClient *http.Client
@@ -455,6 +457,12 @@ func (h *FileHandler) triggerAsyncAutoAnalyze(file model.File, userID int64, cli
 	go func(f model.File, uid int64, ip string) {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer cancel()
+		ctx, scope := h.Blobs.Begin(ctx)
+		defer func() {
+			if err := scope.Close(); err != nil {
+				log.Print("background storage read lease cleanup pending")
+			}
+		}()
 
 		ai := &AIHandler{Cfg: h.Cfg, HTTPClient: h.HTTPClient, Svc: h.AISvc}
 		_ = ai.createAITask(ctx, uid, f.ID, "auto_analyze", "processing", "queued")
@@ -2031,7 +2039,13 @@ func (h *FileHandler) sendFileWithRateLimit(c *gin.Context, filePath string, dow
 			expectedElapsed := time.Duration(float64(sent) / float64(bytesPerSec) * float64(time.Second))
 			actualElapsed := time.Since(start)
 			if expectedElapsed > actualElapsed {
-				time.Sleep(expectedElapsed - actualElapsed)
+				timer := time.NewTimer(expectedElapsed - actualElapsed)
+				select {
+				case <-c.Request.Context().Done():
+					timer.Stop()
+					return c.Request.Context().Err()
+				case <-timer.C:
+				}
 			}
 
 			if flusher, ok := c.Writer.(http.Flusher); ok {

@@ -41,6 +41,7 @@ func Migrate(db *gorm.DB) error {
 		&model.UserRole{},
 		&model.UserPathPermission{},
 		&model.Storage{},
+		&model.StorageReadLease{},
 		&model.Workspace{},
 		&model.WorkspaceUser{},
 		&model.File{},
@@ -136,5 +137,8 @@ func CheckFileSchema(db *gorm.DB) error {
 	if count != 2 {
 		return errors.New("version metadata schema missing file_type/source_verified; back up and run explicit migrate before starting")
 	}
-	return CheckStorageReferenceSchema(db)
+	if err := CheckStorageReferenceSchema(db); err != nil {
+		return err
+	}
+	return CheckStorageLeaseSchema(db)
 }

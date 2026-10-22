@@ -44,6 +44,7 @@ func (UserRole) TableName() string {
 
 // Storage 存储表
 type Storage struct {
+	State      string    `gorm:"type:varchar(24);not null;default:active" json:"-"`
 	ID         int64     `gorm:"primaryKey;autoIncrement" json:"id"`
 	FileHash   string    `gorm:"type:char(64);not null;unique" json:"file_hash"`
 	FilePath   string    `gorm:"type:varchar(500);not null" json:"file_path"`
@@ -54,6 +55,16 @@ type Storage struct {
 func (Storage) TableName() string {
 	return "storage"
 }
+
+// StorageReadLease is internal retention metadata, never a client capability.
+type StorageReadLease struct {
+	Token     string    `gorm:"type:char(64);primaryKey" json:"-"`
+	StorageID int64     `gorm:"not null;index" json:"-"`
+	ExpiresAt time.Time `gorm:"type:datetime(6);not null;index" json:"-"`
+	Storage   Storage   `gorm:"foreignKey:StorageID;references:ID;constraint:OnUpdate:RESTRICT,OnDelete:RESTRICT" json:"-"`
+}
+
+func (StorageReadLease) TableName() string { return "storage_read_lease" }
 
 // Workspace 工作区
 type Workspace struct {

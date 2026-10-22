@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"cloudenest_go/internal/blob"
 	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
 
@@ -414,7 +415,18 @@ func (s *FileService) CompleteUpload(ctx context.Context, uid int64, parentID in
 }
 
 func (s *FileService) ResolveFileVersion(ctx context.Context, uid, fileID int64, version int) (model.File, model.Storage, error) {
-	return s.fileRepo.ResolveFileVersion(ctx, uid, fileID, version)
+	file, storage, err := s.fileRepo.ResolveFileVersion(ctx, uid, fileID, version)
+	if err != nil {
+		return model.File{}, model.Storage{}, err
+	}
+	storage, err = blob.Pin(ctx, storage)
+	if err != nil {
+		return model.File{}, model.Storage{}, err
+	}
+	if err := blob.VerifyStorageObject(ctx, storage); err != nil {
+		return model.File{}, model.Storage{}, err
+	}
+	return file, storage, nil
 }
 
 // UploadProgress 查询上传进度。
@@ -489,6 +501,10 @@ func (s *FileService) GetAccessibleFileAndStorage(ctx context.Context, uid int64
 	}
 
 	storage, err := s.fileRepo.GetStorageByID(ctx, *f.StorageID)
+	if err != nil {
+		return model.File{}, model.Storage{}, err
+	}
+	storage, err = blob.Pin(ctx, storage)
 	if err != nil {
 		return model.File{}, model.Storage{}, err
 	}
@@ -677,6 +693,10 @@ func (s *FileService) ResolvePublicShareDownload(ctx context.Context, code strin
 		}
 		return model.File{}, nil, 0, storageErr
 	}
+	storage, storageErr = blob.Pin(ctx, storage)
+	if storageErr != nil {
+		return model.File{}, nil, 0, storageErr
+	}
 	if _, err := os.Stat(storage.FilePath); err != nil {
 		return model.File{}, nil, 0, ErrPhysicalFileNotFound
 	}
@@ -686,7 +706,28 @@ func (s *FileService) ResolvePublicShareDownload(ctx context.Context, code strin
 
 // CollectBatchDownloadEntries 在一致快照中验证批量下载清单，任何失败均中止。
 func (s *FileService) CollectBatchDownloadEntries(ctx context.Context, uid int64, fileIDs []int64) ([]FileBatchDownloadEntry, error) {
-	return s.fileRepo.CollectBatchDownloadEntries(ctx, uid, fileIDs)
+	entries, err := s.fileRepo.CollectBatchDownloadEntries(ctx, uid, fileIDs)
+	if err != nil {
+		return nil, err
+	}
+	for i := range entries {
+		entry := &entries[i]
+		if entry.IsFolderZip {
+			if err := s.pinArchiveEntries(ctx, entry.FolderEntries); err != nil {
+				return nil, err
+			}
+		} else {
+			if entry.File.StorageID == nil {
+				return nil, gorm.ErrRecordNotFound
+			}
+			path, err := s.pinnedRegularPath(ctx, *entry.File.StorageID)
+			if err != nil {
+				return nil, err
+			}
+			entry.StoragePath = path
+		}
+	}
+	return entries, nil
 }
 
 // SearchFiles 按名称/类型/时间进行检索和筛选。
@@ -749,7 +790,7 @@ func (s *FileService) GetStorageByID(ctx context.Context, storageID int64) (mode
 		}
 		return model.Storage{}, err
 	}
-	return storage, nil
+	return blob.Pin(ctx, storage)
 }
 
 // RecordOperation 写入操作日志。
@@ -793,7 +834,14 @@ func (s *FileService) BatchDeleteFiles(ctx context.Context, uid int64, fileIDs [
 
 // CollectFolderZipEntries 收集目录下载所需的 zip 条目。
 func (s *FileService) CollectFolderZipEntries(ctx context.Context, uid, rootID int64) ([]FileFolderZipEntry, error) {
-	return s.fileRepo.CollectFolderZipEntries(ctx, uid, rootID)
+	entries, err := s.fileRepo.CollectFolderZipEntries(ctx, uid, rootID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.pinArchiveEntries(ctx, entries); err != nil {
+		return nil, err
+	}
+	return entries, nil
 }
 
 // TryAutoBindLivePhotoForFile 尝试将当前文件与同目录同名异类型文件自动绑定。
@@ -1117,4 +1165,34 @@ func translateFileMutationError(err error) error {
 	default:
 		return err
 	}
+}
+
+// Metadata/ACL snapshots finish before lease transactions begin. This avoids
+// holding one pool connection while waiting for another, including pool size 1.
+func (s *FileService) pinArchiveEntries(ctx context.Context, entries []FileFolderZipEntry) error {
+	for i := range entries {
+		if entries[i].IsDir {
+			continue
+		}
+		path, err := s.pinnedRegularPath(ctx, entries[i].StorageID)
+		if err != nil {
+			return err
+		}
+		entries[i].StoragePath = path
+	}
+	return nil
+}
+func (s *FileService) pinnedRegularPath(ctx context.Context, id int64) (string, error) {
+	storage, err := s.GetStorageByID(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Stat(storage.FilePath)
+	if err != nil {
+		return "", err
+	}
+	if !info.Mode().IsRegular() {
+		return "", contract.ErrConflict
+	}
+	return storage.FilePath, nil
 }

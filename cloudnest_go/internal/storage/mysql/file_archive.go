@@ -2,7 +2,6 @@ package mysql
 
 import (
 	"context"
-	"os"
 
 	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
@@ -16,13 +15,6 @@ func archiveStoragePath(tx *gorm.DB, file model.File) (string, error) {
 	var storage model.Storage
 	if err := tx.First(&storage, "id = ?", *file.StorageID).Error; err != nil {
 		return "", err
-	}
-	info, err := os.Stat(storage.FilePath)
-	if err != nil {
-		return "", err
-	}
-	if !info.Mode().IsRegular() {
-		return "", contract.ErrConflict
 	}
 	return storage.FilePath, nil
 }
@@ -58,6 +50,10 @@ func archiveTreeEntries(tx *gorm.DB, uid, rootID int64) ([]contract.FolderZipEnt
 		used[name] = true
 		entry := contract.FolderZipEntry{RelPath: name, IsDir: f.IsFolder == 1}
 		if !entry.IsDir {
+			if f.StorageID == nil {
+				return nil, gorm.ErrRecordNotFound
+			}
+			entry.StorageID = *f.StorageID
 			entry.StoragePath, err = archiveStoragePath(tx, f)
 			if err != nil {
 				return nil, err

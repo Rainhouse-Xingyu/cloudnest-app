@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"cloudenest_go/internal/blob"
 	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
 
@@ -144,10 +145,7 @@ func (r *FileRepo) ResolveFileVersion(ctx context.Context, uid, fileID int64, ve
 		if err := tx.First(&storage, historical.StorageID).Error; err != nil {
 			return err
 		}
-		if err := verifyStorageObject(ctx, storage); err != nil {
-			return err
-		}
-		if historical.Size == nil || *historical.Size != *storage.FileSize {
+		if historical.Size == nil || storage.FileSize == nil || *historical.Size != *storage.FileSize {
 			return contract.ErrConflict
 		}
 		return nil
@@ -994,6 +992,9 @@ func ensureStorageForFileRepo(tx *gorm.DB, fileHash, storagePath string, size in
 	}
 	if selected.FileSize == nil || *selected.FileSize != size {
 		return selected, false, contract.ErrConflict
+	}
+	if selected.State != blob.Active {
+		return model.Storage{}, false, contract.ErrConflict
 	}
 	if selected.FilePath == storagePath {
 		return selected, false, nil

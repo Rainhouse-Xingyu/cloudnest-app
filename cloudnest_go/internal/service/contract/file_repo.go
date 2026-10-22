@@ -27,6 +27,7 @@ type BatchDownloadEntry struct {
 }
 
 type FolderZipEntry struct {
+	StorageID   int64
 	RelPath     string
 	StoragePath string
 	IsDir       bool
@@ -59,6 +60,7 @@ type FileRepository interface {
 	ListRecycleBin(ctx context.Context, uid int64) ([]model.File, error)
 	CanAccessFile(ctx context.Context, userID int64, fileID int64, requireWrite bool) (bool, error)
 	GetActiveFileByID(ctx context.Context, fileID int64) (model.File, error)
+	// ResolveFileVersion returns authorized metadata only; physical readers must pin it.
 	ResolveFileVersion(ctx context.Context, uid, fileID int64, version int) (model.File, model.Storage, error)
 	GetStorageByID(ctx context.Context, storageID int64) (model.Storage, error)
 	CollectFolderZipEntries(ctx context.Context, uid, rootID int64) ([]FolderZipEntry, error)

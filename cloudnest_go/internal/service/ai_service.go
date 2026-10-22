@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"cloudenest_go/internal/blob"
 	"cloudenest_go/internal/config"
 	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
@@ -490,6 +491,10 @@ func (s *AIService) getReadableFileAndStorage(ctx context.Context, userID int64,
 	}
 
 	storage, err := s.repo.GetStorageByID(ctx, *f.StorageID)
+	if err != nil {
+		return model.File{}, model.Storage{}, err
+	}
+	storage, err = blob.Pin(ctx, storage)
 	if err != nil {
 		return model.File{}, model.Storage{}, err
 	}
