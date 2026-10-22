@@ -1,6 +1,6 @@
 # G02 文件一致性：命名与并发首批
 
-日期：2026-10-22。基于已验证的 G01 提交 `588a187`，分支 `codex/g02-file-consistency`。G02 仍在进行，本批不宣称完成配额、存储引用/GC、传输幂等或完整递归授权。
+日期：2026-10-22。基于已验证的 G01 提交 `588a187`，分支 `codex/g02-file-consistency`，[PR #3](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/3) 依赖 PR #2；首批代码提交 `c684291`。G02 仍在进行，本批不宣称完成配额、存储引用/GC、传输幂等或完整递归授权。
 
 ## 修复前的真实复现
 
