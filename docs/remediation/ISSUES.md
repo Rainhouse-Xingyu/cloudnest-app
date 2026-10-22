@@ -26,11 +26,11 @@
 | DEP-001 P1 | 初次 govulncheck 报告 x/net、x/text、quic-go 可达漏洞；旧 Go 标准库另查 | `make vuln`；见 BASELINE | G01 按公告最小升级依赖和工具链，重新构建/扫描 | 已升级；可达/导入包告警 0，另 1 项未调用 OpenPGP 模块告警 |
 | DATA-001 P1 | `internal/store/mysql.go:NewMySQL` 每次启动 AutoMigrate，无版本/审核开关 | 审查启动调用链；仅在测试库观察建表 | G01 关闭隐式生产迁移；G06/G10 版本化迁移、备份/回滚演练 | 普通启动不再迁移；G02 首个独立文件名版本化迁移已实现，其余模型版本化与真实备份恢复待 G06/G10 |
 | FILE-001 P1 | `storage/mysql/file_repo.go:HasActiveNameConflict` 根目录 parent_id=0 未含 user_id | 两用户根目录创建同名目录；第二个不应冲突 | G02 对根按所有者作用域，非根按共享父目录；事务并发约束 | 已复现跨用户 409；修复后通过根/共享目录与并发测试，待 G02 PR 审查 |
-| FILE-002 P1 | `service/file_service.go:InitUpload` 不比较声明分片数与计算值 | total_size=10, chunk_size=5, total_chunks=1 | G03 溢出安全计算、数量及每片/总字节校验 | 已确认，待修 |
-| FILE-003 P1 | `CompleteUploadPersist` 无任务行锁/CAS，无完成结果复用；mergeChunks 直接覆盖路径 | 两个完成请求并发/超时后重试；检查重复 file/物理路径损坏 | G02/G03 完成状态机、互斥/幂等结果、临时文件原子落盘 | 静态确认，并发实测待做 |
+| FILE-002 P1 | `service/file_service.go:InitUpload` 不比较声明分片数与计算值 | total_size=10, chunk_size=5, total_chunks=1 | G03 溢出安全计算、数量及每片/总字节校验 | 完成阶段声明总字节比对已增加；分片数量计算/每片尺寸/资源预算待 G03 |
+| FILE-003 P1 | `CompleteUploadPersist` 无任务行锁/CAS，无完成结果复用；mergeChunks 直接覆盖路径 | 两个完成请求并发/超时后重试；检查重复 file/物理路径损坏 | G02/G03 完成状态机、互斥/幂等结果、临时文件原子落盘 | 已复现并发完成重复记录/下载 404；独立候选路径、任务行锁和提交后清理已修；完成结果复用与崩溃对账待 G03 |
 | FILE-004 P1 | `CompleteUploadPersist` 直接创建同名记录，CreateFolder/Rename 则拒绝 | 同用户同目录同名上传两次 | G02 统一命名/冲突策略，数据库约束及恢复规则 | 应用写入命名锁与数字后缀已修；只读审计及独立版本化数据库唯一约束已实现；旧冲突拒绝迁移，真实库审核修复/升级演练待执行 |
 | FILE-005 P1 | `StorageService.GetOverview` 计算配额；InitUpload/CompleteUpload 无配额预留/核销 | 设置低配额后上传超限文件；并发超额 | G02/G03 配额账本/预留/释放，版本和回收站计量政策 | 已确认，待修 |
-| FILE-006 P1 | `ensureStorageForFileRepo` 以 hash 去重；PermanentDelete 只删逻辑记录 | 上传重复内容后永久删除，统计物理对象和引用 | G02 显式引用图/版本引用/安全 GC；不直接删未知对象 | 已确认，待设计 |
+| FILE-006 P1 | `ensureStorageForFileRepo` 以 hash 去重；PermanentDelete 只删逻辑记录 | 上传重复内容后永久删除，统计物理对象和引用 | G02 完整引用图/版本引用/安全 GC；不直接删未知对象 | 冲突安全去重、独立对象、初始/历史版本引用和已校验上传修复已做；完整对象状态/读取租约/GC 待做 |
 | FILE-007 P1 | 递归 collectDescendantIDs/ListActiveChildren 仅按 parent_id 查询，授权集中在根 | 混合所有者子目录、共享只读子项、循环/异常目录树 | G02 定义继承语义，逐层授权与循环检测/深度上限 | ZIP/批量下载/复制/移动/永久删除已逐项验证既有 ACL，循环/超限拒绝、树锁后重读；目录继承与扩展并发/性能矩阵待做 |
 | FILE-008 P1 | 上传任务无持久 parent_id/结果 file_id；恢复参数和完成目录可变化 | 用原 upload_id 带不同目录/文件元信息继续操作 | G03 固化任务契约并验证重试参数 | 已确认，待修 |
 | FILE-013 P1 | 新建/重命名先检查后写入，复制后缀使用秒级时间 | 12 路并发新建实际 9 成功/3 冲突；双 Router 并发复制/重命名 | G02 同目录事务行锁、READ COMMITTED、重读来源、数字后缀 | 修复前已复现；修复后新建 1 成功/11 冲突，复制与重命名回归通过 |
@@ -41,7 +41,7 @@
 | FILE-009 P2 | 文件搜索多列 LIKE、ListFiles/目录递归无分页/批量规划 | 数据规模测试、EXPLAIN、查询计数 | G02/G10 索引/游标分页/批量目录查询 | 结构已确认，性能未测 |
 | FILE-010 P2 | Go `sendFileWithRateLimit` 已 ServeContent/io.Copy/固定缓冲；客户端 NetworkClient 使用 data(for:) | 大文件峰值内存测试 | G03/G08 新客户端 URLSession 文件下载任务；不重写已流式 Go 普通下载 | 后端整文件内存假设未成立；性能未测 |
 | FILE-011 P1 | Share 模型及 CreateShare 只有 code/expiry，无提取码/访问次数约束 | 查看真实字段/API | G06 提取码哈希/访问计数、限速、撤销/到期测试 | 缺功能 |
-| FILE-012 P1 | 文件版本只创建/列出，没有专用恢复/上传完整协议；客户端可传 size | 版本覆盖/恢复与配额一致性测试 | G01 先保护 storage_id；G02 完整版本引用/恢复协议 | 缺功能 |
+| FILE-012 P1 | 文件版本只创建/列出，没有专用恢复/上传完整协议；客户端可传 size | 版本覆盖/恢复与配额一致性测试 | G01 先保护 storage_id；G02 版本引用/恢复协议 | 上传/复制初始引用、旧当前快照、历史下载、追加式恢复和事务审计已实现；版本专用上传票据、配额及 AI 增量更新仍待后续 |
 | AI-001 P1 | `triggerAsyncAutoAnalyze` 内存 goroutine，AiTask 仅写状态记录 | 上传后杀进程重启；任务无恢复 worker | G04 事务 outbox、持久任务、租约/超时/重试/诊断 | 已确认，待做 |
 | AI-002 P1 | `service/ai_service.go:NLSearch` 解析条件后调用 `storage/mysql/ai_repo.go:Search` 的 LIKE；无 embedding/vector | 执行语义同义查询/带无关干扰的评估集 | G04 独立 embedding、chunk、向量索引、混合检索/文件级 ACL/片段 | 已确认，待做 |
 | AI-003 P1 | `buildAutoAnalyzeResult` 忽略 OCR/模型错误并写“分析完成”；照片标签描述请求仅文本 | 关闭 Ollama 上传图片；查看任务状态和描述 | G04 区分提取/OCR/视觉失败、真实视觉输入、可诊断降级 | 已确认，待修 |
@@ -53,7 +53,7 @@
 | FRP-004 P1 | 端口冲突先查后写，server 作用域/唯一性与心跳离线任务需核对 | 并发相同端口、设备失联、配置回滚 | G05 唯一索引/端口预留/周期判离线/版本关联 | 部分实现，未验收 |
 | COLLAB-001 P1 | Workspace 成员管理存在；通用文件 ACL 主要用 owner/file_permission，空间角色链路不完整 | 空间 viewer/editor 对文件 CRUD 矩阵；禁止越级授权 | G06 明确空间/文件权限继承和管理员边界 | 待完整矩阵验证 |
 | LIVE-001 P2 | LivePhoto 绑定/解绑/查询存在；并发去重及实际播放未测 | 相同 image/video 并发绑定、跨用户配对与 macOS 播放 | G06/G09 唯一约束/权限与原生预览 | 静态审查，未验收 |
-| LOG-001 P1 | 多处 `_ = logOperation`，写操作可能无审计；SQL 日志策略未配置 | 注入日志写失败/数据库故障；确保无密钥与文件正文泄露 | G06 事务审计或可靠 outbox、结构化脱敏日志 | 已确认，待修 |
+| LOG-001 P1 | 多处 `_ = logOperation`，写操作可能无审计；SQL 日志策略未配置 | 注入日志写失败/数据库故障；确保无密钥与文件正文泄露 | G06 事务审计或可靠 outbox、结构化脱敏日志 | 账号恢复、永久删除、上传完成/对象修复、版本创建/恢复已事务化；其他路径和可靠 outbox 仍待做 |
 | ENG-001 P1 | 原仓库无 Go 测试，Swift 测试仅模板 | 基线 go test 全部 no test files | G00 加真实测试/CI；后续随修复扩展 | 首批单元/真实 API 回归已通过；全业务覆盖待后续 |
 | ENG-002 P2 | 已跟踪 dist/main/*.o/xcuserdata | `git ls-files`；检查工作树文件仍在 | G00 取消跟踪并 ignore；历史 patch 需独立核对后归档 | 当前产物已取消跟踪 |
 | ENG-003 P2 | file handler 2165 行、service 1193 行；已有契约与仓储可复用 | 逐功能调用链审查和单元边界 | G02–G06 随业务拆模块，不全盘重写 | 待做 |

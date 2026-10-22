@@ -190,6 +190,8 @@ func (c *Container) NewRouter() *gin.Engine {
 	api.DELETE("/files/:id/collaborators/:user_id", c.CollaborationHandler.RevokeFilePermission)
 	api.POST("/files/:id/versions", c.CollaborationHandler.CreateFileVersion)
 	api.GET("/files/:id/versions", c.CollaborationHandler.ListFileVersions)
+	api.GET("/files/:id/versions/:version/download", c.FileHandler.DownloadVersion)
+	api.POST("/files/:id/versions/:version/restore", c.CollaborationHandler.RestoreFileVersion)
 	api.POST("/workspaces", c.CollaborationHandler.CreateWorkspace)
 	api.GET("/workspaces", c.CollaborationHandler.ListWorkspaces)
 	api.POST("/workspaces/:id/members", c.CollaborationHandler.AddWorkspaceMember)

@@ -127,5 +127,14 @@ func CheckFileSchema(db *gorm.DB) error {
 	if count != 1 {
 		return errors.New("file namespace schema missing; back up and run the explicit migrate command before starting")
 	}
-	return CheckFileNameSchema(db)
+	if err := CheckFileNameSchema(db); err != nil {
+		return err
+	}
+	if err := db.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='file_version' AND column_name IN ('file_type','source_verified')").Scan(&count).Error; err != nil {
+		return err
+	}
+	if count != 2 {
+		return errors.New("version metadata schema missing file_type/source_verified; back up and run explicit migrate before starting")
+	}
+	return nil
 }

@@ -17,6 +17,7 @@ import (
 	"image/draw"
 	"image/jpeg"
 	"io"
+	"log"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -411,25 +412,42 @@ func (h *FileHandler) CompleteUpload(c *gin.Context) {
 		}
 	}
 
-	storagePath, mergedSize, fileHash, err := h.mergeChunks(req.UploadID, snapshot.Task.Filename, snapshot.TotalChunk)
+	storagePath, mergedSize, fileHash, err := h.mergeChunks(c.Request.Context(), req.UploadID, snapshot.TotalChunk)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "merge chunks failed"})
 		return
 	}
 
-	createdFile, err := h.Svc.CompleteUpload(c.Request.Context(), uid, req.ParentID, req.UploadID, snapshot, storagePath, mergedSize, fileHash, c.ClientIP())
+	committed, err := h.Svc.CompleteUpload(c.Request.Context(), uid, req.ParentID, req.UploadID, snapshot, storagePath, mergedSize, fileHash, c.ClientIP())
+	if committed.CandidateDisposable {
+		if cleanupErr := os.Remove(storagePath); cleanupErr != nil && !errors.Is(cleanupErr, os.ErrNotExist) {
+			h.recordUploadCleanupFailure(c.Request.Context(), uid, nil, "upload_candidate_cleanup", c.ClientIP())
+		}
+	}
 	if err != nil {
 		writeFileMutationError(c, err, "complete upload failed")
 		return
 	}
 
-	_ = os.RemoveAll(filepath.Join(h.chunkBaseDir(), req.UploadID))
+	createdFile := committed.File
+
+	if err := os.RemoveAll(filepath.Join(h.chunkBaseDir(), req.UploadID)); err != nil {
+		h.recordUploadCleanupFailure(c.Request.Context(), uid, &createdFile.ID, "upload_chunk_cleanup", c.ClientIP())
+	}
 	// 上传成功后触发 AI 异步分析：自动生成 tags/description/ocr_text 并写入 ai_metadata。
 	h.triggerAsyncAutoAnalyze(createdFile, uid, c.ClientIP())
 	// 上传完成后尝试自动与同目录同名文件配对绑定 Live Photo（无阻塞失败）。
 	_ = h.tryAutoBindLivePhotoForFile(c.Request.Context(), uid, createdFile, c.ClientIP())
 
 	c.JSON(http.StatusOK, gin.H{"item": createdFile})
+}
+
+// Cleanup cannot undo a committed upload. Persist or report a pending cleanup
+// without including private paths or turning committed bytes into a failed task.
+func (h *FileHandler) recordUploadCleanupFailure(ctx context.Context, uid int64, fileID *int64, action, clientIP string) {
+	if err := h.Svc.RecordOperation(ctx, uid, fileID, action, "failed", "temporary upload cleanup pending", clientIP); err != nil {
+		log.Printf("upload cleanup pending action=%s user_id=%d audit_unavailable=true", action, uid)
+	}
 }
 
 // triggerAsyncAutoAnalyze 在后台执行文件自动分析，不阻塞上传接口响应。
@@ -656,6 +674,24 @@ func (h *FileHandler) Download(c *gin.Context) {
 	if err := h.sendFileWithRateLimit(c, storage.FilePath, f.Filename, rate); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "download failed"})
 		return
+	}
+}
+
+func (h *FileHandler) DownloadVersion(c *gin.Context) {
+	uid := c.GetInt64(middleware.ContextUserIDKey)
+	fileID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	version, parseErr := strconv.Atoi(c.Param("version"))
+	if err != nil || parseErr != nil || fileID <= 0 || version <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid version parameters"})
+		return
+	}
+	file, storage, err := h.Svc.ResolveFileVersion(c.Request.Context(), uid, fileID, version)
+	if err != nil {
+		writeFileMutationError(c, err, "download version failed")
+		return
+	}
+	if err := h.sendFileWithRateLimit(c, storage.FilePath, file.Filename, h.getDownloadRateBytesPerSec(c)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "download failed"})
 	}
 }
 
@@ -1436,43 +1472,80 @@ func (h *FileHandler) thumbBaseDir() string {
 	return filepath.Join(h.dataRootDir(), thumbSubDir)
 }
 
-func (h *FileHandler) mergeChunks(uploadID string, filename string, totalChunks int) (string, int64, string, error) {
-	dateDir := time.Now().Format("200601")
-	storageDir := filepath.Join(h.storageBaseDir(), dateDir)
-	if err := os.MkdirAll(storageDir, 0o755); err != nil {
+func (h *FileHandler) mergeChunks(ctx context.Context, uploadID string, totalChunks int) (path string, size int64, digest string, result error) {
+	storageDir := filepath.Join(h.storageBaseDir(), time.Now().Format("200601"))
+	if err := os.MkdirAll(storageDir, 0o700); err != nil {
 		return "", 0, "", err
 	}
-
-	outputName := fmt.Sprintf("%s_%s", uploadID, sanitizeFileName(filename))
-	outputPath := filepath.Join(storageDir, outputName)
-	outFile, err := os.Create(outputPath)
+	out, err := os.CreateTemp(storageDir, ".upload-*")
 	if err != nil {
 		return "", 0, "", err
 	}
-	defer outFile.Close()
-
-	hasher := sha256.New()
-	writer := io.MultiWriter(outFile, hasher)
-
+	candidate := out.Name()
+	complete := false
+	closed := false
+	defer func() {
+		if !closed {
+			result = errors.Join(result, out.Close())
+		}
+		// Before any database call this path belongs only to this request.
+		if !complete {
+			if err := os.Remove(candidate); err != nil && !errors.Is(err, os.ErrNotExist) {
+				result = errors.Join(result, err)
+			}
+		}
+	}()
+	hash := sha256.New()
+	writer := io.MultiWriter(out, hash)
 	for i := 0; i < totalChunks; i++ {
-		chunkPath := filepath.Join(h.chunkBaseDir(), uploadID, fmt.Sprintf("%d.part", i))
-		inFile, err := os.Open(chunkPath)
+		in, err := os.Open(filepath.Join(h.chunkBaseDir(), uploadID, fmt.Sprintf("%d.part", i)))
 		if err != nil {
 			return "", 0, "", err
 		}
-		if _, err := io.Copy(writer, inFile); err != nil {
-			_ = inFile.Close()
-			return "", 0, "", err
+		n, copyErr := io.Copy(writer, &uploadContextReader{ctx: ctx, in: in})
+		closeErr := in.Close()
+		size += n
+		if copyErr != nil {
+			return "", 0, "", copyErr
 		}
-		_ = inFile.Close()
+		if closeErr != nil {
+			return "", 0, "", closeErr
+		}
 	}
-
-	stat, err := outFile.Stat()
+	if err := out.Sync(); err != nil {
+		return "", 0, "", err
+	}
+	closeOutputErr := out.Close()
+	closed = true
+	if closeOutputErr != nil {
+		return "", 0, "", closeOutputErr
+	}
+	dir, err := os.Open(storageDir)
 	if err != nil {
 		return "", 0, "", err
 	}
+	syncErr := dir.Sync()
+	closeErr := dir.Close()
+	if syncErr != nil {
+		return "", 0, "", syncErr
+	}
+	if closeErr != nil {
+		return "", 0, "", closeErr
+	}
+	complete = true
+	return candidate, size, hex.EncodeToString(hash.Sum(nil)), nil
+}
 
-	return outputPath, stat.Size(), hex.EncodeToString(hasher.Sum(nil)), nil
+type uploadContextReader struct {
+	ctx context.Context
+	in  io.Reader
+}
+
+func (r *uploadContextReader) Read(p []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return r.in.Read(p)
 }
 
 func sanitizeFileName(name string) string {
@@ -2066,6 +2139,8 @@ func addZipFileFromPath(zw *zip.Writer, relPath string, sourcePath string) error
 func writeFileMutationError(c *gin.Context, err error, fallback string) {
 	status, message := http.StatusInternalServerError, fallback
 	switch {
+	case errors.Is(err, contract.ErrStorageIntegrity):
+		status, message = http.StatusConflict, "stored content failed integrity verification"
 	case errors.Is(err, contract.ErrForbidden), errors.Is(err, service.ErrFilePermissionDenied):
 		status, message = http.StatusForbidden, "permission denied"
 	case errors.Is(err, contract.ErrInvalidInput), errors.Is(err, contract.ErrTargetNotFolder), errors.Is(err, service.ErrTargetNotFolder), errors.Is(err, service.ErrFileParentNotFolder):

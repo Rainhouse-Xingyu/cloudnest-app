@@ -409,14 +409,12 @@ func (s *FileService) PrepareCompleteUpload(ctx context.Context, uid int64, uplo
 }
 
 // CompleteUpload 完成上传后写入 storage/file 及任务状态。
-func (s *FileService) CompleteUpload(ctx context.Context, uid int64, parentID int64, uploadID string, snapshot FileUploadTaskSnapshot, storagePath string, mergedSize int64, fileHash string, clientIP string) (model.File, error) {
-	createdFile, err := s.fileRepo.CompleteUploadPersist(ctx, uid, parentID, uploadID, snapshot.Task, snapshot.TotalChunk, storagePath, mergedSize, fileHash)
-	if err != nil {
-		return model.File{}, err
-	}
+func (s *FileService) CompleteUpload(ctx context.Context, uid int64, parentID int64, uploadID string, snapshot FileUploadTaskSnapshot, storagePath string, mergedSize int64, fileHash string, clientIP string) (contract.UploadCommit, error) {
+	return s.fileRepo.CompleteUploadPersist(ctx, uid, parentID, uploadID, snapshot.Task, snapshot.TotalChunk, storagePath, mergedSize, fileHash, clientIP)
+}
 
-	_ = s.logOperation(ctx, uid, &createdFile.ID, "upload_complete", "success", fmt.Sprintf("upload_id=%s", uploadID), clientIP)
-	return createdFile, nil
+func (s *FileService) ResolveFileVersion(ctx context.Context, uid, fileID int64, version int) (model.File, model.Storage, error) {
+	return s.fileRepo.ResolveFileVersion(ctx, uid, fileID, version)
 }
 
 // UploadProgress 查询上传进度。

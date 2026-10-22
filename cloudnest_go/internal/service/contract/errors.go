@@ -9,6 +9,7 @@ var (
 	ErrForbidden           = errors.New("forbidden")
 	ErrFolderNotEmpty      = errors.New("folder is not empty")
 	ErrConflict            = errors.New("conflict")
+	ErrStorageIntegrity    = errors.New("stored content failed integrity verification")
 	ErrInternal            = errors.New("internal error")
 	ErrShareExpired        = errors.New("share expired")
 	ErrTargetNotFound      = errors.New("target not found")

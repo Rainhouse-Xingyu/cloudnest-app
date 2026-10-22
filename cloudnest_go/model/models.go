@@ -136,14 +136,16 @@ func (UserPathPermission) TableName() string {
 
 // FileVersion 文件版本
 type FileVersion struct {
-	ID         int64     `gorm:"primaryKey;autoIncrement" json:"id"`
-	FileID     int64     `gorm:"not null;uniqueIndex:idx_file_version" json:"file_id"` // Combined unique index simulation
-	Version    int       `gorm:"not null;uniqueIndex:idx_file_version" json:"version"`
-	StorageID  int64     `gorm:"not null" json:"storage_id"`
-	Size       *int64    `gorm:"type:bigint" json:"size"`
-	CreateUser *int64    `gorm:"type:bigint" json:"create_user"`
-	Comment    string    `gorm:"type:varchar(255)" json:"comment"`
-	CreateTime time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP" json:"create_time"`
+	ID             int64     `gorm:"primaryKey;autoIncrement" json:"id"`
+	FileID         int64     `gorm:"not null;uniqueIndex:idx_file_version" json:"file_id"` // Combined unique index simulation
+	Version        int       `gorm:"not null;uniqueIndex:idx_file_version" json:"version"`
+	SourceVerified bool      `gorm:"not null;default:false" json:"source_verified"`
+	FileType       string    `gorm:"type:varchar(50)" json:"file_type"`
+	StorageID      int64     `gorm:"not null" json:"storage_id"`
+	Size           *int64    `gorm:"type:bigint" json:"size"`
+	CreateUser     *int64    `gorm:"type:bigint" json:"create_user"`
+	Comment        string    `gorm:"type:varchar(255)" json:"comment"`
+	CreateTime     time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP" json:"create_time"`
 }
 
 func (FileVersion) TableName() string {

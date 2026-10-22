@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -444,17 +445,21 @@ func (h *CollaborationHandler) CreateFileVersion(c *gin.Context) {
 		FileType:    req.FileType,
 		Size:        req.Size,
 		UserID:      uid,
+		ClientIP:    c.ClientIP(),
 	})
 	if err != nil {
 		msg := strings.ToLower(err.Error())
 		switch {
-		case errors.Is(err, gorm.ErrRecordNotFound):
+		case errors.Is(err, gorm.ErrRecordNotFound), errors.Is(err, os.ErrNotExist):
 			c.JSON(http.StatusNotFound, gin.H{"error": "file or storage not found"})
 			return
 		case strings.Contains(msg, "folder does not support"):
 			c.JSON(http.StatusBadRequest, gin.H{"error": "folder does not support versioning"})
 			return
-		case strings.Contains(msg, "version conflict"):
+		case errors.Is(err, contract.ErrStorageIntegrity):
+			c.JSON(http.StatusConflict, gin.H{"error": "stored content failed integrity verification"})
+			return
+		case errors.Is(err, contract.ErrConflict), strings.Contains(msg, "version conflict"):
 			c.JSON(http.StatusConflict, gin.H{"error": "base_version is outdated"})
 			return
 		case errors.Is(err, contract.ErrForbidden):
@@ -469,9 +474,26 @@ func (h *CollaborationHandler) CreateFileVersion(c *gin.Context) {
 		}
 	}
 
-	detail := fmt.Sprintf("file_id=%d version=%d base=%d", fileID, created.Version, req.BaseVersion)
-	_ = h.Svc.LogOperation(c.Request.Context(), uid, &fileID, "file_version_create", "success", detail, c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{"item": created})
+}
+
+func (h *CollaborationHandler) RestoreFileVersion(c *gin.Context) {
+	uid := c.GetInt64(middleware.ContextUserIDKey)
+	fileID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	version, parseErr := strconv.Atoi(c.Param("version"))
+	var req struct {
+		BaseVersion int `json:"base_version"`
+	}
+	if err != nil || parseErr != nil || fileID <= 0 || version <= 0 || c.ShouldBindJSON(&req) != nil || req.BaseVersion <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid version parameters"})
+		return
+	}
+	row, err := h.Svc.RestoreFileVersion(c.Request.Context(), uid, fileID, version, req.BaseVersion, c.ClientIP())
+	if err != nil {
+		writeFileMutationError(c, err, "restore version failed")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"item": row})
 }
 
 // ListFileVersions 查询文件版本历史（倒序）。

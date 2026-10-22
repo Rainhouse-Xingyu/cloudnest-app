@@ -142,6 +142,10 @@ func (s *CollaborationService) CreateFileVersion(ctx context.Context, req Create
 	return s.repo.CreateFileVersion(ctx, req)
 }
 
+func (s *CollaborationService) RestoreFileVersion(ctx context.Context, uid, fileID int64, version, baseVersion int, clientIP string) (model.FileVersion, error) {
+	return s.repo.RestoreFileVersion(ctx, uid, fileID, version, baseVersion, clientIP)
+}
+
 // ListFileVersions 查询文件版本历史（倒序）。
 func (s *CollaborationService) ListFileVersions(ctx context.Context, fileID int64) ([]FileVersionRow, error) {
 	return s.repo.ListFileVersions(ctx, fileID)

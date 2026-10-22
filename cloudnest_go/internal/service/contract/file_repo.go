@@ -43,6 +43,13 @@ type FileOperationLogQuery struct {
 	All       int
 }
 
+// UploadCommit reports whether this request's unique candidate can be discarded.
+// An uncertain commit leaves it retained for reconciliation.
+type UploadCommit struct {
+	File                model.File
+	CandidateDisposable bool
+}
+
 // FileRepository 定义 File 模块核心查询访问接口。
 type FileRepository interface {
 	SearchFiles(ctx context.Context, uid int64, q FileSearchQuery) ([]model.File, int64, error)
@@ -52,6 +59,7 @@ type FileRepository interface {
 	ListRecycleBin(ctx context.Context, uid int64) ([]model.File, error)
 	CanAccessFile(ctx context.Context, userID int64, fileID int64, requireWrite bool) (bool, error)
 	GetActiveFileByID(ctx context.Context, fileID int64) (model.File, error)
+	ResolveFileVersion(ctx context.Context, uid, fileID int64, version int) (model.File, model.Storage, error)
 	GetStorageByID(ctx context.Context, storageID int64) (model.Storage, error)
 	CollectFolderZipEntries(ctx context.Context, uid, rootID int64) ([]FolderZipEntry, error)
 	GetSystemSettingByKey(ctx context.Context, key string) (model.SystemSetting, error)
@@ -68,7 +76,7 @@ type FileRepository interface {
 	CreateUploadTask(ctx context.Context, task model.UploadTask) error
 	UpsertUploadChunkAndRefreshProgress(ctx context.Context, taskID int64, uploadID string, chunkIndex int, chunkSize int64, chunkPath string) error
 	CountDoneUploadChunks(ctx context.Context, uploadID string) (int64, error)
-	CompleteUploadPersist(ctx context.Context, uid int64, parentID int64, uploadID string, task model.UploadTask, totalChunks int, storagePath string, mergedSize int64, fileHash string) (model.File, error)
+	CompleteUploadPersist(ctx context.Context, uid int64, parentID int64, uploadID string, task model.UploadTask, totalChunks int, storagePath string, mergedSize int64, fileHash string, clientIP string) (UploadCommit, error)
 	CreateShare(ctx context.Context, uid int64, fileID int64, shareCode string, expireAt *time.Time) (model.Share, error)
 	CreateOperationLog(ctx context.Context, userID int64, fileID *int64, action string, status string, detail string, clientIP string) error
 	ListShares(ctx context.Context, uid int64) ([]model.Share, error)

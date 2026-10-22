@@ -204,12 +204,18 @@ func (f *fixture) upload(t *testing.T, token, filename string, payload []byte) m
 	if completed.Item.ID <= 0 || completed.Item.Size != int64(len(payload)) {
 		t.Fatal("invalid completed file")
 	}
+	f.waitAnalysis(t, completed.Item.ID)
+	return completed.Item
+}
+
+func (f *fixture) waitAnalysis(t *testing.T, fileID int64) {
+	t.Helper()
 	// Existing implementation launches an untracked goroutine. Wait for its terminal
 	// audit entry before fixture cleanup; this is not an AI quality assertion.
 	deadline := time.Now().Add(10 * time.Second)
 	for {
 		var count int64
-		err := f.db.Model(&model.OperationLog{}).Where("file_id = ? AND action = ?", completed.Item.ID, "ai_auto_analyze").Count(&count).Error
+		err := f.db.Model(&model.OperationLog{}).Where("file_id = ? AND action = ?", fileID, "ai_auto_analyze").Count(&count).Error
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -221,7 +227,6 @@ func (f *fixture) upload(t *testing.T, token, filename string, payload []byte) m
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	return completed.Item
 }
 
 func TestAPIFileLifecycle(t *testing.T) {

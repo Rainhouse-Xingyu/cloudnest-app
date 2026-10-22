@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
+	"strings"
 
 	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
@@ -175,94 +177,127 @@ func (r *CollaborationRepo) DeleteFilePermission(ctx context.Context, fileID int
 
 func (r *CollaborationRepo) CreateFileVersion(ctx context.Context, req contract.CollaborationCreateFileVersionInput) (model.FileVersion, error) {
 	var created model.FileVersion
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var f model.File
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&f, "id = ? AND is_deleted = 0", req.FileID).Error; err != nil {
+	err := fileMetadataTransaction(ctx, r.db, func(tx *gorm.DB) error {
+		created = model.FileVersion{}
+		var file model.File
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&file, "id=? AND is_deleted=0", req.FileID).Error; err != nil {
 			return err
 		}
-		if f.IsFolder == 1 {
+		if file.IsFolder == 1 {
 			return fmt.Errorf("folder does not support versioning")
 		}
-		// Recheck the target authorization under the transaction lock. A handler
-		// preflight alone can race with a collaborator being revoked.
 		if req.UserID <= 0 {
 			return contract.ErrForbidden
 		}
-		if f.UserID != req.UserID {
-			var permission model.FilePermission
-			err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("file_id = ? AND user_id = ? AND permission = ?", f.ID, req.UserID, "write").First(&permission).Error
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return contract.ErrForbidden
-			}
-			if err != nil {
-				return err
-			}
+		if err := requireFilePermission(tx, req.UserID, file, true); err != nil {
+			return err
 		}
-		if req.BaseVersion != f.CurrentVersion {
-			return fmt.Errorf("version conflict")
+		if req.BaseVersion != file.CurrentVersion {
+			return contract.ErrConflict
 		}
-		// Storage is globally deduplicated and has no owner. Possessing an ID is
-		// not a capability: only a live file owned by this caller can supply bytes
-		// to this legacy endpoint. Shared-source/version uploads need a scoped
-		// upload ticket in the later transfer protocol.
+		// A storage ID is not a capability. New bytes still require an active file
+		// owned by this caller; restoring this file's own history uses another path.
 		var source model.File
-		err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("storage_id = ? AND user_id = ? AND is_deleted = 0 AND is_folder = 0", req.StorageID, req.UserID).First(&source).Error
+		err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("storage_id=? AND user_id=? AND is_deleted=0 AND is_folder=0", req.StorageID, req.UserID).First(&source).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return contract.ErrForbidden
 		}
 		if err != nil {
 			return err
 		}
-
 		var storage model.Storage
-		if err := tx.First(&storage, "id = ?", req.StorageID).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).First(&storage, req.StorageID).Error; err != nil {
 			return err
 		}
-
-		nextVersion := f.CurrentVersion + 1
-		if storage.FileSize == nil || *storage.FileSize < 0 {
-			return contract.ErrInvalidInput
-		}
-		sizeVal := *storage.FileSize
-		if req.Size != nil && *req.Size != sizeVal {
-			return contract.ErrInvalidInput
-		}
-
-		uidCopy := req.UserID
-		sizeCopy := sizeVal
-		created = model.FileVersion{
-			FileID:     req.FileID,
-			Version:    nextVersion,
-			StorageID:  req.StorageID,
-			Size:       &sizeCopy,
-			CreateUser: &uidCopy,
-			Comment:    req.Comment,
-		}
-		if err := tx.Create(&created).Error; err != nil {
+		if err := verifyStorageObject(ctx, storage); err != nil {
 			return err
 		}
-
-		updates := map[string]interface{}{
-			"current_version": nextVersion,
-			"storage_id":      req.StorageID,
-			"size":            sizeVal,
+		if req.Size != nil && *req.Size != *storage.FileSize {
+			return contract.ErrInvalidInput
 		}
-		if req.FileType != "" {
-			updates["file_type"] = req.FileType
-		}
-		return tx.Model(&model.File{}).Where("id = ?", req.FileID).Updates(updates).Error
+		var errCreate error
+		created, errCreate = appendFileVersion(tx, file, storage, req.UserID, req.FileType, req.Comment, "file_version_create", req.ClientIP)
+		return errCreate
 	})
-	if err != nil {
+	return created, err
+}
+
+func appendFileVersion(tx *gorm.DB, file model.File, storage model.Storage, uid int64, fileType, comment, action, clientIP string) (model.FileVersion, error) {
+	if file.CurrentVersion <= 0 || file.CurrentVersion >= 2147483647 {
+		return model.FileVersion{}, contract.ErrConflict
+	}
+	if err := preserveCurrentVersion(tx, file, nil, "Legacy current version preserved before update"); err != nil {
 		return model.FileVersion{}, err
 	}
-	return created, nil
+	if fileType == "" {
+		fileType = file.FileType
+	}
+	size := *storage.FileSize
+	base := file.CurrentVersion
+	row := model.FileVersion{FileID: file.ID, Version: file.CurrentVersion + 1, StorageID: storage.ID, Size: &size, FileType: fileType, SourceVerified: true, CreateUser: &uid, Comment: comment}
+	if err := tx.Create(&row).Error; err != nil {
+		return row, err
+	}
+	if err := tx.Model(&file).Updates(map[string]any{"current_version": row.Version, "storage_id": storage.ID, "size": size, "file_type": fileType}).Error; err != nil {
+		return row, err
+	}
+	err := tx.Create(&model.OperationLog{UserID: &uid, FileID: &file.ID, Action: action, Status: "success", Detail: fmt.Sprintf("version=%d base=%d", row.Version, base), ClientIP: clientIP}).Error
+	return row, err
+}
+
+func (r *CollaborationRepo) RestoreFileVersion(ctx context.Context, uid, fileID int64, version, baseVersion int, clientIP string) (model.FileVersion, error) {
+	var restored model.FileVersion
+	err := fileMetadataTransaction(ctx, r.db, func(tx *gorm.DB) error {
+		restored = model.FileVersion{}
+		var file model.File
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&file, "id=? AND is_deleted=0", fileID).Error; err != nil {
+			return err
+		}
+		if uid <= 0 {
+			return contract.ErrForbidden
+		}
+		if err := requireFilePermission(tx, uid, file, true); err != nil {
+			return err
+		}
+		if file.IsFolder != 0 || version <= 0 || baseVersion <= 0 {
+			return contract.ErrInvalidInput
+		}
+		if baseVersion != file.CurrentVersion {
+			return contract.ErrConflict
+		}
+		var historical model.FileVersion
+		if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("file_id=? AND version=?", fileID, version).First(&historical).Error; err != nil {
+			return err
+		}
+		if err := requireHistoricalSource(tx, uid, file, historical, true); err != nil {
+			return err
+		}
+		var storage model.Storage
+		if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).First(&storage, historical.StorageID).Error; err != nil {
+			return err
+		}
+		if err := verifyStorageObject(ctx, storage); err != nil {
+			return err
+		}
+		if historical.Size == nil || *historical.Size != *storage.FileSize {
+			return contract.ErrConflict
+		}
+		fileType := historical.FileType
+		if fileType == "" {
+			fileType = strings.TrimPrefix(strings.ToLower(filepath.Ext(file.Filename)), ".")
+		}
+		var err error
+		restored, err = appendFileVersion(tx, file, storage, uid, fileType, fmt.Sprintf("Restored version %d", version), "file_version_restore", clientIP)
+		return err
+	})
+	return restored, err
 }
 
 func (r *CollaborationRepo) ListFileVersions(ctx context.Context, fileID int64) ([]contract.CollaborationFileVersionRow, error) {
 	rows := make([]contract.CollaborationFileVersionRow, 0)
 	err := r.db.WithContext(ctx).
 		Table("file_version fv").
-		Select("fv.id, fv.version, fv.storage_id, fv.size, fv.comment, fv.create_user, u.username, fv.create_time").
+		Select("fv.id, fv.version, fv.storage_id, fv.size, fv.file_type, fv.source_verified, fv.comment, fv.create_user, u.username, fv.create_time").
 		Joins("LEFT JOIN user u ON u.id = fv.create_user").
 		Where("fv.file_id = ?", fileID).
 		Order("fv.version DESC").

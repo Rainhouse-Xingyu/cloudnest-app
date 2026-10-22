@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -117,6 +116,43 @@ func (r *FileRepo) GetActiveFileByID(ctx context.Context, fileID int64) (model.F
 		return model.File{}, err
 	}
 	return f, nil
+}
+
+func (r *FileRepo) ResolveFileVersion(ctx context.Context, uid, fileID int64, version int) (model.File, model.Storage, error) {
+	if uid <= 0 {
+		return model.File{}, model.Storage{}, contract.ErrForbidden
+	}
+	if fileID <= 0 || version <= 0 {
+		return model.File{}, model.Storage{}, contract.ErrInvalidInput
+	}
+	var file model.File
+	var storage model.Storage
+	err := fileReadSnapshot(ctx, r.db, func(tx *gorm.DB) error {
+		if err := tx.First(&file, "id=? AND is_deleted=0", fileID).Error; err != nil {
+			return err
+		}
+		if err := requireTreeRead(tx, uid, []fileTreeNode{{File: file}}); err != nil {
+			return err
+		}
+		var historical model.FileVersion
+		if err := tx.Where("file_id=? AND version=?", fileID, version).First(&historical).Error; err != nil {
+			return err
+		}
+		if err := requireHistoricalSource(tx, uid, file, historical, false); err != nil {
+			return err
+		}
+		if err := tx.First(&storage, historical.StorageID).Error; err != nil {
+			return err
+		}
+		if err := verifyStorageObject(ctx, storage); err != nil {
+			return err
+		}
+		if historical.Size == nil || *historical.Size != *storage.FileSize {
+			return contract.ErrConflict
+		}
+		return nil
+	})
+	return file, storage, err
 }
 
 func (r *FileRepo) GetStorageByID(ctx context.Context, storageID int64) (model.Storage, error) {
@@ -498,16 +534,33 @@ func (r *FileRepo) CountDoneUploadChunks(ctx context.Context, uploadID string) (
 	return doneCount, nil
 }
 
-func (r *FileRepo) CompleteUploadPersist(ctx context.Context, uid int64, parentID int64, uploadID string, task model.UploadTask, totalChunks int, storagePath string, mergedSize int64, fileHash string) (model.File, error) {
+func (r *FileRepo) CompleteUploadPersist(ctx context.Context, uid int64, parentID int64, uploadID string, task model.UploadTask, totalChunks int, storagePath string, mergedSize int64, fileHash string, clientIP string) (contract.UploadCommit, error) {
 	var createdFile model.File
+	var canonical model.Storage
+	var repaired bool
+	prepared := false
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := lockFileNamespaces(tx, fileNamespaceKey(uid, parentID)); err != nil {
 			return err
 		}
+		var currentTask model.UploadTask
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&currentTask, "id=? AND upload_id=?", task.ID, uploadID).Error; err != nil {
+			return err
+		}
+		if currentTask.UserID == nil || *currentTask.UserID != uid {
+			return contract.ErrForbidden
+		}
+		if currentTask.Status != 0 {
+			return contract.ErrConflict
+		}
+		if currentTask.TotalSize == nil || *currentTask.TotalSize != mergedSize || currentTask.TotalChunks == nil || *currentTask.TotalChunks != totalChunks {
+			return contract.ErrInvalidInput
+		}
+		task = currentTask
 		if err := requireWriteParent(tx, uid, parentID); err != nil {
 			return err
 		}
-		storageID, err := ensureStorageForFileRepo(tx, fileHash, storagePath, mergedSize)
+		selected, wasRepaired, err := ensureStorageForFileRepo(tx, fileHash, storagePath, mergedSize)
 		if err != nil {
 			return err
 		}
@@ -525,12 +578,24 @@ func (r *FileRepo) CompleteUploadPersist(ctx context.Context, uid int64, parentI
 			IsFolder:  0,
 			FileType:  fileType,
 			Size:      mergedSize,
-			StorageID: &storageID,
+			StorageID: &selected.ID,
 		}
 		if err := tx.Create(&createdFile).Error; err != nil {
 			return err
 		}
 
+		canonical, repaired = selected, wasRepaired
+		if err := preserveCurrentVersion(tx, createdFile, &uid, "Initial upload"); err != nil {
+			return err
+		}
+		if repaired {
+			if err := tx.Create(&model.OperationLog{UserID: &uid, FileID: &createdFile.ID, Action: "storage_repair", Status: "success", Detail: fmt.Sprintf("storage_id=%d verified upload replaced unavailable or corrupt object", canonical.ID), ClientIP: clientIP}).Error; err != nil {
+				return err
+			}
+		}
+		if err := tx.Create(&model.OperationLog{UserID: &uid, FileID: &createdFile.ID, Action: "upload_complete", Status: "success", Detail: fmt.Sprintf("upload_id=%s", uploadID), ClientIP: clientIP}).Error; err != nil {
+			return err
+		}
 		if err := tx.Model(&model.UploadTask{}).Where("id = ?", task.ID).Updates(map[string]interface{}{
 			"status":          1,
 			"uploaded_chunks": totalChunks,
@@ -542,12 +607,13 @@ func (r *FileRepo) CompleteUploadPersist(ctx context.Context, uid int64, parentI
 			return err
 		}
 
+		prepared = true
 		return nil
 	}, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
-		return model.File{}, normalizeFileNameConstraintError(err)
+		return contract.UploadCommit{CandidateDisposable: !prepared}, normalizeFileNameConstraintError(err)
 	}
-	return createdFile, nil
+	return contract.UploadCommit{File: createdFile, CandidateDisposable: canonical.FilePath != storagePath}, nil
 }
 
 func (r *FileRepo) ResolveValidShare(ctx context.Context, code string) (model.Share, model.File, error) {
@@ -885,13 +951,18 @@ func copyNodeForFileRepo(tx *gorm.DB, newOwnerID int64, src model.File, targetPa
 		Size:           src.Size,
 		StorageID:      src.StorageID,
 		WorkspaceID:    src.WorkspaceID,
-		CurrentVersion: src.CurrentVersion,
+		CurrentVersion: 1,
 		IsDeleted:      0,
 	}
 	if err := tx.Create(&newNode).Error; err != nil {
 		return 0, err
 	}
 
+	if src.IsFolder == 0 {
+		if err := preserveCurrentVersion(tx, newNode, &newOwnerID, "Copied current content"); err != nil {
+			return 0, err
+		}
+	}
 	if src.IsFolder == 1 {
 		var children []model.File
 		if err := tx.Where("parent_id = ? AND is_deleted = 0", src.ID).Order("id ASC").Find(&children).Error; err != nil {
@@ -907,23 +978,39 @@ func copyNodeForFileRepo(tx *gorm.DB, newOwnerID int64, src model.File, targetPa
 	return newNode.ID, nil
 }
 
-func ensureStorageForFileRepo(tx *gorm.DB, fileHash string, storagePath string, size int64) (int64, error) {
-	var existing model.Storage
-	err := tx.Where("file_hash = ?", fileHash).First(&existing).Error
-	if err == nil {
-		_ = os.Remove(storagePath)
-		return existing.ID, nil
+// The unique hash arbitrates simultaneous publications across namespaces. No
+// filesystem deletion occurs inside a metadata transaction.
+func ensureStorageForFileRepo(tx *gorm.DB, fileHash, storagePath string, size int64) (model.Storage, bool, error) {
+	candidate := model.Storage{FileHash: fileHash, FilePath: storagePath, FileSize: &size}
+	if err := verifyStorageObject(tx.Statement.Context, candidate); err != nil {
+		return model.Storage{}, false, err
 	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return 0, err
+	if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&candidate).Error; err != nil {
+		return model.Storage{}, false, err
 	}
-
-	sizeCopy := size
-	storage := model.Storage{FileHash: fileHash, FilePath: storagePath, FileSize: &sizeCopy}
-	if err := tx.Create(&storage).Error; err != nil {
-		return 0, err
+	var selected model.Storage
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("file_hash=?", fileHash).First(&selected).Error; err != nil {
+		return selected, false, err
 	}
-	return storage.ID, nil
+	if selected.FileSize == nil || *selected.FileSize != size {
+		return selected, false, contract.ErrConflict
+	}
+	if selected.FilePath == storagePath {
+		return selected, false, nil
+	}
+	if err := verifyStorageObject(tx.Statement.Context, selected); err != nil {
+		if tx.Statement.Context.Err() != nil {
+			return selected, false, tx.Statement.Context.Err()
+		}
+		// The candidate has the same verified hash and size. Repoint metadata only;
+		// leave the old path intact for diagnosis and any existing readers.
+		if err := tx.Model(&selected).Update("file_path", storagePath).Error; err != nil {
+			return selected, false, err
+		}
+		selected.FilePath = storagePath
+		return selected, true, nil
+	}
+	return selected, false, nil
 }
 
 var _ contract.FileRepository = (*FileRepo)(nil)

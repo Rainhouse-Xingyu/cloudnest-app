@@ -70,8 +70,8 @@ func TestVersionAuthorizationAndConcurrency(t *testing.T) {
 	if err := f.db.Model(&model.FileVersion{}).Where("file_id = ?", target.ID).Count(&count).Error; err != nil {
 		t.Fatal(err)
 	}
-	if count != 1 {
-		t.Fatalf("created %d versions, want 1", count)
+	if count != 2 {
+		t.Fatalf("persisted %d versions, want initial version plus one concurrent publication", count)
 	}
 	got := f.json(t, "GET", fmt.Sprintf("/api/files/%d/download", target.ID), f.alice, nil, http.StatusOK)
 	if got.Body.String() != "new content" {

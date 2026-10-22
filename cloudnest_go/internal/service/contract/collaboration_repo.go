@@ -34,6 +34,7 @@ type CollaborationFilePermissionRow struct {
 type CollaborationCreateFileVersionInput struct {
 	FileID      int64
 	StorageID   int64
+	ClientIP    string
 	BaseVersion int
 	Comment     string
 	FileType    string
@@ -43,14 +44,16 @@ type CollaborationCreateFileVersionInput struct {
 
 // CollaborationFileVersionRow 定义文件版本查询返回行。
 type CollaborationFileVersionRow struct {
-	ID         int64     `json:"id"`
-	Version    int       `json:"version"`
-	StorageID  int64     `json:"storage_id"`
-	Size       *int64    `json:"size"`
-	Comment    string    `json:"comment"`
-	CreateUser *int64    `json:"create_user"`
-	Username   string    `json:"username"`
-	CreateTime time.Time `json:"create_time"`
+	ID             int64     `json:"id"`
+	SourceVerified bool      `json:"source_verified"`
+	FileType       string    `json:"file_type"`
+	Version        int       `json:"version"`
+	StorageID      int64     `json:"storage_id"`
+	Size           *int64    `json:"size"`
+	Comment        string    `json:"comment"`
+	CreateUser     *int64    `json:"create_user"`
+	Username       string    `json:"username"`
+	CreateTime     time.Time `json:"create_time"`
 }
 
 // CollaborationRepository 定义协作模块存储访问能力。
@@ -70,6 +73,7 @@ type CollaborationRepository interface {
 	ListFilePermissions(ctx context.Context, fileID int64) ([]CollaborationFilePermissionRow, error)
 	DeleteFilePermission(ctx context.Context, fileID int64, targetUserID int64) error
 	CreateFileVersion(ctx context.Context, req CollaborationCreateFileVersionInput) (model.FileVersion, error)
+	RestoreFileVersion(ctx context.Context, uid, fileID int64, version, baseVersion int, clientIP string) (model.FileVersion, error)
 	ListFileVersions(ctx context.Context, fileID int64) ([]CollaborationFileVersionRow, error)
 	CreateOperationLog(ctx context.Context, row model.OperationLog) error
 }
