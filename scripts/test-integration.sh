@@ -16,7 +16,7 @@ mysql_id=$(docker run -d --name "$run_id-mysql" --label cloudnest.test=true \
   -p 127.0.0.1::3306 \
   -e MYSQL_ROOT_PASSWORD=cloudnest-disposable-test \
   -e MYSQL_DATABASE=cloudnest_test -e MYSQL_USER=cloudnest_test \
-  -e MYSQL_PASSWORD=cloudnest-disposable-test mysql:8.0)
+  -e MYSQL_PASSWORD=cloudnest-disposable-test mysql:8.0 --log-bin-trust-function-creators=1)
 redis_id=$(docker run -d --name "$run_id-redis" --label cloudnest.test=true \
   -p 127.0.0.1::6379 redis:7.4-alpine)
 ready=false
@@ -33,6 +33,10 @@ if [[ "$ready" != true ]]; then
   echo 'Disposable MySQL/Redis did not become ready within 90 seconds.' >&2
   exit 1
 fi
+# Metadata visibility is required only for GC maintenance tests. These grants
+# and trigger settings apply solely to this newly created disposable container.
+docker exec -e MYSQL_PWD=cloudnest-disposable-test "$mysql_id" mysql -u root \
+  -e "GRANT PROCESS ON *.* TO 'cloudnest_test'@'%'; CREATE USER 'cloudnest_gc_limited'@'%' IDENTIFIED BY 'cloudnest-disposable-test'; GRANT SELECT ON cloudnest_test.* TO 'cloudnest_gc_limited'@'%';" >/dev/null
 mysql_addr=$(docker port "$mysql_id" 3306/tcp)
 redis_addr=$(docker port "$redis_id" 6379/tcp)
 export CLOUDNEST_TEST_DISPOSABLE=1

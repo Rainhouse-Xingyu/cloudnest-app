@@ -350,7 +350,7 @@ func TestReadLeaseSchemaExplicitUpgradeAndDriftRefusal(t *testing.T) {
 	if err := f.db.Exec("DROP TABLE storage_read_lease").Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := f.db.Exec("ALTER TABLE storage DROP COLUMN state").Error; err != nil {
+	if err := f.db.Exec("ALTER TABLE storage DROP INDEX idx_storage_gc, DROP COLUMN state").Error; err != nil {
 		t.Fatal(err)
 	}
 	if store.CheckFileSchema(f.db) == nil {

@@ -44,12 +44,19 @@ func (UserRole) TableName() string {
 
 // Storage 存储表
 type Storage struct {
-	State      string    `gorm:"type:varchar(24);not null;default:active" json:"-"`
-	ID         int64     `gorm:"primaryKey;autoIncrement" json:"id"`
-	FileHash   string    `gorm:"type:char(64);not null;unique" json:"file_hash"`
-	FilePath   string    `gorm:"type:varchar(500);not null" json:"file_path"`
-	FileSize   *int64    `gorm:"type:bigint" json:"file_size"`
-	CreateTime time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP" json:"create_time"`
+	Managed       bool       `gorm:"not null;default:false;index:idx_storage_gc,priority:1" json:"-"`
+	ManagedRoot   string     `gorm:"type:varchar(500);not null;default:''" json:"-"`
+	ManagedPath   string     `gorm:"type:varchar(500);not null;default:''" json:"-"`
+	OrphanedAt    *time.Time `gorm:"type:datetime(6)" json:"-"`
+	GCToken       string     `gorm:"type:char(64);not null;default:''" json:"-"`
+	GCPath        string     `gorm:"type:varchar(500);not null;default:''" json:"-"`
+	QuarantinedAt *time.Time `gorm:"type:datetime(6)" json:"-"`
+	State         string     `gorm:"type:varchar(24);not null;default:active;index:idx_storage_gc,priority:2" json:"-"`
+	ID            int64      `gorm:"primaryKey;autoIncrement" json:"id"`
+	FileHash      string     `gorm:"type:char(64);not null;unique" json:"file_hash"`
+	FilePath      string     `gorm:"type:varchar(500);not null" json:"file_path"`
+	FileSize      *int64     `gorm:"type:bigint" json:"file_size"`
+	CreateTime    time.Time  `gorm:"type:datetime;default:CURRENT_TIMESTAMP" json:"create_time"`
 }
 
 func (Storage) TableName() string {
@@ -65,6 +72,22 @@ type StorageReadLease struct {
 }
 
 func (StorageReadLease) TableName() string { return "storage_read_lease" }
+
+// StorageGarbage survives parent removal. Retained entries are never unlinked.
+type StorageGarbage struct {
+	Token        string     `gorm:"type:char(64);primaryKey" json:"-"`
+	StorageID    int64      `gorm:"not null;index" json:"-"`
+	Root         string     `gorm:"type:varchar(500);not null" json:"-"`
+	OriginalPath string     `gorm:"type:varchar(500);not null" json:"-"`
+	TrashPath    string     `gorm:"type:varchar(500);not null" json:"-"`
+	FileHash     string     `gorm:"type:char(64);not null" json:"-"`
+	FileSize     int64      `gorm:"not null" json:"-"`
+	Status       string     `gorm:"type:varchar(24);not null;index" json:"-"`
+	CreatedAt    time.Time  `gorm:"type:datetime(6);not null;default:CURRENT_TIMESTAMP(6)" json:"-"`
+	CompletedAt  *time.Time `gorm:"type:datetime(6)" json:"-"`
+}
+
+func (StorageGarbage) TableName() string { return "storage_garbage" }
 
 // Workspace 工作区
 type Workspace struct {

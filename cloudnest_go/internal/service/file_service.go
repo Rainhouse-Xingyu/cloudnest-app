@@ -410,8 +410,8 @@ func (s *FileService) PrepareCompleteUpload(ctx context.Context, uid int64, uplo
 }
 
 // CompleteUpload 完成上传后写入 storage/file 及任务状态。
-func (s *FileService) CompleteUpload(ctx context.Context, uid int64, parentID int64, uploadID string, snapshot FileUploadTaskSnapshot, storagePath string, mergedSize int64, fileHash string, clientIP string) (contract.UploadCommit, error) {
-	return s.fileRepo.CompleteUploadPersist(ctx, uid, parentID, uploadID, snapshot.Task, snapshot.TotalChunk, storagePath, mergedSize, fileHash, clientIP)
+func (s *FileService) CompleteUpload(ctx context.Context, uid int64, parentID int64, uploadID string, snapshot FileUploadTaskSnapshot, storagePath, storageRoot string, mergedSize int64, fileHash string, clientIP string) (contract.UploadCommit, error) {
+	return s.fileRepo.CompleteUploadPersist(ctx, uid, parentID, uploadID, snapshot.Task, snapshot.TotalChunk, storagePath, storageRoot, mergedSize, fileHash, clientIP)
 }
 
 func (s *FileService) ResolveFileVersion(ctx context.Context, uid, fileID int64, version int) (model.File, model.Storage, error) {

@@ -15,6 +15,7 @@ import (
 
 	"cloudenest_go/internal/app"
 	"cloudenest_go/internal/config"
+	storageMaintenance "cloudenest_go/internal/maintenance"
 	"cloudenest_go/internal/service"
 	storageMysql "cloudenest_go/internal/storage/mysql"
 	"cloudenest_go/internal/store"
@@ -43,7 +44,7 @@ func main() {
 	if err := applyCLIOverrides(&cfg, args); err != nil {
 		log.Fatalf("启动参数错误: %v", err)
 	}
-	databaseOnly := maintenance.kind == "audit-file-names" || maintenance.kind == "migrate-file-names" || maintenance.kind == "audit-storage-references" || maintenance.kind == "migrate-storage-references"
+	databaseOnly := maintenance.kind == "audit-file-names" || maintenance.kind == "migrate-file-names" || maintenance.kind == "audit-storage-references" || maintenance.kind == "migrate-storage-references" || maintenance.kind == "gc-storage" || maintenance.kind == "prune-read-leases"
 	if databaseOnly {
 		err = cfg.ValidateDatabase()
 	} else {
@@ -107,6 +108,25 @@ func main() {
 				if err == nil && report.HasFindings() {
 					err = store.ErrStorageReferenceFindings
 				}
+			}
+		case "gc-storage":
+			if strings.TrimSpace(os.Getenv("DATA_DIR")) == "" {
+				log.Fatal("gc-storage requires explicit DATA_DIR; no default root is used")
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+			defer cancel()
+			var report storageMaintenance.GCReport
+			report, err = storageMaintenance.RunStorageGC(ctx, db, filepath.Join(strings.TrimSpace(cfg.DataDir), "storage"))
+			if err == nil || errors.Is(err, storageMaintenance.ErrGCPending) {
+				err = errors.Join(err, json.NewEncoder(os.Stdout).Encode(report))
+			}
+		case "prune-read-leases":
+			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			defer cancel()
+			var pruned int64
+			pruned, err = storageMaintenance.PruneExpiredReadLeases(ctx, db)
+			if err == nil {
+				err = json.NewEncoder(os.Stdout).Encode(map[string]int64{"pruned": pruned})
 			}
 		case "migrate-storage-references":
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
@@ -251,6 +271,8 @@ func printUsage() {
 	fmt.Println("  cloudnest migrate-file-names    审计通过后显式安装版本化活动文件名唯一约束（先备份并停旧实例）")
 	fmt.Println("  cloudnest audit-storage-references   只读 JSON 存储引用审计；包括回收站与旧版本，不读取或删除物理文件")
 	fmt.Println("  cloudnest migrate-storage-references 显式安装文件/版本到存储的 RESTRICT 外键（先备份并停旧实例）")
+	fmt.Println("  cloudnest gc-storage           显式 DATA_DIR，仅回收已托管、无引用/有效租约且经过两段 24 小时宽限期的对象")
+	fmt.Println("  cloudnest prune-read-leases    每次最多清理 256 条已过期内部读取租约，不删除文件")
 	fmt.Println("  cloudnest migrate              显式应用模型结构（先备份数据库）")
 	fmt.Println("  cloudnest bootstrap-admin      仅初始化空用户表，密码从 CLOUDNEST_BOOTSTRAP_PASSWORD 读取")
 	fmt.Println("")

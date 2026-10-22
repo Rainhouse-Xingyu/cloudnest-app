@@ -532,7 +532,7 @@ func (r *FileRepo) CountDoneUploadChunks(ctx context.Context, uploadID string) (
 	return doneCount, nil
 }
 
-func (r *FileRepo) CompleteUploadPersist(ctx context.Context, uid int64, parentID int64, uploadID string, task model.UploadTask, totalChunks int, storagePath string, mergedSize int64, fileHash string, clientIP string) (contract.UploadCommit, error) {
+func (r *FileRepo) CompleteUploadPersist(ctx context.Context, uid int64, parentID int64, uploadID string, task model.UploadTask, totalChunks int, storagePath, storageRoot string, mergedSize int64, fileHash string, clientIP string) (contract.UploadCommit, error) {
 	var createdFile model.File
 	var canonical model.Storage
 	var repaired bool
@@ -558,7 +558,7 @@ func (r *FileRepo) CompleteUploadPersist(ctx context.Context, uid int64, parentI
 		if err := requireWriteParent(tx, uid, parentID); err != nil {
 			return err
 		}
-		selected, wasRepaired, err := ensureStorageForFileRepo(tx, fileHash, storagePath, mergedSize)
+		selected, wasRepaired, err := ensureStorageForFileRepo(tx, fileHash, storagePath, storageRoot, mergedSize)
 		if err != nil {
 			return err
 		}
@@ -978,8 +978,12 @@ func copyNodeForFileRepo(tx *gorm.DB, newOwnerID int64, src model.File, targetPa
 
 // The unique hash arbitrates simultaneous publications across namespaces. No
 // filesystem deletion occurs inside a metadata transaction.
-func ensureStorageForFileRepo(tx *gorm.DB, fileHash, storagePath string, size int64) (model.Storage, bool, error) {
-	candidate := model.Storage{FileHash: fileHash, FilePath: storagePath, FileSize: &size}
+func ensureStorageForFileRepo(tx *gorm.DB, fileHash, storagePath, storageRoot string, size int64) (model.Storage, bool, error) {
+	root, rel, err := blob.ManagedLocation(storageRoot, storagePath)
+	if err != nil {
+		return model.Storage{}, false, err
+	}
+	candidate := model.Storage{FileHash: fileHash, FilePath: storagePath, FileSize: &size, Managed: true, ManagedRoot: root, ManagedPath: rel}
 	if err := verifyStorageObject(tx.Statement.Context, candidate); err != nil {
 		return model.Storage{}, false, err
 	}
@@ -996,6 +1000,11 @@ func ensureStorageForFileRepo(tx *gorm.DB, fileHash, storagePath string, size in
 	if selected.State != blob.Active {
 		return model.Storage{}, false, contract.ErrConflict
 	}
+	if selected.OrphanedAt != nil {
+		if err := tx.Model(&selected).Update("orphaned_at", nil).Error; err != nil {
+			return selected, false, err
+		}
+	}
 	if selected.FilePath == storagePath {
 		return selected, false, nil
 	}
@@ -1005,10 +1014,20 @@ func ensureStorageForFileRepo(tx *gorm.DB, fileHash, storagePath string, size in
 		}
 		// The candidate has the same verified hash and size. Repoint metadata only;
 		// leave the old path intact for diagnosis and any existing readers.
-		if err := tx.Model(&selected).Update("file_path", storagePath).Error; err != nil {
+		token, tokenErr := blob.RandomToken()
+		if tokenErr != nil {
+			return selected, false, tokenErr
+		}
+		if err := tx.Create(&model.StorageGarbage{Token: token, StorageID: selected.ID, Root: selected.ManagedRoot, OriginalPath: selected.FilePath, FileHash: selected.FileHash, FileSize: *selected.FileSize, Status: "retained"}).Error; err != nil {
+			return selected, false, err
+		}
+		if err := tx.Model(&selected).Updates(map[string]any{"file_path": storagePath, "managed": true, "managed_root": root, "managed_path": rel}).Error; err != nil {
 			return selected, false, err
 		}
 		selected.FilePath = storagePath
+		selected.Managed = true
+		selected.ManagedRoot = root
+		selected.ManagedPath = rel
 		return selected, true, nil
 	}
 	return selected, false, nil

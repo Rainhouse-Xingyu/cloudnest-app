@@ -42,6 +42,7 @@ func Migrate(db *gorm.DB) error {
 		&model.UserPathPermission{},
 		&model.Storage{},
 		&model.StorageReadLease{},
+		&model.StorageGarbage{},
 		&model.Workspace{},
 		&model.WorkspaceUser{},
 		&model.File{},
@@ -140,5 +141,8 @@ func CheckFileSchema(db *gorm.DB) error {
 	if err := CheckStorageReferenceSchema(db); err != nil {
 		return err
 	}
-	return CheckStorageLeaseSchema(db)
+	if err := CheckStorageLeaseSchema(db); err != nil {
+		return err
+	}
+	return CheckStorageGCSchema(db)
 }

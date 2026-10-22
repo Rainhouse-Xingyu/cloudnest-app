@@ -420,7 +420,7 @@ func (h *FileHandler) CompleteUpload(c *gin.Context) {
 		return
 	}
 
-	committed, err := h.Svc.CompleteUpload(c.Request.Context(), uid, req.ParentID, req.UploadID, snapshot, storagePath, mergedSize, fileHash, c.ClientIP())
+	committed, err := h.Svc.CompleteUpload(c.Request.Context(), uid, req.ParentID, req.UploadID, snapshot, storagePath, h.storageBaseDir(), mergedSize, fileHash, c.ClientIP())
 	if committed.CandidateDisposable {
 		if cleanupErr := os.Remove(storagePath); cleanupErr != nil && !errors.Is(cleanupErr, os.ErrNotExist) {
 			h.recordUploadCleanupFailure(c.Request.Context(), uid, nil, "upload_candidate_cleanup", c.ClientIP())
@@ -1481,15 +1481,33 @@ func (h *FileHandler) thumbBaseDir() string {
 }
 
 func (h *FileHandler) mergeChunks(ctx context.Context, uploadID string, totalChunks int) (path string, size int64, digest string, result error) {
-	storageDir := filepath.Join(h.storageBaseDir(), time.Now().Format("200601"))
-	if err := os.MkdirAll(storageDir, 0o700); err != nil {
+	if err := os.MkdirAll(h.storageBaseDir(), 0700); err != nil {
 		return "", 0, "", err
 	}
-	out, err := os.CreateTemp(storageDir, ".upload-*")
+	root, err := blob.CanonicalRoot(h.storageBaseDir())
 	if err != nil {
 		return "", 0, "", err
 	}
-	candidate := out.Name()
+	relativeDir := filepath.Join(".managed-v1", time.Now().Format("200601"))
+	storageDir := filepath.Join(root, relativeDir)
+	anchored, err := os.OpenRoot(root)
+	if err != nil {
+		return "", 0, "", err
+	}
+	defer anchored.Close()
+	if err := blob.EnsurePrivateDir(anchored, relativeDir); err != nil {
+		return "", 0, "", err
+	}
+	token, err := blob.RandomToken()
+	if err != nil {
+		return "", 0, "", err
+	}
+	relativeCandidate := filepath.Join(relativeDir, "blob-"+token)
+	out, err := anchored.OpenFile(relativeCandidate, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		return "", 0, "", err
+	}
+	candidate := filepath.Join(root, relativeCandidate)
 	complete := false
 	closed := false
 	defer func() {
@@ -1498,7 +1516,7 @@ func (h *FileHandler) mergeChunks(ctx context.Context, uploadID string, totalChu
 		}
 		// Before any database call this path belongs only to this request.
 		if !complete {
-			if err := os.Remove(candidate); err != nil && !errors.Is(err, os.ErrNotExist) {
+			if err := anchored.Remove(relativeCandidate); err != nil && !errors.Is(err, os.ErrNotExist) {
 				result = errors.Join(result, err)
 			}
 		}
@@ -1528,17 +1546,17 @@ func (h *FileHandler) mergeChunks(ctx context.Context, uploadID string, totalChu
 	if closeOutputErr != nil {
 		return "", 0, "", closeOutputErr
 	}
-	dir, err := os.Open(storageDir)
-	if err != nil {
-		return "", 0, "", err
-	}
-	syncErr := dir.Sync()
-	closeErr := dir.Close()
-	if syncErr != nil {
-		return "", 0, "", syncErr
-	}
-	if closeErr != nil {
-		return "", 0, "", closeErr
+	// Persist both the candidate entry and newly created namespace directories.
+	for _, path := range []string{storageDir, filepath.Dir(storageDir), root, filepath.Dir(root)} {
+		dir, err := os.Open(path)
+		if err != nil {
+			return "", 0, "", err
+		}
+		syncErr := dir.Sync()
+		closeErr := dir.Close()
+		if err := errors.Join(syncErr, closeErr); err != nil {
+			return "", 0, "", err
+		}
 	}
 	complete = true
 	return candidate, size, hex.EncodeToString(hash.Sum(nil)), nil

@@ -78,7 +78,7 @@ type FileRepository interface {
 	CreateUploadTask(ctx context.Context, task model.UploadTask) error
 	UpsertUploadChunkAndRefreshProgress(ctx context.Context, taskID int64, uploadID string, chunkIndex int, chunkSize int64, chunkPath string) error
 	CountDoneUploadChunks(ctx context.Context, uploadID string) (int64, error)
-	CompleteUploadPersist(ctx context.Context, uid int64, parentID int64, uploadID string, task model.UploadTask, totalChunks int, storagePath string, mergedSize int64, fileHash string, clientIP string) (UploadCommit, error)
+	CompleteUploadPersist(ctx context.Context, uid int64, parentID int64, uploadID string, task model.UploadTask, totalChunks int, storagePath, storageRoot string, mergedSize int64, fileHash string, clientIP string) (UploadCommit, error)
 	CreateShare(ctx context.Context, uid int64, fileID int64, shareCode string, expireAt *time.Time) (model.Share, error)
 	CreateOperationLog(ctx context.Context, userID int64, fileID *int64, action string, status string, detail string, clientIP string) error
 	ListShares(ctx context.Context, uid int64) ([]model.Share, error)
