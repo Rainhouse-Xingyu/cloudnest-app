@@ -195,17 +195,9 @@ func (s *FileService) CreateFolder(ctx context.Context, uid int64, name string, 
 		}
 	}
 
-	existed, err := s.fileRepo.HasActiveNameConflict(ctx, parentID, name, nil)
-	if err != nil {
-		return model.File{}, err
-	}
-	if existed {
-		return model.File{}, ErrFileNameConflict
-	}
-
 	folder, err := s.fileRepo.CreateFolderRecord(ctx, uid, name, parentID)
 	if err != nil {
-		return model.File{}, err
+		return model.File{}, translateFileMutationError(err)
 	}
 	_ = s.logOperation(ctx, uid, &folder.ID, "create_folder", "success", fmt.Sprintf("parent_id=%d", parentID), clientIP)
 	return folder, nil
@@ -234,19 +226,11 @@ func (s *FileService) RenameFile(ctx context.Context, uid int64, fileID int64, n
 		return model.File{}, err
 	}
 
-	excludeID := f.ID
-	existed, err := s.fileRepo.HasActiveNameConflict(ctx, f.ParentID, name, &excludeID)
+	renamed, err := s.fileRepo.RenameFile(ctx, uid, f.ID, name)
 	if err != nil {
-		return model.File{}, err
+		return model.File{}, translateFileMutationError(err)
 	}
-	if existed {
-		return model.File{}, ErrFileNameConflict
-	}
-
-	if err := s.fileRepo.UpdateFileName(ctx, f.ID, name); err != nil {
-		return model.File{}, err
-	}
-	f.Filename = name
+	f = renamed
 	_ = s.logOperation(ctx, uid, &f.ID, "rename", "success", "renamed file", clientIP)
 	return f, nil
 }
@@ -279,8 +263,8 @@ func (s *FileService) DeleteFile(ctx context.Context, uid int64, fileID int64, c
 		}
 	}
 
-	if err := s.fileRepo.SoftDeleteFileWithLivePhotoCleanup(ctx, f.ID); err != nil {
-		return err
+	if err := s.fileRepo.SoftDeleteFileWithLivePhotoCleanup(ctx, uid, f.ID); err != nil {
+		return translateFileMutationError(err)
 	}
 	_ = s.logOperation(ctx, uid, &f.ID, "delete", "success", "moved to recycle bin", clientIP)
 	return nil
@@ -289,6 +273,9 @@ func (s *FileService) DeleteFile(ctx context.Context, uid int64, fileID int64, c
 // InitUpload 初始化上传任务，支持续传查询。
 func (s *FileService) InitUpload(ctx context.Context, uid int64, in FileUploadInitInput) (FileUploadInitResult, error) {
 	in.Filename = strings.TrimSpace(in.Filename)
+	if err := contract.ValidateFileName(in.Filename); err != nil {
+		return FileUploadInitResult{}, err
+	}
 	in.UploadID = strings.TrimSpace(in.UploadID)
 	if in.Filename == "" || in.TotalSize <= 0 || in.ParentID < 0 {
 		return FileUploadInitResult{}, fmt.Errorf("invalid upload parameters")
@@ -1190,4 +1177,24 @@ func isLivePhotoImageExtInService(ext string) bool {
 func isLivePhotoVideoExtInService(ext string) bool {
 	videos := map[string]bool{"mov": true, "mp4": true, "m4v": true}
 	return videos[ext]
+}
+
+// Consistent transport errors for mutations that recheck state under a DB lock.
+func translateFileMutationError(err error) error {
+	switch {
+	case errors.Is(err, contract.ErrForbidden):
+		return ErrFilePermissionDenied
+	case errors.Is(err, contract.ErrConflict):
+		return ErrFileNameConflict
+	case errors.Is(err, contract.ErrTargetNotFound):
+		return ErrTargetFolderNotFound
+	case errors.Is(err, contract.ErrTargetNotFolder):
+		return ErrTargetNotFolder
+	case errors.Is(err, contract.ErrFolderNotEmpty):
+		return ErrFileFolderNotEmpty
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		return ErrFileNotFound
+	default:
+		return err
+	}
 }

@@ -91,6 +91,9 @@ func main() {
 		log.Printf("维护命令 %s 完成", maintenance.kind)
 		return
 	}
+	if err := store.CheckFileSchema(db); err != nil {
+		log.Fatal(err)
+	}
 	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
 		log.Fatalf("准备数据目录失败: %v", err)
 	}

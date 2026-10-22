@@ -29,6 +29,7 @@ import (
 	"cloudenest_go/internal/config"
 	"cloudenest_go/internal/middleware"
 	"cloudenest_go/internal/service"
+	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
 
 	"github.com/gin-gonic/gin"
@@ -173,23 +174,8 @@ func (h *FileHandler) CreateFolder(c *gin.Context) {
 
 	folder, err := h.Svc.CreateFolder(c.Request.Context(), uid, req.Name, req.ParentID, c.ClientIP())
 	if err != nil {
-		switch {
-		case errors.Is(err, service.ErrFilePermissionDenied):
-			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-			return
-		case errors.Is(err, service.ErrFileParentNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "parent not found"})
-			return
-		case errors.Is(err, service.ErrFileParentNotFolder):
-			c.JSON(http.StatusBadRequest, gin.H{"error": "parent is not folder"})
-			return
-		case errors.Is(err, service.ErrFileNameConflict):
-			c.JSON(http.StatusConflict, gin.H{"error": "name already exists in this folder"})
-			return
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "create folder failed"})
-			return
-		}
+		writeFileMutationError(c, err, "create folder failed")
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"item": folder})
@@ -216,20 +202,8 @@ func (h *FileHandler) Rename(c *gin.Context) {
 
 	f, err := h.Svc.RenameFile(c.Request.Context(), uid, fileID, req.Name, c.ClientIP())
 	if err != nil {
-		switch {
-		case errors.Is(err, service.ErrFilePermissionDenied):
-			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-			return
-		case errors.Is(err, service.ErrFileNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
-			return
-		case errors.Is(err, service.ErrFileNameConflict):
-			c.JSON(http.StatusConflict, gin.H{"error": "name already exists in this folder"})
-			return
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "rename failed"})
-			return
-		}
+		writeFileMutationError(c, err, "rename failed")
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"item": f})
@@ -245,20 +219,8 @@ func (h *FileHandler) Delete(c *gin.Context) {
 
 	err = h.Svc.DeleteFile(c.Request.Context(), uid, fileID, c.ClientIP())
 	if err != nil {
-		switch {
-		case errors.Is(err, service.ErrFilePermissionDenied):
-			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-			return
-		case errors.Is(err, service.ErrFileNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
-			return
-		case errors.Is(err, service.ErrFileFolderNotEmpty):
-			c.JSON(http.StatusConflict, gin.H{"error": "folder is not empty"})
-			return
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "delete failed"})
-			return
-		}
+		writeFileMutationError(c, err, "delete failed")
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
@@ -289,6 +251,10 @@ func (h *FileHandler) InitUpload(c *gin.Context) {
 		TotalChunks: req.TotalChunks,
 	})
 	if err != nil {
+		if errors.Is(err, contract.ErrInvalidInput) {
+			writeFileMutationError(c, err, "invalid upload name")
+			return
+		}
 		switch {
 		case errors.Is(err, service.ErrFilePermissionDenied):
 			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
@@ -453,7 +419,7 @@ func (h *FileHandler) CompleteUpload(c *gin.Context) {
 
 	createdFile, err := h.Svc.CompleteUpload(c.Request.Context(), uid, req.ParentID, req.UploadID, snapshot, storagePath, mergedSize, fileHash, c.ClientIP())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "complete upload failed"})
+		writeFileMutationError(c, err, "complete upload failed")
 		return
 	}
 
@@ -1369,26 +1335,8 @@ func (h *FileHandler) Move(c *gin.Context) {
 
 	updated, err := h.Svc.MoveFiles(c.Request.Context(), uid, req.FileIDs, req.TargetParentID, c.ClientIP())
 	if err != nil {
-		switch {
-		case errors.Is(err, service.ErrFilePermissionDenied):
-			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-			return
-		case errors.Is(err, service.ErrTargetFolderNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "target folder not found"})
-			return
-		case errors.Is(err, service.ErrTargetNotFolder):
-			c.JSON(http.StatusBadRequest, gin.H{"error": "target is not folder"})
-			return
-		case errors.Is(err, service.ErrCannotMoveToItself), errors.Is(err, service.ErrCannotMoveToDesc):
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-			return
-		case errors.Is(err, service.ErrFileNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
-			return
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "move failed"})
-			return
-		}
+		writeFileMutationError(c, err, "move failed")
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"updated_ids": updated})
@@ -1411,17 +1359,8 @@ func (h *FileHandler) Copy(c *gin.Context) {
 
 	newIDs, err := h.Svc.CopyFiles(c.Request.Context(), uid, req.FileIDs, req.TargetParentID, c.ClientIP())
 	if err != nil {
-		switch {
-		case errors.Is(err, service.ErrFilePermissionDenied):
-			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-			return
-		case errors.Is(err, service.ErrFileNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
-			return
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "copy failed"})
-			return
-		}
+		writeFileMutationError(c, err, "copy failed")
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"new_ids": newIDs})
@@ -1451,17 +1390,8 @@ func (h *FileHandler) Restore(c *gin.Context) {
 
 	restored, err := h.Svc.RestoreFromRecycleBin(c.Request.Context(), uid, fileID, c.ClientIP())
 	if err != nil {
-		switch {
-		case errors.Is(err, service.ErrFilePermissionDenied):
-			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-			return
-		case errors.Is(err, service.ErrRecycleItemNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "recycle item not found"})
-			return
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "restore failed"})
-			return
-		}
+		writeFileMutationError(c, err, "restore failed")
+		return
 	}
 	// 恢复后尝试按同目录同名规则自动重建 Live Photo 绑定（无阻塞失败）。
 	_ = h.tryAutoBindLivePhotoForFile(c.Request.Context(), uid, restored, c.ClientIP())
@@ -2162,4 +2092,19 @@ func addZipFileFromPath(zw *zip.Writer, relPath string, sourcePath string) error
 
 	_, err = io.Copy(w, in)
 	return err
+}
+
+func writeFileMutationError(c *gin.Context, err error, fallback string) {
+	status, message := http.StatusInternalServerError, fallback
+	switch {
+	case errors.Is(err, contract.ErrForbidden), errors.Is(err, service.ErrFilePermissionDenied):
+		status, message = http.StatusForbidden, "permission denied"
+	case errors.Is(err, contract.ErrInvalidInput), errors.Is(err, contract.ErrTargetNotFolder), errors.Is(err, service.ErrTargetNotFolder), errors.Is(err, service.ErrFileParentNotFolder):
+		status, message = http.StatusBadRequest, "invalid name or target folder"
+	case errors.Is(err, gorm.ErrRecordNotFound), errors.Is(err, contract.ErrNotFound), errors.Is(err, contract.ErrTargetNotFound), errors.Is(err, service.ErrFileParentNotFound), errors.Is(err, service.ErrFileNotFound), errors.Is(err, service.ErrTargetFolderNotFound), errors.Is(err, service.ErrRecycleItemNotFound):
+		status, message = http.StatusNotFound, "file or folder not found"
+	case errors.Is(err, contract.ErrConflict), errors.Is(err, contract.ErrCannotMoveToItself), errors.Is(err, contract.ErrCannotMoveToDesc), errors.Is(err, contract.ErrFolderNotEmpty), errors.Is(err, service.ErrFileNameConflict), errors.Is(err, service.ErrCannotMoveToItself), errors.Is(err, service.ErrCannotMoveToDesc), errors.Is(err, service.ErrFileFolderNotEmpty):
+		status, message = http.StatusConflict, "file conflict; refresh and retry"
+	}
+	c.JSON(status, gin.H{"error": message})
 }

@@ -43,6 +43,7 @@ func Migrate(db *gorm.DB) error {
 		&model.Workspace{},
 		&model.WorkspaceUser{},
 		&model.File{},
+		&model.FileNamespace{},
 		&model.FileVersion{},
 		&model.FilePermission{},
 		&model.UploadTask{},
@@ -113,6 +114,17 @@ func CheckAuthSchema(db *gorm.DB) error {
 	}
 	if count != 1 {
 		return errors.New("authentication schema missing auth_version; back up and run the explicit migrate command before starting")
+	}
+	return nil
+}
+
+func CheckFileSchema(db *gorm.DB) error {
+	var count int64
+	if err := db.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'file_namespace' AND column_name = 'namespace_key'").Scan(&count).Error; err != nil {
+		return err
+	}
+	if count != 1 {
+		return errors.New("file namespace schema missing; back up and run the explicit migrate command before starting")
 	}
 	return nil
 }

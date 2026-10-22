@@ -7,6 +7,7 @@ var (
 	ErrInvalidInput        = errors.New("invalid input")
 	ErrNotFound            = errors.New("not found")
 	ErrForbidden           = errors.New("forbidden")
+	ErrFolderNotEmpty      = errors.New("folder is not empty")
 	ErrConflict            = errors.New("conflict")
 	ErrInternal            = errors.New("internal error")
 	ErrShareExpired        = errors.New("share expired")

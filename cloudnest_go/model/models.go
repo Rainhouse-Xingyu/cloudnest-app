@@ -297,3 +297,11 @@ type SystemSetting struct {
 func (SystemSetting) TableName() string {
 	return "system_setting"
 }
+
+// FileNamespace is a persistent mutex row, not a file or a user-visible directory.
+// Every name-creating mutation must lock the same root-owner or parent-folder key.
+type FileNamespace struct {
+	Key string `gorm:"column:namespace_key;type:varchar(64);primaryKey" json:"-"`
+}
+
+func (FileNamespace) TableName() string { return "file_namespace" }

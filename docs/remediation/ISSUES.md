@@ -25,14 +25,16 @@
 | CLIENT-002 P2 | 旧 SettingsViewModel.logout 忽略服务端撤销错误，直接清本地会话 | 静态调用链证据；后端错误已正确返回 503 | G07 保留可重试的远端注销并展示失败状态 | 已记录，待新客户端实现 |
 | DEP-001 P1 | 初次 govulncheck 报告 x/net、x/text、quic-go 可达漏洞；旧 Go 标准库另查 | `make vuln`；见 BASELINE | G01 按公告最小升级依赖和工具链，重新构建/扫描 | 已升级；可达/导入包告警 0，另 1 项未调用 OpenPGP 模块告警 |
 | DATA-001 P1 | `internal/store/mysql.go:NewMySQL` 每次启动 AutoMigrate，无版本/审核开关 | 审查启动调用链；仅在测试库观察建表 | G01 关闭隐式生产迁移；G06/G10 版本化迁移、备份/回滚演练 | 普通启动不再迁移；显式迁移已测，版本化迁移待 G06/G10 |
-| FILE-001 P1 | `storage/mysql/file_repo.go:HasActiveNameConflict` 根目录 parent_id=0 未含 user_id | 两用户根目录创建同名目录；第二个不应冲突 | G02 对根按所有者作用域，非根按共享父目录；事务并发约束 | 已确认，待修 |
+| FILE-001 P1 | `storage/mysql/file_repo.go:HasActiveNameConflict` 根目录 parent_id=0 未含 user_id | 两用户根目录创建同名目录；第二个不应冲突 | G02 对根按所有者作用域，非根按共享父目录；事务并发约束 | 已复现跨用户 409；修复后通过根/共享目录与并发测试，待 G02 PR 审查 |
 | FILE-002 P1 | `service/file_service.go:InitUpload` 不比较声明分片数与计算值 | total_size=10, chunk_size=5, total_chunks=1 | G03 溢出安全计算、数量及每片/总字节校验 | 已确认，待修 |
 | FILE-003 P1 | `CompleteUploadPersist` 无任务行锁/CAS，无完成结果复用；mergeChunks 直接覆盖路径 | 两个完成请求并发/超时后重试；检查重复 file/物理路径损坏 | G02/G03 完成状态机、互斥/幂等结果、临时文件原子落盘 | 静态确认，并发实测待做 |
-| FILE-004 P1 | `CompleteUploadPersist` 直接创建同名记录，CreateFolder/Rename 则拒绝 | 同用户同目录同名上传两次 | G02 统一命名/冲突策略，数据库约束及恢复规则 | 已确认，待修 |
+| FILE-004 P1 | `CompleteUploadPersist` 直接创建同名记录，CreateFolder/Rename 则拒绝 | 同用户同目录同名上传两次 | G02 统一命名/冲突策略，数据库约束及恢复规则 | 应用写入命名锁与数字后缀已修；数据库最终唯一约束/历史重复处理仍待做 |
 | FILE-005 P1 | `StorageService.GetOverview` 计算配额；InitUpload/CompleteUpload 无配额预留/核销 | 设置低配额后上传超限文件；并发超额 | G02/G03 配额账本/预留/释放，版本和回收站计量政策 | 已确认，待修 |
 | FILE-006 P1 | `ensureStorageForFileRepo` 以 hash 去重；PermanentDelete 只删逻辑记录 | 上传重复内容后永久删除，统计物理对象和引用 | G02 显式引用图/版本引用/安全 GC；不直接删未知对象 | 已确认，待设计 |
-| FILE-007 P1 | 递归 collectDescendantIDs/ListActiveChildren 仅按 parent_id 查询，授权集中在根 | 混合所有者子目录、共享只读子项、循环/异常目录树 | G02 定义继承语义，逐层授权与循环检测/深度上限 | 待行为复现 |
+| FILE-007 P1 | 递归 collectDescendantIDs/ListActiveChildren 仅按 parent_id 查询，授权集中在根 | 混合所有者子目录、共享只读子项、循环/异常目录树 | G02 定义继承语义，逐层授权与循环检测/深度上限 | 复制已逐项验证既有 ACL，拒绝自身/后代/循环并限制深度；ZIP/永久删除/完整树矩阵待做 |
 | FILE-008 P1 | 上传任务无持久 parent_id/结果 file_id；恢复参数和完成目录可变化 | 用原 upload_id 带不同目录/文件元信息继续操作 | G03 固化任务契约并验证重试参数 | 已确认，待修 |
+| FILE-013 P1 | 新建/重命名先检查后写入，复制后缀使用秒级时间 | 12 路并发新建实际 9 成功/3 冲突；双 Router 并发复制/重命名 | G02 同目录事务行锁、READ COMMITTED、重读来源、数字后缀 | 修复前已复现；修复后新建 1 成功/11 冲突，复制与重命名回归通过 |
+| FILE-014 P1 | 删除目录与新建子项的父目录状态检查不在同一锁定边界 | 并发删除目录/创建子项，再查活跃子项是否指向已删除父目录 | G02 删除锁住子项命名范围，事务内重查空目录和有效父目录 | 8 轮真实 API 竞争检查通过；完整树并发矩阵仍待做 |
 | FILE-009 P2 | 文件搜索多列 LIKE、ListFiles/目录递归无分页/批量规划 | 数据规模测试、EXPLAIN、查询计数 | G02/G10 索引/游标分页/批量目录查询 | 结构已确认，性能未测 |
 | FILE-010 P2 | Go `sendFileWithRateLimit` 已 ServeContent/io.Copy/固定缓冲；客户端 NetworkClient 使用 data(for:) | 大文件峰值内存测试 | G03/G08 新客户端 URLSession 文件下载任务；不重写已流式 Go 普通下载 | 后端整文件内存假设未成立；性能未测 |
 | FILE-011 P1 | Share 模型及 CreateShare 只有 code/expiry，无提取码/访问次数约束 | 查看真实字段/API | G06 提取码哈希/访问计数、限速、撤销/到期测试 | 缺功能 |

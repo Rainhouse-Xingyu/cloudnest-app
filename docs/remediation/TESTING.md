@@ -32,3 +32,5 @@ xcodebuild -project cloudnest_ios/cloudnest_ios.xcodeproj \
 ```
 
 当前所需 iOS 26.2 平台组件不可用；不得降低部署目标伪造通过。后续 macOS 工程使用独立构建/测试脚本。
+
+G02 命名首批新增 7 项真实 API 回归，总计 24 项，覆盖根/共享目录、重名策略及字节保留、双实例并发、删除/创建竞争、复制子项权限/循环和非法/长名称。详情与未完成范围见 [G02 报告](G02-FILE-CONSISTENCY.md)。
