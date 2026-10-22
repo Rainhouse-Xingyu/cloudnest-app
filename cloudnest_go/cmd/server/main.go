@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -42,7 +43,12 @@ func main() {
 	if err := applyCLIOverrides(&cfg, args); err != nil {
 		log.Fatalf("启动参数错误: %v", err)
 	}
-	if err := cfg.Validate(); err != nil {
+	if maintenance.kind == "audit-file-names" {
+		err = cfg.ValidateDatabase()
+	} else {
+		err = cfg.Validate()
+	}
+	if err != nil {
 		log.Fatalf("配置错误: %v", err)
 	}
 	if maintenance.kind == "bootstrap-admin" {
@@ -68,13 +74,26 @@ func main() {
 		log.Fatalf("初始化 MySQL 失败: %s", explainStartupError(err))
 	}
 
-	if maintenance.kind != "migrate" {
+	if maintenance.kind != "migrate" && maintenance.kind != "audit-file-names" {
 		if err := store.CheckAuthSchema(db); err != nil {
 			log.Fatal(err)
 		}
 	}
 	if maintenance.kind != "" {
 		switch maintenance.kind {
+		case "audit-file-names":
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
+			var report store.FileNameAudit
+			report, err = store.AuditFileNames(ctx, db)
+			if err == nil {
+				encoder := json.NewEncoder(os.Stdout)
+				encoder.SetIndent("", "  ")
+				err = encoder.Encode(report)
+				if err == nil && report.HasFindings() {
+					err = store.ErrFileNameAuditFindings
+				}
+			}
 		case "migrate":
 			err = store.Migrate(db)
 		case "bootstrap-admin":
@@ -206,6 +225,7 @@ func printUsage() {
 	fmt.Println("  cloudnest start <端口> <数据目录>")
 	fmt.Println("  cloudnest version")
 	fmt.Println("  cloudnest reset-password <用户ID> <精确用户名>   从标准输入读取新密码并撤销该用户全部会话")
+	fmt.Println("  cloudnest audit-file-names      只读 JSON 名称冲突审计；发现问题时非零退出，不修改数据")
 	fmt.Println("  cloudnest migrate              显式应用模型结构（先备份数据库）")
 	fmt.Println("  cloudnest bootstrap-admin      仅初始化空用户表，密码从 CLOUDNEST_BOOTSTRAP_PASSWORD 读取")
 	fmt.Println("")

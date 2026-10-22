@@ -28,7 +28,7 @@
 | FILE-001 P1 | `storage/mysql/file_repo.go:HasActiveNameConflict` 根目录 parent_id=0 未含 user_id | 两用户根目录创建同名目录；第二个不应冲突 | G02 对根按所有者作用域，非根按共享父目录；事务并发约束 | 已复现跨用户 409；修复后通过根/共享目录与并发测试，待 G02 PR 审查 |
 | FILE-002 P1 | `service/file_service.go:InitUpload` 不比较声明分片数与计算值 | total_size=10, chunk_size=5, total_chunks=1 | G03 溢出安全计算、数量及每片/总字节校验 | 已确认，待修 |
 | FILE-003 P1 | `CompleteUploadPersist` 无任务行锁/CAS，无完成结果复用；mergeChunks 直接覆盖路径 | 两个完成请求并发/超时后重试；检查重复 file/物理路径损坏 | G02/G03 完成状态机、互斥/幂等结果、临时文件原子落盘 | 静态确认，并发实测待做 |
-| FILE-004 P1 | `CompleteUploadPersist` 直接创建同名记录，CreateFolder/Rename 则拒绝 | 同用户同目录同名上传两次 | G02 统一命名/冲突策略，数据库约束及恢复规则 | 应用写入命名锁与数字后缀已修；数据库最终唯一约束/历史重复处理仍待做 |
+| FILE-004 P1 | `CompleteUploadPersist` 直接创建同名记录，CreateFolder/Rename 则拒绝 | 同用户同目录同名上传两次 | G02 统一命名/冲突策略，数据库约束及恢复规则 | 应用写入命名锁与数字后缀已修；只读审计已覆盖历史重名/异常标量，最终唯一约束和审核修复仍待做 |
 | FILE-005 P1 | `StorageService.GetOverview` 计算配额；InitUpload/CompleteUpload 无配额预留/核销 | 设置低配额后上传超限文件；并发超额 | G02/G03 配额账本/预留/释放，版本和回收站计量政策 | 已确认，待修 |
 | FILE-006 P1 | `ensureStorageForFileRepo` 以 hash 去重；PermanentDelete 只删逻辑记录 | 上传重复内容后永久删除，统计物理对象和引用 | G02 显式引用图/版本引用/安全 GC；不直接删未知对象 | 已确认，待设计 |
 | FILE-007 P1 | 递归 collectDescendantIDs/ListActiveChildren 仅按 parent_id 查询，授权集中在根 | 混合所有者子目录、共享只读子项、循环/异常目录树 | G02 定义继承语义，逐层授权与循环检测/深度上限 | ZIP/批量下载/复制/移动/永久删除已逐项验证既有 ACL，循环/超限拒绝、树锁后重读；目录继承与扩展并发/性能矩阵待做 |

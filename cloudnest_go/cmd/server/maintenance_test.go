@@ -10,7 +10,7 @@ func TestMaintenanceRejectsAmbiguousTargetsAndPasswordArguments(t *testing.T) {
 		{"reset-password"}, {"reset-password", "1"}, {"reset-password", "0", "alice"},
 		{"reset-password", "-1", "alice"}, {"reset-password", "1", ""},
 		{"reset-password", "alice", "alice"}, {"reset-password", "1", "alice", "secret-must-not-be-argv"},
-		{"migrate", "extra"}, {"bootstrap-admin", "extra"},
+		{"audit-file-names", "extra"}, {"migrate", "extra"}, {"bootstrap-admin", "extra"},
 	} {
 		_, recognized, err := parseMaintenanceArgs(args)
 		if !recognized || err == nil {

@@ -62,11 +62,20 @@ func (c Config) Validate() error {
 	if len(secret) < 32 || secret != c.JWTSecret || strings.Contains(strings.ToLower(secret), "replace_with") || strings.Contains(strings.ToLower(secret), "change-me") {
 		return fmt.Errorf("JWT_SECRET must be a non-placeholder random secret of at least 32 bytes without surrounding whitespace")
 	}
-	if strings.TrimSpace(c.MySQLDSN) == "" || strings.Contains(c.MySQLDSN, "CHANGE_ME") {
-		return fmt.Errorf("MYSQL_DSN must be explicitly configured")
+	if err := c.ValidateDatabase(); err != nil {
+		return err
 	}
 	if c.JWTExpireHours <= 0 || c.JWTExpireHours > 8760 {
 		return fmt.Errorf("JWT_EXPIRE_HOURS must be between 1 and 8760")
+	}
+	return nil
+}
+
+// ValidateDatabase is sufficient for read-only maintenance that neither serves
+// HTTP nor reads/writes sessions. It does not need the server signing key.
+func (c Config) ValidateDatabase() error {
+	if strings.TrimSpace(c.MySQLDSN) == "" || strings.Contains(c.MySQLDSN, "CHANGE_ME") {
+		return fmt.Errorf("MYSQL_DSN must be explicitly configured")
 	}
 	return nil
 }
