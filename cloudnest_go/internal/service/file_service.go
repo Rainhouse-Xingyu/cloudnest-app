@@ -128,18 +128,10 @@ type FileUploadTaskSnapshot struct {
 }
 
 // FileBatchDownloadEntry 表示批量下载中一个可下载条目。
-type FileBatchDownloadEntry struct {
-	File        model.File
-	IsFolderZip bool
-	StoragePath string
-}
+type FileBatchDownloadEntry = contract.BatchDownloadEntry
 
 // FileFolderZipEntry 表示目录打包中的单个条目。
-type FileFolderZipEntry struct {
-	RelPath     string
-	StoragePath string
-	IsDir       bool
-}
+type FileFolderZipEntry = contract.FolderZipEntry
 
 // ListFiles 返回指定目录下可读文件列表。
 func (s *FileService) ListFiles(ctx context.Context, uid int64, parentID int64) ([]model.File, error) {
@@ -585,7 +577,7 @@ func (s *FileService) RestoreFromRecycleBin(ctx context.Context, uid int64, file
 
 // PermanentDeleteFromRecycleBin 彻底删除回收站条目。
 func (s *FileService) PermanentDeleteFromRecycleBin(ctx context.Context, uid int64, fileID int64, clientIP string) error {
-	err := s.fileRepo.PermanentDeleteFromRecycleBin(ctx, uid, fileID)
+	err := s.fileRepo.PermanentDeleteFromRecycleBin(ctx, uid, fileID, clientIP)
 	if err != nil {
 		switch {
 		case errors.Is(err, contract.ErrRecycleItemNotFound):
@@ -597,7 +589,6 @@ func (s *FileService) PermanentDeleteFromRecycleBin(ctx context.Context, uid int
 		}
 	}
 
-	_ = s.logOperation(ctx, uid, &fileID, "permanent_delete", "success", "delete from recycle bin", clientIP)
 	return nil
 }
 
@@ -669,43 +660,35 @@ func (s *FileService) GetPublicShareInfo(ctx context.Context, code string) (mode
 }
 
 // ResolvePublicShareDownload 获取公开分享下载目标（文件或目录）。
-func (s *FileService) ResolvePublicShareDownload(ctx context.Context, code string) (model.File, *model.Storage, error) {
-	_, file, err := s.resolveValidShare(ctx, code)
+func (s *FileService) ResolvePublicShareDownload(ctx context.Context, code string) (model.File, *model.Storage, int64, error) {
+	share, file, err := s.resolveValidShare(ctx, code)
 	if err != nil {
-		return model.File{}, nil, err
+		return model.File{}, nil, 0, err
 	}
 	if file.IsFolder == 1 {
-		return file, nil, nil
+		return file, nil, *share.UserID, nil
 	}
 	if file.StorageID == nil {
-		return model.File{}, nil, ErrStorageNotFound
+		return model.File{}, nil, 0, ErrStorageNotFound
 	}
 
 	storage, storageErr := s.fileRepo.GetStorageByID(ctx, *file.StorageID)
 	if storageErr != nil {
 		if errors.Is(storageErr, gorm.ErrRecordNotFound) {
-			return model.File{}, nil, ErrStorageNotFound
+			return model.File{}, nil, 0, ErrStorageNotFound
 		}
-		return model.File{}, nil, storageErr
+		return model.File{}, nil, 0, storageErr
 	}
 	if _, err := os.Stat(storage.FilePath); err != nil {
-		return model.File{}, nil, ErrPhysicalFileNotFound
+		return model.File{}, nil, 0, ErrPhysicalFileNotFound
 	}
 
-	return file, &storage, nil
+	return file, &storage, *share.UserID, nil
 }
 
-// CollectBatchDownloadEntries 收集批量下载的可下载条目（无权限或异常条目会被跳过）。
+// CollectBatchDownloadEntries 在一致快照中验证批量下载清单，任何失败均中止。
 func (s *FileService) CollectBatchDownloadEntries(ctx context.Context, uid int64, fileIDs []int64) ([]FileBatchDownloadEntry, error) {
-	rows, err := s.fileRepo.CollectBatchDownloadEntries(ctx, uid, fileIDs)
-	if err != nil {
-		return nil, err
-	}
-	entries := make([]FileBatchDownloadEntry, 0, len(rows))
-	for _, row := range rows {
-		entries = append(entries, FileBatchDownloadEntry{File: row.File, IsFolderZip: row.IsFolderZip, StoragePath: row.StoragePath})
-	}
-	return entries, nil
+	return s.fileRepo.CollectBatchDownloadEntries(ctx, uid, fileIDs)
 }
 
 // SearchFiles 按名称/类型/时间进行检索和筛选。
@@ -811,60 +794,8 @@ func (s *FileService) BatchDeleteFiles(ctx context.Context, uid int64, fileIDs [
 }
 
 // CollectFolderZipEntries 收集目录下载所需的 zip 条目。
-func (s *FileService) CollectFolderZipEntries(ctx context.Context, root model.File) ([]FileFolderZipEntry, error) {
-	type queueNode struct {
-		FolderID int64
-		RelPath  string
-	}
-
-	entries := make([]FileFolderZipEntry, 0)
-	storageCache := make(map[int64]model.Storage)
-	queue := []queueNode{{FolderID: root.ID, RelPath: sanitizeFileNameInService(root.Filename)}}
-
-	for len(queue) > 0 {
-		node := queue[0]
-		queue = queue[1:]
-
-		children, err := s.fileRepo.ListActiveChildrenByParent(ctx, node.FolderID)
-		if err != nil {
-			return nil, err
-		}
-
-		if len(children) == 0 {
-			entries = append(entries, FileFolderZipEntry{RelPath: node.RelPath, IsDir: true})
-			continue
-		}
-
-		for _, child := range children {
-			childRelPath := filepath.ToSlash(filepath.Join(node.RelPath, sanitizeFileNameInService(child.Filename)))
-			if child.IsFolder == 1 {
-				queue = append(queue, queueNode{FolderID: child.ID, RelPath: childRelPath})
-				continue
-			}
-			if child.StorageID == nil {
-				continue
-			}
-
-			storage, ok := storageCache[*child.StorageID]
-			if !ok {
-				storage, err = s.GetStorageByID(ctx, *child.StorageID)
-				if err != nil {
-					if errors.Is(err, ErrStorageNotFound) {
-						continue
-					}
-					return nil, err
-				}
-				storageCache[*child.StorageID] = storage
-			}
-
-			if _, err := os.Stat(storage.FilePath); err != nil {
-				continue
-			}
-			entries = append(entries, FileFolderZipEntry{RelPath: childRelPath, StoragePath: storage.FilePath})
-		}
-	}
-
-	return entries, nil
+func (s *FileService) CollectFolderZipEntries(ctx context.Context, uid, rootID int64) ([]FileFolderZipEntry, error) {
+	return s.fileRepo.CollectFolderZipEntries(ctx, uid, rootID)
 }
 
 // TryAutoBindLivePhotoForFile 尝试将当前文件与同目录同名异类型文件自动绑定。
@@ -1158,15 +1089,6 @@ func parseHHMMToMinuteInService(v string) (int, bool) {
 		return 0, false
 	}
 	return h*60 + m, true
-}
-
-func sanitizeFileNameInService(name string) string {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return "unnamed.bin"
-	}
-	replacer := strings.NewReplacer("/", "_", "\\", "_", "..", "_", " ", "_")
-	return replacer.Replace(name)
 }
 
 func isLivePhotoImageExtInService(ext string) bool {

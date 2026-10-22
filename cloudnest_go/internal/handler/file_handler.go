@@ -686,9 +686,9 @@ func (h *FileHandler) DownloadFolderZip(c *gin.Context) {
 		return
 	}
 
-	zipPath, err := h.createFolderZip(c.Request.Context(), folder)
+	zipPath, err := h.createFolderZip(c.Request.Context(), uid, folder)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "create zip failed"})
+		writeFileMutationError(c, err, "create zip failed")
 		return
 	}
 	defer os.Remove(zipPath)
@@ -741,6 +741,11 @@ func (h *FileHandler) BatchDownload(c *gin.Context) {
 		return
 	}
 
+	entries, err := h.Svc.CollectBatchDownloadEntries(c.Request.Context(), uid, ids)
+	if err != nil {
+		writeFileMutationError(c, err, "create zip failed")
+		return
+	}
 	tmpFile, err := os.CreateTemp("", "cloudnest-batch-*.zip")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "create zip failed"})
@@ -750,61 +755,38 @@ func (h *FileHandler) BatchDownload(c *gin.Context) {
 	defer os.Remove(zipPath)
 
 	zw := zip.NewWriter(tmpFile)
-
-	addFileToZip := func(entryName string, filePath string) error {
-		r, err := os.Open(filePath)
-		if err != nil {
-			return err
+	defer tmpFile.Close()
+	defer zw.Close()
+	usedNames := make(map[string]bool)
+	nextEntryName := func(name string) string {
+		ext := filepath.Ext(name)
+		stem := strings.TrimSuffix(name, ext)
+		candidate := name
+		for n := 1; usedNames[candidate]; n++ {
+			candidate = fmt.Sprintf("%s (%d)%s", stem, n, ext)
 		}
-		defer r.Close()
-
-		w, err := zw.Create(entryName)
-		if err != nil {
-			return err
-		}
-		_, err = io.Copy(w, r)
-		return err
+		usedNames[candidate] = true
+		return candidate
 	}
-
-	usedNames := make(map[string]int)
-	nextEntryName := func(raw string) string {
-		name := sanitizeFileName(raw)
-		if name == "" {
-			name = "item"
-		}
-		if n, ok := usedNames[name]; !ok {
-			usedNames[name] = 1
-			return name
-		} else {
-			usedNames[name] = n + 1
-			ext := filepath.Ext(name)
-			base := strings.TrimSuffix(name, ext)
-			return fmt.Sprintf("%s(%d)%s", base, n, ext)
-		}
-	}
-
-	entries, err := h.Svc.CollectBatchDownloadEntries(c.Request.Context(), uid, ids)
-	if err != nil {
-		_ = zw.Close()
-		_ = tmpFile.Close()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "create zip failed"})
-		return
-	}
-
 	for _, entry := range entries {
+		name := entry.File.Filename
+		source := entry.StoragePath
 		if entry.IsFolderZip {
-			folderZipPath, err := h.createFolderZip(c.Request.Context(), entry.File)
+			name += ".zip"
+			source, err = createFolderZipFromEntries(entry.FolderEntries)
 			if err != nil {
-				continue
+				writeFileMutationError(c, err, "create zip failed")
+				return
 			}
-			entryName := nextEntryName(entry.File.Filename) + ".zip"
-			_ = addFileToZip(entryName, folderZipPath)
-			_ = os.Remove(folderZipPath)
-			continue
 		}
-
-		entryName := nextEntryName(entry.File.Filename)
-		_ = addFileToZip(entryName, entry.StoragePath)
+		err = addZipFileFromPath(zw, nextEntryName(name), source)
+		if entry.IsFolderZip {
+			_ = os.Remove(source)
+		}
+		if err != nil {
+			writeFileMutationError(c, err, "create zip failed")
+			return
+		}
 	}
 
 	if err := zw.Close(); err != nil {
@@ -1282,7 +1264,7 @@ func (h *FileHandler) PublicShareDownload(c *gin.Context) {
 		return
 	}
 
-	file, storage, err := h.Svc.ResolvePublicShareDownload(c.Request.Context(), shareCode)
+	file, storage, creatorID, err := h.Svc.ResolvePublicShareDownload(c.Request.Context(), shareCode)
 	if err != nil {
 		if errors.Is(err, service.ErrStorageNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "storage record not found"})
@@ -1297,9 +1279,9 @@ func (h *FileHandler) PublicShareDownload(c *gin.Context) {
 	}
 
 	if file.IsFolder == 1 {
-		zipPath, err := h.createFolderZip(c.Request.Context(), file)
+		zipPath, err := h.createFolderZip(c.Request.Context(), creatorID, file)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "create zip failed"})
+			writeFileMutationError(c, err, "create zip failed")
 			return
 		}
 		defer os.Remove(zipPath)
@@ -1410,17 +1392,8 @@ func (h *FileHandler) PermanentDelete(c *gin.Context) {
 
 	err = h.Svc.PermanentDeleteFromRecycleBin(c.Request.Context(), uid, fileID, c.ClientIP())
 	if err != nil {
-		switch {
-		case errors.Is(err, service.ErrFilePermissionDenied):
-			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-			return
-		case errors.Is(err, service.ErrRecycleItemNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "recycle item not found"})
-			return
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "permanent delete failed"})
-			return
-		}
+		writeFileMutationError(c, err, "permanent delete failed")
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "permanently deleted"})
@@ -2018,14 +1991,16 @@ func computeFileMD5Hex(filePath string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// zipQueueNode 用于文件夹广度遍历时保存节点路径信息。
-type zipQueueNode struct {
-	FolderID int64
-	RelPath  string
+// createFolderZip validates a complete authorized manifest before opening a ZIP.
+func (h *FileHandler) createFolderZip(ctx context.Context, uid int64, root model.File) (string, error) {
+	entries, err := h.Svc.CollectFolderZipEntries(ctx, uid, root.ID)
+	if err != nil {
+		return "", err
+	}
+	return createFolderZipFromEntries(entries)
 }
 
-// createFolderZip 递归读取目录树并生成临时 zip 文件。
-func (h *FileHandler) createFolderZip(ctx context.Context, root model.File) (string, error) {
+func createFolderZipFromEntries(entries []service.FileFolderZipEntry) (string, error) {
 	tmpFile, err := os.CreateTemp("", "cloudnest-folder-*.zip")
 	if err != nil {
 		return "", err
@@ -2037,12 +2012,6 @@ func (h *FileHandler) createFolderZip(ctx context.Context, root model.File) (str
 		_ = zw.Close()
 		_ = tmpFile.Close()
 	}()
-
-	entries, err := h.Svc.CollectFolderZipEntries(ctx, root)
-	if err != nil {
-		_ = os.Remove(zipPath)
-		return "", err
-	}
 
 	for _, entry := range entries {
 		if entry.IsDir {
@@ -2101,7 +2070,7 @@ func writeFileMutationError(c *gin.Context, err error, fallback string) {
 		status, message = http.StatusForbidden, "permission denied"
 	case errors.Is(err, contract.ErrInvalidInput), errors.Is(err, contract.ErrTargetNotFolder), errors.Is(err, service.ErrTargetNotFolder), errors.Is(err, service.ErrFileParentNotFolder):
 		status, message = http.StatusBadRequest, "invalid name or target folder"
-	case errors.Is(err, gorm.ErrRecordNotFound), errors.Is(err, contract.ErrNotFound), errors.Is(err, contract.ErrTargetNotFound), errors.Is(err, service.ErrFileParentNotFound), errors.Is(err, service.ErrFileNotFound), errors.Is(err, service.ErrTargetFolderNotFound), errors.Is(err, service.ErrRecycleItemNotFound):
+	case errors.Is(err, os.ErrNotExist), errors.Is(err, gorm.ErrRecordNotFound), errors.Is(err, contract.ErrNotFound), errors.Is(err, contract.ErrTargetNotFound), errors.Is(err, service.ErrFileParentNotFound), errors.Is(err, service.ErrFileNotFound), errors.Is(err, service.ErrTargetFolderNotFound), errors.Is(err, service.ErrRecycleItemNotFound):
 		status, message = http.StatusNotFound, "file or folder not found"
 	case errors.Is(err, contract.ErrConflict), errors.Is(err, contract.ErrCannotMoveToItself), errors.Is(err, contract.ErrCannotMoveToDesc), errors.Is(err, contract.ErrFolderNotEmpty), errors.Is(err, service.ErrFileNameConflict), errors.Is(err, service.ErrCannotMoveToItself), errors.Is(err, service.ErrCannotMoveToDesc), errors.Is(err, service.ErrFileFolderNotEmpty):
 		status, message = http.StatusConflict, "file conflict; refresh and retry"

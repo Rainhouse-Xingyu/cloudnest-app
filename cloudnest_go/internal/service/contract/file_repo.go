@@ -20,9 +20,16 @@ type FileSearchQuery struct {
 
 // BatchDownloadEntry 定义批量下载可用条目。
 type BatchDownloadEntry struct {
-	File        model.File
-	IsFolderZip bool
+	File          model.File
+	IsFolderZip   bool
+	StoragePath   string
+	FolderEntries []FolderZipEntry
+}
+
+type FolderZipEntry struct {
+	RelPath     string
 	StoragePath string
+	IsDir       bool
 }
 
 // FileOperationLogQuery 定义操作日志查询参数。
@@ -46,7 +53,7 @@ type FileRepository interface {
 	CanAccessFile(ctx context.Context, userID int64, fileID int64, requireWrite bool) (bool, error)
 	GetActiveFileByID(ctx context.Context, fileID int64) (model.File, error)
 	GetStorageByID(ctx context.Context, storageID int64) (model.Storage, error)
-	ListActiveChildrenByParent(ctx context.Context, parentID int64) ([]model.File, error)
+	CollectFolderZipEntries(ctx context.Context, uid, rootID int64) ([]FolderZipEntry, error)
 	GetSystemSettingByKey(ctx context.Context, key string) (model.SystemSetting, error)
 	CreateFolderRecord(ctx context.Context, uid int64, name string, parentID int64) (model.File, error)
 	RenameFile(ctx context.Context, uid, fileID int64, name string) (model.File, error)
@@ -55,7 +62,7 @@ type FileRepository interface {
 	MoveFiles(ctx context.Context, uid int64, fileIDs []int64, targetParentID int64) ([]int64, error)
 	CopyFiles(ctx context.Context, uid int64, fileIDs []int64, targetParentID int64) ([]int64, error)
 	RestoreFromRecycleBin(ctx context.Context, uid int64, fileID int64) (model.File, error)
-	PermanentDeleteFromRecycleBin(ctx context.Context, uid int64, fileID int64) error
+	PermanentDeleteFromRecycleBin(ctx context.Context, uid int64, fileID int64, clientIP string) error
 	GetUploadTaskByUploadID(ctx context.Context, uploadID string) (model.UploadTask, error)
 	GetUploadTaskAndUploadedChunkIndexes(ctx context.Context, userID int64, uploadID string) (model.UploadTask, []int, error)
 	CreateUploadTask(ctx context.Context, task model.UploadTask) error
