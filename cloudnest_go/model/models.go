@@ -139,21 +139,46 @@ func (UploadChunk) TableName() string {
 
 // UploadTask 分片上传任务
 type UploadTask struct {
-	ID             int64     `gorm:"primaryKey;autoIncrement" json:"id"`
-	UploadID       string    `gorm:"type:varchar(100);not null;unique" json:"upload_id"`
-	UserID         *int64    `gorm:"type:bigint" json:"user_id"`
-	Filename       string    `gorm:"type:varchar(255)" json:"filename"`
-	TotalSize      *int64    `gorm:"type:bigint" json:"total_size"`
-	ChunkSize      *int      `gorm:"type:int" json:"chunk_size"`
-	TotalChunks    *int      `gorm:"type:int" json:"total_chunks"`
-	UploadedChunks int       `gorm:"type:int;default:0" json:"uploaded_chunks"`
-	Status         int8      `gorm:"type:tinyint;default:0;comment:0上传中 1完成" json:"status"`
-	CreateTime     time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP" json:"create_time"`
+	ContractVersion int16      `gorm:"type:smallint;not null;default:0;index:idx_upload_quota,priority:2" json:"-"`
+	ReservedBytes   int64      `gorm:"not null;default:0" json:"-"`
+	ParentID        int64      `gorm:"not null;default:0" json:"parent_id"`
+	ExpiresAt       *time.Time `gorm:"type:datetime(6);index;index:idx_upload_quota,priority:4" json:"expires_at,omitempty"`
+	ID              int64      `gorm:"primaryKey;autoIncrement" json:"id"`
+	UploadID        string     `gorm:"type:varchar(100);not null;unique" json:"upload_id"`
+	UserID          *int64     `gorm:"type:bigint;index:idx_upload_quota,priority:1" json:"user_id"`
+	Filename        string     `gorm:"type:varchar(255)" json:"filename"`
+	TotalSize       *int64     `gorm:"type:bigint" json:"total_size"`
+	ChunkSize       *int       `gorm:"type:int" json:"chunk_size"`
+	TotalChunks     *int       `gorm:"type:int" json:"total_chunks"`
+	UploadedChunks  int        `gorm:"type:int;default:0" json:"uploaded_chunks"`
+	Status          int8       `gorm:"type:tinyint;default:0;index:idx_upload_quota,priority:3;comment:0上传中 1完成 2暂停 3取消 4过期" json:"status"`
+	CreateTime      time.Time  `gorm:"type:datetime;default:CURRENT_TIMESTAMP" json:"create_time"`
 }
 
 func (UploadTask) TableName() string {
 	return "upload_task"
 }
+
+// StorageQuotaPolicy serializes policy edits with concurrent allocations.
+type StorageQuotaPolicy struct {
+	ID int8 `gorm:"type:tinyint;primaryKey;autoIncrement:false"`
+}
+
+func (StorageQuotaPolicy) TableName() string { return "storage_quota_policy" }
+
+// UserStorageLedger is a transactional cache, recomputed from retained refs and
+// live reservations. It is not an ownership authority or a physical disk meter.
+type UserStorageLedger struct {
+	UserID          int64     `gorm:"type:bigint;primaryKey;autoIncrement:false" json:"-"`
+	UsedBytes       int64     `gorm:"not null;default:0" json:"-"`
+	ReservedBytes   int64     `gorm:"not null;default:0" json:"-"`
+	UnmeteredRefs   int64     `gorm:"not null;default:0" json:"-"`
+	AccountingValid bool      `gorm:"not null;default:false" json:"-"`
+	Revision        uint64    `gorm:"type:bigint unsigned;not null;default:0" json:"-"`
+	UpdatedAt       time.Time `gorm:"type:datetime(6);not null;default:CURRENT_TIMESTAMP(6)" json:"-"`
+}
+
+func (UserStorageLedger) TableName() string { return "user_storage_ledger" }
 
 // UserPathPermission 用户路径权限
 type UserPathPermission struct {

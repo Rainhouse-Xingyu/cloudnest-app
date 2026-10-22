@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"cloudenest_go/internal/quota"
 	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
 
@@ -176,12 +177,22 @@ func (r *CollaborationRepo) DeleteFilePermission(ctx context.Context, fileID int
 }
 
 func (r *CollaborationRepo) CreateFileVersion(ctx context.Context, req contract.CollaborationCreateFileVersionInput) (model.FileVersion, error) {
+	owner, errOwner := r.versionOwner(ctx, req.UserID, req.FileID)
+	if errOwner != nil {
+		return model.FileVersion{}, errOwner
+	}
 	var created model.FileVersion
 	err := fileMetadataTransaction(ctx, r.db, func(tx *gorm.DB) error {
+		if err := quota.Begin(tx, owner); err != nil {
+			return err
+		}
 		created = model.FileVersion{}
 		var file model.File
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&file, "id=? AND is_deleted=0", req.FileID).Error; err != nil {
 			return err
+		}
+		if file.UserID != owner {
+			return contract.ErrConflict
 		}
 		if file.IsFolder == 1 {
 			return fmt.Errorf("folder does not support versioning")
@@ -241,17 +252,30 @@ func appendFileVersion(tx *gorm.DB, file model.File, storage model.Storage, uid 
 	if err := tx.Model(&file).Updates(map[string]any{"current_version": row.Version, "storage_id": storage.ID, "size": size, "file_type": fileType}).Error; err != nil {
 		return row, err
 	}
+	if err := quota.Refresh(tx, file.UserID, true); err != nil {
+		return row, err
+	}
 	err := tx.Create(&model.OperationLog{UserID: &uid, FileID: &file.ID, Action: action, Status: "success", Detail: fmt.Sprintf("version=%d base=%d", row.Version, base), ClientIP: clientIP}).Error
 	return row, err
 }
 
 func (r *CollaborationRepo) RestoreFileVersion(ctx context.Context, uid, fileID int64, version, baseVersion int, clientIP string) (model.FileVersion, error) {
+	owner, errOwner := r.versionOwner(ctx, uid, fileID)
+	if errOwner != nil {
+		return model.FileVersion{}, errOwner
+	}
 	var restored model.FileVersion
 	err := fileMetadataTransaction(ctx, r.db, func(tx *gorm.DB) error {
+		if err := quota.Begin(tx, owner); err != nil {
+			return err
+		}
 		restored = model.FileVersion{}
 		var file model.File
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&file, "id=? AND is_deleted=0", fileID).Error; err != nil {
 			return err
+		}
+		if file.UserID != owner {
+			return contract.ErrConflict
 		}
 		if uid <= 0 {
 			return contract.ErrForbidden
@@ -310,4 +334,15 @@ func (r *CollaborationRepo) ListFileVersions(ctx context.Context, fileID int64) 
 
 func (r *CollaborationRepo) CreateOperationLog(ctx context.Context, row model.OperationLog) error {
 	return r.db.WithContext(ctx).Create(&row).Error
+}
+
+func (r *CollaborationRepo) versionOwner(ctx context.Context, uid, fileID int64) (int64, error) {
+	var file model.File
+	if err := r.db.WithContext(ctx).First(&file, "id=? AND is_deleted=0", fileID).Error; err != nil {
+		return 0, err
+	}
+	if err := requireFilePermission(r.db.WithContext(ctx), uid, file, true); err != nil {
+		return 0, err
+	}
+	return file.UserID, nil
 }

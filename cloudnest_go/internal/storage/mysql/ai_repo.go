@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"cloudenest_go/internal/quota"
 	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
 
@@ -23,6 +24,9 @@ func NewAIRepo(db *gorm.DB) *AIRepo {
 
 func (r *AIRepo) ApplySettingWithAudit(ctx context.Context, uid int64, key string, value string, description string, clientIP string) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := quota.LockPolicy(tx, true); err != nil {
+			return err
+		}
 		var row model.SystemSetting
 		err := tx.Where("setting_key = ?", key).First(&row).Error
 		if err != nil {

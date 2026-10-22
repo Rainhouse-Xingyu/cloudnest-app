@@ -163,6 +163,7 @@ var defaultUserRoutes = map[string]struct{}{
 	"POST /api/files/folders":                      {},
 	"PUT /api/files/:id/rename":                    {},
 	"DELETE /api/files/:id":                        {},
+	"POST /api/files/upload/cancel":                {},
 	"POST /api/files/upload/init":                  {},
 	"POST /api/files/upload/chunk":                 {},
 	"POST /api/files/upload/complete":              {},

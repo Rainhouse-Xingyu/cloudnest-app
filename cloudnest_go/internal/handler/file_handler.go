@@ -254,6 +254,10 @@ func (h *FileHandler) InitUpload(c *gin.Context) {
 		TotalChunks: req.TotalChunks,
 	})
 	if err != nil {
+		if isUploadContractError(err) {
+			writeFileMutationError(c, err, "upload rejected")
+			return
+		}
 		if errors.Is(err, contract.ErrInvalidInput) {
 			writeFileMutationError(c, err, "invalid upload name")
 			return
@@ -312,6 +316,10 @@ func (h *FileHandler) UploadChunk(c *gin.Context) {
 
 	task, err := h.Svc.ValidateUploadChunk(c.Request.Context(), uid, uploadID, chunkIndex)
 	if err != nil {
+		if isUploadContractError(err) {
+			writeFileMutationError(c, err, "upload rejected")
+			return
+		}
 		switch {
 		case errors.Is(err, service.ErrUploadTaskNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "upload task not found"})
@@ -364,6 +372,10 @@ func (h *FileHandler) UploadChunk(c *gin.Context) {
 
 	err = h.Svc.MarkChunkUploaded(c.Request.Context(), task, uploadID, chunkIndex, chunkFile.Size, chunkPath)
 	if err != nil {
+		if isUploadContractError(err) {
+			writeFileMutationError(c, err, "chunk rejected")
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "update chunk status failed"})
 		return
 	}
@@ -388,6 +400,10 @@ func (h *FileHandler) CompleteUpload(c *gin.Context) {
 
 	snapshot, err := h.Svc.PrepareCompleteUpload(c.Request.Context(), uid, req.UploadID, req.ParentID)
 	if err != nil {
+		if isUploadContractError(err) {
+			writeFileMutationError(c, err, "upload rejected")
+			return
+		}
 		switch {
 		case errors.Is(err, service.ErrFilePermissionDenied):
 			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
@@ -625,6 +641,10 @@ func (h *FileHandler) UploadProgress(c *gin.Context) {
 
 	res, err := h.Svc.UploadProgress(c.Request.Context(), uid, uploadID)
 	if err != nil {
+		if isUploadContractError(err) {
+			writeFileMutationError(c, err, "upload unavailable")
+			return
+		}
 		if errors.Is(err, service.ErrUploadTaskNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "upload task not found"})
 			return
@@ -2171,6 +2191,12 @@ func addZipFileFromPath(zw *zip.Writer, relPath string, sourcePath string) error
 func writeFileMutationError(c *gin.Context, err error, fallback string) {
 	status, message := http.StatusInternalServerError, fallback
 	switch {
+	case errors.Is(err, contract.ErrQuotaExceeded):
+		status, message = http.StatusInsufficientStorage, "storage quota exceeded"
+	case errors.Is(err, contract.ErrQuotaAccounting):
+		status, message = http.StatusServiceUnavailable, "storage accounting unavailable"
+	case errors.Is(err, contract.ErrUploadContract):
+		status, message = http.StatusConflict, "upload contract changed, expired or not reserved"
 	case errors.Is(err, contract.ErrStorageIntegrity):
 		status, message = http.StatusConflict, "stored content failed integrity verification"
 	case errors.Is(err, contract.ErrForbidden), errors.Is(err, service.ErrFilePermissionDenied):
@@ -2183,4 +2209,22 @@ func writeFileMutationError(c *gin.Context, err error, fallback string) {
 		status, message = http.StatusConflict, "file conflict; refresh and retry"
 	}
 	c.JSON(status, gin.H{"error": message})
+}
+
+func isUploadContractError(err error) bool {
+	return errors.Is(err, contract.ErrQuotaExceeded) || errors.Is(err, contract.ErrQuotaAccounting) || errors.Is(err, contract.ErrUploadContract)
+}
+func (h *FileHandler) CancelUpload(c *gin.Context) {
+	var req struct {
+		UploadID string `json:"upload_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.UploadID) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "upload_id required"})
+		return
+	}
+	if err := h.Svc.CancelUpload(c.Request.Context(), c.GetInt64(middleware.ContextUserIDKey), strings.TrimSpace(req.UploadID), c.ClientIP()); err != nil {
+		writeFileMutationError(c, err, "cancel upload failed")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": 3, "message": "upload canceled"})
 }

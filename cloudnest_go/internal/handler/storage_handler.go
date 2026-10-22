@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"cloudenest_go/internal/service/contract"
+	"errors"
 	"net/http"
 
 	"cloudenest_go/internal/middleware"
@@ -20,6 +22,10 @@ func (h *StorageHandler) GetOverview(c *gin.Context) {
 
 	overview, err := h.Svc.GetOverview(c.Request.Context(), uid)
 	if err != nil {
+		if errors.Is(err, contract.ErrQuotaAccounting) {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "storage accounting unavailable"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "query storage overview failed"})
 		return
 	}

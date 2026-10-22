@@ -83,9 +83,9 @@ func TestConcurrentUploadCompletionCannotDeletePublishedBytes(t *testing.T) {
 	release := make(chan struct{})
 	var once sync.Once
 	var seen atomic.Int32
-	const hook = "test:pause_first_namespace_before_write"
+	const hook = "test:pause_first_quota_before_write"
 	if err := f.db.Callback().Create().Before("gorm:create").Register(hook, func(tx *gorm.DB) {
-		if row, ok := tx.Statement.Dest.(*model.FileNamespace); ok && row.Key == fmt.Sprintf("root:%d", f.aliceID) && seen.Add(1) == 1 {
+		if row, ok := tx.Statement.Dest.(*model.UserStorageLedger); ok && row.UserID == f.aliceID && seen.Add(1) == 1 {
 			close(paused)
 			<-release
 		}
@@ -98,7 +98,7 @@ func TestConcurrentUploadCompletionCannotDeletePublishedBytes(t *testing.T) {
 	select {
 	case <-paused:
 	case <-time.After(10 * time.Second):
-		t.Fatal("first request did not reach namespace write")
+		t.Fatal("first request did not reach quota write")
 	}
 	second := completeUploadRecorder(f, f.alice, id)
 	once.Do(func() { close(release) })
@@ -455,7 +455,11 @@ func TestUploadSizeMismatchCannotPublish(t *testing.T) {
 	f := newFixture(t)
 	payload := []byte("validate final merged size")
 	pending := fixturePendingUpload(t, f, f.alice, "size-mismatch.bin", payload)
-	if err := f.db.Model(&model.UploadTask{}).Where("upload_id=?", pending).Update("total_size", len(payload)+1).Error; err != nil {
+	var chunk model.UploadChunk
+	if err := f.db.Where("upload_id=? AND chunk_index=0", pending).First(&chunk).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(chunk.ChunkPath, append(append([]byte(nil), payload...), byte('!')), 0600); err != nil {
 		t.Fatal(err)
 	}
 	w := completeUploadRecorder(f, f.alice, pending)
@@ -466,7 +470,7 @@ func TestUploadSizeMismatchCannotPublish(t *testing.T) {
 	if err := f.db.Model(&model.File{}).Where("user_id=? AND filename=?", f.aliceID, "size-mismatch.bin").Count(&count).Error; err != nil || count != 0 {
 		t.Fatal("invalid size left file metadata")
 	}
-	if err := f.db.Model(&model.UploadTask{}).Where("upload_id=?", pending).Update("total_size", len(payload)).Error; err != nil {
+	if err := os.WriteFile(chunk.ChunkPath, payload, 0600); err != nil {
 		t.Fatal(err)
 	}
 	completedBlob(t, f, completeUploadRecorder(f, f.alice, pending))

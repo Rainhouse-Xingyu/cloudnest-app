@@ -14,6 +14,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"gorm.io/gorm/logger"
 )
 
@@ -50,6 +51,8 @@ func Migrate(db *gorm.DB) error {
 		&model.FileVersion{},
 		&model.FilePermission{},
 		&model.UploadTask{},
+		&model.StorageQuotaPolicy{},
+		&model.UserStorageLedger{},
 		&model.UploadChunk{},
 		&model.Share{},
 		&model.OperationLog{},
@@ -64,7 +67,7 @@ func Migrate(db *gorm.DB) error {
 		return fmt.Errorf("migrate schema failed: %w", err)
 	}
 
-	return nil
+	return db.Clauses(clause.OnConflict{DoNothing: true}).Create(&model.StorageQuotaPolicy{ID: 1}).Error
 }
 
 // BootstrapAdminUser only initializes an empty user table. It never upgrades an
@@ -144,5 +147,8 @@ func CheckFileSchema(db *gorm.DB) error {
 	if err := CheckStorageLeaseSchema(db); err != nil {
 		return err
 	}
-	return CheckStorageGCSchema(db)
+	if err := CheckStorageGCSchema(db); err != nil {
+		return err
+	}
+	return CheckQuotaSchema(db)
 }

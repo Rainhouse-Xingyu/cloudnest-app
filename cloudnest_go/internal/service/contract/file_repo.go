@@ -73,9 +73,10 @@ type FileRepository interface {
 	CopyFiles(ctx context.Context, uid int64, fileIDs []int64, targetParentID int64) ([]int64, error)
 	RestoreFromRecycleBin(ctx context.Context, uid int64, fileID int64) (model.File, error)
 	PermanentDeleteFromRecycleBin(ctx context.Context, uid int64, fileID int64, clientIP string) error
-	GetUploadTaskByUploadID(ctx context.Context, uploadID string) (model.UploadTask, error)
+	GetUploadTaskByUploadID(ctx context.Context, uid int64, uploadID string) (model.UploadTask, error)
 	GetUploadTaskAndUploadedChunkIndexes(ctx context.Context, userID int64, uploadID string) (model.UploadTask, []int, error)
 	CreateUploadTask(ctx context.Context, task model.UploadTask) error
+	CancelUploadTask(ctx context.Context, uid int64, uploadID, clientIP string) error
 	UpsertUploadChunkAndRefreshProgress(ctx context.Context, taskID int64, uploadID string, chunkIndex int, chunkSize int64, chunkPath string) error
 	CountDoneUploadChunks(ctx context.Context, uploadID string) (int64, error)
 	CompleteUploadPersist(ctx context.Context, uid int64, parentID int64, uploadID string, task model.UploadTask, totalChunks int, storagePath, storageRoot string, mergedSize int64, fileHash string, clientIP string) (UploadCommit, error)

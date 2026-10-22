@@ -448,6 +448,10 @@ func (h *CollaborationHandler) CreateFileVersion(c *gin.Context) {
 		ClientIP:    c.ClientIP(),
 	})
 	if err != nil {
+		if isUploadContractError(err) {
+			writeFileMutationError(c, err, "version publication rejected")
+			return
+		}
 		msg := strings.ToLower(err.Error())
 		switch {
 		case errors.Is(err, gorm.ErrRecordNotFound), errors.Is(err, os.ErrNotExist):

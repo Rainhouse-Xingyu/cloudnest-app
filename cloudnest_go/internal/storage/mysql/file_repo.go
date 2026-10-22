@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"cloudenest_go/internal/blob"
+	"cloudenest_go/internal/quota"
 	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
 
@@ -311,6 +312,9 @@ func (r *FileRepo) MoveFiles(ctx context.Context, uid int64, fileIDs []int64, ta
 func (r *FileRepo) CopyFiles(ctx context.Context, uid int64, fileIDs []int64, targetParentID int64) ([]int64, error) {
 	var newIDs []int64
 	err := fileMetadataTransaction(ctx, r.db, func(tx *gorm.DB) error {
+		if err := quota.Begin(tx, uid); err != nil {
+			return err
+		}
 		newIDs = nil
 		nodes, err := lockFileTree(tx, fileIDs, 0, false, fileNamespaceKey(uid, targetParentID))
 		if err != nil {
@@ -357,7 +361,7 @@ func (r *FileRepo) CopyFiles(ctx context.Context, uid int64, fileIDs []int64, ta
 			}
 			newIDs = append(newIDs, copiedID)
 		}
-		return nil
+		return quota.Refresh(tx, uid, true)
 	})
 	return newIDs, err
 }
@@ -394,6 +398,9 @@ func (r *FileRepo) RestoreFromRecycleBin(ctx context.Context, uid, fileID int64)
 
 func (r *FileRepo) PermanentDeleteFromRecycleBin(ctx context.Context, uid int64, fileID int64, clientIP string) error {
 	return fileMetadataTransaction(ctx, r.db, func(tx *gorm.DB) error {
+		if err := quota.Begin(tx, uid); err != nil {
+			return err
+		}
 		nodes, err := lockFileTree(tx, []int64{fileID}, 1, true)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return contract.ErrRecycleItemNotFound
@@ -440,21 +447,38 @@ func (r *FileRepo) PermanentDeleteFromRecycleBin(ctx context.Context, uid int64,
 			return err
 		}
 
-		return tx.Where("id IN ?", ids).Delete(&model.File{}).Error
+		if err := tx.Where("id IN ?", ids).Delete(&model.File{}).Error; err != nil {
+			return err
+		}
+		return quota.Refresh(tx, uid, false)
 	})
 }
 
-func (r *FileRepo) GetUploadTaskByUploadID(ctx context.Context, uploadID string) (model.UploadTask, error) {
+func (r *FileRepo) GetUploadTaskByUploadID(ctx context.Context, uid int64, uploadID string) (model.UploadTask, error) {
 	var task model.UploadTask
 	if err := r.db.WithContext(ctx).Where("upload_id = ?", uploadID).First(&task).Error; err != nil {
 		return model.UploadTask{}, err
+	}
+	if task.UserID == nil || *task.UserID != uid {
+		return model.UploadTask{}, contract.ErrForbidden
+	}
+	if task.ContractVersion != 1 {
+		return model.UploadTask{}, contract.ErrUploadContract
+	}
+	if task.Status == 0 {
+		if err := quota.RequireLiveTask(r.db.WithContext(ctx), task); err != nil {
+			return model.UploadTask{}, err
+		}
 	}
 	return task, nil
 }
 
 func (r *FileRepo) GetUploadTaskAndUploadedChunkIndexes(ctx context.Context, userID int64, uploadID string) (model.UploadTask, []int, error) {
-	task, err := r.GetUploadTaskByUploadID(ctx, uploadID)
+	task, err := r.GetUploadTaskByUploadID(ctx, userID, uploadID)
 	if err != nil {
+		if errors.Is(err, contract.ErrForbidden) {
+			err = gorm.ErrRecordNotFound
+		}
 		return model.UploadTask{}, nil, err
 	}
 	if task.UserID == nil || *task.UserID != userID {
@@ -479,11 +503,69 @@ func (r *FileRepo) GetUploadTaskAndUploadedChunkIndexes(ctx context.Context, use
 }
 
 func (r *FileRepo) CreateUploadTask(ctx context.Context, task model.UploadTask) error {
-	return r.db.WithContext(ctx).Create(&task).Error
+	if task.UserID == nil || task.TotalSize == nil || task.ReservedBytes != *task.TotalSize || task.ReservedBytes <= 0 || task.ContractVersion != 1 {
+		return contract.ErrInvalidInput
+	}
+	uid := *task.UserID
+	return fileMetadataTransaction(ctx, r.db, func(tx *gorm.DB) error {
+		if err := quota.Begin(tx, uid); err != nil {
+			return err
+		}
+		expired := tx.Model(&model.UploadTask{}).Where("user_id=? AND contract_version=1 AND status IN (0,2) AND expires_at<=UTC_TIMESTAMP(6)", uid).Updates(map[string]any{"status": 4, "reserved_bytes": int64(0)})
+		if expired.Error != nil {
+			return expired.Error
+		}
+		if expired.RowsAffected > 0 {
+			if err := tx.Create(&model.OperationLog{UserID: &uid, Action: "upload_expire", Status: "success", Detail: fmt.Sprintf("expired reservations=%d; physical cleanup pending", expired.RowsAffected)}).Error; err != nil {
+				return err
+			}
+		}
+		if err := lockFileNamespaces(tx, fileNamespaceKey(uid, task.ParentID)); err != nil {
+			return err
+		}
+		if err := requireWriteParent(tx, uid, task.ParentID); err != nil {
+			return err
+		}
+		attempt := task
+		attempt.ID = 0
+		if err := tx.Create(&attempt).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&attempt).Update("expires_at", gorm.Expr("DATE_ADD(UTC_TIMESTAMP(6),INTERVAL 24 HOUR)")).Error; err != nil {
+			return err
+		}
+		if err := quota.Refresh(tx, uid, true); err != nil {
+			return err
+		}
+		return tx.Create(&model.OperationLog{UserID: &uid, Action: "upload_reserve", Status: "success", Detail: fmt.Sprintf("upload_id=%s bytes=%d", task.UploadID, task.ReservedBytes)}).Error
+	})
 }
 
 func (r *FileRepo) UpsertUploadChunkAndRefreshProgress(ctx context.Context, taskID int64, uploadID string, chunkIndex int, chunkSize int64, chunkPath string) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	var owner model.UploadTask
+	if err := r.db.WithContext(ctx).First(&owner, taskID).Error; err != nil {
+		return err
+	}
+	if owner.UserID == nil {
+		return contract.ErrForbidden
+	}
+	return fileMetadataTransaction(ctx, r.db, func(tx *gorm.DB) error {
+		if err := quota.Begin(tx, *owner.UserID); err != nil {
+			return err
+		}
+		var current model.UploadTask
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&current, "id=? AND upload_id=?", taskID, uploadID).Error; err != nil {
+			return err
+		}
+		if current.UserID == nil || *current.UserID != *owner.UserID {
+			return contract.ErrForbidden
+		}
+		if err := quota.RequireLiveTask(tx, current); err != nil {
+			return err
+		}
+		if current.TotalChunks == nil || chunkIndex < 0 || chunkIndex >= *current.TotalChunks {
+			return contract.ErrInvalidInput
+		}
 		var row model.UploadChunk
 		err := tx.Where("upload_id = ? AND chunk_index = ?", uploadID, chunkIndex).First(&row).Error
 		if err != nil {
@@ -538,6 +620,9 @@ func (r *FileRepo) CompleteUploadPersist(ctx context.Context, uid int64, parentI
 	var repaired bool
 	prepared := false
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := quota.Begin(tx, uid); err != nil {
+			return err
+		}
 		if err := lockFileNamespaces(tx, fileNamespaceKey(uid, parentID)); err != nil {
 			return err
 		}
@@ -547,6 +632,12 @@ func (r *FileRepo) CompleteUploadPersist(ctx context.Context, uid int64, parentI
 		}
 		if currentTask.UserID == nil || *currentTask.UserID != uid {
 			return contract.ErrForbidden
+		}
+		if err := quota.RequireLiveTask(tx, currentTask); err != nil {
+			return err
+		}
+		if currentTask.ParentID != parentID {
+			return contract.ErrUploadContract
 		}
 		if currentTask.Status != 0 {
 			return contract.ErrConflict
@@ -594,17 +685,23 @@ func (r *FileRepo) CompleteUploadPersist(ctx context.Context, uid int64, parentI
 		if err := tx.Create(&model.OperationLog{UserID: &uid, FileID: &createdFile.ID, Action: "upload_complete", Status: "success", Detail: fmt.Sprintf("upload_id=%s", uploadID), ClientIP: clientIP}).Error; err != nil {
 			return err
 		}
-		if err := tx.Model(&model.UploadTask{}).Where("id = ?", task.ID).Updates(map[string]interface{}{
-			"status":          1,
-			"uploaded_chunks": totalChunks,
-		}).Error; err != nil {
-			return err
+		transition := tx.Model(&model.UploadTask{}).Where("id=? AND status=0 AND contract_version=1 AND reserved_bytes=? AND parent_id=? AND expires_at>UTC_TIMESTAMP(6)", task.ID, mergedSize, parentID).Updates(map[string]interface{}{
+			"reserved_bytes": int64(0), "status": 1, "uploaded_chunks": totalChunks,
+		})
+		if transition.Error != nil {
+			return transition.Error
+		}
+		if transition.RowsAffected != 1 {
+			return contract.ErrUploadContract
 		}
 
 		if err := tx.Where("upload_id = ?", uploadID).Delete(&model.UploadChunk{}).Error; err != nil {
 			return err
 		}
 
+		if err := quota.Refresh(tx, uid, true); err != nil {
+			return err
+		}
 		prepared = true
 		return nil
 	}, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
@@ -926,6 +1023,9 @@ type copyTraversal struct {
 }
 
 func copyNodeForFileRepo(tx *gorm.DB, newOwnerID int64, src model.File, targetParentID int64, traversal *copyTraversal) (int64, error) {
+	if src.IsFolder != 0 && src.StorageID != nil {
+		return 0, contract.ErrStorageIntegrity
+	}
 	if traversal.remaining <= 0 || len(traversal.path) >= 256 || traversal.path[src.ID] {
 		return 0, contract.ErrConflict
 	}
@@ -1034,3 +1134,31 @@ func ensureStorageForFileRepo(tx *gorm.DB, fileHash, storagePath, storageRoot st
 }
 
 var _ contract.FileRepository = (*FileRepo)(nil)
+
+func (r *FileRepo) CancelUploadTask(ctx context.Context, uid int64, id, ip string) error {
+	return fileMetadataTransaction(ctx, r.db, func(tx *gorm.DB) error {
+		if err := quota.Begin(tx, uid); err != nil {
+			return err
+		}
+		var task model.UploadTask
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("upload_id=?", id).First(&task).Error; err != nil {
+			return err
+		}
+		if task.UserID == nil || *task.UserID != uid {
+			return contract.ErrForbidden
+		}
+		if task.Status == 3 {
+			return nil
+		}
+		if task.ContractVersion != 1 || (task.Status != 0 && task.Status != 2 && task.Status != 4) {
+			return contract.ErrUploadContract
+		}
+		if err := tx.Model(&task).Updates(map[string]any{"status": 3, "reserved_bytes": int64(0)}).Error; err != nil {
+			return err
+		}
+		if err := quota.Refresh(tx, uid, false); err != nil {
+			return err
+		}
+		return tx.Create(&model.OperationLog{UserID: &uid, Action: "upload_cancel", Status: "success", Detail: fmt.Sprintf("upload_id=%s metadata canceled; physical cleanup pending", id), ClientIP: ip}).Error
+	})
+}
