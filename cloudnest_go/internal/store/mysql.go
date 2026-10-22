@@ -32,7 +32,8 @@ func NewMySQL(cfg config.Config) (*gorm.DB, error) {
 }
 
 // Migrate applies the legacy model schema only when explicitly requested.
-// Versioned migrations and upgrade/rollback rehearsal remain a separate milestone.
+// MigrateFileNames is a separate explicit versioned constraint migration. Other
+// model migrations and real-data upgrade/rollback rehearsal remain later work.
 func Migrate(db *gorm.DB) error {
 	if err := db.AutoMigrate(
 		&model.User{},
@@ -126,5 +127,5 @@ func CheckFileSchema(db *gorm.DB) error {
 	if count != 1 {
 		return errors.New("file namespace schema missing; back up and run the explicit migrate command before starting")
 	}
-	return nil
+	return CheckFileNameSchema(db)
 }

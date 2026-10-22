@@ -23,7 +23,7 @@ func fileMetadataTransaction(ctx context.Context, db *gorm.DB, fn func(*gorm.DB)
 		err := db.WithContext(ctx).Transaction(fn, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 		var mysqlErr *mysqlDriver.MySQLError
 		if !errors.As(err, &mysqlErr) || mysqlErr.Number != 1213 {
-			return err
+			return normalizeFileNameConstraintError(err)
 		}
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -163,4 +163,23 @@ func lockFileWithNamespace(tx *gorm.DB, fileID int64, deleted int8, includeChild
 		return current, contract.ErrConflict
 	}
 	return current, nil
+}
+
+// Only the known filename index is an API name conflict; other SQL errors keep
+// their original failure classification.
+func normalizeFileNameConstraintError(err error) error {
+	var mysqlErr *mysqlDriver.MySQLError
+	if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
+		const marker = " for key '"
+		if at := strings.LastIndex(mysqlErr.Message, marker); at >= 0 && strings.HasSuffix(mysqlErr.Message, "'") {
+			key := mysqlErr.Message[at+len(marker) : len(mysqlErr.Message)-1]
+			if dot := strings.LastIndex(key, "."); dot >= 0 {
+				key = key[dot+1:]
+			}
+			if key == "uq_file_active_name_v1" {
+				return contract.ErrConflict
+			}
+		}
+	}
+	return err
 }

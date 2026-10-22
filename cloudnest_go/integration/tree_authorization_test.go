@@ -162,12 +162,19 @@ func TestArchivesPreserveNamesAndRejectMissingBytes(t *testing.T) {
 	if entries["space folder/a b.txt"] != "spaces" || entries["space folder/a_b.txt"] != "underscore" {
 		t.Fatalf("names or bytes changed: %v", entries)
 	}
+	legacyFileNamesForTest(t, f)
+	originalName := b.Filename
+	t.Cleanup(func() {
+		if err := f.db.Model(&model.File{}).Where("id=?", b.ID).Update("filename", originalName).Error; err != nil {
+			t.Error(err)
+		}
+	})
 	// Historical duplicate metadata must fail explicitly instead of ambiguous ZIP names.
 	if err := f.db.Model(&b).Update("filename", a.Filename).Error; err != nil {
 		t.Fatal(err)
 	}
 	f.json(t, "GET", endpoint, f.alice, nil, http.StatusConflict)
-	if err := f.db.Model(&b).Update("filename", b.Filename).Error; err != nil {
+	if err := f.db.Model(&b).Update("filename", originalName).Error; err != nil {
 		t.Fatal(err)
 	}
 	var storage model.Storage

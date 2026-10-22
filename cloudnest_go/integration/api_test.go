@@ -92,6 +92,13 @@ func newFixture(t *testing.T) *fixture {
 	if err := store.Migrate(db); err != nil {
 		t.Fatal(err)
 	}
+	if err := store.MigrateFileNames(context.Background(), db); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CheckFileSchema(db); err != nil {
+		t.Fatal(err)
+	}
+
 	rdb, err := store.NewRedis(context.Background(), cfg)
 	if err != nil {
 		t.Fatal(err)

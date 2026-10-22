@@ -545,7 +545,7 @@ func (r *FileRepo) CompleteUploadPersist(ctx context.Context, uid int64, parentI
 		return nil
 	}, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
-		return model.File{}, err
+		return model.File{}, normalizeFileNameConstraintError(err)
 	}
 	return createdFile, nil
 }

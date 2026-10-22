@@ -45,7 +45,8 @@ func (r FileNameAudit) HasFindings() bool { return r.ConflictGroups > 0 || r.Inv
 // It is a namespace preflight, not a general integrity/ACL/storage audit.
 func AuditFileNames(ctx context.Context, db *gorm.DB) (FileNameAudit, error) {
 	report := FileNameAudit{GeneratedAt: time.Now().UTC(), SampleLimit: fileNameAuditSampleLimit, Conflicts: []FileNameConflict{}}
-	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := db.WithContext(ctx).Session(&gorm.Session{NewDB: true}).Transaction(func(tx *gorm.DB) error {
+		tx = tx.Session(&gorm.Session{NewDB: true})
 		if err := tx.Raw("SELECT collation_name FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'file' AND column_name = 'filename'").Scan(&report.FilenameCollation).Error; err != nil {
 			return err
 		}

@@ -19,6 +19,7 @@ import (
 
 func TestFileNameAuditCLIIsReadOnlyAndUsesDatabaseCollation(t *testing.T) {
 	f := newFixture(t)
+	legacyFileNamesForTest(t, f)
 	baseline, err := store.AuditFileNames(context.Background(), f.db)
 	if err != nil {
 		t.Fatal(err)
@@ -69,6 +70,16 @@ func TestFileNameAuditCLIIsReadOnlyAndUsesDatabaseCollation(t *testing.T) {
 	if err := f.db.Create(&rows).Error; err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		ids := []int64{root.ID}
+		for _, row := range rows {
+			ids = append(ids, row.ID)
+		}
+		if err := f.db.Where("id IN ?", ids).Delete(&model.File{}).Error; err != nil {
+			t.Error(err)
+		}
+	})
+
 	// Exercise nullable legacy scalar metadata; it must be reported, not silently
 	// grouped as a valid per-user root or hidden by a failed integer scan.
 	if err := f.db.Model(&model.File{}).Where("id = ?", rows[7].ID).Update("parent_id", nil).Error; err != nil {
@@ -133,6 +144,7 @@ func TestFileNameAuditCLIIsReadOnlyAndUsesDatabaseCollation(t *testing.T) {
 
 func TestFileNameAuditReportsTruncatedSamplesWithoutLosingTotals(t *testing.T) {
 	f := newFixture(t)
+	legacyFileNamesForTest(t, f)
 	before, err := store.AuditFileNames(context.Background(), f.db)
 	if err != nil {
 		t.Fatal(err)
