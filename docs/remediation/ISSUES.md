@@ -15,7 +15,7 @@
 | SEC-009 P1 | `app/container.go` FRP 上报/拉命令同用户 JWT 入口 | 用用户身份调用设备命令 API；无独立设备认证模型 | G05 设备 enrollment、独立凭据哈希/轮换/撤销与权限范围 | G01 已记录 [边界设计](DEVICE-IDENTITY-DESIGN.md)，G05 代码与实测待做 |
 | SEC-010 P1 | `service/frp_service.go:generateFRPCYaml/SaveConfig` 明文 token 拼入配置并持久化 | 隔离环境读取配置记录/响应；不要记录真实 token | G05 加密敏感配置、脱敏响应、最小 Agent 权限 | G01 已记录设计，明文风险仍在，G05 实施待做 |
 | SEC-011 P1 | iOS `Shared/Managers/SessionManager.swift` 用 UserDefaults 存 token | 检查保存/读取路径 | G07 新 macOS 用 Keychain；冻结旧 iOS 开发 | 已确认，待做 |
-| SEC-012 P1 | `cmd/server/main.go` 用 `gin.Run` 无显式 HTTP 超时；上传入口缺少请求体总限额 | 慢请求/超大 multipart；需受限资源测试 | G01/G03 显式服务器超时、请求/分片尺寸上限、登录速率限制 | G01 请求头/空闲超时及登录体积/限流已修；G03 已补齐有界流式 multipart、共享并发准入、实际 TCP 读取期限及服务读取超时；全局磁盘预算与慢请求规模压测待做 |
+| SEC-012 P1 | `cmd/server/main.go` 用 `gin.Run` 无显式 HTTP 超时；上传入口缺少请求体总限额 | 慢请求/超大 multipart；需受限资源测试 | G01/G03 显式服务器超时、请求/分片尺寸上限、登录速率限制 | G01 请求头/空闲超时及登录体积/限流已修；G03 已补齐有界流式 multipart、共享并发准入、实际 TCP 读取期限及服务读取超时；分片/合并临时卷预算已追加；ZIP/缓存预算与慢请求规模压测待做 |
 | SEC-013 P1 | G01 初版自定义权限覆盖默认路由，导致 GET auth/me、POST auth/logout 被拒绝 | 真实 API 用户仅授予 GET files，me 返回 403；注销同受影响 | 在完整身份认证后独立允许精确方法/自身会话路由，业务与管理员权限不扩大 | 修复前已复现；修复后集成测试通过 |
 | SEC-014 P1 | JWT 仅含用户与秒级时间，相同用户同秒登录 token 相同，注销互相影响 | 真实重复登录返回同一 token；固定时刻签发测试 | crypto/rand 256-bit JTI；独立 Redis 会话与单会话注销验证 | 修复前已复现；修复后集成测试通过 |
 | SEC-015 P1 | 登录入口未限流，Gin 默认相信任意代理转发头 | 同一实际 IP 在两实例并发 40 次、变更转发头；Redis 不可用仍进入认证 | 登录前 Redis 原子窗口、规范化实际 IP、429/Retry-After、Redis 故障 503、关闭任意可信代理 | 修复前已复现；修复后完整 12 项集成回归通过；分布式撞库仍不在本限流覆盖范围 |
@@ -26,10 +26,10 @@
 | DEP-001 P1 | 初次 govulncheck 报告 x/net、x/text、quic-go 可达漏洞；旧 Go 标准库另查 | `make vuln`；见 BASELINE | G01 按公告最小升级依赖和工具链，重新构建/扫描 | 已升级；可达/导入包告警 0，另 1 项未调用 OpenPGP 模块告警 |
 | DATA-001 P1 | `internal/store/mysql.go:NewMySQL` 每次启动 AutoMigrate，无版本/审核开关 | 审查启动调用链；仅在测试库观察建表 | G01 关闭隐式生产迁移；G06/G10 版本化迁移、备份/回滚演练 | 普通启动不再迁移；G02 独立文件名与两步存储引用版本化迁移已实现，其余模型版本化与真实备份恢复待 G06/G10 |
 | FILE-001 P1 | `storage/mysql/file_repo.go:HasActiveNameConflict` 根目录 parent_id=0 未含 user_id | 两用户根目录创建同名目录；第二个不应冲突 | G02 对根按所有者作用域，非根按共享父目录；事务并发约束 | 已复现跨用户 409；修复后通过根/共享目录与并发测试，待 G02 PR 审查 |
-| FILE-002 P1 | `service/file_service.go:InitUpload` 不比较声明分片数与计算值 | total_size=10, chunk_size=5, total_chunks=1 | G03 溢出安全计算、数量及每片/总字节校验 | 完成声明总字节、无溢出数量计算与显式数量匹配已实现；G03 已追加精确片长/末片、不可变路径/清单 SHA-256 与入口体积/并发/期限预算；全局持久临时磁盘预算待做 |
-| FILE-003 P1 | `CompleteUploadPersist` 无任务行锁/CAS，无完成结果复用；mergeChunks 直接覆盖路径 | 两个完成请求并发/超时后重试；检查重复 file/物理路径损坏 | G02/G03 完成状态机、互斥/幂等结果、临时文件原子落盘 | 已复现并发完成重复记录/下载 404；独立候选路径、任务行锁和提交后清理已修；G03 已实现事务回执/完成结果复用及并发清理窗口回归；不可变分片与入口预算已补齐；持久候选/崩溃对账仍待做 |
+| FILE-002 P1 | `service/file_service.go:InitUpload` 不比较声明分片数与计算值 | total_size=10, chunk_size=5, total_chunks=1 | G03 溢出安全计算、数量及每片/总字节校验 | 完成声明总字节、无溢出数量计算与显式数量匹配已实现；G03 已追加精确片长/末片、不可变路径/清单 SHA-256 与入口体积/并发/期限预算；分片/合并的持久临时卷预算已追加，ZIP/缓存及大文件待做 |
+| FILE-003 P1 | `CompleteUploadPersist` 无任务行锁/CAS，无完成结果复用；mergeChunks 直接覆盖路径 | 两个完成请求并发/超时后重试；检查重复 file/物理路径损坏 | G02/G03 完成状态机、互斥/幂等结果、临时文件原子落盘 | 已复现并发完成重复记录/下载 404；独立候选路径、任务行锁和提交后清理已修；G03 已实现事务回执/完成结果复用及并发清理窗口回归；不可变分片与入口预算已补齐；新上传候选持久登记/受控回收已追加；旧未登记字节保留，真实断电/恢复演练待做 |
 | FILE-004 P1 | `CompleteUploadPersist` 直接创建同名记录，CreateFolder/Rename 则拒绝 | 同用户同目录同名上传两次 | G02 统一命名/冲突策略，数据库约束及恢复规则 | 应用写入命名锁与数字后缀已修；只读审计及独立版本化数据库唯一约束已实现；旧冲突拒绝迁移，真实库审核修复/升级演练待执行 |
-| FILE-005 P1 | `StorageService.GetOverview` 计算配额；InitUpload/CompleteUpload 无配额预留/核销 | 设置低配额后上传超限文件；并发超额 | G02/G03 配额账本/预留/释放，版本和回收站计量政策 | 已实现已保留对象计量、账户/策略锁、上传预留核销/取消/到期、复制/版本额度检查与事务审计；未知历史单独报告，临时磁盘预算与大文件验收仍在 G03 |
+| FILE-005 P1 | `StorageService.GetOverview` 计算配额；InitUpload/CompleteUpload 无配额预留/核销 | 设置低配额后上传超限文件；并发超额 | G02/G03 配额账本/预留/释放，版本和回收站计量政策 | 已实现已保留对象计量、账户/策略锁、上传预留核销/取消/到期、复制/版本额度检查与事务审计；未知历史单独报告，上传临时卷预算已追加；ZIP/缓存预算与大文件验收仍在 G03 |
 | FILE-006 P1 | `ensureStorageForFileRepo` 以 hash 去重；PermanentDelete 只删逻辑记录 | 上传重复内容后永久删除，统计物理对象和引用 | G02 完整引用图/版本引用/安全 GC；不直接删未知对象 | 冲突安全去重、独立对象、初始/历史版本引用和已校验上传修复已做；全部 file/版本引用的只读审计与 RESTRICT 外键已实现（包括回收站/未知历史），阻止悬空引用及引用中父记录删除；活动状态/读取租约、显式托管/两段宽限期 GC/过期清理与持久恢复已实现；旧对象不认领，未知候选/全链路崩溃对账与真实断电验收仍待做 |
 | FILE-007 P1 | 递归 collectDescendantIDs/ListActiveChildren 仅按 parent_id 查询，授权集中在根 | 混合所有者子目录、共享只读子项、循环/异常目录树 | G02 定义继承语义，逐层授权与循环检测/深度上限 | ZIP/批量下载/复制/移动/永久删除已逐项验证既有 ACL，循环/超限拒绝、树锁后重读；目录继承与扩展并发/性能矩阵待做 |
 | FILE-008 P1 | 上传任务无持久 parent_id/结果 file_id；恢复参数和完成目录可变化 | 用原 upload_id 带不同目录/文件元信息继续操作 | G03 固化任务契约并验证重试参数 | 新协议已固定 parent/尺寸/分片参数并验证续传/完成；G03 已保存原始结果 file_id/DTO 并复用；旧已完成任务无回执时拒绝猜测，完整持久传输状态机待做 |
@@ -70,3 +70,5 @@
 FILE-018 P2：现有 InitUpload 拒绝 total_size=0，空文件尚不能上传。G03 需明确零字节分片/完成协议并增加真实上传下载回归，不能把非空文件通过当作覆盖。
 
 FILE-019 P1：上传/下载速率选择仍为 query 优先，参数可提高管理员配置值；Range 下载直接走 ServeContent，需统一不可提高的服务端上限、峰时策略及 Range 速率预算。证据为 handler/file_handler.go 的 getUploadRateBytesPerSec/getDownloadRateBytesPerSec/sendFileWithRateLimit 分支，当前仅静态确认，真实策略绕过回归与修复继续属 G03；本批只验证上传等待可取消，未将完整速率策略标为完成。
+
+FILE-020 P1：新上传临时对象已登记并持续收费，取消/过期后凭卷/数据库/inode/FD 锁与事务删除意图回收；半登记、未知引用或替换文件保留并报告。旧未登记文件、ZIP/缓存、主机/数据库恢复仍需人工审核和后续治理，详见 [临时对象协议](TRANSFER-REGISTRY.md)。

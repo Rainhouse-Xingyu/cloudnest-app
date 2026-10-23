@@ -98,7 +98,12 @@ func UploadBodyBudget(rdb *redis.Client, timeout time.Duration) gin.HandlerFunc 
 				}
 			}
 		}()
-		stopClose := context.AfterFunc(ctx, func() { _ = originalBody.Close() })
+		stopClose := context.AfterFunc(ctx, func() {
+			// Closing an HTTP body alone can wait behind an active Read. Wake
+			// that read first, including graceful server shutdown.
+			_ = controller.SetReadDeadline(time.Now())
+			_ = originalBody.Close()
+		})
 		defer stopClose()
 		c.Request = c.Request.WithContext(ctx)
 		c.Request.Body = http.MaxBytesReader(c.Writer, tracked, MaxUploadBodyBytes)

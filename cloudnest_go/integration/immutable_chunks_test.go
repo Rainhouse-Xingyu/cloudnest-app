@@ -18,7 +18,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -110,59 +109,64 @@ func TestImmutableChunkRetriesCannotOverwriteOrDeleteAcceptedBytes(t *testing.T)
 		t.Fatal("confirmed completion did not clean only its manifest")
 	}
 }
+
+// stagedChunkBody pauses at the payload's closing MIME boundary, after the
+// producer has opened/locked its registered file but before any publication.
+type stagedChunkBody struct {
+	first, tail      *bytes.Reader
+	blocked, release chan struct{}
+	signal, unblock  sync.Once
+}
+
+func (s *stagedChunkBody) Read(p []byte) (int, error) {
+	if s.first.Len() > 0 {
+		return s.first.Read(p)
+	}
+	s.signal.Do(func() { close(s.blocked) })
+	<-s.release
+	return s.tail.Read(p)
+}
+func (s *stagedChunkBody) Close() error { s.unblock.Do(func() { close(s.release) }); return nil }
+func stagedBody(t *testing.T, id string, payload string) (*stagedChunkBody, string) {
+	body, ct := chunkBody(t, id, 0, []byte(payload), "")
+	raw := append([]byte(nil), body.Bytes()...)
+	split := bytes.LastIndex(raw, []byte("\r\n--"))
+	if split < 0 {
+		t.Fatal("missing boundary")
+	}
+	return &stagedChunkBody{first: bytes.NewReader(raw[:split]), tail: bytes.NewReader(raw[split:]), blocked: make(chan struct{}), release: make(chan struct{})}, ct
+}
 func TestImmutableChunkDifferentConcurrentBodiesPublishOneIdentity(t *testing.T) {
 	f := newFixture(t)
 	id := immutableInit(t, f, 4, 4)
-	paused, release, other := make(chan struct{}), make(chan struct{}), make(chan struct{})
-	var ledgerSeen atomic.Int32
-	var once sync.Once
-	const hook = "test:immutable_chunk_competition"
-	if err := f.db.Callback().Create().Before("gorm:create").Register(hook, func(tx *gorm.DB) {
-		if row, ok := tx.Statement.Dest.(*model.UserStorageLedger); ok && row.UserID == f.aliceID && ledgerSeen.Add(1) == 2 {
-			close(other)
-		}
-		if row, ok := tx.Statement.Dest.(*model.UploadChunk); ok && row.UploadID == id {
-			close(paused)
-			<-release
-		}
-	}); err != nil {
-		t.Fatal(err)
-	}
-	request := func(payload string) *httptest.ResponseRecorder {
-		body, ct := chunkBody(t, id, 0, []byte(payload), "")
-		req := httptest.NewRequest("POST", "/api/files/upload/chunk", body)
-		req.RemoteAddr = f.remoteAddr
-		req.Header.Set("Content-Type", ct)
-		req.Header.Set("Authorization", "Bearer "+f.alice)
+	body, ct := stagedBody(t, id, "AAAA")
+	defer body.Close()
+	done := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		request := httptest.NewRequest("POST", "/api/files/upload/chunk", body)
+		request.Header.Set("Authorization", "Bearer "+f.alice)
+		request.Header.Set("Content-Type", ct)
 		w := httptest.NewRecorder()
-		f.router.ServeHTTP(w, req)
-		return w
-	}
-	first, second := make(chan *httptest.ResponseRecorder, 1), make(chan *httptest.ResponseRecorder, 1)
-	defer func() { once.Do(func() { close(release) }); f.db.Callback().Create().Remove(hook) }()
-	go func() { first <- request("AAAA") }()
+		f.router.ServeHTTP(w, request)
+		done <- w
+	}()
 	select {
-	case <-paused:
+	case <-body.blocked:
 	case <-time.After(5 * time.Second):
-		t.Fatal("first chunk not paused")
+		t.Fatal("first body did not reach streaming window")
 	}
-	go func() { second <- request("BBBB") }()
-	select {
-	case <-other:
-	case <-time.After(5 * time.Second):
-		t.Fatal("second chunk did not independently finish streaming")
-	}
-	once.Do(func() { close(release) })
-	if a, b := (<-first).Code, (<-second).Code; a != 200 || b != 409 {
-		t.Fatalf("different candidates: %d/%d", a, b)
+	sendChunk(t, f, id, 0, []byte("BBBB"), "", 200)
+	body.Close()
+	if w := <-done; w.Code != 409 {
+		t.Fatal("different concurrent body overwrote winner", w.Code, w.Body.String())
 	}
 	if chunkFiles(t, f) != 1 {
 		t.Fatal("losing candidate leaked")
 	}
 	row := chunkRow(t, f, id)
 	data, _ := os.ReadFile(row.ChunkPath)
-	if string(data) != "AAAA" {
-		t.Fatal("loser overwrote winner")
+	if string(data) != "BBBB" {
+		t.Fatal("loser changed winner bytes")
 	}
 }
 func TestImmutableChunkIdenticalConcurrentRetriesAcrossRouters(t *testing.T) {
@@ -290,7 +294,8 @@ func TestImmutableChunkManifestDetectsDiskAndPathTampering(t *testing.T) {
 	if err := f.db.Model(&row).Update("chunk_path", originalPath).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Remove(originalPath); err != nil {
+	heldPath := originalPath + ".held"
+	if err := os.Rename(originalPath, heldPath); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(outside, originalPath); err != nil {
@@ -302,7 +307,8 @@ func TestImmutableChunkManifestDetectsDiskAndPathTampering(t *testing.T) {
 	if err := os.Remove(originalPath); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(originalPath, payload, 0600); err != nil {
+	// Restore the registered inode, rather than silently adopting a replacement.
+	if err := os.Rename(heldPath, originalPath); err != nil {
 		t.Fatal(err)
 	}
 	completedBlob(t, f, completeUploadRecorder(f, f.alice, id))
@@ -606,20 +612,9 @@ func TestImmutableChunkLateWriterCannotUndoCancelOrCompletion(t *testing.T) {
 		t.Run(strconv.FormatBool(complete), func(t *testing.T) {
 			f := newFixture(t)
 			id := fixturePendingUpload(t, f, f.alice, "late-writer.bin", []byte("AAAA"))
-			paused, release := make(chan struct{}), make(chan struct{})
-			var seen atomic.Int32
-			var once sync.Once
-			const hook = "test:late_chunk_writer"
-			if err := f.db.Callback().Create().Before("gorm:create").Register(hook, func(tx *gorm.DB) {
-				if row, ok := tx.Statement.Dest.(*model.UserStorageLedger); ok && row.UserID == f.aliceID && seen.Add(1) == 1 {
-					close(paused)
-					<-release
-				}
-			}); err != nil {
-				t.Fatal(err)
-			}
+			body, ct := stagedBody(t, id, "BBBB")
+			defer body.Close()
 			done := make(chan *httptest.ResponseRecorder, 1)
-			body, ct := chunkBody(t, id, 0, []byte("BBBB"), "")
 			go func() {
 				req := httptest.NewRequest("POST", "/api/files/upload/chunk", body)
 				req.Header.Set("Content-Type", ct)
@@ -628,11 +623,10 @@ func TestImmutableChunkLateWriterCannotUndoCancelOrCompletion(t *testing.T) {
 				f.router.ServeHTTP(w, req)
 				done <- w
 			}()
-			defer func() { once.Do(func() { close(release) }); f.db.Callback().Create().Remove(hook) }()
 			select {
-			case <-paused:
+			case <-body.blocked:
 			case <-time.After(5 * time.Second):
-				t.Fatal("late writer not paused")
+				t.Fatal("late writer not in streaming window")
 			}
 			var winner *httptest.ResponseRecorder
 			if complete {
@@ -640,7 +634,7 @@ func TestImmutableChunkLateWriterCannotUndoCancelOrCompletion(t *testing.T) {
 			} else {
 				f.json(t, "POST", "/api/files/upload/cancel", f.alice, map[string]any{"upload_id": id}, 200)
 			}
-			once.Do(func() { close(release) })
+			body.Close()
 			if w := <-done; w.Code != 409 {
 				t.Fatal("late writer published", w.Code, w.Body.String())
 			}
@@ -654,7 +648,7 @@ func TestImmutableChunkLateWriterCannotUndoCancelOrCompletion(t *testing.T) {
 				}
 			} else {
 				if chunkFiles(t, f) != 1 {
-					t.Fatal("cancel removed original recorded chunk or leaked candidate")
+					t.Fatal("cancel removed old chunk before reconciliation or leaked a candidate")
 				}
 			}
 		})

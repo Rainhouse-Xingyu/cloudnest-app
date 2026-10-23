@@ -6,19 +6,24 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"cloudenest_go/internal/app"
 	"cloudenest_go/internal/config"
 	storageMaintenance "cloudenest_go/internal/maintenance"
 	"cloudenest_go/internal/service"
+	"cloudenest_go/internal/service/contract"
 	storageMysql "cloudenest_go/internal/storage/mysql"
 	"cloudenest_go/internal/store"
+	"cloudenest_go/internal/transfer"
 
 	"github.com/joho/godotenv"
 )
@@ -44,7 +49,7 @@ func main() {
 	if err := applyCLIOverrides(&cfg, args); err != nil {
 		log.Fatalf("启动参数错误: %v", err)
 	}
-	databaseOnly := maintenance.kind == "audit-file-names" || maintenance.kind == "migrate-file-names" || maintenance.kind == "audit-storage-references" || maintenance.kind == "migrate-storage-references" || maintenance.kind == "gc-storage" || maintenance.kind == "prune-read-leases"
+	databaseOnly := maintenance.kind == "audit-file-names" || maintenance.kind == "migrate-file-names" || maintenance.kind == "audit-storage-references" || maintenance.kind == "migrate-storage-references" || maintenance.kind == "gc-storage" || maintenance.kind == "prune-read-leases" || maintenance.kind == "audit-transfers" || maintenance.kind == "reconcile-transfers" || maintenance.kind == "set-transfer-limit"
 	if databaseOnly {
 		err = cfg.ValidateDatabase()
 	} else {
@@ -109,6 +114,29 @@ func main() {
 					err = store.ErrStorageReferenceFindings
 				}
 			}
+		case "audit-transfers", "reconcile-transfers", "set-transfer-limit":
+			if strings.TrimSpace(os.Getenv("DATA_DIR")) == "" {
+				log.Fatal("transfer maintenance requires explicit DATA_DIR")
+			}
+			if err = store.CheckFileSchema(db); err != nil {
+				break
+			}
+			ctx, stop := context.WithTimeout(context.Background(), 10*time.Minute)
+			defer stop()
+			manager := transfer.NewManager(db, cfg)
+			if maintenance.kind == "set-transfer-limit" {
+				err = manager.SetLimit(ctx, maintenance.limitBytes)
+				break
+			}
+			var report transfer.Report
+			if maintenance.kind == "audit-transfers" {
+				report, err = manager.Audit(ctx)
+			} else {
+				report, err = manager.Reconcile(ctx)
+			}
+			if err == nil || errors.Is(err, transfer.ErrPending) {
+				err = errors.Join(err, json.NewEncoder(os.Stdout).Encode(report))
+			}
 		case "gc-storage":
 			if strings.TrimSpace(os.Getenv("DATA_DIR")) == "" {
 				log.Fatal("gc-storage requires explicit DATA_DIR; no default root is used")
@@ -165,12 +193,52 @@ func main() {
 	}
 
 	container := app.NewContainer(cfg, db, rdb)
+	worker := container.FileHandler.Transfers
+	if cfg.TransferMaintenanceDSN != "" {
+		workerCfg := cfg
+		workerCfg.MySQLDSN = cfg.TransferMaintenanceDSN
+		maintenanceDB, err := store.NewMySQL(workerCfg)
+		if err != nil {
+			log.Fatal("transfer maintenance database unavailable")
+		}
+		first, err := transfer.DatabaseIdentity(context.Background(), db)
+		if err != nil {
+			log.Fatal("runtime database identity unavailable")
+		}
+		second, err := transfer.DatabaseIdentity(context.Background(), maintenanceDB)
+		if err != nil || first != second {
+			log.Fatal("transfer maintenance database must match runtime database")
+		}
+		if sqlDB, err := maintenanceDB.DB(); err == nil {
+			defer sqlDB.Close()
+		}
+		worker = transfer.NewManager(maintenanceDB, workerCfg)
+	}
 	r := container.NewRouter()
 
-	addr := fmt.Sprintf(":%s", cfg.AppPort)
+	addr := net.JoinHostPort(cfg.BindAddr, cfg.AppPort)
 	log.Printf("服务启动成功，监听地址: %s，数据目录: %s", addr, cfg.DataDir)
 	server := &http.Server{Addr: addr, Handler: r, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 5 * time.Minute, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 1 << 20}
-	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	lifetime, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	server.BaseContext = func(net.Listener) context.Context { return lifetime }
+	workerDone := make(chan struct{})
+	go func() { defer close(workerDone); worker.Run(lifetime) }()
+	shutdownDone := make(chan struct{})
+	go func() {
+		defer close(shutdownDone)
+		<-lifetime.Done()
+		closing, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := server.Shutdown(closing); err != nil {
+			_ = server.Close()
+		}
+	}()
+	serveErr := server.ListenAndServe()
+	stop()
+	<-workerDone
+	<-shutdownDone
+	if err := serveErr; err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("启动 HTTP 服务失败: %s", explainStartupError(err))
 	}
 }
@@ -178,6 +246,9 @@ func main() {
 func explainStartupError(err error) string {
 	if err == nil {
 		return ""
+	}
+	if errors.Is(err, contract.ErrTransferUnavailable) {
+		return "transfer storage unavailable; review registry/schema/volume configuration"
 	}
 	msg := err.Error()
 	lower := strings.ToLower(msg)
@@ -272,6 +343,9 @@ func printUsage() {
 	fmt.Println("  cloudnest audit-storage-references   只读 JSON 存储引用审计；包括回收站与旧版本，不读取或删除物理文件")
 	fmt.Println("  cloudnest migrate-storage-references 显式安装文件/版本到存储的 RESTRICT 外键（先备份并停旧实例）")
 	fmt.Println("  cloudnest gc-storage           显式 DATA_DIR，仅回收已托管、无引用/有效租约且经过两段 24 小时宽限期的对象")
+	fmt.Println("  cloudnest audit-transfers      只读检查已登记临时存储额度与阻塞状态，需要显式 DATA_DIR")
+	fmt.Println("  cloudnest reconcile-transfers  有界对账/清理已登记且不再使用的候选，需要显式 DATA_DIR")
+	fmt.Println("  cloudnest set-transfer-limit <bytes> 设置当前本地卷的持久临时存储上限")
 	fmt.Println("  cloudnest prune-read-leases    每次最多清理 256 条已过期内部读取租约，不删除文件")
 	fmt.Println("  cloudnest migrate              显式应用模型结构（先备份数据库）")
 	fmt.Println("  cloudnest bootstrap-admin      仅初始化空用户表，密码从 CLOUDNEST_BOOTSTRAP_PASSWORD 读取")

@@ -119,33 +119,41 @@ func CheckStorageGCReferenceGraph(db *gorm.DB) error {
 // Metadata queries can silently hide objects from underprivileged accounts.
 // Require direct whole-schema visibility plus the global InnoDB FK inventory;
 // do not interpret an incomplete INFORMATION_SCHEMA view as an empty graph.
-func checkGCMetadataVisibility(db *gorm.DB) error {
+func checkSchemaVisibility(db *gorm.DB) (string, error) {
 	var identity, database string
 	if err := db.Raw("SELECT CURRENT_USER()").Scan(&identity).Error; err != nil {
-		return err
+		return "", err
 	}
 	if err := db.Raw("SELECT DATABASE()").Scan(&database).Error; err != nil {
-		return err
+		return "", err
 	}
 	if !safeSQLIdentifier.MatchString(database) {
-		return errors.New("GC requires a simple ASCII database identifier for InnoDB inventory matching")
+		return "", errors.New("GC requires a simple ASCII database identifier for InnoDB inventory matching")
 	}
 	at := strings.LastIndexByte(identity, '@')
 	if at <= 0 {
-		return errors.New("GC cannot determine metadata visibility")
+		return "", errors.New("GC cannot determine metadata visibility")
 	}
 	user, host := identity[:at], identity[at+1:]
 	var privileges []string
 	if err := db.Raw(`SELECT privilege_type FROM information_schema.schema_privileges WHERE CAST(DATABASE() AS BINARY) LIKE CAST(table_schema AS BINARY) ESCAPE ? AND grantee=CONCAT(QUOTE(?),'@',QUOTE(?))
  UNION SELECT privilege_type FROM information_schema.user_privileges WHERE grantee=CONCAT(QUOTE(?),'@',QUOTE(?))`, "\\", user, host, user, host).Scan(&privileges).Error; err != nil {
-		return err
+		return "", err
 	}
 	visible := map[string]bool{}
 	for _, p := range privileges {
 		visible[p] = true
 	}
 	if !visible["SELECT"] || !visible["TRIGGER"] {
-		return errors.New("GC requires directly granted whole-schema SELECT/TRIGGER metadata visibility; use a dedicated maintenance account")
+		return "", errors.New("GC requires directly granted whole-schema SELECT/TRIGGER metadata visibility; use a dedicated maintenance account")
+	}
+	return database, nil
+}
+
+func checkGCMetadataVisibility(db *gorm.DB) error {
+	database, err := checkSchemaVisibility(db)
+	if err != nil {
+		return err
 	}
 	var edges []struct {
 		ForName     string

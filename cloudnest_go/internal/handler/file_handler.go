@@ -30,6 +30,7 @@ import (
 	"cloudenest_go/internal/middleware"
 	"cloudenest_go/internal/service"
 	"cloudenest_go/internal/service/contract"
+	"cloudenest_go/internal/transfer"
 	"cloudenest_go/model"
 
 	"github.com/gin-gonic/gin"
@@ -42,6 +43,7 @@ import (
 
 // FileHandler handles file system related APIs.
 type FileHandler struct {
+	Transfers  *transfer.Manager
 	Blobs      *blob.Manager
 	RDB        *redis.Client
 	Cfg        config.Config
@@ -346,7 +348,7 @@ func (h *FileHandler) CompleteUpload(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"item": *snapshot.CompletedFile})
 		return
 	}
-	storagePath, mergedSize, fileHash, err := h.mergeChunks(c.Request.Context(), snapshot)
+	candidate, mergedSize, fileHash, err := h.mergeChunks(c.Request.Context(), uid, snapshot)
 	if err != nil {
 		// The winner may have committed and removed chunks after our preflight.
 		// Its receipt is authoritative; a missing chunk is not a failed upload.
@@ -363,12 +365,14 @@ func (h *FileHandler) CompleteUpload(c *gin.Context) {
 		return
 	}
 
-	committed, err := h.Svc.CompleteUpload(c.Request.Context(), uid, req.ParentID, req.UploadID, snapshot, storagePath, h.storageBaseDir(), mergedSize, fileHash, c.ClientIP())
-	if committed.CandidateDisposable {
-		if cleanupErr := os.Remove(storagePath); cleanupErr != nil && !errors.Is(cleanupErr, os.ErrNotExist) {
-			h.recordUploadCleanupFailure(c.Request.Context(), uid, nil, "upload_candidate_cleanup", c.ClientIP())
+	disposable := true
+	defer func() {
+		if err := candidate.Close(disposable); err != nil {
+			h.recordUploadCleanupFailure(context.WithoutCancel(c.Request.Context()), uid, nil, "upload_candidate_cleanup", c.ClientIP())
 		}
-	}
+	}()
+	committed, err := h.Svc.CompleteUpload(candidate.Context(), uid, req.ParentID, req.UploadID, snapshot, candidate.Path(), candidate.Root(), mergedSize, fileHash, candidate.Token(), c.ClientIP())
+	disposable = committed.CandidateDisposable
 	if err != nil {
 		writeFileMutationError(c, err, "complete upload failed")
 		return
@@ -1425,99 +1429,53 @@ func (h *FileHandler) thumbBaseDir() string {
 	return filepath.Join(h.dataRootDir(), thumbSubDir)
 }
 
-func (h *FileHandler) mergeChunks(ctx context.Context, snapshot service.FileUploadTaskSnapshot) (path string, size int64, digest string, result error) {
-	if err := os.MkdirAll(h.storageBaseDir(), 0700); err != nil {
-		return "", 0, "", err
-	}
-	root, err := blob.CanonicalRoot(h.storageBaseDir())
+func (h *FileHandler) mergeChunks(ctx context.Context, uid int64, snapshot service.FileUploadTaskSnapshot) (candidate *transfer.Handle, size int64, digest string, result error) {
+	candidate, err := h.Transfers.Create(ctx, uid, snapshot.Task.ID, "merge", snapshot.TotalSize)
 	if err != nil {
-		return "", 0, "", err
+		return nil, 0, "", err
 	}
-	relativeDir := filepath.Join(".managed-v1", time.Now().Format("200601"))
-	storageDir := filepath.Join(root, relativeDir)
-	anchored, err := os.OpenRoot(root)
-	if err != nil {
-		return "", 0, "", err
-	}
-	defer anchored.Close()
-	if err := blob.EnsurePrivateDir(anchored, relativeDir); err != nil {
-		return "", 0, "", err
-	}
-	token, err := blob.RandomToken()
-	if err != nil {
-		return "", 0, "", err
-	}
-	relativeCandidate := filepath.Join(relativeDir, "blob-"+token)
-	out, err := anchored.OpenFile(relativeCandidate, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
-	if err != nil {
-		return "", 0, "", err
-	}
-	candidate := filepath.Join(root, relativeCandidate)
 	complete := false
-	closed := false
+	owned := candidate
 	defer func() {
-		if !closed {
-			result = errors.Join(result, out.Close())
-		}
-		// Before any database call this path belongs only to this request.
 		if !complete {
-			if err := anchored.Remove(relativeCandidate); err != nil && !errors.Is(err, os.ErrNotExist) {
-				result = errors.Join(result, err)
-			}
+			result = errors.Join(result, owned.Close(true))
 		}
 	}()
 	hash := sha256.New()
-	writer := io.MultiWriter(out, hash)
+	writer := io.MultiWriter(candidate, hash)
 	for _, chunk := range snapshot.Chunks {
-		in, err := blob.OpenChunk(anchored, root, chunk.ChunkPath)
+		in, err := h.Transfers.OpenChunk(candidate.Context(), uid, snapshot.Task.ID, chunk)
 		if err != nil {
-			return "", 0, "", chunkManifestError(err)
+			return nil, 0, "", err
 		}
 		info, err := in.Stat()
 		if err != nil || chunk.ChunkSize == nil || info.Size() != *chunk.ChunkSize {
 			in.Close()
-			return "", 0, "", contract.ErrInvalidInput
+			return nil, 0, "", contract.ErrInvalidInput
 		}
-		digest := sha256.New()
-		n, copyErr := io.Copy(io.MultiWriter(writer, digest), io.LimitReader(&uploadContextReader{ctx: ctx, in: in}, *chunk.ChunkSize+1))
+		partHash := sha256.New()
+		n, copyErr := io.Copy(io.MultiWriter(writer, partHash), io.LimitReader(&uploadContextReader{ctx: candidate.Context(), in: in}, *chunk.ChunkSize+1))
 		closeErr := in.Close()
 		size += n
 		if copyErr != nil {
-			return "", 0, "", copyErr
+			return nil, 0, "", copyErr
 		}
 		if closeErr != nil {
-			return "", 0, "", closeErr
+			return nil, 0, "", closeErr
 		}
 		if n != *chunk.ChunkSize {
-			return "", 0, "", contract.ErrInvalidInput
+			return nil, 0, "", contract.ErrInvalidInput
 		}
-		if hex.EncodeToString(digest.Sum(nil)) != chunk.SHA256 {
-			return "", 0, "", contract.ErrStorageIntegrity
+		if hex.EncodeToString(partHash.Sum(nil)) != chunk.SHA256 {
+			return nil, 0, "", contract.ErrStorageIntegrity
 		}
 	}
-
-	if err := out.Sync(); err != nil {
-		return "", 0, "", err
-	}
-	closeOutputErr := out.Close()
-	closed = true
-	if closeOutputErr != nil {
-		return "", 0, "", closeOutputErr
-	}
-	// Persist both the candidate entry and newly created namespace directories.
-	for _, path := range []string{storageDir, filepath.Dir(storageDir), root, filepath.Dir(root)} {
-		dir, err := os.Open(path)
-		if err != nil {
-			return "", 0, "", err
-		}
-		syncErr := dir.Sync()
-		closeErr := dir.Close()
-		if err := errors.Join(syncErr, closeErr); err != nil {
-			return "", 0, "", err
-		}
+	digest = hex.EncodeToString(hash.Sum(nil))
+	if err := candidate.Seal(size, digest); err != nil {
+		return nil, 0, "", err
 	}
 	complete = true
-	return candidate, size, hex.EncodeToString(hash.Sum(nil)), nil
+	return candidate, size, digest, nil
 }
 
 type uploadContextReader struct {
@@ -2059,6 +2017,13 @@ func addZipFileFromPath(zw *zip.Writer, relPath string, sourcePath string) error
 func writeFileMutationError(c *gin.Context, err error, fallback string) {
 	status, message := http.StatusInternalServerError, fallback
 	switch {
+	case errors.Is(err, contract.ErrTransferSpace):
+		status, message = http.StatusInsufficientStorage, "temporary storage capacity unavailable"
+	case errors.Is(err, contract.ErrTransferBusy):
+		c.Header("Retry-After", "1")
+		status, message = http.StatusConflict, "transfer already in progress; retry later"
+	case errors.Is(err, contract.ErrTransferUnavailable):
+		status, message = http.StatusServiceUnavailable, "transfer storage unavailable"
 	case errors.Is(err, contract.ErrQuotaExceeded):
 		status, message = http.StatusInsufficientStorage, "storage quota exceeded"
 	case errors.Is(err, contract.ErrQuotaAccounting):

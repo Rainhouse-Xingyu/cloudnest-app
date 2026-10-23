@@ -10,9 +10,10 @@ import (
 )
 
 type maintenanceCommand struct {
-	kind     string
-	userID   int64
-	username string
+	kind       string
+	userID     int64
+	username   string
+	limitBytes int64
 }
 
 func parseMaintenanceArgs(args []string) (maintenanceCommand, bool, error) {
@@ -20,11 +21,20 @@ func parseMaintenanceArgs(args []string) (maintenanceCommand, bool, error) {
 		return maintenanceCommand{}, false, nil
 	}
 	switch args[0] {
-	case "migrate", "bootstrap-admin", "audit-file-names", "migrate-file-names", "audit-storage-references", "migrate-storage-references", "gc-storage", "prune-read-leases":
+	case "migrate", "bootstrap-admin", "audit-file-names", "migrate-file-names", "audit-storage-references", "migrate-storage-references", "gc-storage", "prune-read-leases", "audit-transfers", "reconcile-transfers":
 		if len(args) != 1 {
 			return maintenanceCommand{}, true, errors.New("maintenance command does not accept extra arguments")
 		}
 		return maintenanceCommand{kind: args[0]}, true, nil
+	case "set-transfer-limit":
+		if len(args) != 2 {
+			return maintenanceCommand{}, true, errors.New("usage: cloudnest set-transfer-limit <positive-bytes>; DATA_DIR must be explicit")
+		}
+		value, err := strconv.ParseInt(args[1], 10, 64)
+		if err != nil || value <= 0 || value > 4<<40 {
+			return maintenanceCommand{}, true, errors.New("transfer limit must be positive and no larger than 4 TiB")
+		}
+		return maintenanceCommand{kind: args[0], limitBytes: value}, true, nil
 	case "reset-password":
 		if len(args) != 3 {
 			return maintenanceCommand{}, true, errors.New("usage: cloudnest reset-password <positive-user-id> <exact-username>; password is read from stdin, never argv")

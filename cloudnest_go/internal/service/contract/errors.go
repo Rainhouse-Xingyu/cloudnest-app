@@ -4,6 +4,9 @@ import "errors"
 
 // 业务层统一错误定义，handler 层可据此映射 HTTP 状态码。
 var (
+	ErrTransferSpace        = errors.New("temporary storage capacity unavailable")
+	ErrTransferBusy         = errors.New("transfer already in progress")
+	ErrTransferUnavailable  = errors.New("transfer storage unavailable")
 	ErrQuotaExceeded        = errors.New("storage quota exceeded")
 	ErrQuotaAccounting      = errors.New("storage accounting unavailable")
 	ErrUploadContract       = errors.New("upload contract changed, expired or not reserved")

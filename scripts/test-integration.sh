@@ -42,4 +42,4 @@ redis_addr=$(docker port "$redis_id" 6379/tcp)
 export CLOUDNEST_TEST_DISPOSABLE=1
 export CLOUDNEST_TEST_MYSQL_DSN="cloudnest_test:cloudnest-disposable-test@tcp($mysql_addr)/cloudnest_test?charset=utf8mb4&parseTime=True&loc=UTC"
 export CLOUDNEST_TEST_REDIS_ADDR="$redis_addr"
-go test -tags=integration -race -count=1 -timeout=3m -v ./integration "$@"
+go test -tags=integration -race -count=1 -timeout=5m -v ./integration "$@"

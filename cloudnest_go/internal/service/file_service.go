@@ -343,7 +343,7 @@ func (s *FileService) InitUpload(ctx context.Context, uid int64, in FileUploadIn
 	chunkSizeCopy := in.ChunkSize
 	totalChunksCopy := in.TotalChunks
 	task := model.UploadTask{
-		ChunkProtocol: 1, ContractVersion: 1, ReservedBytes: in.TotalSize, ParentID: in.ParentID,
+		TransferProtocol: 1, ChunkProtocol: 1, ContractVersion: 1, ReservedBytes: in.TotalSize, ParentID: in.ParentID,
 		UploadID:    uploadID,
 		UserID:      &uidCopy,
 		Filename:    in.Filename,
@@ -386,8 +386,8 @@ func (s *FileService) ValidateUploadChunk(ctx context.Context, uid int64, upload
 }
 
 // MarkChunkUploaded 记录分片上传完成并刷新已上传分片数。
-func (s *FileService) MarkChunkUploaded(ctx context.Context, task model.UploadTask, uploadID string, chunkIndex int, chunkSize int64, chunkPath, chunkRoot, sha256, md5 string) (contract.ChunkCommit, error) {
-	return s.fileRepo.UpsertUploadChunkAndRefreshProgress(ctx, task.ID, uploadID, chunkIndex, chunkSize, chunkPath, chunkRoot, sha256, md5)
+func (s *FileService) MarkChunkUploaded(ctx context.Context, task model.UploadTask, uploadID string, chunkIndex int, chunkSize int64, chunkPath, chunkRoot, sha256, md5, artifactToken string) (contract.ChunkCommit, error) {
+	return s.fileRepo.UpsertUploadChunkAndRefreshProgress(ctx, task.ID, uploadID, chunkIndex, chunkSize, chunkPath, chunkRoot, sha256, md5, artifactToken)
 }
 
 // PrepareCompleteUpload 校验可完成条件并返回任务快照。
@@ -469,8 +469,8 @@ func completedUploadSnapshot(task model.UploadTask, uid, parentID int64) (FileUp
 }
 
 // CompleteUpload 完成上传后写入 storage/file 及任务状态。
-func (s *FileService) CompleteUpload(ctx context.Context, uid int64, parentID int64, uploadID string, snapshot FileUploadTaskSnapshot, storagePath, storageRoot string, mergedSize int64, fileHash string, clientIP string) (contract.UploadCommit, error) {
-	return s.fileRepo.CompleteUploadPersist(ctx, uid, parentID, uploadID, snapshot.Task, snapshot.TotalChunk, storagePath, storageRoot, mergedSize, fileHash, clientIP)
+func (s *FileService) CompleteUpload(ctx context.Context, uid int64, parentID int64, uploadID string, snapshot FileUploadTaskSnapshot, storagePath, storageRoot string, mergedSize int64, fileHash, artifactToken string, clientIP string) (contract.UploadCommit, error) {
+	return s.fileRepo.CompleteUploadPersist(ctx, uid, parentID, uploadID, snapshot.Task, snapshot.TotalChunk, storagePath, storageRoot, mergedSize, fileHash, artifactToken, clientIP)
 }
 
 func (s *FileService) ResolveFileVersion(ctx context.Context, uid, fileID int64, version int) (model.File, model.Storage, error) {

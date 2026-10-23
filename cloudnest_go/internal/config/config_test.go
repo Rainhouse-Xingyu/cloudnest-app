@@ -61,3 +61,22 @@ func TestMalformedJWTExpiryFailsValidation(t *testing.T) {
 		t.Fatal("valid expiry rejected")
 	}
 }
+
+func TestTransferLimitEnvironmentIsStrict(t *testing.T) {
+	t.Setenv("MYSQL_DSN", "app:disposable@tcp(127.0.0.1:3306)/test")
+	t.Setenv("JWT_SECRET", "test-only-random-key-at-least-thirty-two-bytes")
+	for _, value := range []string{"0", "-1", "8GiB", "1.5", "999999999999999999999", "4398046511105"} {
+		t.Setenv("TRANSFER_TEMP_LIMIT_BYTES", value)
+		if err := Load().Validate(); err == nil {
+			t.Fatal("invalid transfer seed limit accepted")
+		}
+	}
+	t.Setenv("TRANSFER_TEMP_LIMIT_BYTES", "")
+	if c := Load(); c.Validate() != nil || c.TransferTempBytes != 8<<30 {
+		t.Fatal("transfer default changed")
+	}
+	t.Setenv("TRANSFER_TEMP_LIMIT_BYTES", "1024")
+	if c := Load(); c.Validate() != nil || c.TransferTempBytes != 1024 {
+		t.Fatal("valid transfer seed limit rejected")
+	}
+}

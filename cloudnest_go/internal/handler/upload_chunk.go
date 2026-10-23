@@ -6,21 +6,18 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"io"
 	"mime/multipart"
 	"net"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
-	"cloudenest_go/internal/blob"
 	"cloudenest_go/internal/middleware"
 	"cloudenest_go/internal/service"
 	"cloudenest_go/internal/service/contract"
+	"cloudenest_go/internal/transfer"
 	"cloudenest_go/model"
 	"github.com/gin-gonic/gin"
 )
@@ -156,48 +153,19 @@ func writeChunkError(c *gin.Context, err error) {
 	}
 }
 func (h *FileHandler) acceptChunkPart(c *gin.Context, reader *multipart.Reader, part *multipart.Part, task model.UploadTask, index int, expected int64, md5sum string) {
-	if err := os.MkdirAll(h.storageBaseDir(), 0700); err != nil {
-		writeChunkError(c, err)
-		return
-	}
-	canonical, err := blob.CanonicalRoot(h.storageBaseDir())
-	if err != nil {
-		writeChunkError(c, err)
-		return
-	}
-	root, err := os.OpenRoot(canonical)
-	if err != nil {
-		writeChunkError(c, err)
-		return
-	}
-	defer root.Close()
-	if err := blob.EnsurePrivateDir(root, ".chunks-v1"); err != nil {
-		writeChunkError(c, err)
-		return
-	}
-	token, err := blob.RandomToken()
-	if err != nil {
-		writeChunkError(c, err)
-		return
-	}
-	relative := filepath.Join(".chunks-v1", "chunk-"+token+".part")
-	candidate := filepath.Join(canonical, relative)
-	file, err := root.OpenFile(relative, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	candidate, err := h.Transfers.Create(c.Request.Context(), *task.UserID, task.ID, "chunk", expected+1)
 	if err != nil {
 		writeChunkError(c, err)
 		return
 	}
 	disposable := true
 	defer func() {
-		_ = file.Close()
-		if disposable {
-			if err := root.Remove(relative); err != nil && !errors.Is(err, os.ErrNotExist) {
-				h.recordUploadCleanupFailure(context.WithoutCancel(c.Request.Context()), *task.UserID, nil, "upload_chunk_candidate_cleanup", c.ClientIP())
-			}
+		if err := candidate.Close(disposable); err != nil {
+			h.recordUploadCleanupFailure(context.WithoutCancel(c.Request.Context()), *task.UserID, nil, "upload_chunk_candidate_cleanup", c.ClientIP())
 		}
 	}()
 	sha, md := sha256.New(), md5.New()
-	total, err := copyUploadPart(c.Request.Context(), io.MultiWriter(file, sha, md), io.LimitReader(part, expected+1), h.getUploadRateBytesPerSec(c))
+	total, err := copyUploadPart(candidate.Context(), io.MultiWriter(candidate, sha, md), io.LimitReader(part, expected+1), h.getUploadRateBytesPerSec(c))
 	if err != nil {
 		writeChunkError(c, err)
 		return
@@ -223,27 +191,11 @@ func (h *FileHandler) acceptChunkPart(c *gin.Context, reader *multipart.Reader, 
 		writeChunkError(c, err)
 		return
 	}
-	if err := file.Sync(); err != nil {
+	if err := candidate.Seal(total, hex.EncodeToString(sha.Sum(nil))); err != nil {
 		writeChunkError(c, err)
 		return
 	}
-	if err := file.Close(); err != nil {
-		writeChunkError(c, err)
-		return
-	}
-	for _, path := range []string{filepath.Join(canonical, ".chunks-v1"), canonical, filepath.Dir(canonical)} {
-		dir, err := os.Open(path)
-		if err != nil {
-			writeChunkError(c, err)
-			return
-		}
-		err = errors.Join(dir.Sync(), dir.Close())
-		if err != nil {
-			writeChunkError(c, err)
-			return
-		}
-	}
-	commit, err := h.Svc.MarkChunkUploaded(c.Request.Context(), task, task.UploadID, index, total, candidate, canonical, hex.EncodeToString(sha.Sum(nil)), md5sum)
+	commit, err := h.Svc.MarkChunkUploaded(candidate.Context(), task, task.UploadID, index, total, candidate.Path(), candidate.Root(), hex.EncodeToString(sha.Sum(nil)), md5sum, candidate.Token())
 	disposable = commit.CandidateDisposable
 	if err != nil {
 		writeChunkError(c, err)
@@ -292,42 +244,10 @@ func copyUploadPart(ctx context.Context, dst io.Writer, src io.Reader, rate int6
 }
 
 func (h *FileHandler) cleanupChunkManifest(ctx context.Context, uid int64, chunks []model.UploadChunk, clientIP string) {
-	canonical, err := blob.CanonicalRoot(h.storageBaseDir())
-	if err != nil {
-		h.recordUploadCleanupFailure(ctx, uid, nil, "upload_chunk_cleanup", clientIP)
-		return
+	cleanup, stop := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer stop()
+	_, err := h.Transfers.Reconcile(cleanup)
+	if err != nil && !errors.Is(err, transfer.ErrPending) {
+		h.recordUploadCleanupFailure(cleanup, uid, nil, "upload_chunk_cleanup", clientIP)
 	}
-	root, err := os.OpenRoot(canonical)
-	if err != nil {
-		h.recordUploadCleanupFailure(ctx, uid, nil, "upload_chunk_cleanup", clientIP)
-		return
-	}
-	defer root.Close()
-	for _, chunk := range chunks {
-		relative, err := blob.ChunkRelative(canonical, chunk.ChunkPath)
-		if err == nil {
-			err = blob.RegularPath(root, relative)
-		}
-		if err == nil {
-			err = root.Remove(relative)
-		}
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			h.recordUploadCleanupFailure(ctx, uid, nil, "upload_chunk_cleanup", clientIP)
-		}
-	}
-	dir, err := root.Open(".chunks-v1")
-	if err == nil {
-		err = errors.Join(dir.Sync(), dir.Close())
-	}
-	if err != nil {
-		h.recordUploadCleanupFailure(ctx, uid, nil, "upload_chunk_cleanup", clientIP)
-	}
-}
-
-// Keep a stable, non-path-bearing error for manifest failures.
-func chunkManifestError(err error) error {
-	if errors.Is(err, blob.ErrChunkSize) {
-		return contract.ErrInvalidInput
-	}
-	return fmt.Errorf("%w: chunk manifest unavailable", contract.ErrStorageIntegrity)
 }
