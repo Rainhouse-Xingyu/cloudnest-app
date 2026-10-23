@@ -103,6 +103,7 @@ type FileUploadInitInput struct {
 
 // FileUploadInitResult 表示上传初始化返回。
 type FileUploadInitResult struct {
+	TransferEpoch  int64
 	UploadID       string
 	UploadedChunks []int
 	UploadedCount  int
@@ -111,6 +112,7 @@ type FileUploadInitResult struct {
 
 // FileUploadProgressResult 表示上传进度。
 type FileUploadProgressResult struct {
+	TransferEpoch  int64
 	UploadID       string
 	Status         int8
 	UploadedCount  int
@@ -334,6 +336,7 @@ func (s *FileService) InitUpload(ctx context.Context, uid int64, in FileUploadIn
 		}
 		return FileUploadInitResult{
 			UploadID:       task.UploadID,
+			TransferEpoch:  task.TransferEpoch,
 			UploadedChunks: chunkIndexes,
 			UploadedCount:  task.UploadedChunks,
 			Status:         task.Status,
@@ -518,7 +521,7 @@ func (s *FileService) UploadProgress(ctx context.Context, uid int64, uploadID st
 	if task.Status == 1 {
 		// Completion removes chunk rows. Their absence is expected and must not
 		// turn a committed task back into zero progress or missing chunks.
-		return FileUploadProgressResult{UploadID: task.UploadID, Status: 1, UploadedCount: totalChunks, TotalChunks: totalChunks, UploadedChunks: []int{}, MissingChunks: []int{}, Progress: 100}, nil
+		return FileUploadProgressResult{TransferEpoch: task.TransferEpoch, UploadID: task.UploadID, Status: 1, UploadedCount: totalChunks, TotalChunks: totalChunks, UploadedChunks: []int{}, MissingChunks: []int{}, Progress: 100}, nil
 	}
 
 	missingChunks := make([]int, 0)
@@ -539,7 +542,7 @@ func (s *FileService) UploadProgress(ctx context.Context, uid int64, uploadID st
 		progress = float64(len(uploadedChunks)) * 100 / float64(totalChunks)
 	}
 
-	return FileUploadProgressResult{UploadID: task.UploadID, Status: task.Status, UploadedCount: len(uploadedChunks), TotalChunks: totalChunks, UploadedChunks: uploadedChunks, MissingChunks: missingChunks, Progress: progress}, nil
+	return FileUploadProgressResult{TransferEpoch: task.TransferEpoch, UploadID: task.UploadID, Status: task.Status, UploadedCount: len(uploadedChunks), TotalChunks: totalChunks, UploadedChunks: uploadedChunks, MissingChunks: missingChunks, Progress: progress}, nil
 }
 
 // GetAccessibleFile 查询可访问文件（不包含 storage 校验）。
@@ -1186,4 +1189,11 @@ func (s *FileService) pinnedRegularPath(ctx context.Context, id int64) (string, 
 
 func (s *FileService) CancelUpload(ctx context.Context, uid int64, id, ip string) error {
 	return s.fileRepo.CancelUploadTask(ctx, uid, id, ip)
+}
+
+func (s *FileService) ControlUpload(ctx context.Context, uid int64, uploadID string, expectedEpoch int64, paused bool, clientIP string) (model.UploadTask, error) {
+	if strings.TrimSpace(uploadID) == "" || expectedEpoch < 0 {
+		return model.UploadTask{}, contract.ErrInvalidInput
+	}
+	return s.fileRepo.ControlUploadTask(ctx, uid, uploadID, expectedEpoch, paused, clientIP)
 }

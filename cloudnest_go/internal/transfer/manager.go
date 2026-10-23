@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"cloudenest_go/internal/blob"
@@ -25,6 +26,8 @@ const DefaultLimit int64 = 8 << 30
 const DefaultMinFree int64 = 64 << 20
 
 type Manager struct {
+	activeMu  sync.Mutex
+	active    map[*Handle]struct{}
 	db        *gorm.DB
 	rootPath  string
 	seedLimit int64
@@ -96,7 +99,10 @@ func record(tx *gorm.DB, uid int64, action, token string) error {
 
 // Create registers and charges before creating a file. The root gate spans the
 // filesystem creation/FD-lock handoff, including a lost database connection.
-func (m *Manager) Create(ctx context.Context, uid, taskID int64, kind string, bytes int64) (*Handle, error) {
+func (m *Manager) Create(ctx context.Context, uid, taskID int64, kind string, bytes int64, expectedEpoch int64) (*Handle, error) {
+	if expectedEpoch < 0 {
+		return nil, contract.ErrUploadContract
+	}
 	parent := ctx
 	operation, stop := context.WithTimeout(ctx, 5*time.Second)
 	defer stop()
@@ -117,7 +123,7 @@ func (m *Manager) Create(ctx context.Context, uid, taskID int64, kind string, by
 	if !validRelative(kind, token, relative) {
 		return nil, contract.ErrTransferUnavailable
 	}
-	artifact := model.TransferArtifact{Token: token, VolumeID: root.id, RelativePath: relative, UserID: uid, TaskID: taskID, Kind: kind, State: "intent", Bytes: bytes, ExpiresAt: time.Now().UTC().Add(leaseSeconds * time.Second)}
+	artifact := model.TransferArtifact{TransferEpoch: expectedEpoch, Token: token, VolumeID: root.id, RelativePath: relative, UserID: uid, TaskID: taskID, Kind: kind, State: "intent", Bytes: bytes, ExpiresAt: time.Now().UTC().Add(leaseSeconds * time.Second)}
 	err = m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := quota.Begin(tx, uid); err != nil {
 			return err
@@ -132,6 +138,9 @@ func (m *Manager) Create(ctx context.Context, uid, taskID int64, kind string, by
 		}
 		if err := live(tx, task); err != nil {
 			return err
+		}
+		if task.TransferEpoch != expectedEpoch {
+			return contract.ErrUploadContract
 		}
 		if task.TransferVolume != "" && task.TransferVolume != root.id {
 			return contract.ErrTransferUnavailable
@@ -209,6 +218,7 @@ func (m *Manager) Create(ctx context.Context, uid, taskID int64, kind string, by
 	if err := errors.Join(file.Sync(), syncArtifactDirs(root.root, relative)); err != nil {
 		return nil, unavailable(err)
 	}
+	stale := false
 	err = m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := quota.Begin(tx, uid); err != nil {
 			return err
@@ -220,10 +230,12 @@ func (m *Manager) Create(ctx context.Context, uid, taskID int64, kind string, by
 		if err != nil {
 			return err
 		}
-		if err := live(tx, task); err != nil {
-			return err
+		stale = task.TransferEpoch != artifact.TransferEpoch || live(tx, task) != nil
+		state := "writing"
+		if stale {
+			state = "discard"
 		}
-		update := tx.Model(&model.TransferArtifact{}).Where("token=? AND state='intent' AND expires_at>UTC_TIMESTAMP(6)", token).Updates(map[string]any{"state": "writing", "device": device, "inode": inode, "expires_at": gorm.Expr("DATE_ADD(UTC_TIMESTAMP(6),INTERVAL 90 SECOND)")})
+		update := tx.Model(&model.TransferArtifact{}).Where("token=? AND state='intent' AND expires_at>UTC_TIMESTAMP(6)", token).Updates(map[string]any{"state": state, "device": device, "inode": inode, "expires_at": gorm.Expr("DATE_ADD(UTC_TIMESTAMP(6),INTERVAL 90 SECOND)")})
 		if update.Error != nil {
 			return update.Error
 		}
@@ -235,10 +247,14 @@ func (m *Manager) Create(ctx context.Context, uid, taskID int64, kind string, by
 	if err != nil {
 		return nil, unavailable(err)
 	}
+	if stale {
+		return nil, contract.ErrUploadContract
+	}
 	artifact.State = "writing"
 	artifact.Device = device
 	artifact.Inode = inode
 	handle := newHandle(m, artifact, file, root.path, parent)
+	m.track(handle)
 	owned = true
 	return handle, nil
 }
@@ -364,4 +380,25 @@ func (m *Manager) abortNoFile(parent context.Context, root *rootScope, artifact 
 		}
 		return record(tx, current.UserID, "transfer_no_file", current.Token)
 	})
+}
+
+func (m *Manager) track(h *Handle) {
+	m.activeMu.Lock()
+	defer m.activeMu.Unlock()
+	if m.active == nil {
+		m.active = map[*Handle]struct{}{}
+	}
+	m.active[h] = struct{}{}
+}
+func (m *Manager) untrack(h *Handle) { m.activeMu.Lock(); delete(m.active, h); m.activeMu.Unlock() }
+
+// CancelBefore never cancels handles from a concurrent, newer resume.
+func (m *Manager) CancelBefore(uid, taskID, epoch int64) {
+	m.activeMu.Lock()
+	defer m.activeMu.Unlock()
+	for h := range m.active {
+		if h.artifact.UserID == uid && h.artifact.TaskID == taskID && h.artifact.TransferEpoch < epoch {
+			h.cancel(contract.ErrUploadContract)
+		}
+	}
 }

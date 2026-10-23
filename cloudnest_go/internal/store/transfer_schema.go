@@ -7,21 +7,22 @@ import (
 
 func CheckTransferSchema(db *gorm.DB) error {
 	var count int64
-	if err := db.Raw(`SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND ((table_name='upload_task' AND ((column_name='transfer_protocol' AND data_type='smallint' AND is_nullable='NO' AND column_default='0') OR (column_name IN ('transfer_volume','merge_artifact') AND data_type='char' AND character_maximum_length=64 AND is_nullable='NO' AND column_default=''))) OR (table_name='upload_chunk' AND column_name='artifact_token' AND data_type='char' AND character_maximum_length=64 AND is_nullable='NO' AND column_default=''))`).Scan(&count).Error; err != nil {
+	if err := db.Raw(`SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND ((table_name='upload_task' AND ((column_name='transfer_epoch' AND data_type='bigint' AND column_type='bigint' AND is_nullable='NO' AND column_default='0') OR (column_name='transfer_protocol' AND data_type='smallint' AND is_nullable='NO' AND column_default='0') OR (column_name IN ('transfer_volume','merge_artifact') AND data_type='char' AND character_maximum_length=64 AND is_nullable='NO' AND column_default=''))) OR (table_name='upload_chunk' AND column_name='artifact_token' AND data_type='char' AND character_maximum_length=64 AND is_nullable='NO' AND column_default=''))`).Scan(&count).Error; err != nil {
 		return err
 	}
-	if count != 4 {
+	if count != 5 {
 		return errors.New("transfer registration columns missing or changed; review explicit migrate before starting")
 	}
 	for table, columns := range map[string]map[string]string{
 		"transfer_volume":   {"id": "char", "root_path": "varchar", "limit_bytes": "bigint", "min_free_bytes": "bigint"},
-		"transfer_artifact": {"token": "char", "volume_id": "char", "relative_path": "varchar", "user_id": "bigint", "task_id": "bigint", "kind": "varchar", "state": "varchar", "bytes": "bigint", "size": "bigint", "sha256": "char", "device": "bigint", "inode": "bigint", "expires_at": "datetime", "created_at": "datetime"},
+		"transfer_artifact": {"transfer_epoch": "bigint", "token": "char", "volume_id": "char", "relative_path": "varchar", "user_id": "bigint", "task_id": "bigint", "kind": "varchar", "state": "varchar", "bytes": "bigint", "size": "bigint", "sha256": "char", "device": "bigint", "inode": "bigint", "expires_at": "datetime", "created_at": "datetime"},
 	} {
 		var rows []struct {
 			ColumnName, DataType, IsNullable, ColumnType string
+			ColumnDefault                                *string
 			DatetimePrecision                            *int64
 		}
-		if err := db.Raw("SELECT column_name,data_type,is_nullable,column_type,datetime_precision FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=?", table).Scan(&rows).Error; err != nil {
+		if err := db.Raw("SELECT column_name,data_type,is_nullable,column_type,column_default,datetime_precision FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=?", table).Scan(&rows).Error; err != nil {
 			return err
 		}
 		if len(rows) != len(columns) {
@@ -30,6 +31,9 @@ func CheckTransferSchema(db *gorm.DB) error {
 		for _, row := range rows {
 			if columns[row.ColumnName] != row.DataType || row.IsNullable != "NO" {
 				return errors.New("transfer registry column changed")
+			}
+			if row.ColumnName == "transfer_epoch" && (row.ColumnType != "bigint" || row.ColumnDefault == nil || *row.ColumnDefault != "0") {
+				return errors.New("transfer epoch schema changed")
 			}
 			if row.DataType == "datetime" && (row.DatetimePrecision == nil || *row.DatetimePrecision != 6) {
 				return errors.New("transfer registry timestamp changed")

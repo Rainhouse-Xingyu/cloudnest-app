@@ -45,6 +45,9 @@ func registered(tx *gorm.DB, token string, task model.UploadTask, kind, path str
 		return artifact, contract.ErrTransferUnavailable
 	}
 	if active {
+		if artifact.TransferEpoch != task.TransferEpoch {
+			return artifact, contract.ErrUploadContract
+		}
 		var count int64
 		if err := tx.Model(&model.TransferArtifact{}).Where("token=? AND expires_at>UTC_TIMESTAMP(6)", token).Count(&count).Error; err != nil {
 			return artifact, err

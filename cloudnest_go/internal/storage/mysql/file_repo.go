@@ -486,7 +486,7 @@ func (r *FileRepo) GetUploadTaskByUploadID(ctx context.Context, uid int64, uploa
 	if task.UserID == nil || *task.UserID != uid {
 		return model.UploadTask{}, contract.ErrForbidden
 	}
-	if task.ContractVersion != 1 {
+	if task.ContractVersion != 1 || task.TransferEpoch < 0 {
 		return model.UploadTask{}, contract.ErrUploadContract
 	}
 	if task.Status != 1 && (task.ChunkProtocol != 1 || task.TransferProtocol != 1) {
@@ -495,8 +495,8 @@ func (r *FileRepo) GetUploadTaskByUploadID(ctx context.Context, uid int64, uploa
 	if task.Status != 1 && task.TotalChunks != nil && (*task.TotalChunks < 0 || *task.TotalChunks > contract.MaxUploadChunks) {
 		return model.UploadTask{}, contract.ErrUploadContract
 	}
-	if task.Status == 0 {
-		if err := quota.RequireLiveTask(r.db.WithContext(ctx), task); err != nil {
+	if task.Status == 0 || task.Status == 2 {
+		if err := quota.RequireRetainedTask(r.db.WithContext(ctx), task); err != nil {
 			return model.UploadTask{}, err
 		}
 	}
@@ -692,6 +692,9 @@ func (r *FileRepo) CompleteUploadPersist(ctx context.Context, uid int64, parentI
 		}
 		if err := quota.RequireLiveTask(tx, currentTask); err != nil {
 			return err
+		}
+		if currentTask.TransferEpoch != task.TransferEpoch {
+			return contract.ErrUploadContract
 		}
 		if contract.IsEmptyUpload(currentTask) {
 			var count int64

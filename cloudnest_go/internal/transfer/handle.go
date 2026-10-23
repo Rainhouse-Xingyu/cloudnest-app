@@ -26,7 +26,7 @@ type Handle struct {
 	file           *os.File
 	root           string
 	ctx            context.Context
-	cancel         context.CancelFunc
+	cancel         context.CancelCauseFunc
 	done           chan struct{}
 	mu             sync.Mutex
 	written        int64
@@ -34,7 +34,7 @@ type Handle struct {
 }
 
 func newHandle(m *Manager, a model.TransferArtifact, f *os.File, root string, parent context.Context) *Handle {
-	ctx, cancel := context.WithCancel(parent)
+	ctx, cancel := context.WithCancelCause(parent)
 	h := &Handle{digest: sha256.New(), manager: m, artifact: a, file: f, root: root, ctx: ctx, cancel: cancel, done: make(chan struct{})}
 	go h.renew()
 	return h
@@ -98,6 +98,9 @@ func (h *Handle) Seal(size int64, digest string) error {
 		if err := live(tx, task); err != nil {
 			return err
 		}
+		if task.TransferEpoch != h.artifact.TransferEpoch {
+			return contract.ErrUploadContract
+		}
 		result := tx.Model(&model.TransferArtifact{}).Where("token=? AND state='writing' AND expires_at>UTC_TIMESTAMP(6)", h.Token()).Updates(map[string]any{"state": "ready", "size": size, "bytes": max(size, int64(1)), "sha256": digest})
 		if result.Error != nil {
 			return result.Error
@@ -123,10 +126,14 @@ func (h *Handle) renew() {
 			return
 		case <-ticker.C:
 			ctx, stop := context.WithTimeout(h.ctx, 5*time.Second)
-			result := h.manager.db.WithContext(ctx).Model(&model.TransferArtifact{}).Where("token=? AND state IN ('writing','ready') AND expires_at>UTC_TIMESTAMP(6) AND EXISTS (SELECT 1 FROM upload_task WHERE id=? AND status=0 AND expires_at>UTC_TIMESTAMP(6))", h.Token(), h.artifact.TaskID).Update("expires_at", gorm.Expr("DATE_ADD(UTC_TIMESTAMP(6),INTERVAL 90 SECOND)"))
+			result := h.manager.db.WithContext(ctx).Model(&model.TransferArtifact{}).Where("token=? AND state IN ('writing','ready') AND expires_at>UTC_TIMESTAMP(6) AND EXISTS (SELECT 1 FROM upload_task WHERE id=? AND status=0 AND transfer_epoch=? AND expires_at>UTC_TIMESTAMP(6))", h.Token(), h.artifact.TaskID, h.artifact.TransferEpoch).Update("expires_at", gorm.Expr("DATE_ADD(UTC_TIMESTAMP(6),INTERVAL 90 SECOND)"))
 			stop()
 			if result.Error != nil || result.RowsAffected != 1 {
-				h.cancel()
+				cause := contract.ErrUploadContract
+				if result.Error != nil {
+					cause = contract.ErrTransferUnavailable
+				}
+				h.cancel(cause)
 				return
 			}
 		}
@@ -136,7 +143,8 @@ func (h *Handle) renew() {
 // Close never unlinks an open descriptor. Known-unused artifacts are durably
 // discarded, then use the same bounded reconciler as crash recovery.
 func (h *Handle) Close(discard bool) error {
-	h.cancel()
+	defer h.manager.untrack(h)
+	h.cancel(nil)
 	<-h.done
 	h.mu.Lock()
 	if h.closed {

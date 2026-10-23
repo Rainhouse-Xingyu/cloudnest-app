@@ -97,3 +97,7 @@ G03 新临时登记协议保持 File/multipart DTO 不变；507 也可能表示�
 G03 速率参数名称不变，实际单位 KiB/s；仅能降低管理员上限，个人窗口也不能关闭全局高峰。空/重复/非法速率参数 400，策略配置或读取失败 503；不再静默扩大为默认速度。小于 64 的有效个人降速可用到 1 KiB/s，仍须满足分片期限。下载 200/206 后必须检查响应体完整读取，遇到中途错误可能直接断流，不会在正文中附加 JSON。GET rate-window 仍描述个人偏好，不表示全局限制已关闭。HTTP Range/条件响应及完整规则见 [速率协议](TRANSFER-RATE-POLICY.md)。
 
 G03 空文件需明确传 total_size=0、total_chunks=0，chunk_size 可明确给正值（如 4096）。无需发空分片，直接完成原任务；总片数为 0 时仍根据 status/progress 判断是否已发布，不能省略 complete。缺少/null/负数 size 仍 400，旧非空调用不变，iOS 源码保持冻结。服务端返回真实 Content-Length: 0 文件并复用原回执；新 macOS 需实现这一路径，详见 [空文件协议](EMPTY-UPLOADS.md)。
+
+G03 新增 POST upload/pause 与 upload/resume，必须携 expected_epoch，init/progress 新增 transfer_epoch，旧 DTO 字段不变且 iOS 冻结。新客户端需保存代次、409 后刷新状态；暂停不释放预留、不延长到期，已确认分片可继续复用。两个新方法仍需业务路径授权。详细幂等/竞态/错误/迁移规则见 [控制协议](UPLOAD-CONTROL.md)。
+
+一旦任务 transfer_epoch>0，后续 chunk/尚未完成的 complete 须携匹配的 X-Upload-Epoch。未控制的 epoch=0 任务仍允许旧客户端省略；旧客户端不能继续一个被新客户端暂停/恢复的任务，返回 409，已完成回执确认不受此限制。新 macOS 需随控制响应更新代次并在所有数据请求中发送。

@@ -282,6 +282,7 @@ func (h *FileHandler) InitUpload(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"upload_id":       res.UploadID,
+		"transfer_epoch":  res.TransferEpoch,
 		"uploaded_chunks": res.UploadedChunks,
 		"uploaded_count":  res.UploadedCount,
 		"status":          res.Status,
@@ -340,6 +341,10 @@ func (h *FileHandler) CompleteUpload(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"item": *snapshot.CompletedFile})
 		return
 	}
+	if err := verifyUploadEpoch(c, snapshot.Task.TransferEpoch); err != nil {
+		writeFileMutationError(c, err, "upload epoch rejected")
+		return
+	}
 	candidate, mergedSize, fileHash, err := h.mergeChunks(c.Request.Context(), uid, snapshot)
 	if err != nil {
 		// The winner may have committed and removed chunks after our preflight.
@@ -352,6 +357,9 @@ func (h *FileHandler) CompleteUpload(c *gin.Context) {
 		if isUploadContractError(receiptErr) {
 			writeFileMutationError(c, receiptErr, "complete upload failed")
 			return
+		}
+		if errors.Is(err, context.Canceled) && c.Request.Context().Err() == nil {
+			err = contract.ErrUploadContract
 		}
 		writeFileMutationError(c, err, "merge chunks failed")
 		return
@@ -366,6 +374,9 @@ func (h *FileHandler) CompleteUpload(c *gin.Context) {
 	committed, err := h.Svc.CompleteUpload(candidate.Context(), uid, req.ParentID, req.UploadID, snapshot, candidate.Path(), candidate.Root(), mergedSize, fileHash, candidate.Token(), c.ClientIP())
 	disposable = committed.CandidateDisposable
 	if err != nil {
+		if candidate.Context().Err() != nil && c.Request.Context().Err() == nil {
+			err = contract.ErrUploadContract
+		}
 		writeFileMutationError(c, err, "complete upload failed")
 		return
 	}
@@ -580,6 +591,7 @@ func (h *FileHandler) UploadProgress(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"upload_id":       res.UploadID,
+		"transfer_epoch":  res.TransferEpoch,
 		"status":          res.Status,
 		"uploaded_count":  res.UploadedCount,
 		"total_chunks":    res.TotalChunks,
@@ -1442,7 +1454,7 @@ func (h *FileHandler) thumbBaseDir() string {
 }
 
 func (h *FileHandler) mergeChunks(ctx context.Context, uid int64, snapshot service.FileUploadTaskSnapshot) (candidate *transfer.Handle, size int64, digest string, result error) {
-	candidate, err := h.Transfers.Create(ctx, uid, snapshot.Task.ID, "merge", max(snapshot.TotalSize, int64(1)))
+	candidate, err := h.Transfers.Create(ctx, uid, snapshot.Task.ID, "merge", max(snapshot.TotalSize, int64(1)), snapshot.Task.TransferEpoch)
 	if err != nil {
 		return nil, 0, "", err
 	}

@@ -34,7 +34,7 @@ type leaseResponseWriter struct {
 }
 
 func (w *leaseResponseWriter) allow() error {
-	if err := w.scope.Check(); err != nil {
+	if err := w.scope.CheckResponse(); err != nil {
 		if !w.ResponseWriter.Written() {
 			w.ResponseWriter.Header().Del("Content-Length")
 			w.ResponseWriter.Header().Del("Content-Disposition")

@@ -79,6 +79,7 @@ type FileRepository interface {
 	GetUploadTaskAndUploadedChunkIndexes(ctx context.Context, userID int64, uploadID string) (model.UploadTask, []int, error)
 	CreateUploadTask(ctx context.Context, task model.UploadTask) error
 	CancelUploadTask(ctx context.Context, uid int64, uploadID, clientIP string) error
+	ControlUploadTask(ctx context.Context, uid int64, uploadID string, expectedEpoch int64, paused bool, clientIP string) (model.UploadTask, error)
 	UpsertUploadChunkAndRefreshProgress(ctx context.Context, taskID int64, uploadID string, chunkIndex int, chunkSize int64, chunkPath, chunkRoot, sha256, md5, artifactToken string) (ChunkCommit, error)
 	ListDoneUploadChunks(ctx context.Context, uploadID string) ([]model.UploadChunk, error)
 	CompleteUploadPersist(ctx context.Context, uid int64, parentID int64, uploadID string, task model.UploadTask, totalChunks int, storagePath, storageRoot string, mergedSize int64, fileHash, artifactToken string, clientIP string) (UploadCommit, error)

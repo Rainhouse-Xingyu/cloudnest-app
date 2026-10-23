@@ -142,7 +142,15 @@ func Refresh(tx *gorm.DB, uid int64, enforce bool) error {
 	return tx.Create(&model.OperationLog{UserID: &uid, Action: "quota_accounting", Status: "success", Detail: fmt.Sprintf("revision=%d used=%d reserved=%d unmetered_refs=%d valid=%t", revision, u.UsedBytes, u.ReservedBytes, u.UnmeteredRefs, u.BrokenRefs == 0)}).Error
 }
 func RequireLiveTask(tx *gorm.DB, t model.UploadTask) error {
-	if t.ContractVersion != 1 || t.Status != 0 || t.TotalSize == nil || t.ReservedBytes != *t.TotalSize || t.ReservedBytes < 0 || (t.ReservedBytes == 0 && !contract.IsEmptyUpload(t)) || t.ExpiresAt == nil {
+	if t.Status != 0 {
+		return contract.ErrUploadContract
+	}
+	return RequireRetainedTask(tx, t)
+}
+
+// RequireRetainedTask validates an unexpired running or paused reservation.
+func RequireRetainedTask(tx *gorm.DB, t model.UploadTask) error {
+	if t.ContractVersion != 1 || (t.Status != 0 && t.Status != 2) || t.TotalSize == nil || t.ReservedBytes != *t.TotalSize || t.ReservedBytes < 0 || (t.ReservedBytes == 0 && !contract.IsEmptyUpload(t)) || t.ExpiresAt == nil {
 		return contract.ErrUploadContract
 	}
 	var live int64

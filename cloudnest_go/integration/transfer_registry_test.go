@@ -57,7 +57,7 @@ func newTransferHandle(t *testing.T, f *fixture, kind string, cap int64) (*trans
 	t.Helper()
 	id := immutableInit(t, f, 4, 4)
 	task := receiptTask(t, f, id)
-	h, err := transferManager(f).Create(context.Background(), f.aliceID, task.ID, kind, cap)
+	h, err := transferManager(f).Create(context.Background(), f.aliceID, task.ID, kind, cap, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestTransferConcurrentReservationsCannotOverbook(t *testing.T) {
 	for range 8 {
 		go func() {
 			<-start
-			h, e := m.Create(context.Background(), f.aliceID, task.ID, "chunk", 5)
+			h, e := m.Create(context.Background(), f.aliceID, task.ID, "chunk", 5, 0)
 			results <- result{h, e}
 		}()
 	}
@@ -312,7 +312,7 @@ func TestTransferUnprovenIntentAndReplacedInodeAreBlocked(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	h, err := transferManager(f).Create(context.Background(), f.aliceID, task.ID, "chunk", 5)
+	h, err := transferManager(f).Create(context.Background(), f.aliceID, task.ID, "chunk", 5, 0)
 	f.db.Callback().Update().Remove(hook)
 	if err == nil {
 		h.Close(true)
@@ -390,29 +390,29 @@ func TestTransferSingleMergeClaimAndGlobalMergeCeiling(t *testing.T) {
 		}
 	}()
 	for i := range 4 {
-		h, err := m.Create(context.Background(), f.aliceID, tasks[i].ID, "merge", 4)
+		h, err := m.Create(context.Background(), f.aliceID, tasks[i].ID, "merge", 4, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
 		handles = append(handles, h)
 	}
-	if h, err := m.Create(context.Background(), f.aliceID, tasks[0].ID, "merge", 4); err == nil {
+	if h, err := m.Create(context.Background(), f.aliceID, tasks[0].ID, "merge", 4, 0); err == nil {
 		h.Close(true)
 		t.Fatal("second merger admitted for same task")
 	}
-	if h, err := m.Create(context.Background(), f.aliceID, tasks[4].ID, "merge", 4); err == nil {
+	if h, err := m.Create(context.Background(), f.aliceID, tasks[4].ID, "merge", 4, 0); err == nil {
 		h.Close(true)
 		t.Fatal("volume merge concurrency exceeded")
 	}
 	transferExpire(t, f, handles[0].Token())
-	if h, err := m.Create(context.Background(), f.aliceID, tasks[0].ID, "merge", 4); err == nil {
+	if h, err := m.Create(context.Background(), f.aliceID, tasks[0].ID, "merge", 4, 0); err == nil {
 		h.Close(true)
 		t.Fatal("expired but open merge claim stolen")
 	}
 	if err := handles[0].Close(true); err != nil {
 		t.Fatal(err)
 	}
-	h, err := m.Create(context.Background(), f.aliceID, tasks[4].ID, "merge", 4)
+	h, err := m.Create(context.Background(), f.aliceID, tasks[4].ID, "merge", 4, 0)
 	if err != nil {
 		t.Fatal("closed claim did not release merge slot", err)
 	}
@@ -594,7 +594,7 @@ func TestTransferVolumeAffinityAndInvalidPolicyFailClosed(t *testing.T) {
 	otherCfg := f.cfg
 	otherCfg.DataDir = t.TempDir()
 	other := transfer.NewManager(f.db, otherCfg)
-	if h, err := other.Create(context.Background(), f.aliceID, task.ID, "chunk", 5); err == nil {
+	if h, err := other.Create(context.Background(), f.aliceID, task.ID, "chunk", 5, 0); err == nil {
 		h.Close(true)
 		t.Fatal("task silently moved to another physical volume")
 	}

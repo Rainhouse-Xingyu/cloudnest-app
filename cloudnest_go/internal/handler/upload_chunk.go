@@ -90,6 +90,10 @@ func (h *FileHandler) UploadChunk(c *gin.Context) {
 				writeChunkError(c, err)
 				return
 			}
+			if err := verifyUploadEpoch(c, task.TransferEpoch); err != nil {
+				writeChunkError(c, err)
+				return
+			}
 			expected, err = contract.ExpectedChunkBytes(task, index)
 			if err != nil {
 				writeChunkError(c, err)
@@ -158,7 +162,7 @@ func (h *FileHandler) acceptChunkPart(c *gin.Context, reader *multipart.Reader, 
 		writeChunkError(c, err)
 		return
 	}
-	candidate, err := h.Transfers.Create(c.Request.Context(), *task.UserID, task.ID, "chunk", expected+1)
+	candidate, err := h.Transfers.Create(c.Request.Context(), *task.UserID, task.ID, "chunk", expected+1, task.TransferEpoch)
 	if err != nil {
 		writeChunkError(c, err)
 		return
@@ -169,14 +173,35 @@ func (h *FileHandler) acceptChunkPart(c *gin.Context, reader *multipart.Reader, 
 			h.recordUploadCleanupFailure(context.WithoutCancel(c.Request.Context()), *task.UserID, nil, "upload_chunk_candidate_cleanup", c.ClientIP())
 		}
 	}()
+	controller := http.NewResponseController(c.Writer)
+	body := c.Request.Body
+	closed := make(chan struct{})
+	stopRead := context.AfterFunc(candidate.Context(), func() { defer close(closed); _ = controller.SetReadDeadline(time.Now()); _ = body.Close() })
+	defer func() {
+		if !stopRead() {
+			<-closed
+		}
+	}()
+	fail := func(err error) {
+		switch cause := context.Cause(candidate.Context()); {
+		case errors.Is(cause, contract.ErrUploadContract):
+			err = contract.ErrUploadContract
+		case errors.Is(cause, contract.ErrTransferUnavailable):
+			err = contract.ErrTransferUnavailable
+		case errors.Is(cause, context.DeadlineExceeded):
+			err = context.DeadlineExceeded
+		}
+		writeChunkError(c, err)
+	}
+
 	sha, md := sha256.New(), md5.New()
 	total, err := copyUploadPart(candidate.Context(), io.MultiWriter(candidate, sha, md), io.LimitReader(part, expected+1), rate)
 	if err != nil {
-		writeChunkError(c, err)
+		fail(err)
 		return
 	}
 	if total != expected || hex.EncodeToString(md.Sum(nil)) != md5sum {
-		writeChunkError(c, contract.ErrInvalidInput)
+		fail(contract.ErrInvalidInput)
 		return
 	}
 	// No second file, duplicate metadata or trailing part may be silently ignored.
@@ -186,24 +211,24 @@ func (h *FileHandler) acceptChunkPart(c *gin.Context, reader *multipart.Reader, 
 		} else {
 			err = chunkReadError(err)
 		}
-		writeChunkError(c, err)
+		fail(err)
 		return
 	}
 	// Consume the bounded HTTP envelope to EOF as well as the MIME boundary.
 	// An endless epilogue cannot outlive admission; complete valid requests can
 	// retain their connection without timing out net/http's background reader.
 	if _, err := io.Copy(io.Discard, c.Request.Body); err != nil {
-		writeChunkError(c, err)
+		fail(err)
 		return
 	}
 	if err := candidate.Seal(total, hex.EncodeToString(sha.Sum(nil))); err != nil {
-		writeChunkError(c, err)
+		fail(err)
 		return
 	}
 	commit, err := h.Svc.MarkChunkUploaded(candidate.Context(), task, task.UploadID, index, total, candidate.Path(), candidate.Root(), hex.EncodeToString(sha.Sum(nil)), md5sum, candidate.Token())
 	disposable = commit.CandidateDisposable
 	if err != nil {
-		writeChunkError(c, err)
+		fail(err)
 		return
 	}
 	c.JSON(200, gin.H{"message": "chunk uploaded"})

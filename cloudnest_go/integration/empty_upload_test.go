@@ -179,7 +179,7 @@ func TestEmptyUploadStillChargesMinimumTemporaryReservation(t *testing.T) {
 	}
 	first := emptyInit(t, f, f.alice, "held-empty.bin")
 	task := receiptTask(t, f, first)
-	handle, err := m.Create(context.Background(), f.aliceID, task.ID, "merge", 1)
+	handle, err := m.Create(context.Background(), f.aliceID, task.ID, "merge", 1, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

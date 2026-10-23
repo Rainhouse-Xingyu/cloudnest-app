@@ -142,6 +142,7 @@ func (UploadChunk) TableName() string {
 
 // UploadTask 分片上传任务
 type UploadTask struct {
+	TransferEpoch    int64      `gorm:"type:bigint;not null;default:0" json:"transfer_epoch"`
 	TransferProtocol int16      `gorm:"type:smallint;not null;default:0" json:"-"`
 	TransferVolume   string     `gorm:"type:char(64);not null;default:''" json:"-"`
 	MergeArtifact    string     `gorm:"type:char(64);not null;default:''" json:"-"`
