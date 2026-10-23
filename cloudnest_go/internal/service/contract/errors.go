@@ -4,6 +4,7 @@ import "errors"
 
 // 业务层统一错误定义，handler 层可据此映射 HTTP 状态码。
 var (
+	ErrRatePolicy           = errors.New("transfer rate policy unavailable")
 	ErrTransferSpace        = errors.New("temporary storage capacity unavailable")
 	ErrTransferBusy         = errors.New("transfer already in progress")
 	ErrTransferUnavailable  = errors.New("transfer storage unavailable")

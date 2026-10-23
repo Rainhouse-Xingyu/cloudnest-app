@@ -134,7 +134,8 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 
 // NewRouter 统一构建路由与中间件。
 func (c *Container) NewRouter() *gin.Engine {
-	r := gin.Default()
+	r := gin.New()
+	r.Use(gin.Logger(), middleware.RecoverHTTP())
 	r.Use(middleware.ProtectBlobReads(c.Blobs))
 	// Forwarding headers are untrusted until an explicit ingress policy exists.
 	_ = r.SetTrustedProxies(nil)

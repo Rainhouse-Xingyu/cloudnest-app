@@ -122,14 +122,6 @@ const (
 	storageSubDir  = "storage"
 	thumbSubDir    = "thumbnails"
 
-	defaultUploadRateBytesPerSec int64 = 2 * 1024 * 1024
-	minUploadRateKbps            int64 = 64
-	maxUploadRateKbps            int64 = 10240
-
-	defaultDownloadRateBytesPerSec int64 = 2 * 1024 * 1024
-	minDownloadRateKbps            int64 = 64
-	maxDownloadRateKbps            int64 = 10240
-
 	shareRateWindow        = 60 * time.Second
 	shareInfoRateLimit     = 60
 	shareDownloadRateLimit = 20
@@ -631,9 +623,13 @@ func (h *FileHandler) Download(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "target is folder, use folder zip download"})
 		return
 	}
-	rate := h.getDownloadRateBytesPerSec(c)
+	rate, err := h.transferRate(c, "download")
+	if err != nil {
+		writeFileMutationError(c, err, "download policy unavailable")
+		return
+	}
 	if err := h.sendFileWithRateLimit(c, storage.FilePath, f.Filename, rate); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "download failed"})
+		writeDownloadError(c, err)
 		return
 	}
 }
@@ -651,8 +647,13 @@ func (h *FileHandler) DownloadVersion(c *gin.Context) {
 		writeFileMutationError(c, err, "download version failed")
 		return
 	}
-	if err := h.sendFileWithRateLimit(c, storage.FilePath, file.Filename, h.getDownloadRateBytesPerSec(c)); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "download failed"})
+	rate, err := h.transferRate(c, "download")
+	if err != nil {
+		writeFileMutationError(c, err, "download policy unavailable")
+		return
+	}
+	if err := h.sendFileWithRateLimit(c, storage.FilePath, file.Filename, rate); err != nil {
+		writeDownloadError(c, err)
 	}
 }
 
@@ -683,6 +684,11 @@ func (h *FileHandler) DownloadFolderZip(c *gin.Context) {
 		return
 	}
 
+	rate, err := h.transferRate(c, "download")
+	if err != nil {
+		writeFileMutationError(c, err, "download policy unavailable")
+		return
+	}
 	zipPath, err := h.createFolderZip(c.Request.Context(), uid, folder)
 	if err != nil {
 		writeFileMutationError(c, err, "create zip failed")
@@ -691,9 +697,8 @@ func (h *FileHandler) DownloadFolderZip(c *gin.Context) {
 	defer os.Remove(zipPath)
 
 	zipName := sanitizeFileName(folder.Filename) + ".zip"
-	rate := h.getDownloadRateBytesPerSec(c)
 	if err := h.sendFileWithRateLimit(c, zipPath, zipName, rate); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "download failed"})
+		writeDownloadError(c, err)
 		return
 	}
 }
@@ -741,6 +746,11 @@ func (h *FileHandler) BatchDownload(c *gin.Context) {
 	entries, err := h.Svc.CollectBatchDownloadEntries(c.Request.Context(), uid, ids)
 	if err != nil {
 		writeFileMutationError(c, err, "create zip failed")
+		return
+	}
+	rate, err := h.transferRate(c, "download")
+	if err != nil {
+		writeFileMutationError(c, err, "download policy unavailable")
 		return
 	}
 	tmpFile, err := os.CreateTemp("", "cloudnest-batch-*.zip")
@@ -796,9 +806,8 @@ func (h *FileHandler) BatchDownload(c *gin.Context) {
 		return
 	}
 
-	rate := h.getDownloadRateBytesPerSec(c)
 	if err := h.sendFileWithRateLimit(c, zipPath, "batch_download.zip", rate); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "download failed"})
+		writeDownloadError(c, err)
 		return
 	}
 
@@ -1275,6 +1284,11 @@ func (h *FileHandler) PublicShareDownload(c *gin.Context) {
 		return
 	}
 
+	rate, err := h.transferRate(c, "download")
+	if err != nil {
+		writeFileMutationError(c, err, "download policy unavailable")
+		return
+	}
 	if file.IsFolder == 1 {
 		zipPath, err := h.createFolderZip(c.Request.Context(), creatorID, file)
 		if err != nil {
@@ -1282,17 +1296,15 @@ func (h *FileHandler) PublicShareDownload(c *gin.Context) {
 			return
 		}
 		defer os.Remove(zipPath)
-		rate := h.getDownloadRateBytesPerSec(c)
 		if err := h.sendFileWithRateLimit(c, zipPath, sanitizeFileName(file.Filename)+".zip", rate); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "download failed"})
+			writeDownloadError(c, err)
 			return
 		}
 		return
 	}
 
-	rate := h.getDownloadRateBytesPerSec(c)
 	if err := h.sendFileWithRateLimit(c, storage.FilePath, file.Filename, rate); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "download failed"})
+		writeDownloadError(c, err)
 		return
 	}
 }
@@ -1771,177 +1783,6 @@ func (h *FileHandler) checkShareAccessRateLimit(ctx context.Context, shareCode s
 	return count <= int64(maxInWindow), nil
 }
 
-// getUploadRateBytesPerSec 获取上传限速值：query 参数优先，其次读取 system_setting。
-func (h *FileHandler) getUploadRateBytesPerSec(c *gin.Context) int64 {
-	rateKbpsRaw := strings.TrimSpace(c.Query("upload_rate_kbps"))
-	uid := c.GetInt64(middleware.ContextUserIDKey)
-	ctx := c.Request.Context()
-	if rateKbpsRaw == "" {
-		if v, ok, err := h.getSystemSettingInt64(ctx, "upload_speed_limit_kbps"); err == nil && ok && v > 0 {
-			rateKbpsRaw = strconv.FormatInt(v, 10)
-		}
-		if inPeak, err := h.isInPeakWindow(ctx, uid); err == nil && inPeak {
-			if v, ok, err := h.getSystemSettingInt64(ctx, "upload_peak_speed_limit_kbps"); err == nil && ok && v > 0 {
-				rateKbpsRaw = strconv.FormatInt(v, 10)
-			}
-		}
-	}
-	if rateKbpsRaw == "" {
-		return defaultUploadRateBytesPerSec
-	}
-	rateKbps, err := strconv.ParseInt(rateKbpsRaw, 10, 64)
-	if err != nil {
-		return defaultUploadRateBytesPerSec
-	}
-	if rateKbps < minUploadRateKbps {
-		rateKbps = minUploadRateKbps
-	}
-	if rateKbps > maxUploadRateKbps {
-		rateKbps = maxUploadRateKbps
-	}
-	return rateKbps * 1024
-}
-
-// getSystemSettingInt64 读取整数配置项，返回值、是否存在、错误。
-func (h *FileHandler) getSystemSettingInt64(ctx context.Context, key string) (int64, bool, error) {
-	return h.Svc.GetSystemSettingInt64(ctx, key)
-}
-
-// getSystemSettingString 读取字符串配置项，返回值、是否存在、错误。
-func (h *FileHandler) getSystemSettingString(ctx context.Context, key string) (string, bool, error) {
-	return h.Svc.GetSystemSettingString(ctx, key)
-}
-
-// getDownloadRateBytesPerSec 获取下载限速值：query 参数优先，其次读取 system_setting。
-func (h *FileHandler) getDownloadRateBytesPerSec(c *gin.Context) int64 {
-	rateKbpsRaw := strings.TrimSpace(c.Query("rate_kbps"))
-	uid := c.GetInt64(middleware.ContextUserIDKey)
-	ctx := c.Request.Context()
-	if rateKbpsRaw == "" {
-		if v, ok, err := h.getSystemSettingInt64(ctx, "download_speed_limit_kbps"); err == nil && ok && v > 0 {
-			rateKbpsRaw = strconv.FormatInt(v, 10)
-		}
-		if inPeak, err := h.isInPeakWindow(ctx, uid); err == nil && inPeak {
-			if v, ok, err := h.getSystemSettingInt64(ctx, "download_peak_speed_limit_kbps"); err == nil && ok && v > 0 {
-				rateKbpsRaw = strconv.FormatInt(v, 10)
-			}
-		}
-	}
-	if rateKbpsRaw == "" {
-		return defaultDownloadRateBytesPerSec
-	}
-	rateKbps, err := strconv.ParseInt(rateKbpsRaw, 10, 64)
-	if err != nil {
-		return defaultDownloadRateBytesPerSec
-	}
-	if rateKbps < minDownloadRateKbps {
-		rateKbps = minDownloadRateKbps
-	}
-	if rateKbps > maxDownloadRateKbps {
-		rateKbps = maxDownloadRateKbps
-	}
-	return rateKbps * 1024
-}
-
-// isInPeakWindow 判断当前请求是否处于高峰时段。
-func (h *FileHandler) isInPeakWindow(ctx context.Context, uid int64) (bool, error) {
-	return h.Svc.IsInPeakWindow(ctx, uid)
-}
-
-func (h *FileHandler) resolvePeakWindowSetting(ctx context.Context, uid int64) (bool, string, string, error) {
-	return h.Svc.ResolvePeakWindowSetting(ctx, uid)
-}
-
-func parseHHMMToMinute(v string) (int, bool) {
-	v = strings.TrimSpace(v)
-	if len(v) != 5 || v[2] != ':' {
-		return 0, false
-	}
-	h, errH := strconv.Atoi(v[:2])
-	m, errM := strconv.Atoi(v[3:])
-	if errH != nil || errM != nil {
-		return 0, false
-	}
-	if h < 0 || h > 23 || m < 0 || m > 59 {
-		return 0, false
-	}
-	return h*60 + m, true
-}
-
-// sendFileWithRateLimit 以限速方式输出文件流，避免下载占满带宽。
-func (h *FileHandler) sendFileWithRateLimit(c *gin.Context, filePath string, downloadName string, bytesPerSec int64) error {
-	f, err := os.Open(filePath)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	stat, err := f.Stat()
-	if err != nil {
-		return err
-	}
-
-	c.Header("Accept-Ranges", "bytes")
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", sanitizeFileName(downloadName)))
-
-	if strings.TrimSpace(c.GetHeader("Range")) != "" {
-		http.ServeContent(c.Writer, c.Request, sanitizeFileName(downloadName), stat.ModTime(), f)
-		return nil
-	}
-
-	if bytesPerSec <= 0 {
-		c.Header("Content-Type", "application/octet-stream")
-		c.Header("Content-Length", strconv.FormatInt(stat.Size(), 10))
-		_, err = io.Copy(c.Writer, f)
-		return err
-	}
-
-	c.Header("Content-Type", "application/octet-stream")
-	c.Header("Content-Length", strconv.FormatInt(stat.Size(), 10))
-
-	const chunkSize = 32 * 1024
-	buf := make([]byte, chunkSize)
-	start := time.Now()
-	var sent int64
-
-	for {
-		n, readErr := f.Read(buf)
-		if n > 0 {
-			written, writeErr := c.Writer.Write(buf[:n])
-			if writeErr != nil {
-				return writeErr
-			}
-			sent += int64(written)
-
-			// 按累计发送量控制整体速率，避免短时突发。
-			expectedElapsed := time.Duration(float64(sent) / float64(bytesPerSec) * float64(time.Second))
-			actualElapsed := time.Since(start)
-			if expectedElapsed > actualElapsed {
-				timer := time.NewTimer(expectedElapsed - actualElapsed)
-				select {
-				case <-c.Request.Context().Done():
-					timer.Stop()
-					return c.Request.Context().Err()
-				case <-timer.C:
-				}
-			}
-
-			if flusher, ok := c.Writer.(http.Flusher); ok {
-				flusher.Flush()
-			}
-		}
-
-		if readErr != nil {
-			if errors.Is(readErr, io.EOF) {
-				break
-			}
-			return readErr
-		}
-	}
-
-	return nil
-}
-
 // createFolderZip validates a complete authorized manifest before opening a ZIP.
 func (h *FileHandler) createFolderZip(ctx context.Context, uid int64, root model.File) (string, error) {
 	entries, err := h.Svc.CollectFolderZipEntries(ctx, uid, root.ID)
@@ -2017,6 +1858,8 @@ func addZipFileFromPath(zw *zip.Writer, relPath string, sourcePath string) error
 func writeFileMutationError(c *gin.Context, err error, fallback string) {
 	status, message := http.StatusInternalServerError, fallback
 	switch {
+	case errors.Is(err, contract.ErrRatePolicy):
+		status, message = http.StatusServiceUnavailable, "transfer rate policy unavailable"
 	case errors.Is(err, contract.ErrTransferSpace):
 		status, message = http.StatusInsufficientStorage, "temporary storage capacity unavailable"
 	case errors.Is(err, contract.ErrTransferBusy):

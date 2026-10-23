@@ -957,80 +957,6 @@ func (s *FileService) TryAutoBindLivePhotoForFile(ctx context.Context, userID in
 	return s.fileRepo.CreateLivePhotoAutoBindIfAbsent(ctx, userID, imageID, videoID, clientIP)
 }
 
-// GetSystemSettingInt64 读取整数配置项。
-func (s *FileService) GetSystemSettingInt64(ctx context.Context, key string) (int64, bool, error) {
-	return s.getSystemSettingInt64(ctx, key)
-}
-
-// GetSystemSettingString 读取字符串配置项。
-func (s *FileService) GetSystemSettingString(ctx context.Context, key string) (string, bool, error) {
-	return s.getSystemSettingString(ctx, key)
-}
-
-// IsInPeakWindow 判断当前请求是否处于高峰时段。
-func (s *FileService) IsInPeakWindow(ctx context.Context, uid int64) (bool, error) {
-	enabled, start, end, err := s.ResolvePeakWindowSetting(ctx, uid)
-	if err != nil {
-		return false, err
-	}
-	if !enabled {
-		return false, nil
-	}
-	startMin, okStart := parseHHMMToMinuteInService(start)
-	endMin, okEnd := parseHHMMToMinuteInService(end)
-	if !okStart || !okEnd {
-		return false, nil
-	}
-
-	now := time.Now()
-	nowMin := now.Hour()*60 + now.Minute()
-	if startMin == endMin {
-		return true, nil
-	}
-	if startMin < endMin {
-		return nowMin >= startMin && nowMin < endMin, nil
-	}
-	return nowMin >= startMin || nowMin < endMin, nil
-}
-
-// ResolvePeakWindowSetting 解析用户或全局高峰时段配置。
-func (s *FileService) ResolvePeakWindowSetting(ctx context.Context, uid int64) (bool, string, string, error) {
-	if uid > 0 {
-		enabledKey := "peak_window_enabled_user_" + strconv.FormatInt(uid, 10)
-		startKey := "peak_window_start_user_" + strconv.FormatInt(uid, 10)
-		endKey := "peak_window_end_user_" + strconv.FormatInt(uid, 10)
-
-		if enabledVal, exists, err := s.getSystemSettingString(ctx, enabledKey); err != nil {
-			return false, "", "", err
-		} else if exists {
-			enabled := strings.TrimSpace(enabledVal) == "1"
-			startVal, _, errStart := s.getSystemSettingString(ctx, startKey)
-			if errStart != nil {
-				return false, "", "", errStart
-			}
-			endVal, _, errEnd := s.getSystemSettingString(ctx, endKey)
-			if errEnd != nil {
-				return false, "", "", errEnd
-			}
-			return enabled, startVal, endVal, nil
-		}
-	}
-
-	enabledGlobal, _, err := s.getSystemSettingInt64(ctx, "peak_window_enabled")
-	if err != nil {
-		return false, "", "", err
-	}
-	startGlobal, _, err := s.getSystemSettingString(ctx, "peak_window_start")
-	if err != nil {
-		return false, "", "", err
-	}
-	endGlobal, _, err := s.getSystemSettingString(ctx, "peak_window_end")
-	if err != nil {
-		return false, "", "", err
-	}
-	return enabledGlobal == 1, startGlobal, endGlobal, nil
-}
-
 func (s *FileService) canAccessFile(ctx context.Context, userID int64, fileID int64, requireWrite bool) (bool, error) {
 	return s.fileRepo.CanAccessFile(ctx, userID, fileID, requireWrite)
 }
@@ -1052,17 +978,6 @@ func (s *FileService) getSystemSettingInt64(ctx context.Context, key string) (in
 		return 0, false, convErr
 	}
 	return n, true, nil
-}
-
-func (s *FileService) getSystemSettingString(ctx context.Context, key string) (string, bool, error) {
-	row, err := s.fileRepo.GetSystemSettingByKey(ctx, key)
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return "", false, nil
-		}
-		return "", false, err
-	}
-	return strings.TrimSpace(row.SettingValue), true, nil
 }
 
 func (s *FileService) logOperation(ctx context.Context, userID int64, fileID *int64, action string, status string, detail string, clientIP string) error {
@@ -1187,7 +1102,7 @@ func parseFlexibleTimeForFile(raw string) (time.Time, error) {
 
 func parseHHMMToMinuteInService(v string) (int, bool) {
 	v = strings.TrimSpace(v)
-	if len(v) != 5 || v[2] != ':' {
+	if len(v) != 5 || v[2] != ':' || v[0] < '0' || v[0] > '9' || v[1] < '0' || v[1] > '9' || v[3] < '0' || v[3] > '9' || v[4] < '0' || v[4] > '9' {
 		return 0, false
 	}
 	h, errH := strconv.Atoi(v[:2])

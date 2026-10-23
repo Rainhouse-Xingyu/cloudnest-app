@@ -69,6 +69,8 @@
 
 FILE-018 P2：现有 InitUpload 拒绝 total_size=0，空文件尚不能上传。G03 需明确零字节分片/完成协议并增加真实上传下载回归，不能把非空文件通过当作覆盖。
 
-FILE-019 P1：上传/下载速率选择仍为 query 优先，参数可提高管理员配置值；Range 下载直接走 ServeContent，需统一不可提高的服务端上限、峰时策略及 Range 速率预算。证据为 handler/file_handler.go 的 getUploadRateBytesPerSec/getDownloadRateBytesPerSec/sendFileWithRateLimit 分支，当前仅静态确认，真实策略绕过回归与修复继续属 G03；本批只验证上传等待可取消，未将完整速率策略标为完成。
+FILE-019 P1：已用真实 API 复现 query 提高管理员速率和 Range 绕过；现统一一致策略快照、全局窗口不可被个人关闭、参数只收紧，以及完整/Range/multipart 统一限速和可取消等待。坏策略/读取失败 503，歧义参数 400，流中错误终止且不追加 JSON；十项真实定向回归通过，完整结果见 [速率协议](TRANSFER-RATE-POLICY.md) / TESTING。本修复是每次传输速率上限，不冒充聚合带宽控制。
 
 FILE-020 P1：新上传临时对象已登记并持续收费，取消/过期后凭卷/数据库/inode/FD 锁与事务删除意图回收；半登记、未知引用或替换文件保留并报告。旧未登记文件、ZIP/缓存、主机/数据库恢复仍需人工审核和后续治理，详见 [临时对象协议](TRANSFER-REGISTRY.md)。
+
+FILE-021 P2：限速目前按请求快照/每次传输生效，跨连接/跨实例聚合带宽、公平排队、动态重配、慢下载写入期限及 HTTP2 压测仍需 G03/G10。不能用本批小文件速率断言替代全局吞吐、内存或大文件验收。

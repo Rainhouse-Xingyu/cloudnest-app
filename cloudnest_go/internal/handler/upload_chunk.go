@@ -153,6 +153,11 @@ func writeChunkError(c *gin.Context, err error) {
 	}
 }
 func (h *FileHandler) acceptChunkPart(c *gin.Context, reader *multipart.Reader, part *multipart.Part, task model.UploadTask, index int, expected int64, md5sum string) {
+	rate, err := h.transferRate(c, "upload")
+	if err != nil {
+		writeChunkError(c, err)
+		return
+	}
 	candidate, err := h.Transfers.Create(c.Request.Context(), *task.UserID, task.ID, "chunk", expected+1)
 	if err != nil {
 		writeChunkError(c, err)
@@ -165,7 +170,7 @@ func (h *FileHandler) acceptChunkPart(c *gin.Context, reader *multipart.Reader, 
 		}
 	}()
 	sha, md := sha256.New(), md5.New()
-	total, err := copyUploadPart(candidate.Context(), io.MultiWriter(candidate, sha, md), io.LimitReader(part, expected+1), h.getUploadRateBytesPerSec(c))
+	total, err := copyUploadPart(candidate.Context(), io.MultiWriter(candidate, sha, md), io.LimitReader(part, expected+1), rate)
 	if err != nil {
 		writeChunkError(c, err)
 		return
@@ -204,8 +209,8 @@ func (h *FileHandler) acceptChunkPart(c *gin.Context, reader *multipart.Reader, 
 	c.JSON(200, gin.H{"message": "chunk uploaded"})
 }
 func copyUploadPart(ctx context.Context, dst io.Writer, src io.Reader, rate int64) (int64, error) {
-	buffer := make([]byte, 32*1024)
-	start := time.Now()
+	buffer := make([]byte, 32<<10)
+	pacer := transferPacer{ctx: ctx, rate: rate, start: time.Now()}
 	var total int64
 	for {
 		if err := ctx.Err(); err != nil {
@@ -213,6 +218,9 @@ func copyUploadPart(ctx context.Context, dst io.Writer, src io.Reader, rate int6
 		}
 		n, readErr := src.Read(buffer)
 		if n > 0 {
+			if err := pacer.wait(n); err != nil {
+				return total, err
+			}
 			written, err := dst.Write(buffer[:n])
 			total += int64(written)
 			if err != nil {
@@ -220,18 +228,6 @@ func copyUploadPart(ctx context.Context, dst io.Writer, src io.Reader, rate int6
 			}
 			if written != n {
 				return total, io.ErrShortWrite
-			}
-			if rate > 0 {
-				wait := time.Duration(float64(total)/float64(rate)*float64(time.Second)) - time.Since(start)
-				if wait > 0 {
-					timer := time.NewTimer(wait)
-					select {
-					case <-ctx.Done():
-						timer.Stop()
-						return total, ctx.Err()
-					case <-timer.C:
-					}
-				}
 			}
 		}
 		if readErr != nil {

@@ -66,6 +66,7 @@ type FileRepository interface {
 	GetStorageByID(ctx context.Context, storageID int64) (model.Storage, error)
 	CollectFolderZipEntries(ctx context.Context, uid, rootID int64) ([]FolderZipEntry, error)
 	GetSystemSettingByKey(ctx context.Context, key string) (model.SystemSetting, error)
+	GetTransferRateSettings(ctx context.Context, uid int64) ([]model.SystemSetting, error)
 	CreateFolderRecord(ctx context.Context, uid int64, name string, parentID int64) (model.File, error)
 	RenameFile(ctx context.Context, uid, fileID int64, name string) (model.File, error)
 	CountActiveChildren(ctx context.Context, parentID int64) (int64, error)

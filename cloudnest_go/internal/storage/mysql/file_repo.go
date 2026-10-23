@@ -172,6 +172,28 @@ func (r *FileRepo) GetSystemSettingByKey(ctx context.Context, key string) (model
 	return row, nil
 }
 
+// GetTransferRateSettings shares the existing settings policy lock. No DB
+// connection/lock remains held during IO or limiter waits.
+func (r *FileRepo) GetTransferRateSettings(ctx context.Context, uid int64) ([]model.SystemSetting, error) {
+	ctx, stop := context.WithTimeout(ctx, 5*time.Second)
+	defer stop()
+	var rows []model.SystemSetting
+	keys := []string{"upload_speed_limit_kbps", "download_speed_limit_kbps", "upload_peak_speed_limit_kbps", "download_peak_speed_limit_kbps", "peak_window_enabled", "peak_window_start", "peak_window_end"}
+	if uid > 0 {
+		suffix := fmt.Sprintf("_user_%d", uid)
+		for _, key := range []string{"peak_window_enabled", "peak_window_start", "peak_window_end"} {
+			keys = append(keys, key+suffix)
+		}
+	}
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := quota.LockPolicy(tx, false); err != nil {
+			return err
+		}
+		return tx.Where("setting_key IN ?", keys).Find(&rows).Error
+	}, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	return rows, err
+}
+
 func (r *FileRepo) CreateFolderRecord(ctx context.Context, uid int64, name string, parentID int64) (model.File, error) {
 	var folder model.File
 	err := fileMetadataTransaction(ctx, r.db, func(tx *gorm.DB) error {

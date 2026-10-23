@@ -175,7 +175,7 @@ func (h *SettingsHandler) UpdateMyRateWindow(c *gin.Context) {
 
 func isValidHHMM(v string) bool {
 	v = strings.TrimSpace(v)
-	if len(v) != 5 || v[2] != ':' {
+	if len(v) != 5 || v[2] != ':' || v[0] < '0' || v[0] > '9' || v[1] < '0' || v[1] > '9' || v[3] < '0' || v[3] > '9' || v[4] < '0' || v[4] > '9' {
 		return false
 	}
 	h, errH := strconv.Atoi(v[:2])
