@@ -28,4 +28,4 @@ G00 已提交 [PR #1](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/1)�
 
 G01 本次补齐自定义权限下的会话查询/注销、随机 JTI、客户端 API 契约测试及 Redis 原子登录限流。受控密码恢复/会话撤销已实现，17 项本地集成及迁移回归通过，G01 代码完成待审，最终提交 CI 单独核验；设备身份边界设计已记录，G05 实现前仍保留风险项；下一阶段按依赖推进 G02 文件一致性。G02 已实现命名隔离/事务锁、递归权限整改、版本化活动名称唯一约束及对象/版本一致性整改；追加存储引用审计、两步 RESTRICT 外键、读取租约及显式托管/分阶段 GC，容量账本与上传预留已接入，116 项本地集成回归通过，已提交独立 [PR #3](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/3)，base 为 PR #2 分支；未登记候选崩溃对账、稳定传输协议、目录继承和真实库升级演练仍在推进。G02–G11 未完成，整体目标保持进行中。所有生产数据迁移、旧凭据轮换、真实 FRP 服务器访问和最终发布必须在有相应凭据/授权后执行。
 
-G03 独立分支 codex/g03-transfer-foundation 已开始完成回执/结果复用，124 项本地完整集成回归通过；[传输报告](G03-TRANSFER.md) 记录协议、升级及尚未完成的验收。G02 的 a4eaaf0 远端 PR/push 构建、单元/集成及漏洞扫描均已通过。
+G03 独立 [PR #4](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/4)（codex/g03-transfer-foundation，base 为 PR #3 分支）已开始完成回执/结果复用，124 项本地完整集成回归通过；[传输报告](G03-TRANSFER.md) 记录协议、升级及尚未完成的验收。G02 的 a4eaaf0 远端 PR/push 构建、单元/集成及漏洞扫描均已通过。
