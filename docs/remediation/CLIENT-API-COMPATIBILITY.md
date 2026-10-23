@@ -103,3 +103,5 @@ G03 新增 POST upload/pause 与 upload/resume，必须携 expected_epoch，init
 一旦任务 transfer_epoch>0，后续 chunk/尚未完成的 complete 须携匹配的 X-Upload-Epoch。未控制的 epoch=0 任务仍允许旧客户端省略；旧客户端不能继续一个被新客户端暂停/恢复的任务，返回 409，已完成回执确认不受此限制。新 macOS 需随控制响应更新代次并在所有数据请求中发送。
 
 G03 下载新增强 ETag/Repr-Digest，只有精确强 If-Range 才继续旧表示；日期/弱/旧标签回退完整 200。客户端须在 200 时从零开始，206 时核对偏移/总长/标签，最终校验完整摘要，不能只凭状态或 Range 拼接。所有视频/预览/缩略图也受 download 策略；损坏/旧非 SHA-256 元数据拒绝而不自动升级，缩略图改为私有禁止存储缓存。路由和 File DTO 未变，iOS 源码冻结，新 macOS 持久化续传尚待实现；详见 [下载身份与兼容边界](DOWNLOAD-INTEGRITY.md)。
+
+G03 ZIP 保持普通/批量内嵌/公开分享结构和下载路由，但损坏源现在拒绝整个包（完整性 409、缺失 404），不省略条目或重封坏内容。ZIP 同上传共享临时卷，507 也可能发生在打包中；活动归档超限 409/Retry-After: 1，登记不可用 503。批量下载 JSON 上限 16 KiB/超限 413，需分批选择；旧正常请求与 ZIP 命名/字节内容有回归，iOS 未改。详见 [归档协议](ARCHIVE-TRANSFERS.md)。

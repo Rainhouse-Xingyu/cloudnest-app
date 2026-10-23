@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -12,6 +13,7 @@ import (
 
 	"cloudenest_go/internal/blob"
 	"cloudenest_go/internal/service/contract"
+	"cloudenest_go/internal/transfer"
 	"cloudenest_go/model"
 	"github.com/gin-gonic/gin"
 )
@@ -81,6 +83,34 @@ func (h *FileHandler) sendFileWithRateLimit(c *gin.Context, path, name string, r
 		if _, err := file.Seek(0, io.SeekStart); err != nil {
 			return err
 		}
+	}
+	return h.serveFileIdentity(c, file, digest, name, rate)
+}
+
+func (h *FileHandler) sendArchiveWithRateLimit(c *gin.Context, a *transfer.Handle, name string, rate int64) error {
+	file, digest, err := a.ArchiveReader()
+	if err != nil {
+		return err
+	}
+	original := c.Request
+	c.Request = c.Request.Clone(a.Context())
+	defer func() { c.Request = original }()
+	err = h.serveFileIdentity(c, file, digest, name, rate)
+	if err != nil {
+		if cause := context.Cause(a.Context()); cause != nil {
+			return cause
+		}
+	}
+	return err
+}
+
+func (h *FileHandler) serveFileIdentity(c *gin.Context, file *os.File, digest, name string, rate int64) error {
+	if rate <= 0 {
+		return contract.ErrRatePolicy
+	}
+	stat, err := file.Stat()
+	if err != nil {
+		return err
 	}
 	sum, err := hex.DecodeString(digest)
 	if err != nil || len(sum) != sha256.Size {

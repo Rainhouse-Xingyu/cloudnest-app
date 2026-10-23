@@ -53,7 +53,7 @@ type Usage struct {
 
 func usage(tx *gorm.DB, volume string) (Usage, error) {
 	var result Usage
-	err := tx.Raw(`SELECT COALESCE(SUM(bytes),0) AS charged,COALESCE(SUM(IF(state IN ('intent','writing'),bytes,0)),0) AS unwritten,COALESCE(SUM(IF(bytes<=0 OR size<0 OR state NOT IN ('intent','writing','ready','chunk','discard','deleting','blocked'),1,0)),0) AS broken FROM transfer_artifact WHERE volume_id=? AND state NOT IN ('done','published')`, volume).Scan(&result).Error
+	err := tx.Raw(`SELECT COALESCE(SUM(bytes),0) AS charged,COALESCE(SUM(IF(state IN ('intent','writing'),bytes,0)),0) AS unwritten,COALESCE(SUM(IF(bytes<=0 OR size<0 OR kind NOT IN ('chunk','merge','archive') OR (kind='archive' AND (task_id<>0 OR transfer_epoch<>0)) OR state NOT IN ('intent','writing','ready','chunk','discard','deleting','blocked'),1,0)),0) AS broken FROM transfer_artifact WHERE volume_id=? AND state NOT IN ('done','published')`, volume).Scan(&result).Error
 	if err != nil || result.Charged < 0 || result.Unwritten < 0 || result.Unwritten > result.Charged {
 		return result, contract.ErrTransferUnavailable
 	}
@@ -100,14 +100,24 @@ func record(tx *gorm.DB, uid int64, action, token string) error {
 // Create registers and charges before creating a file. The root gate spans the
 // filesystem creation/FD-lock handoff, including a lost database connection.
 func (m *Manager) Create(ctx context.Context, uid, taskID int64, kind string, bytes int64, expectedEpoch int64) (*Handle, error) {
-	if expectedEpoch < 0 {
+	if expectedEpoch < 0 || (kind != "chunk" && kind != "merge") {
 		return nil, contract.ErrUploadContract
 	}
+	return m.create(ctx, uid, taskID, kind, bytes, expectedEpoch)
+}
+
+// CreateArchive is a request-scoped artifact, never a synthetic upload task.
+// Capacity grows durably before writes; the open FD remains locked until Close.
+func (m *Manager) CreateArchive(ctx context.Context, uid int64) (*Handle, error) {
+	return m.create(ctx, uid, 0, "archive", 1, 0)
+}
+
+func (m *Manager) create(ctx context.Context, uid, taskID int64, kind string, bytes int64, expectedEpoch int64) (*Handle, error) {
 	parent := ctx
 	operation, stop := context.WithTimeout(ctx, 5*time.Second)
 	defer stop()
 	ctx = operation
-	if m.seedLimit <= 0 || m.seedLimit > 4<<40 || bytes <= 0 || bytes > contract.MaxUploadFileBytes+1 || (kind != "chunk" && kind != "merge") {
+	if m.seedLimit <= 0 || m.seedLimit > 4<<40 || bytes <= 0 || bytes > contract.MaxUploadFileBytes+1 || (kind != "chunk" && kind != "merge" && kind != "archive") {
 		return nil, contract.ErrTransferUnavailable
 	}
 	root, err := m.openRoot(ctx, true)
@@ -132,31 +142,47 @@ func (m *Manager) Create(ctx context.Context, uid, taskID int64, kind string, by
 		if err != nil {
 			return err
 		}
-		task, err := taskForUpdate(tx, uid, taskID)
-		if err != nil {
-			return err
-		}
-		if err := live(tx, task); err != nil {
-			return err
-		}
-		if task.TransferEpoch != expectedEpoch {
-			return contract.ErrUploadContract
-		}
-		if task.TransferVolume != "" && task.TransferVolume != root.id {
-			return contract.ErrTransferUnavailable
-		}
-		if task.MergeArtifact != "" {
-			return contract.ErrTransferBusy
-		}
-		if kind == "merge" {
-			var active int64
-			if err := tx.Model(&model.TransferArtifact{}).Where("volume_id=? AND kind='merge' AND state IN ('intent','writing','ready')", root.id).Count(&active).Error; err != nil {
+		var task model.UploadTask
+		if kind != "archive" {
+			task, err = taskForUpdate(tx, uid, taskID)
+			if err != nil {
 				return err
 			}
-			if active >= 4 {
+			if err := live(tx, task); err != nil {
+				return err
+			}
+			if task.TransferEpoch != expectedEpoch {
+				return contract.ErrUploadContract
+			}
+			if task.TransferVolume != "" && task.TransferVolume != root.id {
+				return contract.ErrTransferUnavailable
+			}
+			if task.MergeArtifact != "" {
+				return contract.ErrTransferBusy
+			}
+			if kind == "merge" {
+				var active int64
+				if err := tx.Model(&model.TransferArtifact{}).Where("volume_id=? AND kind='merge' AND state IN ('intent','writing','ready')", root.id).Count(&active).Error; err != nil {
+					return err
+				}
+				if active >= 4 {
+					return contract.ErrTransferBusy
+				}
+			}
+		} else {
+			var total, owned int64
+			q := tx.Model(&model.TransferArtifact{}).Where("volume_id=? AND kind='archive' AND state IN ('intent','writing','ready')", root.id)
+			if err := q.Count(&total).Error; err != nil {
+				return err
+			}
+			if err := q.Where("user_id=?", uid).Count(&owned).Error; err != nil {
+				return err
+			}
+			if total >= 4 || owned >= 2 {
 				return contract.ErrTransferBusy
 			}
 		}
+
 		current, err := usage(tx, root.id)
 		if err != nil {
 			return err
@@ -180,12 +206,14 @@ func (m *Manager) Create(ctx context.Context, uid, taskID int64, kind string, by
 		if err := tx.Model(&artifact).Update("expires_at", gorm.Expr("DATE_ADD(UTC_TIMESTAMP(6),INTERVAL 90 SECOND)")).Error; err != nil {
 			return err
 		}
-		updates := map[string]any{"transfer_volume": root.id}
-		if kind == "merge" {
-			updates["merge_artifact"] = token
-		}
-		if err := tx.Model(&task).Updates(updates).Error; err != nil {
-			return err
+		if kind != "archive" {
+			updates := map[string]any{"transfer_volume": root.id}
+			if kind == "merge" {
+				updates["merge_artifact"] = token
+			}
+			if err := tx.Model(&task).Updates(updates).Error; err != nil {
+				return err
+			}
 		}
 		return record(tx, uid, "transfer_reserve", token)
 	}, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
@@ -226,11 +254,13 @@ func (m *Manager) Create(ctx context.Context, uid, taskID int64, kind string, by
 		if _, err := m.volume(tx, root, false); err != nil {
 			return err
 		}
-		task, err := taskForUpdate(tx, uid, taskID)
-		if err != nil {
-			return err
+		if kind != "archive" {
+			task, err := taskForUpdate(tx, uid, taskID)
+			if err != nil {
+				return err
+			}
+			stale = task.TransferEpoch != artifact.TransferEpoch || live(tx, task) != nil
 		}
-		stale = task.TransferEpoch != artifact.TransferEpoch || live(tx, task) != nil
 		state := "writing"
 		if stale {
 			state = "discard"
@@ -240,6 +270,9 @@ func (m *Manager) Create(ctx context.Context, uid, taskID int64, kind string, by
 			return update.Error
 		}
 		if update.RowsAffected != 1 {
+			if kind == "archive" {
+				return contract.ErrTransferUnavailable
+			}
 			return contract.ErrUploadContract
 		}
 		return nil
@@ -316,8 +349,7 @@ func (m *Manager) discard(ctx context.Context, artifact model.TransferArtifact) 
 		if _, err := m.volume(tx, root, false); err != nil {
 			return err
 		}
-		var task model.UploadTask
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&task, artifact.TaskID).Error; err != nil {
+		if _, err := artifactTaskForUpdate(tx, artifact); err != nil {
 			return err
 		}
 		var current model.TransferArtifact
@@ -359,7 +391,7 @@ func (m *Manager) abortNoFile(parent context.Context, root *rootScope, artifact 
 		if err := quota.Begin(tx, artifact.UserID); err != nil {
 			return err
 		}
-		task, err := taskForUpdate(tx, artifact.UserID, artifact.TaskID)
+		task, err := artifactTaskForUpdate(tx, artifact)
 		if err != nil {
 			return err
 		}

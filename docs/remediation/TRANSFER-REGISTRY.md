@@ -57,3 +57,7 @@ audit-transfers 只读，无 SQL 写入或文件初始化；未初始化卷明�
 新空文件的合并候选仍登记/收费至少 1 字节，实际 Seal 长度为 0，不跳过卷/FD/审计约束；逻辑用户预留为 0，详见 [空文件协议](EMPTY-UPLOADS.md)。
 
 后续 pause/resume 已贯通空任务和普通任务；暂停保留逻辑/临时预留与确认分片，未挂接旧代次候选依实际锁回收。新增代次字段须显式迁移，详见 [控制协议](UPLOAD-CONTROL.md)。
+
+## 请求级 ZIP 扩展
+
+后续增加 kind=archive、task_id=0/transfer_epoch=0 的派生登记，不虚构上传任务；严格 .archives-v1 随机路径，按实际压缩写入前申请增长，与上传共享卷/真实空闲量。HTTP 输出结束前保持收费与 FD 锁，90/20 秒续约不检查 UploadTask；同一 reconciler 可回收过期归档，未知身份/引用保留。旧 worker/CLI 必须整体更新，本批不新增列或自动接管旧路径。完整限制、错误与实际证据见 [归档协议](ARCHIVE-TRANSFERS.md)；缓存持久预算仍待做。

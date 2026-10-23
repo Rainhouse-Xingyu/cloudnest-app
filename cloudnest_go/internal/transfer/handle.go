@@ -53,7 +53,12 @@ func (h *Handle) Write(p []byte) (int, error) {
 		return 0, err
 	}
 	if int64(len(p)) > h.artifact.Bytes-h.written {
-		return 0, contract.ErrTransferSpace
+		if h.artifact.Kind != "archive" {
+			return 0, contract.ErrTransferSpace
+		}
+		if err := h.growArchive(int64(len(p))); err != nil {
+			return 0, err
+		}
 	}
 	n, err := h.file.Write(p)
 	h.written += int64(n)
@@ -91,21 +96,26 @@ func (h *Handle) Seal(size int64, digest string) error {
 		if _, err := h.manager.volume(tx, scope, false); err != nil {
 			return err
 		}
-		task, err := taskForUpdate(tx, h.artifact.UserID, h.artifact.TaskID)
-		if err != nil {
-			return err
-		}
-		if err := live(tx, task); err != nil {
-			return err
-		}
-		if task.TransferEpoch != h.artifact.TransferEpoch {
-			return contract.ErrUploadContract
+		if h.artifact.Kind != "archive" {
+			task, err := taskForUpdate(tx, h.artifact.UserID, h.artifact.TaskID)
+			if err != nil {
+				return err
+			}
+			if err := live(tx, task); err != nil {
+				return err
+			}
+			if task.TransferEpoch != h.artifact.TransferEpoch {
+				return contract.ErrUploadContract
+			}
 		}
 		result := tx.Model(&model.TransferArtifact{}).Where("token=? AND state='writing' AND expires_at>UTC_TIMESTAMP(6)", h.Token()).Updates(map[string]any{"state": "ready", "size": size, "bytes": max(size, int64(1)), "sha256": digest})
 		if result.Error != nil {
 			return result.Error
 		}
 		if result.RowsAffected != 1 {
+			if h.artifact.Kind == "archive" {
+				return contract.ErrTransferUnavailable
+			}
 			return contract.ErrUploadContract
 		}
 		return nil
@@ -113,6 +123,9 @@ func (h *Handle) Seal(size int64, digest string) error {
 	if err != nil {
 		return unavailable(err)
 	}
+	h.artifact.Size = size
+	h.artifact.SHA256 = digest
+	h.artifact.Bytes = max(size, int64(1))
 	h.sealed = true
 	return nil
 }
@@ -126,11 +139,17 @@ func (h *Handle) renew() {
 			return
 		case <-ticker.C:
 			ctx, stop := context.WithTimeout(h.ctx, 5*time.Second)
-			result := h.manager.db.WithContext(ctx).Model(&model.TransferArtifact{}).Where("token=? AND state IN ('writing','ready') AND expires_at>UTC_TIMESTAMP(6) AND EXISTS (SELECT 1 FROM upload_task WHERE id=? AND status=0 AND transfer_epoch=? AND expires_at>UTC_TIMESTAMP(6))", h.Token(), h.artifact.TaskID, h.artifact.TransferEpoch).Update("expires_at", gorm.Expr("DATE_ADD(UTC_TIMESTAMP(6),INTERVAL 90 SECOND)"))
+			q := h.manager.db.WithContext(ctx).Model(&model.TransferArtifact{}).Where("token=? AND state IN ('writing','ready') AND expires_at>UTC_TIMESTAMP(6)", h.Token())
+			if h.artifact.Kind == "archive" {
+				q = q.Where("kind='archive' AND task_id=0 AND transfer_epoch=0")
+			} else {
+				q = q.Where("EXISTS (SELECT 1 FROM upload_task WHERE id=? AND status=0 AND transfer_epoch=? AND expires_at>UTC_TIMESTAMP(6))", h.artifact.TaskID, h.artifact.TransferEpoch)
+			}
+			result := q.Update("expires_at", gorm.Expr("DATE_ADD(UTC_TIMESTAMP(6),INTERVAL 90 SECOND)"))
 			stop()
 			if result.Error != nil || result.RowsAffected != 1 {
 				cause := contract.ErrUploadContract
-				if result.Error != nil {
+				if result.Error != nil || h.artifact.Kind == "archive" {
 					cause = contract.ErrTransferUnavailable
 				}
 				h.cancel(cause)

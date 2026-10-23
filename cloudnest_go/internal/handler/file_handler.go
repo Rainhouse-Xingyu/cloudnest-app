@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"archive/zip"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -700,15 +699,15 @@ func (h *FileHandler) DownloadFolderZip(c *gin.Context) {
 		writeFileMutationError(c, err, "download policy unavailable")
 		return
 	}
-	zipPath, err := h.createFolderZip(c.Request.Context(), uid, folder)
+	archive, err := h.createFolderZip(c.Request.Context(), uid, folder)
 	if err != nil {
 		writeFileMutationError(c, err, "create zip failed")
 		return
 	}
-	defer os.Remove(zipPath)
+	defer releaseArchive(archive)
 
 	zipName := sanitizeFileName(folder.Filename) + ".zip"
-	if err := h.sendFileWithRateLimit(c, zipPath, zipName, rate, nil); err != nil {
+	if err := h.sendArchiveWithRateLimit(c, archive, zipName, rate); err != nil {
 		writeDownloadError(c, err)
 		return
 	}
@@ -742,8 +741,25 @@ func (h *FileHandler) BatchDelete(c *gin.Context) {
 func (h *FileHandler) BatchDownload(c *gin.Context) {
 	uid := c.GetInt64(middleware.ContextUserIDKey)
 
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<10)
 	var req BatchDownloadRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	decoder := json.NewDecoder(c.Request.Body)
+	decodeErr := decoder.Decode(&req)
+	if decodeErr == nil {
+		var tail json.RawMessage
+		if err := decoder.Decode(&tail); !errors.Is(err, io.EOF) {
+			decodeErr = err
+			if decodeErr == nil {
+				decodeErr = contract.ErrInvalidInput
+			}
+		}
+	}
+	if err := decodeErr; err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request too large"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
 		return
 	}
@@ -764,65 +780,21 @@ func (h *FileHandler) BatchDownload(c *gin.Context) {
 		writeFileMutationError(c, err, "download policy unavailable")
 		return
 	}
-	tmpFile, err := os.CreateTemp("", "cloudnest-batch-*.zip")
+	archive, err := h.createBatchZip(c.Request.Context(), uid, entries)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "create zip failed"})
+		writeFileMutationError(c, err, "create zip failed")
 		return
 	}
-	zipPath := tmpFile.Name()
-	defer os.Remove(zipPath)
-
-	zw := zip.NewWriter(tmpFile)
-	defer tmpFile.Close()
-	defer zw.Close()
-	usedNames := make(map[string]bool)
-	nextEntryName := func(name string) string {
-		ext := filepath.Ext(name)
-		stem := strings.TrimSuffix(name, ext)
-		candidate := name
-		for n := 1; usedNames[candidate]; n++ {
-			candidate = fmt.Sprintf("%s (%d)%s", stem, n, ext)
-		}
-		usedNames[candidate] = true
-		return candidate
-	}
-	for _, entry := range entries {
-		name := entry.File.Filename
-		source := entry.StoragePath
-		if entry.IsFolderZip {
-			name += ".zip"
-			source, err = createFolderZipFromEntries(entry.FolderEntries)
-			if err != nil {
-				writeFileMutationError(c, err, "create zip failed")
-				return
-			}
-		}
-		err = addZipFileFromPath(zw, nextEntryName(name), source)
-		if entry.IsFolderZip {
-			_ = os.Remove(source)
-		}
-		if err != nil {
-			writeFileMutationError(c, err, "create zip failed")
-			return
-		}
-	}
-
-	if err := zw.Close(); err != nil {
-		_ = tmpFile.Close()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "create zip failed"})
-		return
-	}
-	if err := tmpFile.Close(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "create zip failed"})
-		return
-	}
-
-	if err := h.sendFileWithRateLimit(c, zipPath, "batch_download.zip", rate, nil); err != nil {
+	defer releaseArchive(archive)
+	if err := h.sendArchiveWithRateLimit(c, archive, "batch_download.zip", rate); err != nil {
 		writeDownloadError(c, err)
 		return
 	}
-
-	_ = h.Svc.RecordOperation(c.Request.Context(), uid, nil, "batch_download", "success", fmt.Sprintf("count=%d", len(ids)), c.ClientIP())
+	if err := h.Svc.RecordOperation(c.Request.Context(), uid, nil, "batch_download", "success", fmt.Sprintf("count=%d", len(ids)), c.ClientIP()); err != nil {
+		// The file response is already sent; report the audit failure without
+		// appending JSON or claiming we can undo the completed network write.
+		log.Print("batch download operation audit unavailable")
+	}
 }
 
 // StreamVideo 视频流媒体播放接口，支持 Range 请求和拖拽进度。
@@ -1315,13 +1287,13 @@ func (h *FileHandler) PublicShareDownload(c *gin.Context) {
 		return
 	}
 	if file.IsFolder == 1 {
-		zipPath, err := h.createFolderZip(c.Request.Context(), creatorID, file)
+		archive, err := h.createFolderZip(c.Request.Context(), creatorID, file)
 		if err != nil {
 			writeFileMutationError(c, err, "create zip failed")
 			return
 		}
-		defer os.Remove(zipPath)
-		if err := h.sendFileWithRateLimit(c, zipPath, sanitizeFileName(file.Filename)+".zip", rate, nil); err != nil {
+		defer releaseArchive(archive)
+		if err := h.sendArchiveWithRateLimit(c, archive, sanitizeFileName(file.Filename)+".zip", rate); err != nil {
 			writeDownloadError(c, err)
 			return
 		}
@@ -1807,78 +1779,6 @@ func (h *FileHandler) checkShareAccessRateLimit(ctx context.Context, shareCode s
 	}
 
 	return count <= int64(maxInWindow), nil
-}
-
-// createFolderZip validates a complete authorized manifest before opening a ZIP.
-func (h *FileHandler) createFolderZip(ctx context.Context, uid int64, root model.File) (string, error) {
-	entries, err := h.Svc.CollectFolderZipEntries(ctx, uid, root.ID)
-	if err != nil {
-		return "", err
-	}
-	return createFolderZipFromEntries(entries)
-}
-
-func createFolderZipFromEntries(entries []service.FileFolderZipEntry) (string, error) {
-	tmpFile, err := os.CreateTemp("", "cloudnest-folder-*.zip")
-	if err != nil {
-		return "", err
-	}
-	zipPath := tmpFile.Name()
-
-	zw := zip.NewWriter(tmpFile)
-	defer func() {
-		_ = zw.Close()
-		_ = tmpFile.Close()
-	}()
-
-	for _, entry := range entries {
-		if entry.IsDir {
-			if err := addZipDir(zw, entry.RelPath); err != nil {
-				_ = os.Remove(zipPath)
-				return "", err
-			}
-			continue
-		}
-		if err := addZipFileFromPath(zw, entry.RelPath, entry.StoragePath); err != nil {
-			_ = os.Remove(zipPath)
-			return "", err
-		}
-	}
-
-	if err := zw.Close(); err != nil {
-		_ = os.Remove(zipPath)
-		return "", err
-	}
-	if err := tmpFile.Close(); err != nil {
-		_ = os.Remove(zipPath)
-		return "", err
-	}
-
-	return zipPath, nil
-}
-
-// addZipDir 在 zip 中写入目录项，兼容空目录下载。
-func addZipDir(zw *zip.Writer, relPath string) error {
-	entry := filepath.ToSlash(strings.TrimSuffix(relPath, "/")) + "/"
-	_, err := zw.Create(entry)
-	return err
-}
-
-// addZipFileFromPath 读取磁盘文件并写入 zip 指定路径。
-func addZipFileFromPath(zw *zip.Writer, relPath string, sourcePath string) error {
-	in, err := os.Open(sourcePath)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-
-	w, err := zw.Create(filepath.ToSlash(relPath))
-	if err != nil {
-		return err
-	}
-
-	_, err = io.Copy(w, in)
-	return err
 }
 
 func writeFileMutationError(c *gin.Context, err error, fallback string) {

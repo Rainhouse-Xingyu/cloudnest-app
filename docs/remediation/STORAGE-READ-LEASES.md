@@ -49,3 +49,5 @@
 G03 受控上传暂停会取消读取中的 HTTP body。响应保护现允许从未 Pin 且无 Pin 错误的纯元数据响应在请求取消后返回正确状态；持有租约、Pin 已失败或 scope 关闭仍严格检查，物理读取不放宽。真实暂停 TCP 与全部读取租约回归共同验证，详见 [上传控制](UPLOAD-CONTROL.md)。
 
 G03 下载身份批次进一步移除“校验后重开路径”的窗口，条件响应也先授权/Pin/完整校验；首次保护失败同时清理 ETag/Repr-Digest/Content-Digest/Last-Modified。FD 路径替换回归通过，但这不保护外部原地改写，仍依赖服务端不可变发布约束；详见 DOWNLOAD-INTEGRITY。
+
+ZIP 后续改为从已 Pin 的固定存储快照单遍复制并核对摘要/尺寸，完成前任何错误废弃全部私有归档。归档自身另持传输登记/FD/续约直到 HTTP 结束，源读取租约仍贯穿构建和输出，见 ARCHIVE-TRANSFERS。
