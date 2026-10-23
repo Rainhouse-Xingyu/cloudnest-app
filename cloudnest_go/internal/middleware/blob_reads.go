@@ -64,3 +64,6 @@ func (w *leaseResponseWriter) Flush() {
 		w.ResponseWriter.Flush()
 	}
 }
+
+// Unwrap exposes connection deadline control without bypassing protected writes.
+func (w *leaseResponseWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }

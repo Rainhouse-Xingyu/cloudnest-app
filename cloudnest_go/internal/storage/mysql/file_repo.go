@@ -466,6 +466,12 @@ func (r *FileRepo) GetUploadTaskByUploadID(ctx context.Context, uid int64, uploa
 	if task.ContractVersion != 1 {
 		return model.UploadTask{}, contract.ErrUploadContract
 	}
+	if task.Status != 1 && task.ChunkProtocol != 1 {
+		return model.UploadTask{}, contract.ErrUploadContract
+	}
+	if task.Status != 1 && task.TotalChunks != nil && (*task.TotalChunks < 0 || *task.TotalChunks > contract.MaxUploadChunks) {
+		return model.UploadTask{}, contract.ErrUploadContract
+	}
 	if task.Status == 0 {
 		if err := quota.RequireLiveTask(r.db.WithContext(ctx), task); err != nil {
 			return model.UploadTask{}, err
@@ -490,7 +496,7 @@ func (r *FileRepo) GetUploadTaskAndUploadedChunkIndexes(ctx context.Context, use
 	err = r.db.WithContext(ctx).
 		Where("upload_id = ? AND status = 1", uploadID).
 		Order("chunk_index ASC").
-		Find(&rows).Error
+		Limit(contract.MaxUploadChunks + 1).Find(&rows).Error
 	if err != nil {
 		return model.UploadTask{}, nil, err
 	}
@@ -542,15 +548,18 @@ func (r *FileRepo) CreateUploadTask(ctx context.Context, task model.UploadTask) 
 	})
 }
 
-func (r *FileRepo) UpsertUploadChunkAndRefreshProgress(ctx context.Context, taskID int64, uploadID string, chunkIndex int, chunkSize int64, chunkPath string) error {
+func (r *FileRepo) UpsertUploadChunkAndRefreshProgress(ctx context.Context, taskID int64, uploadID string, chunkIndex int, chunkSize int64, chunkPath, chunkRoot, sha256, md5 string) (contract.ChunkCommit, error) {
 	var owner model.UploadTask
 	if err := r.db.WithContext(ctx).First(&owner, taskID).Error; err != nil {
-		return err
+		return contract.ChunkCommit{CandidateDisposable: true}, err
 	}
 	if owner.UserID == nil {
-		return contract.ErrForbidden
+		return contract.ChunkCommit{CandidateDisposable: true}, contract.ErrForbidden
 	}
-	return fileMetadataTransaction(ctx, r.db, func(tx *gorm.DB) error {
+	prepared, unused := false, false
+	err := fileMetadataTransaction(ctx, r.db, func(tx *gorm.DB) error {
+		// A deadlock retry starts a fresh attempt, never inheriting commit evidence.
+		prepared, unused = false, false
 		if err := quota.Begin(tx, *owner.UserID); err != nil {
 			return err
 		}
@@ -564,55 +573,54 @@ func (r *FileRepo) UpsertUploadChunkAndRefreshProgress(ctx context.Context, task
 		if err := quota.RequireLiveTask(tx, current); err != nil {
 			return err
 		}
-		if current.TotalChunks == nil || chunkIndex < 0 || chunkIndex >= *current.TotalChunks {
+		expected, err := contract.ExpectedChunkBytes(current, chunkIndex)
+		if err != nil {
+			return err
+		}
+		if chunkSize != expected || !blob.ValidToken(sha256) || len(md5) != 32 {
 			return contract.ErrInvalidInput
 		}
+		if err := blob.VerifyChunk(ctx, chunkRoot, chunkPath, expected, sha256); err != nil {
+			return contract.ErrStorageIntegrity
+		}
 		var row model.UploadChunk
-		err := tx.Where("upload_id = ? AND chunk_index = ?", uploadID, chunkIndex).First(&row).Error
-		if err != nil {
+		err = tx.First(&row, "upload_id=? AND chunk_index=?", uploadID, chunkIndex).Error
+		if err == nil {
+			if row.Status != 1 || row.ChunkSize == nil || *row.ChunkSize != chunkSize || row.SHA256 != sha256 || row.MD5 != md5 {
+				return contract.ErrConflict
+			}
+			if err := blob.VerifyChunk(ctx, chunkRoot, row.ChunkPath, expected, row.SHA256); err != nil {
+				return contract.ErrStorageIntegrity
+			}
+			unused = true
+		} else {
 			if !errors.Is(err, gorm.ErrRecordNotFound) {
 				return err
 			}
-			chunkSizeVal := chunkSize
-			row = model.UploadChunk{
-				UploadID:   uploadID,
-				ChunkIndex: chunkIndex,
-				ChunkSize:  &chunkSizeVal,
-				ChunkPath:  chunkPath,
-				Status:     1,
-			}
+			row = model.UploadChunk{UploadID: uploadID, ChunkIndex: chunkIndex, ChunkSize: &chunkSize, ChunkPath: chunkPath, SHA256: sha256, MD5: md5, Status: 1}
 			if err := tx.Create(&row).Error; err != nil {
 				return err
 			}
-		} else {
-			chunkSizeVal := chunkSize
-			if err := tx.Model(&row).Updates(map[string]interface{}{
-				"chunk_size": chunkSizeVal,
-				"chunk_path": chunkPath,
-				"status":     1,
-			}).Error; err != nil {
+			var count int64
+			if err := tx.Model(&model.UploadChunk{}).Where("upload_id=? AND status=1", uploadID).Count(&count).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&model.UploadTask{}).Where("id=?", taskID).Update("uploaded_chunks", count).Error; err != nil {
 				return err
 			}
 		}
-
-		var doneCount int64
-		if err := tx.Model(&model.UploadChunk{}).Where("upload_id = ? AND status = 1", uploadID).Count(&doneCount).Error; err != nil {
-			return err
-		}
-		return tx.Model(&model.UploadTask{}).Where("id = ?", taskID).Update("uploaded_chunks", int(doneCount)).Error
+		prepared = true
+		return nil
 	})
-}
-
-func (r *FileRepo) CountDoneUploadChunks(ctx context.Context, uploadID string) (int64, error) {
-	var doneCount int64
-	err := r.db.WithContext(ctx).
-		Model(&model.UploadChunk{}).
-		Where("upload_id = ? AND status = 1", uploadID).
-		Count(&doneCount).Error
 	if err != nil {
-		return 0, err
+		return contract.ChunkCommit{CandidateDisposable: !prepared || unused}, err
 	}
-	return doneCount, nil
+	return contract.ChunkCommit{CandidateDisposable: unused}, nil
+}
+func (r *FileRepo) ListDoneUploadChunks(ctx context.Context, uploadID string) ([]model.UploadChunk, error) {
+	var rows []model.UploadChunk
+	err := r.db.WithContext(ctx).Where("upload_id=? AND status=1", uploadID).Order("chunk_index ASC").Limit(contract.MaxUploadChunks + 1).Find(&rows).Error
+	return rows, err
 }
 
 func (r *FileRepo) CompleteUploadPersist(ctx context.Context, uid int64, parentID int64, uploadID string, task model.UploadTask, totalChunks int, storagePath, storageRoot string, mergedSize int64, fileHash string, clientIP string) (contract.UploadCommit, error) {
@@ -642,6 +650,9 @@ func (r *FileRepo) CompleteUploadPersist(ctx context.Context, uid int64, parentI
 			return err
 		}
 		if err := quota.RequireLiveTask(tx, currentTask); err != nil {
+			return err
+		}
+		if _, err := contract.ExpectedChunkBytes(currentTask, 0); err != nil {
 			return err
 		}
 		if currentTask.ParentID != parentID {

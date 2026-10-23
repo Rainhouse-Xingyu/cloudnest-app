@@ -153,5 +153,8 @@ func CheckFileSchema(db *gorm.DB) error {
 	if err := CheckQuotaSchema(db); err != nil {
 		return err
 	}
-	return CheckUploadResultSchema(db)
+	if err := CheckUploadResultSchema(db); err != nil {
+		return err
+	}
+	return CheckUploadChunkSchema(db)
 }

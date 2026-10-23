@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -128,6 +127,7 @@ type FileUploadTaskSnapshot struct {
 	ChunkSize     int
 	TotalChunk    int
 	CompletedFile *model.File
+	Chunks        []model.UploadChunk
 }
 
 // FileBatchDownloadEntry 表示批量下载中一个可下载条目。
@@ -272,7 +272,7 @@ func (s *FileService) InitUpload(ctx context.Context, uid int64, in FileUploadIn
 		return FileUploadInitResult{}, err
 	}
 	in.UploadID = strings.TrimSpace(in.UploadID)
-	if in.Filename == "" || in.TotalSize <= 0 || in.ParentID < 0 {
+	if in.Filename == "" || in.TotalSize <= 0 || in.TotalSize > contract.MaxUploadFileBytes || in.ParentID < 0 {
 		return FileUploadInitResult{}, fmt.Errorf("invalid upload parameters")
 	}
 
@@ -283,7 +283,7 @@ func (s *FileService) InitUpload(ctx context.Context, uid int64, in FileUploadIn
 		if v, ok, err := s.getSystemSettingInt64(ctx, "upload_default_chunk_size_mb"); err != nil {
 			return FileUploadInitResult{}, err
 		} else if ok && v > 0 {
-			if v > 1024 {
+			if v > contract.MaxUploadChunkBytes/(1024*1024) {
 				return FileUploadInitResult{}, contract.ErrQuotaAccounting
 			}
 			in.ChunkSize = int(v * 1024 * 1024)
@@ -293,11 +293,11 @@ func (s *FileService) InitUpload(ctx context.Context, uid int64, in FileUploadIn
 		in.ChunkSize = 4 * 1024 * 1024
 	}
 
-	if in.ChunkSize > math.MaxInt32 {
+	if int64(in.ChunkSize) > contract.MaxUploadChunkBytes {
 		return FileUploadInitResult{}, contract.ErrInvalidInput
 	}
 	calculated := 1 + (in.TotalSize-1)/int64(in.ChunkSize)
-	if calculated > math.MaxInt32 {
+	if calculated > contract.MaxUploadChunks {
 		return FileUploadInitResult{}, contract.ErrInvalidInput
 	}
 	calculatedTotalChunks := int(calculated)
@@ -326,7 +326,7 @@ func (s *FileService) InitUpload(ctx context.Context, uid int64, in FileUploadIn
 			}
 			return FileUploadInitResult{}, err
 		}
-		if task.ParentID != in.ParentID || task.Filename != in.Filename || task.TotalSize == nil || *task.TotalSize != in.TotalSize || task.ChunkSize == nil || *task.ChunkSize != in.ChunkSize || task.TotalChunks == nil || *task.TotalChunks != in.TotalChunks {
+		if (task.Status != 1 && task.ChunkProtocol != 1) || task.ParentID != in.ParentID || task.Filename != in.Filename || task.TotalSize == nil || *task.TotalSize != in.TotalSize || task.ChunkSize == nil || *task.ChunkSize != in.ChunkSize || task.TotalChunks == nil || *task.TotalChunks != in.TotalChunks {
 			return FileUploadInitResult{}, contract.ErrUploadContract
 		}
 		return FileUploadInitResult{
@@ -343,7 +343,7 @@ func (s *FileService) InitUpload(ctx context.Context, uid int64, in FileUploadIn
 	chunkSizeCopy := in.ChunkSize
 	totalChunksCopy := in.TotalChunks
 	task := model.UploadTask{
-		ContractVersion: 1, ReservedBytes: in.TotalSize, ParentID: in.ParentID,
+		ChunkProtocol: 1, ContractVersion: 1, ReservedBytes: in.TotalSize, ParentID: in.ParentID,
 		UploadID:    uploadID,
 		UserID:      &uidCopy,
 		Filename:    in.Filename,
@@ -376,7 +376,7 @@ func (s *FileService) ValidateUploadChunk(ctx context.Context, uid int64, upload
 	if task.Status == 1 {
 		return model.UploadTask{}, ErrUploadTaskCompleted
 	}
-	if task.Status != 0 {
+	if task.Status != 0 || task.ChunkProtocol != 1 {
 		return model.UploadTask{}, contract.ErrUploadContract
 	}
 	if task.TotalChunks != nil && chunkIndex >= *task.TotalChunks {
@@ -386,8 +386,8 @@ func (s *FileService) ValidateUploadChunk(ctx context.Context, uid int64, upload
 }
 
 // MarkChunkUploaded 记录分片上传完成并刷新已上传分片数。
-func (s *FileService) MarkChunkUploaded(ctx context.Context, task model.UploadTask, uploadID string, chunkIndex int, chunkSize int64, chunkPath string) error {
-	return s.fileRepo.UpsertUploadChunkAndRefreshProgress(ctx, task.ID, uploadID, chunkIndex, chunkSize, chunkPath)
+func (s *FileService) MarkChunkUploaded(ctx context.Context, task model.UploadTask, uploadID string, chunkIndex int, chunkSize int64, chunkPath, chunkRoot, sha256, md5 string) (contract.ChunkCommit, error) {
+	return s.fileRepo.UpsertUploadChunkAndRefreshProgress(ctx, task.ID, uploadID, chunkIndex, chunkSize, chunkPath, chunkRoot, sha256, md5)
 }
 
 // PrepareCompleteUpload 校验可完成条件并返回任务快照。
@@ -412,7 +412,7 @@ func (s *FileService) PrepareCompleteUpload(ctx context.Context, uid int64, uplo
 	if task.Status == 1 {
 		return completedUploadSnapshot(task, uid, parentID)
 	}
-	if task.Status != 0 {
+	if task.Status != 0 || task.ChunkProtocol != 1 {
 		return FileUploadTaskSnapshot{}, contract.ErrUploadContract
 	}
 	if task.ParentID != parentID {
@@ -431,11 +431,11 @@ func (s *FileService) PrepareCompleteUpload(ctx context.Context, uid int64, uplo
 		return FileUploadTaskSnapshot{}, ErrUploadMetaIncomplete
 	}
 
-	doneCount, err := s.fileRepo.CountDoneUploadChunks(ctx, uploadID)
+	chunks, err := s.fileRepo.ListDoneUploadChunks(ctx, uploadID)
 	if err != nil {
 		return FileUploadTaskSnapshot{}, err
 	}
-	if int(doneCount) != *task.TotalChunks {
+	if len(chunks) != *task.TotalChunks {
 		// A competing completion can atomically remove chunk metadata after the
 		// first task read. Re-read its durable result instead of reporting loss.
 		latest, err := s.fileRepo.GetUploadTaskByUploadID(ctx, uid, uploadID)
@@ -448,7 +448,16 @@ func (s *FileService) PrepareCompleteUpload(ctx context.Context, uid int64, uplo
 		return FileUploadTaskSnapshot{}, ErrChunksNotComplete
 	}
 
-	return FileUploadTaskSnapshot{Task: task, TotalSize: *task.TotalSize, ChunkSize: *task.ChunkSize, TotalChunk: *task.TotalChunks}, nil
+	for i, chunk := range chunks {
+		expected, err := contract.ExpectedChunkBytes(task, i)
+		if err != nil {
+			return FileUploadTaskSnapshot{}, err
+		}
+		if chunk.ChunkIndex != i || chunk.ChunkSize == nil || *chunk.ChunkSize != expected || !blob.ValidToken(chunk.SHA256) {
+			return FileUploadTaskSnapshot{}, contract.ErrStorageIntegrity
+		}
+	}
+	return FileUploadTaskSnapshot{Task: task, TotalSize: *task.TotalSize, ChunkSize: *task.ChunkSize, TotalChunk: *task.TotalChunks, Chunks: chunks}, nil
 }
 
 func completedUploadSnapshot(task model.UploadTask, uid, parentID int64) (FileUploadTaskSnapshot, error) {

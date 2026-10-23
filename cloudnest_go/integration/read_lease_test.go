@@ -446,7 +446,7 @@ func TestReadLeaseBackgroundAnalysisOutlivesHTTPAndReleasesLease(t *testing.T) {
 		// local file read and never fabricates OCR/model output or AI success.
 		return nil, errors.New("injected model transport failure")
 	})}
-	f.router = container.NewRouter()
+	f.router = fixtureRouter(container.NewRouter())
 	defer unblock.Do(func() { close(release) })
 	var payload bytes.Buffer
 	if err := png.Encode(&payload, image.NewRGBA(image.Rect(0, 0, 1, 1))); err != nil {

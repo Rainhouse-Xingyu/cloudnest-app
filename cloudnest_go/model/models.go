@@ -124,6 +124,8 @@ func (File) TableName() string {
 
 // UploadChunk 分片上传块
 type UploadChunk struct {
+	SHA256     string    `gorm:"type:char(64);not null;default:''" json:"-"`
+	MD5        string    `gorm:"type:char(32);not null;default:''" json:"-"`
 	ID         int64     `gorm:"primaryKey;autoIncrement" json:"id"`
 	UploadID   string    `gorm:"type:varchar(100);not null;uniqueIndex:idx_upload_chunk" json:"upload_id"`
 	ChunkIndex int       `gorm:"not null;uniqueIndex:idx_upload_chunk" json:"chunk_index"`
@@ -139,6 +141,7 @@ func (UploadChunk) TableName() string {
 
 // UploadTask 分片上传任务
 type UploadTask struct {
+	ChunkProtocol   int16      `gorm:"type:smallint;not null;default:0" json:"-"`
 	ResultVersion   int16      `gorm:"type:smallint;not null;default:0" json:"-"`
 	ResultFileID    *int64     `gorm:"type:bigint" json:"-"`
 	ResultJSON      *string    `gorm:"type:text" json:"-"`

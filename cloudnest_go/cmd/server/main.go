@@ -169,7 +169,7 @@ func main() {
 
 	addr := fmt.Sprintf(":%s", cfg.AppPort)
 	log.Printf("服务启动成功，监听地址: %s，数据目录: %s", addr, cfg.DataDir)
-	server := &http.Server{Addr: addr, Handler: r, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 1 << 20}
+	server := &http.Server{Addr: addr, Handler: r, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 5 * time.Minute, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 1 << 20}
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("启动 HTTP 服务失败: %s", explainStartupError(err))
 	}

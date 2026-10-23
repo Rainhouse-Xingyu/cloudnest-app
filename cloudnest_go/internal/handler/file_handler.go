@@ -3,7 +3,6 @@ package handler
 import (
 	"archive/zip"
 	"context"
-	"crypto/md5"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -19,7 +18,6 @@ import (
 	"io"
 	"log"
 	"mime"
-	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -119,7 +117,6 @@ type FileSearchQuery struct {
 
 const (
 	defaultDataDir = "data"
-	chunkSubDir    = "chunks"
 	storageSubDir  = "storage"
 	thumbSubDir    = "thumbnails"
 
@@ -231,6 +228,7 @@ func (h *FileHandler) Delete(c *gin.Context) {
 
 // InitUpload 初始化分片上传任务，支持续传场景。
 func (h *FileHandler) InitUpload(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<10)
 	uid := c.GetInt64(middleware.ContextUserIDKey)
 
 	var req InitUploadRequest
@@ -296,95 +294,9 @@ func (h *FileHandler) InitUpload(c *gin.Context) {
 	})
 }
 
-// UploadChunk 保存单个分片到本地并更新分片状态。
-func (h *FileHandler) UploadChunk(c *gin.Context) {
-	uid := c.GetInt64(middleware.ContextUserIDKey)
-	uploadID := strings.TrimSpace(c.PostForm("upload_id"))
-	chunkIndexRaw := strings.TrimSpace(c.PostForm("chunk_index"))
-	chunkMD5 := strings.ToLower(strings.TrimSpace(c.PostForm("chunk_md5")))
-
-	if uploadID == "" || chunkIndexRaw == "" || chunkMD5 == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "upload_id, chunk_index and chunk_md5 are required"})
-		return
-	}
-
-	chunkIndex, err := strconv.Atoi(chunkIndexRaw)
-	if err != nil || chunkIndex < 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid chunk_index"})
-		return
-	}
-
-	task, err := h.Svc.ValidateUploadChunk(c.Request.Context(), uid, uploadID, chunkIndex)
-	if err != nil {
-		if isUploadContractError(err) {
-			writeFileMutationError(c, err, "upload rejected")
-			return
-		}
-		switch {
-		case errors.Is(err, service.ErrUploadTaskNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "upload task not found"})
-			return
-		case errors.Is(err, service.ErrFilePermissionDenied):
-			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-			return
-		case errors.Is(err, service.ErrUploadTaskCompleted):
-			c.JSON(http.StatusConflict, gin.H{"error": "upload task already completed"})
-			return
-		case errors.Is(err, service.ErrChunkIndexOutOfRange):
-			c.JSON(http.StatusBadRequest, gin.H{"error": "chunk_index out of range"})
-			return
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-			return
-		}
-	}
-
-	chunkFile, err := c.FormFile("chunk")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "chunk file is required"})
-		return
-	}
-
-	chunkDir := filepath.Join(h.chunkBaseDir(), uploadID)
-	if err := os.MkdirAll(chunkDir, 0o755); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "create chunk directory failed"})
-		return
-	}
-
-	chunkPath := filepath.Join(chunkDir, fmt.Sprintf("%d.part", chunkIndex))
-	uploadRate := h.getUploadRateBytesPerSec(c)
-	if err := h.saveUploadedFileWithRateLimit(c, chunkFile, chunkPath, uploadRate); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "save chunk failed"})
-		return
-	}
-
-	actualMD5, err := computeFileMD5Hex(chunkPath)
-	if err != nil {
-		_ = os.Remove(chunkPath)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "verify chunk md5 failed"})
-		return
-	}
-	if !strings.EqualFold(actualMD5, chunkMD5) {
-		_ = os.Remove(chunkPath)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "chunk md5 mismatch"})
-		return
-	}
-
-	err = h.Svc.MarkChunkUploaded(c.Request.Context(), task, uploadID, chunkIndex, chunkFile.Size, chunkPath)
-	if err != nil {
-		if isUploadContractError(err) {
-			writeFileMutationError(c, err, "chunk rejected")
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "update chunk status failed"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "chunk uploaded"})
-}
-
 // CompleteUpload 合并所有分片，写入 storage/file 记录并完成上传任务。
 func (h *FileHandler) CompleteUpload(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<10)
 	uid := c.GetInt64(middleware.ContextUserIDKey)
 
 	var req CompleteUploadRequest
@@ -434,7 +346,7 @@ func (h *FileHandler) CompleteUpload(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"item": *snapshot.CompletedFile})
 		return
 	}
-	storagePath, mergedSize, fileHash, err := h.mergeChunks(c.Request.Context(), req.UploadID, snapshot.TotalChunk)
+	storagePath, mergedSize, fileHash, err := h.mergeChunks(c.Request.Context(), snapshot)
 	if err != nil {
 		// The winner may have committed and removed chunks after our preflight.
 		// Its receipt is authoritative; a missing chunk is not a failed upload.
@@ -447,7 +359,7 @@ func (h *FileHandler) CompleteUpload(c *gin.Context) {
 			writeFileMutationError(c, receiptErr, "complete upload failed")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "merge chunks failed"})
+		writeFileMutationError(c, err, "merge chunks failed")
 		return
 	}
 
@@ -468,9 +380,7 @@ func (h *FileHandler) CompleteUpload(c *gin.Context) {
 		return
 	}
 
-	if err := os.RemoveAll(filepath.Join(h.chunkBaseDir(), req.UploadID)); err != nil {
-		h.recordUploadCleanupFailure(c.Request.Context(), uid, &createdFile.ID, "upload_chunk_cleanup", c.ClientIP())
-	}
+	h.cleanupChunkManifest(c.Request.Context(), uid, snapshot.Chunks, c.ClientIP())
 	// 上传成功后触发 AI 异步分析：自动生成 tags/description/ocr_text 并写入 ai_metadata。
 	h.triggerAsyncAutoAnalyze(createdFile, uid, c.ClientIP())
 	// 上传完成后尝试自动与同目录同名文件配对绑定 Live Photo（无阻塞失败）。
@@ -1507,10 +1417,6 @@ func (h *FileHandler) dataRootDir() string {
 	return base
 }
 
-func (h *FileHandler) chunkBaseDir() string {
-	return filepath.Join(h.dataRootDir(), chunkSubDir)
-}
-
 func (h *FileHandler) storageBaseDir() string {
 	return filepath.Join(h.dataRootDir(), storageSubDir)
 }
@@ -1519,7 +1425,7 @@ func (h *FileHandler) thumbBaseDir() string {
 	return filepath.Join(h.dataRootDir(), thumbSubDir)
 }
 
-func (h *FileHandler) mergeChunks(ctx context.Context, uploadID string, totalChunks int) (path string, size int64, digest string, result error) {
+func (h *FileHandler) mergeChunks(ctx context.Context, snapshot service.FileUploadTaskSnapshot) (path string, size int64, digest string, result error) {
 	if err := os.MkdirAll(h.storageBaseDir(), 0700); err != nil {
 		return "", 0, "", err
 	}
@@ -1562,12 +1468,18 @@ func (h *FileHandler) mergeChunks(ctx context.Context, uploadID string, totalChu
 	}()
 	hash := sha256.New()
 	writer := io.MultiWriter(out, hash)
-	for i := 0; i < totalChunks; i++ {
-		in, err := os.Open(filepath.Join(h.chunkBaseDir(), uploadID, fmt.Sprintf("%d.part", i)))
+	for _, chunk := range snapshot.Chunks {
+		in, err := blob.OpenChunk(anchored, root, chunk.ChunkPath)
 		if err != nil {
-			return "", 0, "", err
+			return "", 0, "", chunkManifestError(err)
 		}
-		n, copyErr := io.Copy(writer, &uploadContextReader{ctx: ctx, in: in})
+		info, err := in.Stat()
+		if err != nil || chunk.ChunkSize == nil || info.Size() != *chunk.ChunkSize {
+			in.Close()
+			return "", 0, "", contract.ErrInvalidInput
+		}
+		digest := sha256.New()
+		n, copyErr := io.Copy(io.MultiWriter(writer, digest), io.LimitReader(&uploadContextReader{ctx: ctx, in: in}, *chunk.ChunkSize+1))
 		closeErr := in.Close()
 		size += n
 		if copyErr != nil {
@@ -1576,7 +1488,14 @@ func (h *FileHandler) mergeChunks(ctx context.Context, uploadID string, totalChu
 		if closeErr != nil {
 			return "", 0, "", closeErr
 		}
+		if n != *chunk.ChunkSize {
+			return "", 0, "", contract.ErrInvalidInput
+		}
+		if hex.EncodeToString(digest.Sum(nil)) != chunk.SHA256 {
+			return "", 0, "", contract.ErrStorageIntegrity
+		}
 	}
+
 	if err := out.Sync(); err != nil {
 		return "", 0, "", err
 	}
@@ -1925,62 +1844,6 @@ func (h *FileHandler) getUploadRateBytesPerSec(c *gin.Context) int64 {
 	return rateKbps * 1024
 }
 
-// saveUploadedFileWithRateLimit 以限速方式写入上传分片，防止上传突发占满带宽。
-func (h *FileHandler) saveUploadedFileWithRateLimit(c *gin.Context, fh *multipart.FileHeader, dstPath string, bytesPerSec int64) error {
-	src, err := fh.Open()
-	if err != nil {
-		return err
-	}
-	defer src.Close()
-
-	dst, err := os.Create(dstPath)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_ = dst.Close()
-	}()
-
-	if bytesPerSec <= 0 {
-		_, copyErr := io.Copy(dst, src)
-		return copyErr
-	}
-
-	const chunkSize = 32 * 1024
-	buf := make([]byte, chunkSize)
-	start := time.Now()
-	var writtenTotal int64
-
-	for {
-		n, readErr := src.Read(buf)
-		if n > 0 {
-			w, writeErr := dst.Write(buf[:n])
-			if writeErr != nil {
-				return writeErr
-			}
-			writtenTotal += int64(w)
-
-			elapsed := time.Since(start)
-			expected := time.Duration(float64(writtenTotal) / float64(bytesPerSec) * float64(time.Second))
-			if expected > elapsed {
-				time.Sleep(expected - elapsed)
-			}
-		}
-		if readErr != nil {
-			if errors.Is(readErr, io.EOF) {
-				break
-			}
-			return readErr
-		}
-
-		if c.Request.Context().Err() != nil {
-			return c.Request.Context().Err()
-		}
-	}
-
-	return nil
-}
-
 // getSystemSettingInt64 读取整数配置项，返回值、是否存在、错误。
 func (h *FileHandler) getSystemSettingInt64(ctx context.Context, key string) (int64, bool, error) {
 	return h.Svc.GetSystemSettingInt64(ctx, key)
@@ -2121,20 +1984,6 @@ func (h *FileHandler) sendFileWithRateLimit(c *gin.Context, filePath string, dow
 	return nil
 }
 
-func computeFileMD5Hex(filePath string) (string, error) {
-	f, err := os.Open(filePath)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-
-	h := md5.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(h.Sum(nil)), nil
-}
-
 // createFolderZip validates a complete authorized manifest before opening a ZIP.
 func (h *FileHandler) createFolderZip(ctx context.Context, uid int64, root model.File) (string, error) {
 	entries, err := h.Svc.CollectFolderZipEntries(ctx, uid, root.ID)
@@ -2238,6 +2087,7 @@ func isUploadContractError(err error) bool {
 	return errors.Is(err, contract.ErrQuotaExceeded) || errors.Is(err, contract.ErrQuotaAccounting) || errors.Is(err, contract.ErrUploadContract) || errors.Is(err, contract.ErrUploadReceipt) || errors.Is(err, contract.ErrUploadReceiptMissing)
 }
 func (h *FileHandler) CancelUpload(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<10)
 	var req struct {
 		UploadID string `json:"upload_id"`
 	}

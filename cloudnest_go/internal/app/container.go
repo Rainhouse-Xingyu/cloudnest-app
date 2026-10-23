@@ -173,7 +173,7 @@ func (c *Container) NewRouter() *gin.Engine {
 	api.PUT("/files/:id/rename", c.FileHandler.Rename)
 	api.DELETE("/files/:id", c.FileHandler.Delete)
 	api.POST("/files/upload/init", c.FileHandler.InitUpload)
-	api.POST("/files/upload/chunk", c.FileHandler.UploadChunk)
+	api.POST("/files/upload/chunk", middleware.UploadBodyBudget(c.RDB, middleware.UploadBodyTimeout), c.FileHandler.UploadChunk)
 	api.POST("/files/upload/cancel", c.FileHandler.CancelUpload)
 	api.POST("/files/upload/complete", c.FileHandler.CompleteUpload)
 	api.GET("/files/upload/progress", c.FileHandler.UploadProgress)

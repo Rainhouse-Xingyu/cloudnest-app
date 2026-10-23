@@ -79,7 +79,7 @@ func TestUploadReceiptReplaysAcrossContainerReconstruction(t *testing.T) {
 	if err := f.db.Model(&model.UploadTask{}).Where("upload_id=?", id).Update("expires_at", gorm.Expr("DATE_SUB(UTC_TIMESTAMP(6),INTERVAL 1 DAY)")).Error; err != nil {
 		t.Fatal(err)
 	}
-	f.router = app.NewContainer(f.cfg, f.db, f.rdb).NewRouter()
+	f.router = fixtureRouter(app.NewContainer(f.cfg, f.db, f.rdb).NewRouter())
 	for range 3 {
 		assertReceiptReply(t, f, id, original)
 	}
@@ -145,7 +145,7 @@ func TestUploadReceiptRecoversActualTCPResponseLoss(t *testing.T) {
 	}
 	waitNoReadLeases(t, f, *file.StorageID)
 	before := fmt.Sprint(receiptSideEffects(t, f, *task.ResultFileID))
-	f.router = app.NewContainer(f.cfg, f.db, f.rdb).NewRouter()
+	f.router = fixtureRouter(app.NewContainer(f.cfg, f.db, f.rdb).NewRouter())
 	replay := completeUploadRecorder(f, f.alice, id)
 	if replay.Code != 200 || strings.TrimSpace(replay.Body.String()) != `{"item":`+*task.ResultJSON+`}` {
 		t.Fatalf("lost response not recoverable: %d %s", replay.Code, replay.Body.String())

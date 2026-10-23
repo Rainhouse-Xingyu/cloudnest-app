@@ -147,7 +147,7 @@ func TestKeepBothNamesAcrossFileOperations(t *testing.T) {
 func TestConcurrentCopiesAndRenames(t *testing.T) {
 	f := newFixture(t)
 	source := fixtureFolder(t, f, f.alice, "parallel-copy", 0)
-	second := app.NewContainer(f.cfg, f.db, f.rdb).NewRouter()
+	second := fixtureRouter(app.NewContainer(f.cfg, f.db, f.rdb).NewRouter())
 	run := func(method string, paths []string, bodies []any) map[int]int {
 		t.Helper()
 		start := make(chan struct{})
