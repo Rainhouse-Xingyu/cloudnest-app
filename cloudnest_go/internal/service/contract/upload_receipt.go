@@ -19,7 +19,7 @@ func UploadReceipt(task model.UploadTask, uid, parentID int64) (model.File, erro
 		return model.File{}, ErrUploadContract
 	}
 	if task.ResultVersion == 0 && task.ResultFileID == nil && task.ResultJSON == nil {
-		return model.File{}, ErrUploadContract // a completed pre-receipt task
+		return model.File{}, ErrUploadReceiptMissing // a completed pre-receipt task
 	}
 	if task.ResultVersion != 1 || task.ResultFileID == nil || task.ResultJSON == nil || len(*task.ResultJSON) > 8192 || task.ReservedBytes != 0 {
 		return model.File{}, ErrUploadReceipt

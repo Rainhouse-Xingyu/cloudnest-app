@@ -272,7 +272,10 @@ func TestUploadReceiptLegacyAndCorruptionNeverGuessAResult(t *testing.T) {
 	if err := f.db.Model(&model.UploadTask{}).Where("id=?", saved.ID).Updates(map[string]any{"result_version": 0, "result_file_id": nil, "result_json": nil}).Error; err != nil {
 		t.Fatal(err)
 	}
-	f.json(t, "POST", "/api/files/upload/complete", f.alice, map[string]any{"upload_id": id}, 409)
+	legacyReply := f.json(t, "POST", "/api/files/upload/complete", f.alice, map[string]any{"upload_id": id}, 409)
+	if !strings.Contains(legacyReply.Body.String(), "already completed") {
+		t.Fatal("missing receipt misreported as an uncommitted upload")
+	}
 	restore()
 	wrongOwner := file
 	wrongOwner.UserID = f.bobID

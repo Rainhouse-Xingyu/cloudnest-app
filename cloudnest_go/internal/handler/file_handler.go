@@ -2216,6 +2216,8 @@ func writeFileMutationError(c *gin.Context, err error, fallback string) {
 		status, message = http.StatusServiceUnavailable, "storage accounting unavailable"
 	case errors.Is(err, contract.ErrUploadReceipt):
 		status, message = http.StatusServiceUnavailable, "upload completion receipt unavailable"
+	case errors.Is(err, contract.ErrUploadReceiptMissing):
+		status, message = http.StatusConflict, "upload already completed; original result unavailable"
 	case errors.Is(err, contract.ErrUploadContract):
 		status, message = http.StatusConflict, "upload contract changed, expired or not reserved"
 	case errors.Is(err, contract.ErrStorageIntegrity):
@@ -2233,7 +2235,7 @@ func writeFileMutationError(c *gin.Context, err error, fallback string) {
 }
 
 func isUploadContractError(err error) bool {
-	return errors.Is(err, contract.ErrQuotaExceeded) || errors.Is(err, contract.ErrQuotaAccounting) || errors.Is(err, contract.ErrUploadContract) || errors.Is(err, contract.ErrUploadReceipt)
+	return errors.Is(err, contract.ErrQuotaExceeded) || errors.Is(err, contract.ErrQuotaAccounting) || errors.Is(err, contract.ErrUploadContract) || errors.Is(err, contract.ErrUploadReceipt) || errors.Is(err, contract.ErrUploadReceiptMissing)
 }
 func (h *FileHandler) CancelUpload(c *gin.Context) {
 	var req struct {
