@@ -70,7 +70,7 @@ type InitUploadRequest struct {
 	UploadID    string `json:"upload_id"`
 	ParentID    int64  `json:"parent_id"`
 	Filename    string `json:"filename" binding:"required"`
-	TotalSize   int64  `json:"total_size" binding:"required"`
+	TotalSize   *int64 `json:"total_size" binding:"required"`
 	ChunkSize   int    `json:"chunk_size"`
 	TotalChunks int    `json:"total_chunks"`
 }
@@ -232,7 +232,7 @@ func (h *FileHandler) InitUpload(c *gin.Context) {
 	}
 
 	req.Filename = strings.TrimSpace(req.Filename)
-	if req.Filename == "" || req.TotalSize <= 0 || req.ParentID < 0 {
+	if req.Filename == "" || req.TotalSize == nil || *req.TotalSize < 0 || req.ParentID < 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid upload parameters"})
 		return
 	}
@@ -241,7 +241,7 @@ func (h *FileHandler) InitUpload(c *gin.Context) {
 		UploadID:    req.UploadID,
 		ParentID:    req.ParentID,
 		Filename:    req.Filename,
-		TotalSize:   req.TotalSize,
+		TotalSize:   *req.TotalSize,
 		ChunkSize:   req.ChunkSize,
 		TotalChunks: req.TotalChunks,
 	})
@@ -1442,7 +1442,7 @@ func (h *FileHandler) thumbBaseDir() string {
 }
 
 func (h *FileHandler) mergeChunks(ctx context.Context, uid int64, snapshot service.FileUploadTaskSnapshot) (candidate *transfer.Handle, size int64, digest string, result error) {
-	candidate, err := h.Transfers.Create(ctx, uid, snapshot.Task.ID, "merge", snapshot.TotalSize)
+	candidate, err := h.Transfers.Create(ctx, uid, snapshot.Task.ID, "merge", max(snapshot.TotalSize, int64(1)))
 	if err != nil {
 		return nil, 0, "", err
 	}

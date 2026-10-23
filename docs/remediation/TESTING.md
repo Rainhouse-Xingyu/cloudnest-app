@@ -56,3 +56,7 @@ go mod verify、make check（vet/build）、make test（race 单元）、仓库/
 G03 不可提高的速率/高峰/Range 策略追加 **10 项**，总计 **172 项**；2026-10-23 完整 disposable MySQL/Redis/文件系统/API 回归开启 race 通过（233.478s）。覆盖实际上传和普通/Range 下载的高 query 绕过、个人关闭不覆盖全局高峰、六类下载坏策略拒绝、无效/重复参数不创建候选、数据库读取错误拒绝、真实 HTTP 写入失败截断/无错误 JSON/租约释放、个人窗口事务回滚、管理员并发更新下的一致策略，以及 suffix/multipart/If-Range/416/304。修改前同两项 API 复现测试实际失败：64 KiB 上传约 146 ms、32 KiB 普通/Range 约 10/22 ms；修复后约 1 秒/0.5 秒且字节正确。没有将修复前失败计为通过，小负载速率不当作性能基准。
 
 make check（vet/build）、make test（race 单元）、go mod verify、仓库/diff 检查和后端 darwin/linux × amd64/arm64 交叉构建通过。完整回归运行期间另补齐配置键大小写/空白别名归一化与歧义拒绝，并单独通过 service/handler/middleware 的 race 单元，避免键别名被错当成未配置；最终提交的全量 CI 再按精确 SHA 核验。协议、兼容性和未完成的聚合带宽/慢下载/HTTP2 等范围见 [速率报告](TRANSFER-RATE-POLICY.md)。
+
+G03 零字节上传追加 **12 项**，总计 **184 项**；2026-10-23 最终完整 disposable MySQL/Redis/文件系统/API 回归开启 race 通过（236.112s）。覆盖明确 0 与缺少/null/负数 size、零分片声明与拒绝空分片、实际空文件/空 SHA-256/Content-Length: 0、逻辑满额允许真实零字节但不允许额外字节、最少 1 字节临时登记及 507、八请求竞争只发布一次、所有者/固定参数/目录/进度/改名回执、发布审计回滚、跨用户去重/删除后一方仍可下载、历史恢复/复制/分享、取消/过期/旧协议及畸形零任务拒绝、未知分片行/外部路径保留，以及坏配额/临时策略拒绝。
+
+修改前正确编译的端到端测试实际得到初始化 400；最初夹具曾引用不存在的 StorageOverview.AccountingValid 而编译失败，后改查实际账本。首轮十一项扩展运行的唯一失败为改名夹具使用 POST/filename，改为既有 PUT/name 后加入策略故障用例并完整重跑十二项及全部 184 项；未修改产品路由/DTO 迎合测试。make check、make test（race）、go mod verify、仓库/diff 检查和后端 darwin/linux × amd64/arm64 交叉构建通过；最终提交 CI 按精确 SHA 核验。没有新增数据库列，没有操作生产数据；旧实例/回滚边界与仍未建立的数量配额见 [空文件报告](EMPTY-UPLOADS.md)。

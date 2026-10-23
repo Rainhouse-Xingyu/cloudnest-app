@@ -533,7 +533,7 @@ func (r *FileRepo) GetUploadTaskAndUploadedChunkIndexes(ctx context.Context, use
 }
 
 func (r *FileRepo) CreateUploadTask(ctx context.Context, task model.UploadTask) error {
-	if task.UserID == nil || task.TotalSize == nil || task.ReservedBytes != *task.TotalSize || task.ReservedBytes <= 0 || task.ContractVersion != 1 {
+	if task.UserID == nil || task.TotalSize == nil || task.ReservedBytes != *task.TotalSize || task.ReservedBytes < 0 || (task.ReservedBytes == 0 && !contract.IsEmptyUpload(task)) || task.ContractVersion != 1 {
 		return contract.ErrInvalidInput
 	}
 	uid := *task.UserID
@@ -693,7 +693,15 @@ func (r *FileRepo) CompleteUploadPersist(ctx context.Context, uid int64, parentI
 		if err := quota.RequireLiveTask(tx, currentTask); err != nil {
 			return err
 		}
-		if _, err := contract.ExpectedChunkBytes(currentTask, 0); err != nil {
+		if contract.IsEmptyUpload(currentTask) {
+			var count int64
+			if err := tx.Model(&model.UploadChunk{}).Where("upload_id=?", uploadID).Count(&count).Error; err != nil {
+				return err
+			}
+			if count != 0 {
+				return contract.ErrStorageIntegrity
+			}
+		} else if _, err := contract.ExpectedChunkBytes(currentTask, 0); err != nil {
 			return err
 		}
 		if currentTask.ParentID != parentID {

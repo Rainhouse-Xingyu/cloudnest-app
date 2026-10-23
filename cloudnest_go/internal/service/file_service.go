@@ -272,7 +272,7 @@ func (s *FileService) InitUpload(ctx context.Context, uid int64, in FileUploadIn
 		return FileUploadInitResult{}, err
 	}
 	in.UploadID = strings.TrimSpace(in.UploadID)
-	if in.Filename == "" || in.TotalSize <= 0 || in.TotalSize > contract.MaxUploadFileBytes || in.ParentID < 0 {
+	if in.Filename == "" || in.TotalSize < 0 || in.TotalSize > contract.MaxUploadFileBytes || in.ParentID < 0 {
 		return FileUploadInitResult{}, fmt.Errorf("invalid upload parameters")
 	}
 
@@ -296,7 +296,10 @@ func (s *FileService) InitUpload(ctx context.Context, uid int64, in FileUploadIn
 	if int64(in.ChunkSize) > contract.MaxUploadChunkBytes {
 		return FileUploadInitResult{}, contract.ErrInvalidInput
 	}
-	calculated := 1 + (in.TotalSize-1)/int64(in.ChunkSize)
+	calculated := int64(0)
+	if in.TotalSize > 0 {
+		calculated = 1 + (in.TotalSize-1)/int64(in.ChunkSize)
+	}
 	if calculated > contract.MaxUploadChunks {
 		return FileUploadInitResult{}, contract.ErrInvalidInput
 	}
@@ -431,6 +434,11 @@ func (s *FileService) PrepareCompleteUpload(ctx context.Context, uid int64, uplo
 		return FileUploadTaskSnapshot{}, ErrUploadMetaIncomplete
 	}
 
+	if !contract.IsEmptyUpload(task) {
+		if _, err := contract.ExpectedChunkBytes(task, 0); err != nil {
+			return FileUploadTaskSnapshot{}, err
+		}
+	}
 	chunks, err := s.fileRepo.ListDoneUploadChunks(ctx, uploadID)
 	if err != nil {
 		return FileUploadTaskSnapshot{}, err

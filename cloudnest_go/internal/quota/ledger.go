@@ -79,8 +79,9 @@ func snapshot(tx *gorm.DB, uid int64, withLimit bool) (contract.StorageUsage, er
 		Broken        int64
 	}
 	if err := tx.Raw(`SELECT COALESCE(SUM(reserved_bytes),0) AS reserved_bytes,
- COALESCE(SUM(IF(reserved_bytes<=0 OR total_size IS NULL OR reserved_bytes<>total_size,1,0)),0) AS broken
- FROM upload_task WHERE user_id=? AND contract_version=1 AND status IN (0,2) AND expires_at>UTC_TIMESTAMP(6)`, uid).Scan(&reservations).Error; err != nil {
+ COALESCE(SUM(IF(reserved_bytes<0 OR total_size IS NULL OR reserved_bytes<>total_size OR
+ (reserved_bytes=0 AND NOT(COALESCE(chunk_protocol=1 AND transfer_protocol=1 AND total_size=0 AND chunk_size BETWEEN 1 AND ? AND total_chunks=0 AND uploaded_chunks=0,0))),1,0)),0) AS broken
+ FROM upload_task WHERE user_id=? AND contract_version=1 AND status IN (0,2) AND expires_at>UTC_TIMESTAMP(6)`, contract.MaxUploadChunkBytes, uid).Scan(&reservations).Error; err != nil {
 		return u, contract.ErrQuotaAccounting
 	}
 	u.ReservedBytes = reservations.ReservedBytes
@@ -141,7 +142,7 @@ func Refresh(tx *gorm.DB, uid int64, enforce bool) error {
 	return tx.Create(&model.OperationLog{UserID: &uid, Action: "quota_accounting", Status: "success", Detail: fmt.Sprintf("revision=%d used=%d reserved=%d unmetered_refs=%d valid=%t", revision, u.UsedBytes, u.ReservedBytes, u.UnmeteredRefs, u.BrokenRefs == 0)}).Error
 }
 func RequireLiveTask(tx *gorm.DB, t model.UploadTask) error {
-	if t.ContractVersion != 1 || t.Status != 0 || t.TotalSize == nil || t.ReservedBytes != *t.TotalSize || t.ReservedBytes <= 0 || t.ExpiresAt == nil {
+	if t.ContractVersion != 1 || t.Status != 0 || t.TotalSize == nil || t.ReservedBytes != *t.TotalSize || t.ReservedBytes < 0 || (t.ReservedBytes == 0 && !contract.IsEmptyUpload(t)) || t.ExpiresAt == nil {
 		return contract.ErrUploadContract
 	}
 	var live int64

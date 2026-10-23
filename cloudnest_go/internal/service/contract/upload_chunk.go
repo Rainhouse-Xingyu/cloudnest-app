@@ -3,7 +3,7 @@ package contract
 import "cloudenest_go/model"
 
 // Fixed protocol ceilings bound manifests and each request; logical quota and
-// the future durable temporary-space budget are separate policies.
+// the durable temporary-space budget are separate policies.
 const (
 	MaxUploadChunkBytes int64 = 64 << 20
 	MaxUploadChunks           = 16384
@@ -24,4 +24,10 @@ func ExpectedChunkBytes(t model.UploadTask, index int) (int64, error) {
 		return int64(*t.ChunkSize), nil
 	}
 	return remaining, nil
+}
+
+// IsEmptyUpload recognizes the only valid zero-byte task shape. No chunk is
+// accepted: completion creates a verified empty object through normal handoff.
+func IsEmptyUpload(t model.UploadTask) bool {
+	return t.ContractVersion == 1 && t.ChunkProtocol == 1 && t.TransferProtocol == 1 && t.TotalSize != nil && *t.TotalSize == 0 && t.ReservedBytes == 0 && t.ChunkSize != nil && *t.ChunkSize > 0 && int64(*t.ChunkSize) <= MaxUploadChunkBytes && t.TotalChunks != nil && *t.TotalChunks == 0 && t.UploadedChunks == 0
 }
