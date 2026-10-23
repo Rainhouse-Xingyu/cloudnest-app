@@ -87,3 +87,5 @@ G02 新增历史版本下载/恢复两个业务路由，见 [对象与版本报�
 G02 旧历史 source_verified 默认为 false，不能凭 file_version 关联重新打开升级前的任意 storage 引用；只有已有当前内容能力时才可读取/恢复，未证明来源的历史可能返回 403，需显示具体失败，不能伪装为空历史或恢复成功。
 
 G02 容量概览改为当前内容、已验证保留历史和回收站的逻辑对象计量，并增加预留/可用于上传额度及未计量引用数等字段。Init/恢复/完成参数需与已持久化契约一致，旧未完成任务及已过期任务 409，配额不足 507，异常计量/配置 503。现有 Swift DTO 和三类上传入口均已发送 parent_id 及对应尺寸/分片参数；iOS 源码保持冻结，未进行 UI/SDK 验收。新增 POST upload/cancel 和完整语义见 [额度报告](STORAGE-QUOTA.md)，macOS 需区分有效预留后的可用额度和普通 remaining_bytes。
+
+G03 完成接口保持 `item: File` 结构，新完成任务的相同 upload_id/固定 parent_id 重试返回原始 200 回执。回执不代表当前文件状态/访问权限，客户端确认 ID 后刷新列表；无需重复上传或创建新任务。旧已完成任务没有回执时仍 409；损坏回执 503。完成进度为 100%，uploaded_count=total_chunks，uploaded_chunks/missing_chunks 都是空列表（无需再传输），不能据空列表将已完成任务重传。冻结 iOS 未改，新 macOS 需按任务状态及文件 ID 消费结果，详见 [G03](G03-TRANSFER.md)。

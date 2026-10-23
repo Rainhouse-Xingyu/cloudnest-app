@@ -7,6 +7,7 @@ var (
 	ErrQuotaExceeded       = errors.New("storage quota exceeded")
 	ErrQuotaAccounting     = errors.New("storage accounting unavailable")
 	ErrUploadContract      = errors.New("upload contract changed, expired or not reserved")
+	ErrUploadReceipt       = errors.New("upload completion receipt unavailable")
 	ErrInvalidInput        = errors.New("invalid input")
 	ErrNotFound            = errors.New("not found")
 	ErrForbidden           = errors.New("forbidden")

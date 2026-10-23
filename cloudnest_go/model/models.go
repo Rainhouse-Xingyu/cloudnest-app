@@ -139,6 +139,9 @@ func (UploadChunk) TableName() string {
 
 // UploadTask 分片上传任务
 type UploadTask struct {
+	ResultVersion   int16      `gorm:"type:smallint;not null;default:0" json:"-"`
+	ResultFileID    *int64     `gorm:"type:bigint" json:"-"`
+	ResultJSON      *string    `gorm:"type:text" json:"-"`
 	ContractVersion int16      `gorm:"type:smallint;not null;default:0;index:idx_upload_quota,priority:2" json:"-"`
 	ReservedBytes   int64      `gorm:"not null;default:0" json:"-"`
 	ParentID        int64      `gorm:"not null;default:0" json:"parent_id"`

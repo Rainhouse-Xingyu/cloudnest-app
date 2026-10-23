@@ -3,6 +3,7 @@ package mysql
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -618,6 +619,7 @@ func (r *FileRepo) CompleteUploadPersist(ctx context.Context, uid int64, parentI
 	var createdFile model.File
 	var canonical model.Storage
 	var repaired bool
+	var replayed bool
 	prepared := false
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := quota.Begin(tx, uid); err != nil {
@@ -632,6 +634,12 @@ func (r *FileRepo) CompleteUploadPersist(ctx context.Context, uid int64, parentI
 		}
 		if currentTask.UserID == nil || *currentTask.UserID != uid {
 			return contract.ErrForbidden
+		}
+		if currentTask.Status == 1 {
+			var err error
+			createdFile, err = contract.UploadReceipt(currentTask, uid, parentID)
+			replayed = err == nil
+			return err
 		}
 		if err := quota.RequireLiveTask(tx, currentTask); err != nil {
 			return err
@@ -685,8 +693,18 @@ func (r *FileRepo) CompleteUploadPersist(ctx context.Context, uid int64, parentI
 		if err := tx.Create(&model.OperationLog{UserID: &uid, FileID: &createdFile.ID, Action: "upload_complete", Status: "success", Detail: fmt.Sprintf("upload_id=%s", uploadID), ClientIP: clientIP}).Error; err != nil {
 			return err
 		}
+		// Read DB defaults before persisting the exact original response. The
+		// receipt is informational and does not retain file/storage rows.
+		if err := tx.First(&createdFile, createdFile.ID).Error; err != nil {
+			return err
+		}
+		payload, err := json.Marshal(createdFile)
+		if err != nil || len(payload) > 8192 {
+			return contract.ErrUploadReceipt
+		}
 		transition := tx.Model(&model.UploadTask{}).Where("id=? AND status=0 AND contract_version=1 AND reserved_bytes=? AND parent_id=? AND expires_at>UTC_TIMESTAMP(6)", task.ID, mergedSize, parentID).Updates(map[string]interface{}{
 			"reserved_bytes": int64(0), "status": 1, "uploaded_chunks": totalChunks,
+			"result_version": int16(1), "result_file_id": createdFile.ID, "result_json": string(payload),
 		})
 		if transition.Error != nil {
 			return transition.Error
@@ -708,7 +726,7 @@ func (r *FileRepo) CompleteUploadPersist(ctx context.Context, uid int64, parentI
 	if err != nil {
 		return contract.UploadCommit{CandidateDisposable: !prepared}, normalizeFileNameConstraintError(err)
 	}
-	return contract.UploadCommit{File: createdFile, CandidateDisposable: canonical.FilePath != storagePath}, nil
+	return contract.UploadCommit{File: createdFile, CandidateDisposable: replayed || canonical.FilePath != storagePath, Replayed: replayed}, nil
 }
 
 func (r *FileRepo) ResolveValidShare(ctx context.Context, code string) (model.Share, model.File, error) {

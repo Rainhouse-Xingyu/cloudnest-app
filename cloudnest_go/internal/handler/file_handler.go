@@ -430,8 +430,23 @@ func (h *FileHandler) CompleteUpload(c *gin.Context) {
 		}
 	}
 
+	if snapshot.CompletedFile != nil {
+		c.JSON(http.StatusOK, gin.H{"item": *snapshot.CompletedFile})
+		return
+	}
 	storagePath, mergedSize, fileHash, err := h.mergeChunks(c.Request.Context(), req.UploadID, snapshot.TotalChunk)
 	if err != nil {
+		// The winner may have committed and removed chunks after our preflight.
+		// Its receipt is authoritative; a missing chunk is not a failed upload.
+		latest, receiptErr := h.Svc.PrepareCompleteUpload(c.Request.Context(), uid, req.UploadID, req.ParentID)
+		if receiptErr == nil && latest.CompletedFile != nil {
+			c.JSON(http.StatusOK, gin.H{"item": *latest.CompletedFile})
+			return
+		}
+		if isUploadContractError(receiptErr) {
+			writeFileMutationError(c, receiptErr, "complete upload failed")
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "merge chunks failed"})
 		return
 	}
@@ -448,6 +463,10 @@ func (h *FileHandler) CompleteUpload(c *gin.Context) {
 	}
 
 	createdFile := committed.File
+	if committed.Replayed {
+		c.JSON(http.StatusOK, gin.H{"item": createdFile})
+		return
+	}
 
 	if err := os.RemoveAll(filepath.Join(h.chunkBaseDir(), req.UploadID)); err != nil {
 		h.recordUploadCleanupFailure(c.Request.Context(), uid, &createdFile.ID, "upload_chunk_cleanup", c.ClientIP())
@@ -2195,6 +2214,8 @@ func writeFileMutationError(c *gin.Context, err error, fallback string) {
 		status, message = http.StatusInsufficientStorage, "storage quota exceeded"
 	case errors.Is(err, contract.ErrQuotaAccounting):
 		status, message = http.StatusServiceUnavailable, "storage accounting unavailable"
+	case errors.Is(err, contract.ErrUploadReceipt):
+		status, message = http.StatusServiceUnavailable, "upload completion receipt unavailable"
 	case errors.Is(err, contract.ErrUploadContract):
 		status, message = http.StatusConflict, "upload contract changed, expired or not reserved"
 	case errors.Is(err, contract.ErrStorageIntegrity):
@@ -2212,7 +2233,7 @@ func writeFileMutationError(c *gin.Context, err error, fallback string) {
 }
 
 func isUploadContractError(err error) bool {
-	return errors.Is(err, contract.ErrQuotaExceeded) || errors.Is(err, contract.ErrQuotaAccounting) || errors.Is(err, contract.ErrUploadContract)
+	return errors.Is(err, contract.ErrQuotaExceeded) || errors.Is(err, contract.ErrQuotaAccounting) || errors.Is(err, contract.ErrUploadContract) || errors.Is(err, contract.ErrUploadReceipt)
 }
 func (h *FileHandler) CancelUpload(c *gin.Context) {
 	var req struct {

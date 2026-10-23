@@ -26,8 +26,11 @@ import (
 )
 
 func fixturePendingUpload(t *testing.T, f *fixture, token, name string, payload []byte) string {
+	return fixturePendingUploadAt(t, f, token, name, payload, 0)
+}
+func fixturePendingUploadAt(t *testing.T, f *fixture, token, name string, payload []byte, parentID int64) string {
 	t.Helper()
-	w := f.json(t, "POST", "/api/files/upload/init", token, map[string]any{"filename": name, "total_size": len(payload), "chunk_size": len(payload), "total_chunks": 1}, http.StatusOK)
+	w := f.json(t, "POST", "/api/files/upload/init", token, map[string]any{"filename": name, "total_size": len(payload), "chunk_size": len(payload), "total_chunks": 1, "parent_id": parentID}, http.StatusOK)
 	var init struct {
 		UploadID string `json:"upload_id"`
 	}
@@ -109,8 +112,8 @@ func TestConcurrentUploadCompletionCannotDeletePublishedBytes(t *testing.T) {
 			successful = append(successful, completedBlob(t, f, w))
 		}
 	}
-	if second.Code != http.StatusOK || first.Code != http.StatusConflict {
-		t.Errorf("completion statuses second=%d first=%d, want 200/409", second.Code, first.Code)
+	if second.Code != http.StatusOK || first.Code != http.StatusOK || first.Body.String() != second.Body.String() {
+		t.Errorf("completion statuses second=%d first=%d, want identical 200 results", second.Code, first.Code)
 	}
 	if len(successful) == 0 {
 		t.Fatal("neither completion published a file")

@@ -123,10 +123,11 @@ type FileUploadProgressResult struct {
 
 // FileUploadTaskSnapshot 表示完成上传前的任务快照。
 type FileUploadTaskSnapshot struct {
-	Task       model.UploadTask
-	TotalSize  int64
-	ChunkSize  int
-	TotalChunk int
+	Task          model.UploadTask
+	TotalSize     int64
+	ChunkSize     int
+	TotalChunk    int
+	CompletedFile *model.File
 }
 
 // FileBatchDownloadEntry 表示批量下载中一个可下载条目。
@@ -395,16 +396,6 @@ func (s *FileService) PrepareCompleteUpload(ctx context.Context, uid int64, uplo
 		return FileUploadTaskSnapshot{}, fmt.Errorf("invalid parameters")
 	}
 
-	if parentID > 0 {
-		canWrite, err := s.canAccessFile(ctx, uid, parentID, true)
-		if err != nil {
-			return FileUploadTaskSnapshot{}, err
-		}
-		if !canWrite {
-			return FileUploadTaskSnapshot{}, ErrFilePermissionDenied
-		}
-	}
-
 	task, err := s.fileRepo.GetUploadTaskByUploadID(ctx, uid, uploadID)
 	if err != nil {
 		if errors.Is(err, contract.ErrForbidden) {
@@ -419,13 +410,22 @@ func (s *FileService) PrepareCompleteUpload(ctx context.Context, uid int64, uplo
 		return FileUploadTaskSnapshot{}, ErrFilePermissionDenied
 	}
 	if task.Status == 1 {
-		return FileUploadTaskSnapshot{}, ErrUploadTaskCompleted
+		return completedUploadSnapshot(task, uid, parentID)
 	}
 	if task.Status != 0 {
 		return FileUploadTaskSnapshot{}, contract.ErrUploadContract
 	}
 	if task.ParentID != parentID {
 		return FileUploadTaskSnapshot{}, contract.ErrUploadContract
+	}
+	if parentID > 0 {
+		canWrite, err := s.canAccessFile(ctx, uid, parentID, true)
+		if err != nil {
+			return FileUploadTaskSnapshot{}, err
+		}
+		if !canWrite {
+			return FileUploadTaskSnapshot{}, ErrFilePermissionDenied
+		}
 	}
 	if task.TotalChunks == nil || task.ChunkSize == nil || task.TotalSize == nil {
 		return FileUploadTaskSnapshot{}, ErrUploadMetaIncomplete
@@ -436,10 +436,27 @@ func (s *FileService) PrepareCompleteUpload(ctx context.Context, uid int64, uplo
 		return FileUploadTaskSnapshot{}, err
 	}
 	if int(doneCount) != *task.TotalChunks {
+		// A competing completion can atomically remove chunk metadata after the
+		// first task read. Re-read its durable result instead of reporting loss.
+		latest, err := s.fileRepo.GetUploadTaskByUploadID(ctx, uid, uploadID)
+		if err != nil {
+			return FileUploadTaskSnapshot{}, err
+		}
+		if latest.Status == 1 {
+			return completedUploadSnapshot(latest, uid, parentID)
+		}
 		return FileUploadTaskSnapshot{}, ErrChunksNotComplete
 	}
 
 	return FileUploadTaskSnapshot{Task: task, TotalSize: *task.TotalSize, ChunkSize: *task.ChunkSize, TotalChunk: *task.TotalChunks}, nil
+}
+
+func completedUploadSnapshot(task model.UploadTask, uid, parentID int64) (FileUploadTaskSnapshot, error) {
+	f, err := contract.UploadReceipt(task, uid, parentID)
+	if err != nil {
+		return FileUploadTaskSnapshot{}, err
+	}
+	return FileUploadTaskSnapshot{Task: task, CompletedFile: &f}, nil
 }
 
 // CompleteUpload 完成上传后写入 storage/file 及任务状态。
@@ -480,6 +497,11 @@ func (s *FileService) UploadProgress(ctx context.Context, uid int64, uploadID st
 	totalChunks := 0
 	if task.TotalChunks != nil {
 		totalChunks = *task.TotalChunks
+	}
+	if task.Status == 1 {
+		// Completion removes chunk rows. Their absence is expected and must not
+		// turn a committed task back into zero progress or missing chunks.
+		return FileUploadProgressResult{UploadID: task.UploadID, Status: 1, UploadedCount: totalChunks, TotalChunks: totalChunks, UploadedChunks: []int{}, MissingChunks: []int{}, Progress: 100}, nil
 	}
 
 	missingChunks := make([]int, 0)

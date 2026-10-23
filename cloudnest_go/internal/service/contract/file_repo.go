@@ -49,6 +49,7 @@ type FileOperationLogQuery struct {
 type UploadCommit struct {
 	File                model.File
 	CandidateDisposable bool
+	Replayed            bool
 }
 
 // FileRepository 定义 File 模块核心查询访问接口。
