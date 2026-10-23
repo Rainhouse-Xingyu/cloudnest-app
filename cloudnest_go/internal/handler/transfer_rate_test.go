@@ -35,3 +35,15 @@ func TestDownloadErrorAfterCommitAbortsWithoutAppendingJSON(t *testing.T) {
 	}()
 	writeDownloadError(c, io.ErrUnexpectedEOF)
 }
+
+func TestDownloadErrorBeforeBodyClearsRepresentationHeaders(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	for key, value := range map[string]string{"Content-Length": "999", "Content-Range": "bytes 1-9/10", "ETag": `"sha256-file"`, "Repr-Digest": "sha-256=:AAAA:", "Content-Disposition": "attachment", "Content-Type": "application/octet-stream"} {
+		c.Header(key, value)
+	}
+	writeDownloadError(c, io.ErrUnexpectedEOF)
+	if recorder.Code != 500 || recorder.Header().Get("Content-Length") != "" || recorder.Header().Get("Content-Range") != "" || recorder.Header().Get("ETag") != "" || recorder.Header().Get("Repr-Digest") != "" || !strings.HasPrefix(recorder.Header().Get("Content-Type"), "application/json") {
+		t.Fatal("error mislabeled as original file", recorder.Code, recorder.Header())
+	}
+}

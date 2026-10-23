@@ -5,7 +5,6 @@ import (
 	"io"
 	"math"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -73,6 +72,14 @@ type pacedResponseWriter struct {
 	err   error
 }
 
+func (w *pacedResponseWriter) WriteHeader(status int) {
+	if status >= 400 {
+		clearDownloadIdentity(w.Header())
+		w.Header().Del("Content-Disposition")
+		w.Header().Set("Cache-Control", privateDownloadCache)
+	}
+	w.ResponseWriter.WriteHeader(status)
+}
 func (w *pacedResponseWriter) Unwrap() http.ResponseWriter       { return w.ResponseWriter }
 func (w *pacedResponseWriter) WriteString(s string) (int, error) { return w.Write([]byte(s)) }
 func (w *pacedResponseWriter) Write(p []byte) (int, error) {
@@ -99,27 +106,6 @@ func (w *pacedResponseWriter) Write(p []byte) (int, error) {
 	}
 	return total, nil
 }
-func (h *FileHandler) sendFileWithRateLimit(c *gin.Context, filePath, downloadName string, bytesPerSec int64) error {
-	if bytesPerSec <= 0 {
-		return contract.ErrRatePolicy
-	}
-	f, err := os.Open(filePath)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	stat, err := f.Stat()
-	if err != nil {
-		return err
-	}
-	c.Header("Content-Disposition", `attachment; filename="`+sanitizeFileName(downloadName)+`"`)
-	original := c.Writer
-	writer := &pacedResponseWriter{ResponseWriter: original, pacer: transferPacer{ctx: c.Request.Context(), rate: bytesPerSec, start: time.Now()}}
-	c.Writer = writer
-	defer func() { c.Writer = original }()
-	http.ServeContent(writer, c.Request, sanitizeFileName(downloadName), stat.ModTime(), f)
-	return writer.err
-}
 func writeDownloadError(c *gin.Context, err error) {
 	// Once bytes/headers were sent, appending JSON would corrupt the file/range
 	// body. Terminate the stream so clients observe a truncated Content-Length.
@@ -127,5 +113,11 @@ func writeDownloadError(c *gin.Context, err error) {
 		c.Abort()
 		panic(http.ErrAbortHandler)
 	}
+	clearDownloadIdentity(c.Writer.Header())
+	c.Writer.Header().Del("Content-Range")
+	c.Writer.Header().Del("Content-Length")
+	c.Header("Cache-Control", privateDownloadCache)
+	c.Header("Content-Disposition", "")
+	c.Header("Content-Type", "application/json")
 	writeFileMutationError(c, err, "download failed")
 }

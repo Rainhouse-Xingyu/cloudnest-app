@@ -17,7 +17,6 @@ import (
 	"image/jpeg"
 	"io"
 	"log"
-	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -640,7 +639,7 @@ func (h *FileHandler) Download(c *gin.Context) {
 		writeFileMutationError(c, err, "download policy unavailable")
 		return
 	}
-	if err := h.sendFileWithRateLimit(c, storage.FilePath, f.Filename, rate); err != nil {
+	if err := h.sendFileWithRateLimit(c, storage.FilePath, f.Filename, rate, &storage); err != nil {
 		writeDownloadError(c, err)
 		return
 	}
@@ -664,7 +663,7 @@ func (h *FileHandler) DownloadVersion(c *gin.Context) {
 		writeFileMutationError(c, err, "download policy unavailable")
 		return
 	}
-	if err := h.sendFileWithRateLimit(c, storage.FilePath, file.Filename, rate); err != nil {
+	if err := h.sendFileWithRateLimit(c, storage.FilePath, file.Filename, rate, &storage); err != nil {
 		writeDownloadError(c, err)
 	}
 }
@@ -709,7 +708,7 @@ func (h *FileHandler) DownloadFolderZip(c *gin.Context) {
 	defer os.Remove(zipPath)
 
 	zipName := sanitizeFileName(folder.Filename) + ".zip"
-	if err := h.sendFileWithRateLimit(c, zipPath, zipName, rate); err != nil {
+	if err := h.sendFileWithRateLimit(c, zipPath, zipName, rate, nil); err != nil {
 		writeDownloadError(c, err)
 		return
 	}
@@ -818,7 +817,7 @@ func (h *FileHandler) BatchDownload(c *gin.Context) {
 		return
 	}
 
-	if err := h.sendFileWithRateLimit(c, zipPath, "batch_download.zip", rate); err != nil {
+	if err := h.sendFileWithRateLimit(c, zipPath, "batch_download.zip", rate, nil); err != nil {
 		writeDownloadError(c, err)
 		return
 	}
@@ -851,28 +850,15 @@ func (h *FileHandler) StreamVideo(c *gin.Context) {
 		return
 	}
 
-	file, err := os.Open(storage.FilePath)
+	rate, err := h.transferRate(c, "download")
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "physical file not found"})
+		writeFileMutationError(c, err, "stream policy unavailable")
 		return
 	}
-	defer file.Close()
-
-	stat, err := file.Stat()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "read file info failed"})
-		return
+	c.Header("Content-Disposition", fmt.Sprintf("inline; filename=%q", sanitizeFileName(f.Filename)))
+	if err := h.sendFileWithRateLimit(c, storage.FilePath, f.Filename, rate, &storage); err != nil {
+		writeDownloadError(c, err)
 	}
-
-	contentType := mime.TypeByExtension(filepath.Ext(f.Filename))
-	if contentType == "" {
-		contentType = "application/octet-stream"
-	}
-
-	// ServeContent 内置处理 Range，能自动返回 206 Partial Content。
-	c.Header("Accept-Ranges", "bytes")
-	c.Header("Content-Type", contentType)
-	http.ServeContent(c.Writer, c.Request, f.Filename, stat.ModTime(), file)
 }
 
 // Thumbnail 生成并缓存图片缩略图，重复请求直接命中缓存。
@@ -908,14 +894,26 @@ func (h *FileHandler) Thumbnail(c *gin.Context) {
 		}
 	}
 
-	thumbPath, err := h.buildOrGetThumbnail(storage.FilePath, f.ID, f.UpdateTime.Unix(), thumbSize)
+	rate, err := h.transferRate(c, "download")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "generate thumbnail failed"})
+		writeFileMutationError(c, err, "thumbnail policy unavailable")
 		return
 	}
-
-	c.Header("Cache-Control", "public, max-age=86400")
-	c.File(thumbPath)
+	source, pinned, err := blob.OpenPinnedStorage(c.Request.Context(), storage)
+	if err != nil {
+		writeDownloadError(c, err)
+		return
+	}
+	defer source.Close()
+	thumbPath, err := h.buildOrGetThumbnail(source, f.ID, strings.ToLower(pinned.FileHash), thumbSize)
+	if err != nil {
+		writeFileMutationError(c, err, "generate thumbnail failed")
+		return
+	}
+	c.Header("Content-Disposition", "inline")
+	if err := h.sendFileWithRateLimit(c, thumbPath, "thumbnail.jpg", rate, nil); err != nil {
+		writeDownloadError(c, err)
+	}
 }
 
 // SearchFiles 按名称/类型/时间进行检索和筛选，支持分页。
@@ -993,27 +991,40 @@ func (h *FileHandler) Preview(c *gin.Context) {
 		return
 	}
 
+	rate, err := h.transferRate(c, "download")
+	if err != nil {
+		writeFileMutationError(c, err, "preview policy unavailable")
+		return
+	}
 	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(f.Filename), "."))
 	if isTextPreviewExt(ext) {
 		const maxPreviewBytes = 1024 * 1024
-		content, truncated, readErr := readTextFileWithLimit(storage.FilePath, maxPreviewBytes)
-		if readErr != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "read file failed"})
+		source, _, err := blob.OpenPinnedStorage(c.Request.Context(), storage)
+		if err != nil {
+			writeDownloadError(c, err)
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{
-			"file_id":   f.ID,
-			"filename":  f.Filename,
-			"type":      "text",
-			"content":   content,
-			"truncated": truncated,
-		})
+		defer source.Close()
+		raw, readErr := io.ReadAll(io.LimitReader(&uploadContextReader{ctx: c.Request.Context(), in: source}, maxPreviewBytes+1))
+		if readErr != nil {
+			writeDownloadError(c, readErr)
+			return
+		}
+		truncated := len(raw) > maxPreviewBytes
+		if truncated {
+			raw = raw[:maxPreviewBytes]
+		}
+		if err := h.sendPreviewJSON(c, rate, gin.H{"file_id": f.ID, "filename": f.Filename, "type": "text", "content": string(raw), "truncated": truncated}); err != nil {
+			writeDownloadError(c, err)
+		}
 		return
 	}
 
 	if isInlinePreviewExt(ext) {
 		c.Header("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", sanitizeFileName(f.Filename)))
-		c.File(storage.FilePath)
+		if err := h.sendFileWithRateLimit(c, storage.FilePath, f.Filename, rate, &storage); err != nil {
+			writeDownloadError(c, err)
+		}
 		return
 	}
 
@@ -1025,7 +1036,9 @@ func (h *FileHandler) Preview(c *gin.Context) {
 		}
 		// 提示前端当前使用的是 Office 基础预览策略。
 		c.Header("X-Preview-Strategy", "office-inline")
-		c.File(storage.FilePath)
+		if err := h.sendFileWithRateLimit(c, storage.FilePath, f.Filename, rate, &storage); err != nil {
+			writeDownloadError(c, err)
+		}
 		return
 	}
 
@@ -1308,14 +1321,14 @@ func (h *FileHandler) PublicShareDownload(c *gin.Context) {
 			return
 		}
 		defer os.Remove(zipPath)
-		if err := h.sendFileWithRateLimit(c, zipPath, sanitizeFileName(file.Filename)+".zip", rate); err != nil {
+		if err := h.sendFileWithRateLimit(c, zipPath, sanitizeFileName(file.Filename)+".zip", rate, nil); err != nil {
 			writeDownloadError(c, err)
 			return
 		}
 		return
 	}
 
-	if err := h.sendFileWithRateLimit(c, storage.FilePath, file.Filename, rate); err != nil {
+	if err := h.sendFileWithRateLimit(c, storage.FilePath, file.Filename, rate, storage); err != nil {
 		writeDownloadError(c, err)
 		return
 	}
@@ -1621,44 +1634,45 @@ func readTextFileWithLimit(path string, limit int64) (string, bool, error) {
 }
 
 // buildOrGetThumbnail 根据源文件生成并缓存缩略图。
-func (h *FileHandler) buildOrGetThumbnail(sourcePath string, fileID int64, versionTag int64, size int) (string, error) {
-	thumbBaseDir := h.thumbBaseDir()
-	if err := os.MkdirAll(thumbBaseDir, 0o755); err != nil {
+func (h *FileHandler) buildOrGetThumbnail(source *os.File, fileID int64, digest string, size int) (string, error) {
+	base := h.thumbBaseDir()
+	if err := os.MkdirAll(base, 0700); err != nil {
 		return "", err
 	}
-
-	cacheName := fmt.Sprintf("thumb_%d_%d_%d.jpg", fileID, versionTag, size)
-	cachePath := filepath.Join(thumbBaseDir, cacheName)
-	if _, err := os.Stat(cachePath); err == nil {
-		return cachePath, nil
+	path := filepath.Join(base, fmt.Sprintf("thumb-v2_%d_%s_%d.jpg", fileID, digest, size))
+	if info, err := os.Lstat(path); err == nil {
+		if !info.Mode().IsRegular() {
+			return "", contract.ErrStorageIntegrity
+		}
+		return path, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", err
 	}
-
-	srcFile, err := os.Open(sourcePath)
+	img, _, err := image.Decode(source)
 	if err != nil {
 		return "", err
 	}
-	defer srcFile.Close()
-
-	img, _, err := image.Decode(srcFile)
+	out, err := os.CreateTemp(base, ".thumb-v2-*.tmp")
 	if err != nil {
 		return "", err
 	}
-
-	thumb := resizeToMaxEdge(img, size)
-	outFile, err := os.Create(cachePath)
-	if err != nil {
+	defer os.Remove(out.Name())
+	defer out.Close()
+	if err := jpeg.Encode(out, resizeToMaxEdge(img, size), &jpeg.Options{Quality: 82}); err != nil {
 		return "", err
 	}
-	defer outFile.Close()
-
-	if err := jpeg.Encode(outFile, thumb, &jpeg.Options{Quality: 82}); err != nil {
+	if err := out.Sync(); err != nil {
 		return "", err
 	}
-
-	return cachePath, nil
+	if err := out.Close(); err != nil {
+		return "", err
+	}
+	if err := os.Link(out.Name(), path); err != nil && !errors.Is(err, os.ErrExist) {
+		return "", err
+	}
+	return path, nil
 }
 
-// resizeToMaxEdge 将图片按比例缩放到指定最长边，避免原图过大导致预览缓慢。
 func resizeToMaxEdge(src image.Image, maxEdge int) image.Image {
 	b := src.Bounds()
 	sw := b.Dx()

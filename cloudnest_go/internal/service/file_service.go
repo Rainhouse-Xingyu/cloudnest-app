@@ -493,9 +493,7 @@ func (s *FileService) ResolveFileVersion(ctx context.Context, uid, fileID int64,
 	if err != nil {
 		return model.File{}, model.Storage{}, err
 	}
-	if err := blob.VerifyStorageObject(ctx, storage); err != nil {
-		return model.File{}, model.Storage{}, err
-	}
+	// The response opens, verifies and serves the same pinned descriptor.
 	return file, storage, nil
 }
 
