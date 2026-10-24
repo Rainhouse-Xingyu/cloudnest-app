@@ -54,7 +54,7 @@ func (m *Manager) Reconcile(ctx context.Context) (Report, error) {
 	}
 	report.Blocked = int(blocked)
 	var tokens []string
-	if err := m.db.WithContext(ctx).Table("transfer_artifact AS a").Joins("LEFT JOIN upload_task AS t ON t.id=a.task_id").Where("a.volume_id=? AND a.state NOT IN ('done','published','blocked') AND ((a.kind='archive' AND (a.state IN ('discard','deleting') OR a.expires_at<=UTC_TIMESTAMP(6))) OR (a.kind<>'archive' AND (a.state IN ('discard','deleting') OR (a.state<>'chunk' AND (a.expires_at<=UTC_TIMESTAMP(6) OR t.status=2 OR a.transfer_epoch<>t.transfer_epoch)) OR t.id IS NULL OR t.status NOT IN (0,2) OR t.expires_at<=UTC_TIMESTAMP(6))))", id).Order("a.created_at,a.token").Limit(64).Pluck("a.token", &tokens).Error; err != nil {
+	if err := m.db.WithContext(ctx).Table("transfer_artifact AS a").Joins("LEFT JOIN upload_task AS t ON t.id=a.task_id").Where("a.volume_id=? AND a.state NOT IN ('done','published','blocked') AND ((a.kind IN ('archive','thumbnail') AND (a.state IN ('discard','deleting') OR a.expires_at<=UTC_TIMESTAMP(6))) OR (a.kind NOT IN ('archive','thumbnail') AND (a.state IN ('discard','deleting') OR (a.state<>'chunk' AND (a.expires_at<=UTC_TIMESTAMP(6) OR t.status=2 OR a.transfer_epoch<>t.transfer_epoch)) OR t.id IS NULL OR t.status NOT IN (0,2) OR t.expires_at<=UTC_TIMESTAMP(6))))", id).Order("a.created_at,a.token").Limit(64).Pluck("a.token", &tokens).Error; err != nil {
 		return report, unavailable(err)
 	}
 	for _, token := range tokens {
@@ -172,7 +172,7 @@ func (m *Manager) reconcileOne(ctx context.Context, token string) (string, error
 		if err := tx.Model(&model.TransferArtifact{}).Where("token=? AND expires_at>UTC_TIMESTAMP(6)", token).Count(&leaseLive).Error; err != nil {
 			return err
 		}
-		if current.Kind == "archive" && (current.State == "intent" || current.State == "writing" || current.State == "ready") && leaseLive != 0 {
+		if requestArtifact(current.Kind) && (current.State == "intent" || current.State == "writing" || current.State == "ready" || current.State == "cached") && leaseLive != 0 {
 			return nil
 		}
 		if current.State == "chunk" && taskLive != 0 {
@@ -213,7 +213,7 @@ func (m *Manager) reconcileOne(ctx context.Context, token string) (string, error
 			blocked = true
 			return record(tx, current.UserID, "transfer_blocked", token)
 		}
-		if err := tx.Model(&current).Update("state", "deleting").Error; err != nil {
+		if err := tx.Model(&current).Updates(map[string]any{"state": "deleting", "cache_key": nil}).Error; err != nil {
 			return err
 		}
 		if err := record(tx, current.UserID, "transfer_delete_intent", token); err != nil {

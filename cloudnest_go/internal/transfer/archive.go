@@ -2,7 +2,6 @@ package transfer
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/hex"
 	"io"
 	"os"
@@ -19,7 +18,7 @@ const archiveQuantum int64 = 1 << 20
 const maxArchiveBytes int64 = 1 << 40
 
 func artifactTaskForUpdate(tx *gorm.DB, artifact model.TransferArtifact) (model.UploadTask, error) {
-	if artifact.Kind == "archive" {
+	if requestArtifact(artifact.Kind) {
 		if artifact.TaskID != 0 || artifact.TransferEpoch != 0 {
 			return model.UploadTask{}, contract.ErrTransferUnavailable
 		}
@@ -32,12 +31,16 @@ func artifactTaskForUpdate(tx *gorm.DB, artifact model.TransferArtifact) (model.
 
 // Called with the handle mutex held. The capacity change commits before any
 // payload write, and unknown commit outcomes leave durable charges in place.
-func (h *Handle) growArchive(add int64) error {
-	if add < 0 || add > maxArchiveBytes-h.written {
+func (h *Handle) growTemporary(add int64) error {
+	maximum, quantum := maxArchiveBytes, archiveQuantum
+	if h.artifact.Kind == "thumbnail" {
+		maximum, quantum = MaxThumbnailBytes, 64<<10
+	}
+	if add < 0 || add > maximum-h.written {
 		return contract.ErrTransferSpace
 	}
 	need := h.written + add
-	target := min(((need+archiveQuantum-1)/archiveQuantum)*archiveQuantum, maxArchiveBytes)
+	target := min(((need+quantum-1)/quantum)*quantum, maximum)
 	ctx, stop := context.WithTimeout(h.ctx, 5*time.Second)
 	defer stop()
 	err := h.manager.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -53,7 +56,7 @@ func (h *Handle) growArchive(add int64) error {
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("token=? AND state='writing' AND expires_at>UTC_TIMESTAMP(6)", h.Token()).First(&row).Error; err != nil {
 			return err
 		}
-		if row.Kind != "archive" || row.TaskID != 0 || row.TransferEpoch != 0 || row.VolumeID != h.artifact.VolumeID || row.UserID != h.artifact.UserID || row.Bytes != h.artifact.Bytes || row.Device != h.artifact.Device || row.Inode != h.artifact.Inode {
+		if row.Kind != h.artifact.Kind || row.TaskID != 0 || row.TransferEpoch != 0 || row.VolumeID != h.artifact.VolumeID || row.UserID != h.artifact.UserID || row.Bytes != h.artifact.Bytes || row.Device != h.artifact.Device || row.Inode != h.artifact.Inode {
 			return contract.ErrTransferUnavailable
 		}
 		usage, err := usage(tx, row.VolumeID)
@@ -71,6 +74,13 @@ func (h *Handle) growArchive(add int64) error {
 			return contract.ErrTransferSpace
 		}
 		capacity := min(volume.LimitBytes-(usage.Charged-row.Bytes), free-volume.MinFreeBytes-(usage.Unwritten-row.Bytes))
+		if row.Kind == "thumbnail" {
+			_, charged, err := thumbnailUsage(tx, row.VolumeID)
+			if err != nil {
+				return err
+			}
+			capacity = min(capacity, thumbnailCapacity(volume)-(charged-row.Bytes))
+		}
 		target = min(target, capacity)
 		if target < need {
 			return contract.ErrTransferSpace
@@ -78,7 +88,7 @@ func (h *Handle) growArchive(add int64) error {
 		if err := tx.Model(&row).Update("bytes", target).Error; err != nil {
 			return err
 		}
-		return record(tx, row.UserID, "transfer_archive_grow", row.Token)
+		return record(tx, row.UserID, "transfer_"+row.Kind+"_grow", row.Token)
 	})
 	if err != nil {
 		return unavailable(err)
@@ -122,27 +132,8 @@ func (h *Handle) ArchiveReader() (*os.File, string, error) {
 	if err := h.ctx.Err(); err != nil {
 		return nil, "", context.Cause(h.ctx)
 	}
-	info, err := h.file.Stat()
+	digest, err := verifyArtifactFile(h.ctx, h.file, h.artifact)
 	if err != nil {
-		return nil, "", err
-	}
-	device, inode, err := fileIdentity(h.file)
-	if err != nil || device != h.artifact.Device || inode != h.artifact.Inode || !info.Mode().IsRegular() || info.Size() != h.artifact.Size {
-		return nil, "", contract.ErrStorageIntegrity
-	}
-	if _, err := h.file.Seek(0, io.SeekStart); err != nil {
-		return nil, "", err
-	}
-	sum := sha256.New()
-	n, err := io.CopyBuffer(sum, archiveContextReader{ctx: h.ctx, in: h.file}, make([]byte, 64<<10))
-	if err != nil {
-		return nil, "", err
-	}
-	digest := hex.EncodeToString(sum.Sum(nil))
-	if n != h.artifact.Size || digest != h.artifact.SHA256 {
-		return nil, "", contract.ErrStorageIntegrity
-	}
-	if _, err := h.file.Seek(0, io.SeekStart); err != nil {
 		return nil, "", err
 	}
 	return h.file, digest, nil

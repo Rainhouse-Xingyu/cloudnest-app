@@ -15,21 +15,29 @@ func CheckTransferSchema(db *gorm.DB) error {
 	}
 	for table, columns := range map[string]map[string]string{
 		"transfer_volume":   {"id": "char", "root_path": "varchar", "limit_bytes": "bigint", "min_free_bytes": "bigint"},
-		"transfer_artifact": {"transfer_epoch": "bigint", "token": "char", "volume_id": "char", "relative_path": "varchar", "user_id": "bigint", "task_id": "bigint", "kind": "varchar", "state": "varchar", "bytes": "bigint", "size": "bigint", "sha256": "char", "device": "bigint", "inode": "bigint", "expires_at": "datetime", "created_at": "datetime"},
+		"transfer_artifact": {"cache_key": "char", "transfer_epoch": "bigint", "token": "char", "volume_id": "char", "relative_path": "varchar", "user_id": "bigint", "task_id": "bigint", "kind": "varchar", "state": "varchar", "bytes": "bigint", "size": "bigint", "sha256": "char", "device": "bigint", "inode": "bigint", "expires_at": "datetime", "created_at": "datetime"},
 	} {
 		var rows []struct {
 			ColumnName, DataType, IsNullable, ColumnType string
 			ColumnDefault                                *string
 			DatetimePrecision                            *int64
+			CharacterMaximumLength                       *int64
 		}
-		if err := db.Raw("SELECT column_name,data_type,is_nullable,column_type,column_default,datetime_precision FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=?", table).Scan(&rows).Error; err != nil {
+		if err := db.Raw("SELECT column_name,data_type,is_nullable,column_type,column_default,datetime_precision,character_maximum_length FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=?", table).Scan(&rows).Error; err != nil {
 			return err
 		}
 		if len(rows) != len(columns) {
 			return errors.New("transfer registry schema missing or changed")
 		}
 		for _, row := range rows {
-			if columns[row.ColumnName] != row.DataType || row.IsNullable != "NO" {
+			nullable := "NO"
+			if table == "transfer_artifact" && row.ColumnName == "cache_key" {
+				nullable = "YES"
+				if row.ColumnDefault != nil || row.CharacterMaximumLength == nil || *row.CharacterMaximumLength != 64 {
+					return errors.New("thumbnail cache key schema changed")
+				}
+			}
+			if columns[row.ColumnName] != row.DataType || row.IsNullable != nullable {
 				return errors.New("transfer registry column changed")
 			}
 			if row.ColumnName == "transfer_epoch" && (row.ColumnType != "bigint" || row.ColumnDefault == nil || *row.ColumnDefault != "0") {
@@ -47,6 +55,7 @@ func CheckTransferSchema(db *gorm.DB) error {
 	}{
 		{"transfer_volume", "PRIMARY", []string{"id"}, 0}, {"transfer_artifact", "PRIMARY", []string{"token"}, 0},
 		{"transfer_artifact", "idx_transfer_path", []string{"volume_id", "relative_path"}, 0},
+		{"transfer_artifact", "idx_transfer_cache", []string{"volume_id", "cache_key"}, 0},
 		{"transfer_artifact", "idx_transfer_reconcile", []string{"volume_id", "state", "expires_at"}, 1},
 	} {
 		var parts []fileNameIndexPart

@@ -53,7 +53,7 @@ type Usage struct {
 
 func usage(tx *gorm.DB, volume string) (Usage, error) {
 	var result Usage
-	err := tx.Raw(`SELECT COALESCE(SUM(bytes),0) AS charged,COALESCE(SUM(IF(state IN ('intent','writing'),bytes,0)),0) AS unwritten,COALESCE(SUM(IF(bytes<=0 OR size<0 OR kind NOT IN ('chunk','merge','archive') OR (kind='archive' AND (task_id<>0 OR transfer_epoch<>0)) OR state NOT IN ('intent','writing','ready','chunk','discard','deleting','blocked'),1,0)),0) AS broken FROM transfer_artifact WHERE volume_id=? AND state NOT IN ('done','published')`, volume).Scan(&result).Error
+	err := tx.Raw(`SELECT COALESCE(SUM(bytes),0) AS charged,COALESCE(SUM(IF(state IN ('intent','writing'),bytes,0)),0) AS unwritten,COALESCE(SUM(IF(bytes<=0 OR size<0 OR kind NOT IN ('chunk','merge','archive','thumbnail') OR (kind IN ('archive','thumbnail') AND (task_id<>0 OR transfer_epoch<>0)) OR (kind<>'thumbnail' AND cache_key IS NOT NULL) OR (state='cached' AND kind<>'thumbnail') OR (kind='thumbnail' AND state IN ('intent','writing','ready','cached') AND (cache_key IS NULL OR cache_key NOT REGEXP '^[0-9a-f]{64}$')) OR state NOT IN ('intent','writing','ready','cached','chunk','discard','deleting','blocked'),1,0)),0) AS broken FROM transfer_artifact WHERE volume_id=? AND state NOT IN ('done','published')`, volume).Scan(&result).Error
 	if err != nil || result.Charged < 0 || result.Unwritten < 0 || result.Unwritten > result.Charged {
 		return result, contract.ErrTransferUnavailable
 	}
@@ -103,22 +103,25 @@ func (m *Manager) Create(ctx context.Context, uid, taskID int64, kind string, by
 	if expectedEpoch < 0 || (kind != "chunk" && kind != "merge") {
 		return nil, contract.ErrUploadContract
 	}
-	return m.create(ctx, uid, taskID, kind, bytes, expectedEpoch)
+	return m.create(ctx, uid, taskID, kind, bytes, expectedEpoch, "")
 }
 
 // CreateArchive is a request-scoped artifact, never a synthetic upload task.
 // Capacity grows durably before writes; the open FD remains locked until Close.
 func (m *Manager) CreateArchive(ctx context.Context, uid int64) (*Handle, error) {
-	return m.create(ctx, uid, 0, "archive", 1, 0)
+	return m.create(ctx, uid, 0, "archive", 1, 0, "")
 }
 
-func (m *Manager) create(ctx context.Context, uid, taskID int64, kind string, bytes int64, expectedEpoch int64) (*Handle, error) {
+func (m *Manager) create(ctx context.Context, uid, taskID int64, kind string, bytes int64, expectedEpoch int64, cacheKey string) (*Handle, error) {
 	parent := ctx
 	operation, stop := context.WithTimeout(ctx, 5*time.Second)
 	defer stop()
 	ctx = operation
-	if m.seedLimit <= 0 || m.seedLimit > 4<<40 || bytes <= 0 || bytes > contract.MaxUploadFileBytes+1 || (kind != "chunk" && kind != "merge" && kind != "archive") {
+	if m.seedLimit <= 0 || m.seedLimit > 4<<40 || bytes <= 0 || bytes > contract.MaxUploadFileBytes+1 || (kind != "chunk" && kind != "merge" && kind != "archive" && kind != "thumbnail") {
 		return nil, contract.ErrTransferUnavailable
+	}
+	if (kind == "thumbnail" && !blob.ValidToken(cacheKey)) || (kind != "thumbnail" && cacheKey != "") {
+		return nil, contract.ErrInvalidInput
 	}
 	root, err := m.openRoot(ctx, true)
 	if err != nil {
@@ -134,6 +137,9 @@ func (m *Manager) create(ctx context.Context, uid, taskID int64, kind string, by
 		return nil, contract.ErrTransferUnavailable
 	}
 	artifact := model.TransferArtifact{TransferEpoch: expectedEpoch, Token: token, VolumeID: root.id, RelativePath: relative, UserID: uid, TaskID: taskID, Kind: kind, State: "intent", Bytes: bytes, ExpiresAt: time.Now().UTC().Add(leaseSeconds * time.Second)}
+	if kind == "thumbnail" {
+		artifact.CacheKey = &cacheKey
+	}
 	err = m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := quota.Begin(tx, uid); err != nil {
 			return err
@@ -142,8 +148,11 @@ func (m *Manager) create(ctx context.Context, uid, taskID int64, kind string, by
 		if err != nil {
 			return err
 		}
+		if volume.LimitBytes <= 0 || volume.LimitBytes > 4<<40 || volume.MinFreeBytes < 0 {
+			return contract.ErrTransferUnavailable
+		}
 		var task model.UploadTask
-		if kind != "archive" {
+		if !requestArtifact(kind) {
 			task, err = taskForUpdate(tx, uid, taskID)
 			if err != nil {
 				return err
@@ -171,7 +180,7 @@ func (m *Manager) create(ctx context.Context, uid, taskID int64, kind string, by
 			}
 		} else {
 			var total, owned int64
-			q := tx.Model(&model.TransferArtifact{}).Where("volume_id=? AND kind='archive' AND state IN ('intent','writing','ready')", root.id)
+			q := tx.Model(&model.TransferArtifact{}).Where("volume_id=? AND kind IN ('archive','thumbnail') AND state IN ('intent','writing','ready')", root.id)
 			if err := q.Count(&total).Error; err != nil {
 				return err
 			}
@@ -183,6 +192,22 @@ func (m *Manager) create(ctx context.Context, uid, taskID int64, kind string, by
 			}
 		}
 
+		if kind == "thumbnail" {
+			var existing int64
+			if err := tx.Model(&model.TransferArtifact{}).Where("volume_id=? AND cache_key=?", root.id, cacheKey).Count(&existing).Error; err != nil {
+				return err
+			}
+			if existing != 0 {
+				return contract.ErrTransferBusy
+			}
+			count, charged, err := thumbnailUsage(tx, root.id)
+			if err != nil {
+				return err
+			}
+			if count >= MaxThumbnailEntries || bytes > thumbnailCapacity(volume)-charged {
+				return contract.ErrTransferSpace
+			}
+		}
 		current, err := usage(tx, root.id)
 		if err != nil {
 			return err
@@ -206,7 +231,7 @@ func (m *Manager) create(ctx context.Context, uid, taskID int64, kind string, by
 		if err := tx.Model(&artifact).Update("expires_at", gorm.Expr("DATE_ADD(UTC_TIMESTAMP(6),INTERVAL 90 SECOND)")).Error; err != nil {
 			return err
 		}
-		if kind != "archive" {
+		if !requestArtifact(kind) {
 			updates := map[string]any{"transfer_volume": root.id}
 			if kind == "merge" {
 				updates["merge_artifact"] = token
@@ -254,7 +279,7 @@ func (m *Manager) create(ctx context.Context, uid, taskID int64, kind string, by
 		if _, err := m.volume(tx, root, false); err != nil {
 			return err
 		}
-		if kind != "archive" {
+		if !requestArtifact(kind) {
 			task, err := taskForUpdate(tx, uid, taskID)
 			if err != nil {
 				return err
@@ -270,7 +295,7 @@ func (m *Manager) create(ctx context.Context, uid, taskID int64, kind string, by
 			return update.Error
 		}
 		if update.RowsAffected != 1 {
-			if kind == "archive" {
+			if requestArtifact(kind) {
 				return contract.ErrTransferUnavailable
 			}
 			return contract.ErrUploadContract
@@ -369,7 +394,7 @@ func (m *Manager) discard(ctx context.Context, artifact model.TransferArtifact) 
 		if refs != 0 {
 			return contract.ErrTransferUnavailable
 		}
-		if err := tx.Model(&current).Update("state", "discard").Error; err != nil {
+		if err := tx.Model(&current).Updates(map[string]any{"state": "discard", "cache_key": nil}).Error; err != nil {
 			return err
 		}
 		return record(tx, current.UserID, "transfer_discard", current.Token)
@@ -402,7 +427,7 @@ func (m *Manager) abortNoFile(parent context.Context, root *rootScope, artifact 
 		if current.VolumeID != root.id || current.State != "intent" || current.Inode != 0 {
 			return contract.ErrTransferUnavailable
 		}
-		if err := tx.Model(&current).Update("state", "done").Error; err != nil {
+		if err := tx.Model(&current).Updates(map[string]any{"state": "done", "cache_key": nil}).Error; err != nil {
 			return err
 		}
 		if task.MergeArtifact == artifact.Token {

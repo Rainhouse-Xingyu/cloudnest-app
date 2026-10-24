@@ -14,12 +14,14 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
 	"cloudenest_go/internal/service/contract"
+	"cloudenest_go/internal/transfer"
+	"crypto/sha256"
 	"github.com/gin-gonic/gin"
+	"log"
 )
 
 const (
@@ -221,82 +223,84 @@ func writeThumbnailError(c *gin.Context, err error) {
 	}
 }
 
-// Cache keys include the source digest. Persistent cache capacity and eviction
-// remain separate work; decode admission is not a disk budget.
-func (h *FileHandler) buildOrGetThumbnail(ctx context.Context, source *os.File, fileID int64, digest string, size int) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, thumbnailBuildTimeout)
+// Old unregistered cache files are never adopted or deleted.
+func (h *FileHandler) buildOrGetThumbnail(parent context.Context, source *os.File, uid, fileID int64, digest string, size int) (*transfer.ThumbnailReader, error) {
+	ctx, cancel := context.WithTimeout(parent, thumbnailBuildTimeout)
 	defer cancel()
 	cfg, format, err := thumbnailConfig(ctx, source)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	base := h.thumbBaseDir()
-	path := filepath.Join(base, fmt.Sprintf("thumb-v2_%d_%s_%d.jpg", fileID, digest, size))
-	cached := func() (bool, error) {
-		info, err := os.Lstat(path)
-		if errors.Is(err, os.ErrNotExist) {
-			return false, nil
-		}
-		if err != nil {
-			return false, err
-		}
-		if !info.Mode().IsRegular() {
-			return false, contract.ErrStorageIntegrity
-		}
-		return true, nil
+	if h.Transfers == nil {
+		return nil, contract.ErrTransferUnavailable
 	}
-	if hit, err := cached(); hit || err != nil {
-		return path, err
+	key := fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("thumbnail-v3:%d:%s:%d", fileID, digest, size))))
+	waitDeadline := time.Now().Add(thumbnailWaitTimeout)
+	var candidate *transfer.Handle
+	for {
+		cached, err := h.Transfers.OpenThumbnail(ctx, key)
+		if err == nil && cached != nil {
+			return cached, nil
+		}
+		if err == nil {
+			candidate, err = h.Transfers.CreateThumbnail(ctx, uid, key)
+		}
+		// A competing immutable-key build is retried within a bounded wait.
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, contract.ErrTransferBusy) {
+			return nil, err
+		}
+		if time.Now().After(waitDeadline) {
+			return nil, errThumbnailBusy
+		}
+		timer := time.NewTimer(20 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
 	}
+	keep := false
+	defer func() {
+		if err := candidate.Close(!keep); err != nil {
+			log.Print("thumbnail cleanup retained for transfer reconciliation")
+		}
+	}()
 	weight, err := thumbnailWeight(cfg.Width, cfg.Height)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	release, err := processThumbnailBudget.acquire(ctx, weight)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer release()
-	// A build that released the budget may already have published our key.
-	if hit, err := cached(); hit || err != nil {
-		return path, err
-	}
 	img, err := decodeThumbnail(ctx, source, cfg, format)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	resized, err := resizeThumbnail(ctx, img, size)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	if err := os.MkdirAll(base, 0700); err != nil {
-		return "", err
-	}
-	out, err := os.CreateTemp(base, ".thumb-v2-*.tmp")
-	if err != nil {
-		return "", err
-	}
-	defer os.Remove(out.Name())
-	defer out.Close()
-	if err := jpeg.Encode(archiveOutput{ctx: ctx, out: out}, resized, &jpeg.Options{Quality: 82}); err != nil {
-		return "", err
+	if err := jpeg.Encode(archiveOutput{ctx: ctx, out: candidate}, resized, &jpeg.Options{Quality: 82}); err != nil {
+		return nil, err
 	}
 	if err := ctx.Err(); err != nil {
-		return "", err
+		return nil, err
 	}
-	if err := out.Sync(); err != nil {
-		return "", err
+	if err := candidate.SealThumbnail(); err != nil {
+		return nil, err
 	}
-	if err := out.Close(); err != nil {
-		return "", err
+	keep = true
+	cached, err := h.Transfers.OpenThumbnail(ctx, key)
+	if err == nil && cached == nil {
+		err = contract.ErrTransferUnavailable
 	}
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
-	if err := os.Link(out.Name(), path); err != nil && !errors.Is(err, os.ErrExist) {
-		return "", err
-	}
-	return path, nil
+	return cached, err
 }
 
 func resizeThumbnail(ctx context.Context, src image.Image, maxEdge int) (image.Image, error) {

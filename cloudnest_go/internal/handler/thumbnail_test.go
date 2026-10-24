@@ -175,7 +175,7 @@ func TestThumbnailCancellationLeavesNoCacheOrDetachedWork(t *testing.T) {
 	handler := FileHandler{Cfg: config.Config{DataDir: root}}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := handler.buildOrGetThumbnail(ctx, source, 1, "test", 64); !errors.Is(err, context.Canceled) {
+	if _, err := handler.buildOrGetThumbnail(ctx, source, 1, 1, "test", 64); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
 	entries, err := os.ReadDir(root)

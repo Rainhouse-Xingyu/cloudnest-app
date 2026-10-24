@@ -53,11 +53,28 @@ func (h *Handle) Write(p []byte) (int, error) {
 		return 0, err
 	}
 	if int64(len(p)) > h.artifact.Bytes-h.written {
-		if h.artifact.Kind != "archive" {
+		if !requestArtifact(h.artifact.Kind) {
 			return 0, contract.ErrTransferSpace
 		}
-		if err := h.growArchive(int64(len(p))); err != nil {
-			return 0, err
+		if h.artifact.Kind == "thumbnail" && int64(len(p)) > MaxThumbnailBytes-h.written {
+			return 0, contract.ErrTransferSpace
+		}
+		var err error
+		for attempt := 0; attempt <= 16; attempt++ {
+			err = h.growTemporary(int64(len(p)))
+			if err == nil {
+				break
+			}
+			if h.artifact.Kind != "thumbnail" || !errors.Is(err, contract.ErrTransferSpace) || attempt == 16 {
+				return 0, err
+			}
+			removed, evictErr := h.manager.evictThumbnail(h.ctx)
+			if evictErr != nil {
+				return 0, evictErr
+			}
+			if !removed {
+				return 0, err
+			}
 		}
 	}
 	n, err := h.file.Write(p)
@@ -96,7 +113,7 @@ func (h *Handle) Seal(size int64, digest string) error {
 		if _, err := h.manager.volume(tx, scope, false); err != nil {
 			return err
 		}
-		if h.artifact.Kind != "archive" {
+		if !requestArtifact(h.artifact.Kind) {
 			task, err := taskForUpdate(tx, h.artifact.UserID, h.artifact.TaskID)
 			if err != nil {
 				return err
@@ -113,7 +130,7 @@ func (h *Handle) Seal(size int64, digest string) error {
 			return result.Error
 		}
 		if result.RowsAffected != 1 {
-			if h.artifact.Kind == "archive" {
+			if requestArtifact(h.artifact.Kind) {
 				return contract.ErrTransferUnavailable
 			}
 			return contract.ErrUploadContract
@@ -140,16 +157,22 @@ func (h *Handle) renew() {
 		case <-ticker.C:
 			ctx, stop := context.WithTimeout(h.ctx, 5*time.Second)
 			q := h.manager.db.WithContext(ctx).Model(&model.TransferArtifact{}).Where("token=? AND state IN ('writing','ready') AND expires_at>UTC_TIMESTAMP(6)", h.Token())
-			if h.artifact.Kind == "archive" {
-				q = q.Where("kind='archive' AND task_id=0 AND transfer_epoch=0")
+			if requestArtifact(h.artifact.Kind) {
+				q = q.Where("kind=? AND task_id=0 AND transfer_epoch=0", h.artifact.Kind)
 			} else {
 				q = q.Where("EXISTS (SELECT 1 FROM upload_task WHERE id=? AND status=0 AND transfer_epoch=? AND expires_at>UTC_TIMESTAMP(6))", h.artifact.TaskID, h.artifact.TransferEpoch)
 			}
 			result := q.Update("expires_at", gorm.Expr("DATE_ADD(UTC_TIMESTAMP(6),INTERVAL 90 SECOND)"))
 			stop()
+			if result.Error == nil && result.RowsAffected == 0 && h.artifact.Kind == "thumbnail" {
+				var cached int64
+				if h.manager.db.WithContext(h.ctx).Model(&model.TransferArtifact{}).Where("token=? AND state='cached' AND expires_at>UTC_TIMESTAMP(6)", h.Token()).Count(&cached).Error == nil && cached == 1 {
+					return
+				}
+			}
 			if result.Error != nil || result.RowsAffected != 1 {
 				cause := contract.ErrUploadContract
-				if result.Error != nil || h.artifact.Kind == "archive" {
+				if result.Error != nil || requestArtifact(h.artifact.Kind) {
 					cause = contract.ErrTransferUnavailable
 				}
 				h.cancel(cause)

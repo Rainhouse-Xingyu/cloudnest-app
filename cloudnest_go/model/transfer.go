@@ -16,9 +16,10 @@ func (TransferVolume) TableName() string { return "transfer_volume" }
 // Records survive unlink/ownership handoff. Published/done are uncharged; all
 // other states, including blocked/uncertain records, retain their reservation.
 type TransferArtifact struct {
+	CacheKey      *string   `gorm:"type:char(64);uniqueIndex:idx_transfer_cache,priority:2" json:"-"`
 	TransferEpoch int64     `gorm:"type:bigint;not null;default:0" json:"-"`
 	Token         string    `gorm:"type:char(64);primaryKey" json:"token"`
-	VolumeID      string    `gorm:"type:char(64);not null;uniqueIndex:idx_transfer_path,priority:1;index:idx_transfer_reconcile,priority:1" json:"-"`
+	VolumeID      string    `gorm:"type:char(64);not null;uniqueIndex:idx_transfer_path,priority:1;uniqueIndex:idx_transfer_cache,priority:1;index:idx_transfer_reconcile,priority:1" json:"-"`
 	RelativePath  string    `gorm:"type:varchar(500);not null;uniqueIndex:idx_transfer_path,priority:2" json:"-"`
 	UserID        int64     `gorm:"not null;index" json:"-"`
 	TaskID        int64     `gorm:"not null;index" json:"-"`

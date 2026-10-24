@@ -111,7 +111,6 @@ type FileSearchQuery struct {
 const (
 	defaultDataDir = "data"
 	storageSubDir  = "storage"
-	thumbSubDir    = "thumbnails"
 
 	shareRateWindow        = 60 * time.Second
 	shareInfoRateLimit     = 60
@@ -874,13 +873,14 @@ func (h *FileHandler) Thumbnail(c *gin.Context) {
 		return
 	}
 	defer source.Close()
-	thumbPath, err := h.buildOrGetThumbnail(c.Request.Context(), source, f.ID, strings.ToLower(pinned.FileHash), thumbSize)
+	thumb, err := h.buildOrGetThumbnail(c.Request.Context(), source, uid, f.ID, strings.ToLower(pinned.FileHash), thumbSize)
 	if err != nil {
 		writeThumbnailError(c, err)
 		return
 	}
+	defer thumb.Close()
 	c.Header("Content-Disposition", "inline")
-	if err := h.sendFileWithRateLimit(c, thumbPath, "thumbnail.jpg", rate, nil); err != nil {
+	if err := h.serveFileIdentity(c, thumb.File, thumb.Digest, "thumbnail.jpg", rate); err != nil {
 		writeDownloadError(c, err)
 	}
 }
@@ -1429,10 +1429,6 @@ func (h *FileHandler) dataRootDir() string {
 
 func (h *FileHandler) storageBaseDir() string {
 	return filepath.Join(h.dataRootDir(), storageSubDir)
-}
-
-func (h *FileHandler) thumbBaseDir() string {
-	return filepath.Join(h.dataRootDir(), thumbSubDir)
 }
 
 func (h *FileHandler) mergeChunks(ctx context.Context, uid int64, snapshot service.FileUploadTaskSnapshot) (candidate *transfer.Handle, size int64, digest string, result error) {

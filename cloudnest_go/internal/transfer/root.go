@@ -166,6 +166,9 @@ func syncDirs(root *os.Root, paths []string) error {
 	return nil
 }
 func artifactRelative(kind, token string) string {
+	if kind == "thumbnail" {
+		return filepath.Join(".thumbnails-v3", "thumbnail-"+token+".jpg")
+	}
 	if kind == "archive" {
 		return filepath.Join(".archives-v1", "archive-"+token+".zip")
 	}
@@ -177,6 +180,9 @@ func artifactRelative(kind, token string) string {
 func validRelative(kind, token, relative string) bool {
 	if !blob.ValidToken(token) || !blob.CleanRelative(relative) {
 		return false
+	}
+	if kind == "thumbnail" {
+		return relative == filepath.Join(".thumbnails-v3", "thumbnail-"+token+".jpg")
 	}
 	if kind == "archive" {
 		return relative == filepath.Join(".archives-v1", "archive-"+token+".zip")

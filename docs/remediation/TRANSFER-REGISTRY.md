@@ -61,3 +61,5 @@ audit-transfers 只读，无 SQL 写入或文件初始化；未初始化卷明�
 ## 请求级 ZIP 扩展
 
 后续增加 kind=archive、task_id=0/transfer_epoch=0 的派生登记，不虚构上传任务；严格 .archives-v1 随机路径，按实际压缩写入前申请增长，与上传共享卷/真实空闲量。HTTP 输出结束前保持收费与 FD 锁，90/20 秒续约不检查 UploadTask；同一 reconciler 可回收过期归档，未知身份/引用保留。旧 worker/CLI 必须整体更新，本批不新增列或自动接管旧路径。完整限制、错误与实际证据见 [归档协议](ARCHIVE-TRANSFERS.md)；缓存持久预算仍待做。
+
+新缩略图持久缓存后续已增加 thumbnail/cached、可空 cache_key 与唯一索引、共享卷/独立子预算、FD 读取保护及统一受控回收，见 [缓存协议](THUMBNAIL-CACHE.md)。旧未登记缓存不采用；所有写实例/worker/维护 CLI 须同步升级并显式 migrate，不能由旧二进制接管新类型。
