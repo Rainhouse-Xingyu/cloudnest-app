@@ -10,10 +10,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"image"
-	"image/color"
-	"image/draw"
-	"image/jpeg"
 	"io"
 	"log"
 	"net/http"
@@ -34,9 +30,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
-
-	_ "image/gif"
-	_ "image/png"
 )
 
 // FileHandler handles file system related APIs.
@@ -871,15 +864,19 @@ func (h *FileHandler) Thumbnail(c *gin.Context) {
 		writeFileMutationError(c, err, "thumbnail policy unavailable")
 		return
 	}
+	if storage.FileSize != nil && *storage.FileSize > thumbnailMaxEncodedBytes {
+		writeThumbnailError(c, errThumbnailLimit)
+		return
+	}
 	source, pinned, err := blob.OpenPinnedStorage(c.Request.Context(), storage)
 	if err != nil {
 		writeDownloadError(c, err)
 		return
 	}
 	defer source.Close()
-	thumbPath, err := h.buildOrGetThumbnail(source, f.ID, strings.ToLower(pinned.FileHash), thumbSize)
+	thumbPath, err := h.buildOrGetThumbnail(c.Request.Context(), source, f.ID, strings.ToLower(pinned.FileHash), thumbSize)
 	if err != nil {
-		writeFileMutationError(c, err, "generate thumbnail failed")
+		writeThumbnailError(c, err)
 		return
 	}
 	c.Header("Content-Disposition", "inline")
@@ -1603,86 +1600,6 @@ func readTextFileWithLimit(path string, limit int64) (string, bool, error) {
 		return string(buf[:limit]), true, nil
 	}
 	return string(buf[:n]), false, nil
-}
-
-// buildOrGetThumbnail 根据源文件生成并缓存缩略图。
-func (h *FileHandler) buildOrGetThumbnail(source *os.File, fileID int64, digest string, size int) (string, error) {
-	base := h.thumbBaseDir()
-	if err := os.MkdirAll(base, 0700); err != nil {
-		return "", err
-	}
-	path := filepath.Join(base, fmt.Sprintf("thumb-v2_%d_%s_%d.jpg", fileID, digest, size))
-	if info, err := os.Lstat(path); err == nil {
-		if !info.Mode().IsRegular() {
-			return "", contract.ErrStorageIntegrity
-		}
-		return path, nil
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return "", err
-	}
-	img, _, err := image.Decode(source)
-	if err != nil {
-		return "", err
-	}
-	out, err := os.CreateTemp(base, ".thumb-v2-*.tmp")
-	if err != nil {
-		return "", err
-	}
-	defer os.Remove(out.Name())
-	defer out.Close()
-	if err := jpeg.Encode(out, resizeToMaxEdge(img, size), &jpeg.Options{Quality: 82}); err != nil {
-		return "", err
-	}
-	if err := out.Sync(); err != nil {
-		return "", err
-	}
-	if err := out.Close(); err != nil {
-		return "", err
-	}
-	if err := os.Link(out.Name(), path); err != nil && !errors.Is(err, os.ErrExist) {
-		return "", err
-	}
-	return path, nil
-}
-
-func resizeToMaxEdge(src image.Image, maxEdge int) image.Image {
-	b := src.Bounds()
-	sw := b.Dx()
-	sh := b.Dy()
-	if sw <= 0 || sh <= 0 || maxEdge <= 0 {
-		return src
-	}
-
-	if sw <= maxEdge && sh <= maxEdge {
-		return src
-	}
-
-	var dw, dh int
-	if sw >= sh {
-		dw = maxEdge
-		dh = sh * maxEdge / sw
-	} else {
-		dh = maxEdge
-		dw = sw * maxEdge / sh
-	}
-	if dw <= 0 {
-		dw = 1
-	}
-	if dh <= 0 {
-		dh = 1
-	}
-
-	dst := image.NewRGBA(image.Rect(0, 0, dw, dh))
-	// 先填充白底，避免透明图转 jpg 后出现黑底。
-	draw.Draw(dst, dst.Bounds(), &image.Uniform{C: color.White}, image.Point{}, draw.Src)
-	for y := 0; y < dh; y++ {
-		sy := b.Min.Y + y*sh/dh
-		for x := 0; x < dw; x++ {
-			sx := b.Min.X + x*sw/dw
-			dst.Set(x, y, src.At(sx, sy))
-		}
-	}
-	return dst
 }
 
 func generateShareCode(length int) (string, error) {
