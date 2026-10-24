@@ -155,6 +155,8 @@ type rateBrokenWriter struct {
 	writes int
 }
 
+func (w *rateBrokenWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
 func (w *rateBrokenWriter) Write(p []byte) (int, error) {
 	w.writes++
 	if w.writes > 1 {

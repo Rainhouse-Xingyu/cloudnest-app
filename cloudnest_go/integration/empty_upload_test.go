@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"gorm.io/gorm"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sync"
@@ -105,19 +106,19 @@ func TestEmptyUploadConcurrentCompletionOnlyPublishesOnce(t *testing.T) {
 	f := newFixture(t)
 	id := emptyInit(t, f, f.alice, "concurrent-empty.bin")
 	var group sync.WaitGroup
-	results := make(chan int, 8)
+	results := make(chan *httptest.ResponseRecorder, 8)
 	for range 8 {
 		group.Add(1)
 		go func() {
 			defer group.Done()
-			results <- quotaJSON(f, "POST", "/api/files/upload/complete", f.alice, map[string]any{"upload_id": id}).Code
+			results <- quotaJSON(f, "POST", "/api/files/upload/complete", f.alice, map[string]any{"upload_id": id})
 		}()
 	}
 	group.Wait()
 	close(results)
-	for status := range results {
-		if status != 200 && status != 409 {
-			t.Fatal("unexpected competing completion", status)
+	for response := range results {
+		if response.Code != 200 && response.Code != 409 {
+			t.Fatal("unexpected competing completion", response.Code, response.Body.String())
 		}
 	}
 	file := emptyComplete(t, f, f.alice, id)

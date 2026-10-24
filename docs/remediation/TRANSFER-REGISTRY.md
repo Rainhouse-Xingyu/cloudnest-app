@@ -63,3 +63,5 @@ audit-transfers 只读，无 SQL 写入或文件初始化；未初始化卷明�
 后续增加 kind=archive、task_id=0/transfer_epoch=0 的派生登记，不虚构上传任务；严格 .archives-v1 随机路径，按实际压缩写入前申请增长，与上传共享卷/真实空闲量。HTTP 输出结束前保持收费与 FD 锁，90/20 秒续约不检查 UploadTask；同一 reconciler 可回收过期归档，未知身份/引用保留。旧 worker/CLI 必须整体更新，本批不新增列或自动接管旧路径。完整限制、错误与实际证据见 [归档协议](ARCHIVE-TRANSFERS.md)；缓存持久预算仍待做。
 
 新缩略图持久缓存后续已增加 thumbnail/cached、可空 cache_key 与唯一索引、共享卷/独立子预算、FD 读取保护及统一受控回收，见 [缓存协议](THUMBNAIL-CACHE.md)。旧未登记缓存不采用；所有写实例/worker/维护 CLI 须同步升级并显式 migrate，不能由旧二进制接管新类型。
+
+首次卷锁文件初始化使用 O_CREATE|O_EXCL 确立唯一创建者，EEXIST 时仅以 O_RDWR 打开现存 inode，不截断或替换文件；只读维护仍不创建 gate。该修改针对 macOS 并发 openat(O_CREATE) 可复现的 ENOENT：本轮空文件并发完成完整回归触发 503，30 轮重复中失败 7 轮，独立文件系统复现 4,800 次打开失败 493 次。独占创建方式的同量复现零失败，新增 64 轮 × 16 个打开者的同 inode/权限检查及只读不创建/既有内容保留测试。卷绑定、flock、登记事务与回收约束保持原契约，最终 API/完整回归见 TESTING。

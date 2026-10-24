@@ -135,7 +135,7 @@ func (h *FileHandler) serveFileIdentity(c *gin.Context, file *os.File, digest, n
 	c.Writer = writer
 	defer func() { c.Writer = original }()
 	http.ServeContent(writer, req, sanitizeFileName(name), stat.ModTime(), file)
-	return writer.err
+	return writer.finish()
 }
 
 func (h *FileHandler) sendPreviewJSON(c *gin.Context, rate int64, value any) error {
@@ -145,5 +145,5 @@ func (h *FileHandler) sendPreviewJSON(c *gin.Context, rate int64, value any) err
 	c.Writer = writer
 	defer func() { c.Writer = original }()
 	c.JSON(http.StatusOK, value)
-	return writer.err
+	return writer.finish()
 }

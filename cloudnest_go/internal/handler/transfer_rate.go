@@ -2,12 +2,14 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"io"
 	"math"
 	"net/http"
 	"strings"
 	"time"
 
+	"cloudenest_go/internal/httpio"
 	"cloudenest_go/internal/middleware"
 	"cloudenest_go/internal/service/contract"
 	"github.com/gin-gonic/gin"
@@ -68,8 +70,72 @@ func (p *transferPacer) wait(n int) error {
 
 type pacedResponseWriter struct {
 	gin.ResponseWriter
-	pacer transferPacer
-	err   error
+	pacer        transferPacer
+	err          error
+	writeTimeout time.Duration // zero uses the production default; shorter unit-test transports are explicit
+}
+
+const downloadWriteTimeout = 30 * time.Second
+
+// Only actual transport IO is timed. A healthy large transfer and an intentional
+// low rate may last much longer. Cancellation also interrupts a blocked write,
+// and its callback is joined before clearing/reusing the response deadline.
+func (w *pacedResponseWriter) writeIO(write func() (int, error)) (n int, err error) {
+	if err = w.pacer.ctx.Err(); err != nil {
+		return 0, err
+	}
+	window := w.writeTimeout
+	if window <= 0 {
+		window = downloadWriteTimeout
+	}
+	controller := http.NewResponseController(w.ResponseWriter)
+	err = controller.SetWriteDeadline(time.Now().Add(window))
+	if errors.Is(err, http.ErrNotSupported) {
+		// In-memory recorders have no connection to time out. Production net/http
+		// HTTP/1 and HTTP/2 writers support deadlines through our Unwrap chain.
+		return write()
+	}
+	if err != nil {
+		return 0, err
+	}
+	done := make(chan struct{})
+	stop := context.AfterFunc(w.pacer.ctx, func() {
+		defer close(done)
+		_ = controller.SetWriteDeadline(time.Now())
+	})
+	defer func() {
+		if !stop() {
+			<-done
+		}
+		clearErr := controller.SetWriteDeadline(time.Time{})
+		if err == nil {
+			err = w.pacer.ctx.Err()
+		}
+		if err == nil {
+			err = clearErr
+		}
+	}()
+	return write()
+}
+
+func (w *pacedResponseWriter) flush() error {
+	err := httpio.Flush(w.ResponseWriter)
+	if errors.Is(err, http.ErrNotSupported) {
+		return nil
+	}
+	return err
+}
+
+// Commit/flush even a zero-byte or conditional response while its deadline is
+// armed; do not leave the final buffered write to net/http after lease release.
+func (w *pacedResponseWriter) finish() error {
+	if w.err == nil {
+		_, w.err = w.writeIO(func() (int, error) {
+			w.ResponseWriter.WriteHeaderNow()
+			return 0, w.flush()
+		})
+	}
+	return w.err
 }
 
 func (w *pacedResponseWriter) WriteHeader(status int) {
@@ -82,6 +148,8 @@ func (w *pacedResponseWriter) WriteHeader(status int) {
 }
 func (w *pacedResponseWriter) Unwrap() http.ResponseWriter       { return w.ResponseWriter }
 func (w *pacedResponseWriter) WriteString(s string) (int, error) { return w.Write([]byte(s)) }
+func (w *pacedResponseWriter) FlushError() error                 { return w.finish() }
+func (w *pacedResponseWriter) Flush()                            { _ = w.finish() }
 func (w *pacedResponseWriter) Write(p []byte) (int, error) {
 	if w.err != nil {
 		return 0, w.err
@@ -93,11 +161,17 @@ func (w *pacedResponseWriter) Write(p []byte) (int, error) {
 			w.err = err
 			return total, err
 		}
-		written, err := w.ResponseWriter.Write(p[:n])
+		written, err := w.writeIO(func() (int, error) {
+			count, err := w.ResponseWriter.Write(p[:n])
+			if err == nil && count != n {
+				err = io.ErrShortWrite
+			}
+			if err == nil {
+				err = w.flush()
+			}
+			return count, err
+		})
 		total += written
-		if err == nil && written != n {
-			err = io.ErrShortWrite
-		}
 		if err != nil {
 			w.err = err
 			return total, err

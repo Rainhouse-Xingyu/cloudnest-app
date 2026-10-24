@@ -16,6 +16,22 @@ import (
 var errLocked = errors.New("transfer file is still open")
 var errUnsupported = errors.New("transfer volume requires local filesystem locking")
 
+const admissionGatePath = ".transfer-admission-v1"
+
+func openAdmissionGate(root *os.Root, create bool) (*os.File, error) {
+	if !create {
+		return root.Open(admissionGatePath)
+	}
+	// Concurrent openat(O_CREATE) can return ENOENT on the supported macOS
+	// filesystem during first creation. Establish one exclusive creator, then
+	// open the existing inode without creation/truncation. Never unlink the gate.
+	file, err := root.OpenFile(admissionGatePath, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0600)
+	if errors.Is(err, os.ErrExist) {
+		return root.OpenFile(admissionGatePath, os.O_RDWR, 0)
+	}
+	return file, err
+}
+
 type rootScope struct {
 	root     *os.Root
 	gate     *os.File
@@ -82,19 +98,14 @@ func (m *Manager) openRoot(ctx context.Context, create bool) (*rootScope, error)
 			scope.Close()
 		}
 	}()
-	const gatePath = ".transfer-admission-v1"
-	if info, err := root.Lstat(gatePath); err == nil {
+	if info, err := root.Lstat(admissionGatePath); err == nil {
 		if !info.Mode().IsRegular() || info.Mode().Perm()&0022 != 0 {
 			return nil, blob.ErrManagedPath
 		}
 	} else if !errors.Is(err, os.ErrNotExist) || !create {
 		return nil, err
 	}
-	flags := os.O_RDONLY
-	if create {
-		flags = os.O_RDWR | os.O_CREATE
-	}
-	gate, err := root.OpenFile(gatePath, flags, 0600)
+	gate, err := openAdmissionGate(root, create)
 	if err != nil {
 		return nil, err
 	}

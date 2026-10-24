@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"cloudenest_go/internal/blob"
+	"cloudenest_go/internal/httpio"
 	"github.com/gin-gonic/gin"
 )
 
@@ -64,9 +65,13 @@ func (w *leaseResponseWriter) WriteString(s string) (int, error) {
 	return w.ResponseWriter.WriteString(s)
 }
 func (w *leaseResponseWriter) Flush() {
-	if w.allow() == nil {
-		w.ResponseWriter.Flush()
+	_ = w.FlushError()
+}
+func (w *leaseResponseWriter) FlushError() error {
+	if err := w.allow(); err != nil {
+		return err
 	}
+	return httpio.Flush(w.ResponseWriter)
 }
 
 // Unwrap exposes connection deadline control without bypassing protected writes.
