@@ -113,6 +113,20 @@ func (s *Scope) Check() error {
 	return nil
 }
 
+// CheckResponse permits metadata replies after intentional request read
+// cancellation, but never relaxes a held lease or a previous failed Pin.
+func (s *Scope) CheckResponse() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.held) == 0 && s.err == nil && !s.closed {
+		return nil
+	}
+	if err := s.checkLocked(); err != nil {
+		return s.failLocked(err)
+	}
+	return nil
+}
+
 func (s *Scope) failLocked(err error) error {
 	if s.err != nil {
 		return s.err

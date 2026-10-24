@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -104,6 +103,7 @@ type FileUploadInitInput struct {
 
 // FileUploadInitResult 表示上传初始化返回。
 type FileUploadInitResult struct {
+	TransferEpoch  int64
 	UploadID       string
 	UploadedChunks []int
 	UploadedCount  int
@@ -112,6 +112,7 @@ type FileUploadInitResult struct {
 
 // FileUploadProgressResult 表示上传进度。
 type FileUploadProgressResult struct {
+	TransferEpoch  int64
 	UploadID       string
 	Status         int8
 	UploadedCount  int
@@ -123,10 +124,12 @@ type FileUploadProgressResult struct {
 
 // FileUploadTaskSnapshot 表示完成上传前的任务快照。
 type FileUploadTaskSnapshot struct {
-	Task       model.UploadTask
-	TotalSize  int64
-	ChunkSize  int
-	TotalChunk int
+	Task          model.UploadTask
+	TotalSize     int64
+	ChunkSize     int
+	TotalChunk    int
+	CompletedFile *model.File
+	Chunks        []model.UploadChunk
 }
 
 // FileBatchDownloadEntry 表示批量下载中一个可下载条目。
@@ -271,7 +274,7 @@ func (s *FileService) InitUpload(ctx context.Context, uid int64, in FileUploadIn
 		return FileUploadInitResult{}, err
 	}
 	in.UploadID = strings.TrimSpace(in.UploadID)
-	if in.Filename == "" || in.TotalSize <= 0 || in.ParentID < 0 {
+	if in.Filename == "" || in.TotalSize < 0 || in.TotalSize > contract.MaxUploadFileBytes || in.ParentID < 0 {
 		return FileUploadInitResult{}, fmt.Errorf("invalid upload parameters")
 	}
 
@@ -282,7 +285,7 @@ func (s *FileService) InitUpload(ctx context.Context, uid int64, in FileUploadIn
 		if v, ok, err := s.getSystemSettingInt64(ctx, "upload_default_chunk_size_mb"); err != nil {
 			return FileUploadInitResult{}, err
 		} else if ok && v > 0 {
-			if v > 1024 {
+			if v > contract.MaxUploadChunkBytes/(1024*1024) {
 				return FileUploadInitResult{}, contract.ErrQuotaAccounting
 			}
 			in.ChunkSize = int(v * 1024 * 1024)
@@ -292,11 +295,14 @@ func (s *FileService) InitUpload(ctx context.Context, uid int64, in FileUploadIn
 		in.ChunkSize = 4 * 1024 * 1024
 	}
 
-	if in.ChunkSize > math.MaxInt32 {
+	if int64(in.ChunkSize) > contract.MaxUploadChunkBytes {
 		return FileUploadInitResult{}, contract.ErrInvalidInput
 	}
-	calculated := 1 + (in.TotalSize-1)/int64(in.ChunkSize)
-	if calculated > math.MaxInt32 {
+	calculated := int64(0)
+	if in.TotalSize > 0 {
+		calculated = 1 + (in.TotalSize-1)/int64(in.ChunkSize)
+	}
+	if calculated > contract.MaxUploadChunks {
 		return FileUploadInitResult{}, contract.ErrInvalidInput
 	}
 	calculatedTotalChunks := int(calculated)
@@ -325,11 +331,12 @@ func (s *FileService) InitUpload(ctx context.Context, uid int64, in FileUploadIn
 			}
 			return FileUploadInitResult{}, err
 		}
-		if task.ParentID != in.ParentID || task.Filename != in.Filename || task.TotalSize == nil || *task.TotalSize != in.TotalSize || task.ChunkSize == nil || *task.ChunkSize != in.ChunkSize || task.TotalChunks == nil || *task.TotalChunks != in.TotalChunks {
+		if (task.Status != 1 && task.ChunkProtocol != 1) || task.ParentID != in.ParentID || task.Filename != in.Filename || task.TotalSize == nil || *task.TotalSize != in.TotalSize || task.ChunkSize == nil || *task.ChunkSize != in.ChunkSize || task.TotalChunks == nil || *task.TotalChunks != in.TotalChunks {
 			return FileUploadInitResult{}, contract.ErrUploadContract
 		}
 		return FileUploadInitResult{
 			UploadID:       task.UploadID,
+			TransferEpoch:  task.TransferEpoch,
 			UploadedChunks: chunkIndexes,
 			UploadedCount:  task.UploadedChunks,
 			Status:         task.Status,
@@ -342,7 +349,7 @@ func (s *FileService) InitUpload(ctx context.Context, uid int64, in FileUploadIn
 	chunkSizeCopy := in.ChunkSize
 	totalChunksCopy := in.TotalChunks
 	task := model.UploadTask{
-		ContractVersion: 1, ReservedBytes: in.TotalSize, ParentID: in.ParentID,
+		TransferProtocol: 1, ChunkProtocol: 1, ContractVersion: 1, ReservedBytes: in.TotalSize, ParentID: in.ParentID,
 		UploadID:    uploadID,
 		UserID:      &uidCopy,
 		Filename:    in.Filename,
@@ -375,7 +382,7 @@ func (s *FileService) ValidateUploadChunk(ctx context.Context, uid int64, upload
 	if task.Status == 1 {
 		return model.UploadTask{}, ErrUploadTaskCompleted
 	}
-	if task.Status != 0 {
+	if task.Status != 0 || task.ChunkProtocol != 1 {
 		return model.UploadTask{}, contract.ErrUploadContract
 	}
 	if task.TotalChunks != nil && chunkIndex >= *task.TotalChunks {
@@ -385,24 +392,14 @@ func (s *FileService) ValidateUploadChunk(ctx context.Context, uid int64, upload
 }
 
 // MarkChunkUploaded 记录分片上传完成并刷新已上传分片数。
-func (s *FileService) MarkChunkUploaded(ctx context.Context, task model.UploadTask, uploadID string, chunkIndex int, chunkSize int64, chunkPath string) error {
-	return s.fileRepo.UpsertUploadChunkAndRefreshProgress(ctx, task.ID, uploadID, chunkIndex, chunkSize, chunkPath)
+func (s *FileService) MarkChunkUploaded(ctx context.Context, task model.UploadTask, uploadID string, chunkIndex int, chunkSize int64, chunkPath, chunkRoot, sha256, md5, artifactToken string) (contract.ChunkCommit, error) {
+	return s.fileRepo.UpsertUploadChunkAndRefreshProgress(ctx, task.ID, uploadID, chunkIndex, chunkSize, chunkPath, chunkRoot, sha256, md5, artifactToken)
 }
 
 // PrepareCompleteUpload 校验可完成条件并返回任务快照。
 func (s *FileService) PrepareCompleteUpload(ctx context.Context, uid int64, uploadID string, parentID int64) (FileUploadTaskSnapshot, error) {
 	if parentID < 0 || strings.TrimSpace(uploadID) == "" {
 		return FileUploadTaskSnapshot{}, fmt.Errorf("invalid parameters")
-	}
-
-	if parentID > 0 {
-		canWrite, err := s.canAccessFile(ctx, uid, parentID, true)
-		if err != nil {
-			return FileUploadTaskSnapshot{}, err
-		}
-		if !canWrite {
-			return FileUploadTaskSnapshot{}, ErrFilePermissionDenied
-		}
 	}
 
 	task, err := s.fileRepo.GetUploadTaskByUploadID(ctx, uid, uploadID)
@@ -419,32 +416,72 @@ func (s *FileService) PrepareCompleteUpload(ctx context.Context, uid int64, uplo
 		return FileUploadTaskSnapshot{}, ErrFilePermissionDenied
 	}
 	if task.Status == 1 {
-		return FileUploadTaskSnapshot{}, ErrUploadTaskCompleted
+		return completedUploadSnapshot(task, uid, parentID)
 	}
-	if task.Status != 0 {
+	if task.Status != 0 || task.ChunkProtocol != 1 {
 		return FileUploadTaskSnapshot{}, contract.ErrUploadContract
 	}
 	if task.ParentID != parentID {
 		return FileUploadTaskSnapshot{}, contract.ErrUploadContract
 	}
+	if parentID > 0 {
+		canWrite, err := s.canAccessFile(ctx, uid, parentID, true)
+		if err != nil {
+			return FileUploadTaskSnapshot{}, err
+		}
+		if !canWrite {
+			return FileUploadTaskSnapshot{}, ErrFilePermissionDenied
+		}
+	}
 	if task.TotalChunks == nil || task.ChunkSize == nil || task.TotalSize == nil {
 		return FileUploadTaskSnapshot{}, ErrUploadMetaIncomplete
 	}
 
-	doneCount, err := s.fileRepo.CountDoneUploadChunks(ctx, uploadID)
+	if !contract.IsEmptyUpload(task) {
+		if _, err := contract.ExpectedChunkBytes(task, 0); err != nil {
+			return FileUploadTaskSnapshot{}, err
+		}
+	}
+	chunks, err := s.fileRepo.ListDoneUploadChunks(ctx, uploadID)
 	if err != nil {
 		return FileUploadTaskSnapshot{}, err
 	}
-	if int(doneCount) != *task.TotalChunks {
+	if len(chunks) != *task.TotalChunks {
+		// A competing completion can atomically remove chunk metadata after the
+		// first task read. Re-read its durable result instead of reporting loss.
+		latest, err := s.fileRepo.GetUploadTaskByUploadID(ctx, uid, uploadID)
+		if err != nil {
+			return FileUploadTaskSnapshot{}, err
+		}
+		if latest.Status == 1 {
+			return completedUploadSnapshot(latest, uid, parentID)
+		}
 		return FileUploadTaskSnapshot{}, ErrChunksNotComplete
 	}
 
-	return FileUploadTaskSnapshot{Task: task, TotalSize: *task.TotalSize, ChunkSize: *task.ChunkSize, TotalChunk: *task.TotalChunks}, nil
+	for i, chunk := range chunks {
+		expected, err := contract.ExpectedChunkBytes(task, i)
+		if err != nil {
+			return FileUploadTaskSnapshot{}, err
+		}
+		if chunk.ChunkIndex != i || chunk.ChunkSize == nil || *chunk.ChunkSize != expected || !blob.ValidToken(chunk.SHA256) {
+			return FileUploadTaskSnapshot{}, contract.ErrStorageIntegrity
+		}
+	}
+	return FileUploadTaskSnapshot{Task: task, TotalSize: *task.TotalSize, ChunkSize: *task.ChunkSize, TotalChunk: *task.TotalChunks, Chunks: chunks}, nil
+}
+
+func completedUploadSnapshot(task model.UploadTask, uid, parentID int64) (FileUploadTaskSnapshot, error) {
+	f, err := contract.UploadReceipt(task, uid, parentID)
+	if err != nil {
+		return FileUploadTaskSnapshot{}, err
+	}
+	return FileUploadTaskSnapshot{Task: task, CompletedFile: &f}, nil
 }
 
 // CompleteUpload 完成上传后写入 storage/file 及任务状态。
-func (s *FileService) CompleteUpload(ctx context.Context, uid int64, parentID int64, uploadID string, snapshot FileUploadTaskSnapshot, storagePath, storageRoot string, mergedSize int64, fileHash string, clientIP string) (contract.UploadCommit, error) {
-	return s.fileRepo.CompleteUploadPersist(ctx, uid, parentID, uploadID, snapshot.Task, snapshot.TotalChunk, storagePath, storageRoot, mergedSize, fileHash, clientIP)
+func (s *FileService) CompleteUpload(ctx context.Context, uid int64, parentID int64, uploadID string, snapshot FileUploadTaskSnapshot, storagePath, storageRoot string, mergedSize int64, fileHash, artifactToken string, clientIP string) (contract.UploadCommit, error) {
+	return s.fileRepo.CompleteUploadPersist(ctx, uid, parentID, uploadID, snapshot.Task, snapshot.TotalChunk, storagePath, storageRoot, mergedSize, fileHash, artifactToken, clientIP)
 }
 
 func (s *FileService) ResolveFileVersion(ctx context.Context, uid, fileID int64, version int) (model.File, model.Storage, error) {
@@ -456,9 +493,7 @@ func (s *FileService) ResolveFileVersion(ctx context.Context, uid, fileID int64,
 	if err != nil {
 		return model.File{}, model.Storage{}, err
 	}
-	if err := blob.VerifyStorageObject(ctx, storage); err != nil {
-		return model.File{}, model.Storage{}, err
-	}
+	// The response opens, verifies and serves the same pinned descriptor.
 	return file, storage, nil
 }
 
@@ -481,6 +516,11 @@ func (s *FileService) UploadProgress(ctx context.Context, uid int64, uploadID st
 	if task.TotalChunks != nil {
 		totalChunks = *task.TotalChunks
 	}
+	if task.Status == 1 {
+		// Completion removes chunk rows. Their absence is expected and must not
+		// turn a committed task back into zero progress or missing chunks.
+		return FileUploadProgressResult{TransferEpoch: task.TransferEpoch, UploadID: task.UploadID, Status: 1, UploadedCount: totalChunks, TotalChunks: totalChunks, UploadedChunks: []int{}, MissingChunks: []int{}, Progress: 100}, nil
+	}
 
 	missingChunks := make([]int, 0)
 	if totalChunks > 0 {
@@ -500,7 +540,7 @@ func (s *FileService) UploadProgress(ctx context.Context, uid int64, uploadID st
 		progress = float64(len(uploadedChunks)) * 100 / float64(totalChunks)
 	}
 
-	return FileUploadProgressResult{UploadID: task.UploadID, Status: task.Status, UploadedCount: len(uploadedChunks), TotalChunks: totalChunks, UploadedChunks: uploadedChunks, MissingChunks: missingChunks, Progress: progress}, nil
+	return FileUploadProgressResult{TransferEpoch: task.TransferEpoch, UploadID: task.UploadID, Status: task.Status, UploadedCount: len(uploadedChunks), TotalChunks: totalChunks, UploadedChunks: uploadedChunks, MissingChunks: missingChunks, Progress: progress}, nil
 }
 
 // GetAccessibleFile 查询可访问文件（不包含 storage 校验）。
@@ -926,80 +966,6 @@ func (s *FileService) TryAutoBindLivePhotoForFile(ctx context.Context, userID in
 	return s.fileRepo.CreateLivePhotoAutoBindIfAbsent(ctx, userID, imageID, videoID, clientIP)
 }
 
-// GetSystemSettingInt64 读取整数配置项。
-func (s *FileService) GetSystemSettingInt64(ctx context.Context, key string) (int64, bool, error) {
-	return s.getSystemSettingInt64(ctx, key)
-}
-
-// GetSystemSettingString 读取字符串配置项。
-func (s *FileService) GetSystemSettingString(ctx context.Context, key string) (string, bool, error) {
-	return s.getSystemSettingString(ctx, key)
-}
-
-// IsInPeakWindow 判断当前请求是否处于高峰时段。
-func (s *FileService) IsInPeakWindow(ctx context.Context, uid int64) (bool, error) {
-	enabled, start, end, err := s.ResolvePeakWindowSetting(ctx, uid)
-	if err != nil {
-		return false, err
-	}
-	if !enabled {
-		return false, nil
-	}
-	startMin, okStart := parseHHMMToMinuteInService(start)
-	endMin, okEnd := parseHHMMToMinuteInService(end)
-	if !okStart || !okEnd {
-		return false, nil
-	}
-
-	now := time.Now()
-	nowMin := now.Hour()*60 + now.Minute()
-	if startMin == endMin {
-		return true, nil
-	}
-	if startMin < endMin {
-		return nowMin >= startMin && nowMin < endMin, nil
-	}
-	return nowMin >= startMin || nowMin < endMin, nil
-}
-
-// ResolvePeakWindowSetting 解析用户或全局高峰时段配置。
-func (s *FileService) ResolvePeakWindowSetting(ctx context.Context, uid int64) (bool, string, string, error) {
-	if uid > 0 {
-		enabledKey := "peak_window_enabled_user_" + strconv.FormatInt(uid, 10)
-		startKey := "peak_window_start_user_" + strconv.FormatInt(uid, 10)
-		endKey := "peak_window_end_user_" + strconv.FormatInt(uid, 10)
-
-		if enabledVal, exists, err := s.getSystemSettingString(ctx, enabledKey); err != nil {
-			return false, "", "", err
-		} else if exists {
-			enabled := strings.TrimSpace(enabledVal) == "1"
-			startVal, _, errStart := s.getSystemSettingString(ctx, startKey)
-			if errStart != nil {
-				return false, "", "", errStart
-			}
-			endVal, _, errEnd := s.getSystemSettingString(ctx, endKey)
-			if errEnd != nil {
-				return false, "", "", errEnd
-			}
-			return enabled, startVal, endVal, nil
-		}
-	}
-
-	enabledGlobal, _, err := s.getSystemSettingInt64(ctx, "peak_window_enabled")
-	if err != nil {
-		return false, "", "", err
-	}
-	startGlobal, _, err := s.getSystemSettingString(ctx, "peak_window_start")
-	if err != nil {
-		return false, "", "", err
-	}
-	endGlobal, _, err := s.getSystemSettingString(ctx, "peak_window_end")
-	if err != nil {
-		return false, "", "", err
-	}
-	return enabledGlobal == 1, startGlobal, endGlobal, nil
-}
-
 func (s *FileService) canAccessFile(ctx context.Context, userID int64, fileID int64, requireWrite bool) (bool, error) {
 	return s.fileRepo.CanAccessFile(ctx, userID, fileID, requireWrite)
 }
@@ -1021,17 +987,6 @@ func (s *FileService) getSystemSettingInt64(ctx context.Context, key string) (in
 		return 0, false, convErr
 	}
 	return n, true, nil
-}
-
-func (s *FileService) getSystemSettingString(ctx context.Context, key string) (string, bool, error) {
-	row, err := s.fileRepo.GetSystemSettingByKey(ctx, key)
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return "", false, nil
-		}
-		return "", false, err
-	}
-	return strings.TrimSpace(row.SettingValue), true, nil
 }
 
 func (s *FileService) logOperation(ctx context.Context, userID int64, fileID *int64, action string, status string, detail string, clientIP string) error {
@@ -1156,7 +1111,7 @@ func parseFlexibleTimeForFile(raw string) (time.Time, error) {
 
 func parseHHMMToMinuteInService(v string) (int, bool) {
 	v = strings.TrimSpace(v)
-	if len(v) != 5 || v[2] != ':' {
+	if len(v) != 5 || v[2] != ':' || v[0] < '0' || v[0] > '9' || v[1] < '0' || v[1] > '9' || v[3] < '0' || v[3] > '9' || v[4] < '0' || v[4] > '9' {
 		return 0, false
 	}
 	h, errH := strconv.Atoi(v[:2])
@@ -1232,4 +1187,11 @@ func (s *FileService) pinnedRegularPath(ctx context.Context, id int64) (string, 
 
 func (s *FileService) CancelUpload(ctx context.Context, uid int64, id, ip string) error {
 	return s.fileRepo.CancelUploadTask(ctx, uid, id, ip)
+}
+
+func (s *FileService) ControlUpload(ctx context.Context, uid int64, uploadID string, expectedEpoch int64, paused bool, clientIP string) (model.UploadTask, error) {
+	if strings.TrimSpace(uploadID) == "" || expectedEpoch < 0 {
+		return model.UploadTask{}, contract.ErrInvalidInput
+	}
+	return s.fileRepo.ControlUploadTask(ctx, uid, uploadID, expectedEpoch, paused, clientIP)
 }

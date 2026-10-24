@@ -197,18 +197,14 @@ func (s *SettingsService) UpdateMyRateWindow(ctx context.Context, uid int64, ena
 	startKey := "peak_window_start_user_" + strconv.FormatInt(uid, 10)
 	endKey := "peak_window_end_user_" + strconv.FormatInt(uid, 10)
 
-	if err := s.repo.UpsertSystemSetting(ctx, enabledKey, boolToFlag(enabled), "用户自定义高峰时段开关"); err != nil {
-		return err
-	}
+	items := []contract.SettingUpsertItem{{SettingKey: enabledKey, SettingValue: boolToFlag(enabled), Description: "用户自定义高峰时段开关"}}
 	if enabled {
-		if err := s.repo.UpsertSystemSetting(ctx, startKey, start, "用户自定义高峰开始时刻 HH:MM"); err != nil {
-			return err
+		if !isValidHHMM(start) || !isValidHHMM(end) {
+			return contract.ErrInvalidInput
 		}
-		if err := s.repo.UpsertSystemSetting(ctx, endKey, end, "用户自定义高峰结束时刻 HH:MM"); err != nil {
-			return err
-		}
+		items = append(items, contract.SettingUpsertItem{SettingKey: startKey, SettingValue: start, Description: "用户自定义高峰开始时刻 HH:MM"}, contract.SettingUpsertItem{SettingKey: endKey, SettingValue: end, Description: "用户自定义高峰结束时刻 HH:MM"})
 	}
-	return nil
+	return s.repo.UpsertSystemSettings(ctx, items)
 }
 
 func (s *SettingsService) readSettingValue(ctx context.Context, key string) (string, error) {
@@ -222,18 +218,7 @@ func (s *SettingsService) readSettingValue(ctx context.Context, key string) (str
 	return v, nil
 }
 
-func isValidHHMM(v string) bool {
-	v = strings.TrimSpace(v)
-	if len(v) != 5 || v[2] != ':' {
-		return false
-	}
-	h, errH := strconv.Atoi(v[:2])
-	m, errM := strconv.Atoi(v[3:])
-	if errH != nil || errM != nil {
-		return false
-	}
-	return h >= 0 && h <= 23 && m >= 0 && m <= 59
-}
+func isValidHHMM(v string) bool { _, ok := parseHHMMToMinuteInService(v); return ok }
 
 func boolToFlag(v bool) string {
 	if v {

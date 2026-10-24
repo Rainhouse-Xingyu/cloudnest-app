@@ -1,9 +1,7 @@
 package handler
 
 import (
-	"archive/zip"
 	"context"
-	"crypto/md5"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -12,14 +10,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"image"
-	"image/color"
-	"image/draw"
-	"image/jpeg"
 	"io"
 	"log"
-	"mime"
-	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -32,18 +24,17 @@ import (
 	"cloudenest_go/internal/middleware"
 	"cloudenest_go/internal/service"
 	"cloudenest_go/internal/service/contract"
+	"cloudenest_go/internal/transfer"
 	"cloudenest_go/model"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
-
-	_ "image/gif"
-	_ "image/png"
 )
 
 // FileHandler handles file system related APIs.
 type FileHandler struct {
+	Transfers  *transfer.Manager
 	Blobs      *blob.Manager
 	RDB        *redis.Client
 	Cfg        config.Config
@@ -70,7 +61,7 @@ type InitUploadRequest struct {
 	UploadID    string `json:"upload_id"`
 	ParentID    int64  `json:"parent_id"`
 	Filename    string `json:"filename" binding:"required"`
-	TotalSize   int64  `json:"total_size" binding:"required"`
+	TotalSize   *int64 `json:"total_size" binding:"required"`
 	ChunkSize   int    `json:"chunk_size"`
 	TotalChunks int    `json:"total_chunks"`
 }
@@ -119,17 +110,7 @@ type FileSearchQuery struct {
 
 const (
 	defaultDataDir = "data"
-	chunkSubDir    = "chunks"
 	storageSubDir  = "storage"
-	thumbSubDir    = "thumbnails"
-
-	defaultUploadRateBytesPerSec int64 = 2 * 1024 * 1024
-	minUploadRateKbps            int64 = 64
-	maxUploadRateKbps            int64 = 10240
-
-	defaultDownloadRateBytesPerSec int64 = 2 * 1024 * 1024
-	minDownloadRateKbps            int64 = 64
-	maxDownloadRateKbps            int64 = 10240
 
 	shareRateWindow        = 60 * time.Second
 	shareInfoRateLimit     = 60
@@ -231,6 +212,7 @@ func (h *FileHandler) Delete(c *gin.Context) {
 
 // InitUpload 初始化分片上传任务，支持续传场景。
 func (h *FileHandler) InitUpload(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<10)
 	uid := c.GetInt64(middleware.ContextUserIDKey)
 
 	var req InitUploadRequest
@@ -240,7 +222,7 @@ func (h *FileHandler) InitUpload(c *gin.Context) {
 	}
 
 	req.Filename = strings.TrimSpace(req.Filename)
-	if req.Filename == "" || req.TotalSize <= 0 || req.ParentID < 0 {
+	if req.Filename == "" || req.TotalSize == nil || *req.TotalSize < 0 || req.ParentID < 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid upload parameters"})
 		return
 	}
@@ -249,7 +231,7 @@ func (h *FileHandler) InitUpload(c *gin.Context) {
 		UploadID:    req.UploadID,
 		ParentID:    req.ParentID,
 		Filename:    req.Filename,
-		TotalSize:   req.TotalSize,
+		TotalSize:   *req.TotalSize,
 		ChunkSize:   req.ChunkSize,
 		TotalChunks: req.TotalChunks,
 	})
@@ -290,101 +272,16 @@ func (h *FileHandler) InitUpload(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"upload_id":       res.UploadID,
+		"transfer_epoch":  res.TransferEpoch,
 		"uploaded_chunks": res.UploadedChunks,
 		"uploaded_count":  res.UploadedCount,
 		"status":          res.Status,
 	})
 }
 
-// UploadChunk 保存单个分片到本地并更新分片状态。
-func (h *FileHandler) UploadChunk(c *gin.Context) {
-	uid := c.GetInt64(middleware.ContextUserIDKey)
-	uploadID := strings.TrimSpace(c.PostForm("upload_id"))
-	chunkIndexRaw := strings.TrimSpace(c.PostForm("chunk_index"))
-	chunkMD5 := strings.ToLower(strings.TrimSpace(c.PostForm("chunk_md5")))
-
-	if uploadID == "" || chunkIndexRaw == "" || chunkMD5 == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "upload_id, chunk_index and chunk_md5 are required"})
-		return
-	}
-
-	chunkIndex, err := strconv.Atoi(chunkIndexRaw)
-	if err != nil || chunkIndex < 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid chunk_index"})
-		return
-	}
-
-	task, err := h.Svc.ValidateUploadChunk(c.Request.Context(), uid, uploadID, chunkIndex)
-	if err != nil {
-		if isUploadContractError(err) {
-			writeFileMutationError(c, err, "upload rejected")
-			return
-		}
-		switch {
-		case errors.Is(err, service.ErrUploadTaskNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "upload task not found"})
-			return
-		case errors.Is(err, service.ErrFilePermissionDenied):
-			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-			return
-		case errors.Is(err, service.ErrUploadTaskCompleted):
-			c.JSON(http.StatusConflict, gin.H{"error": "upload task already completed"})
-			return
-		case errors.Is(err, service.ErrChunkIndexOutOfRange):
-			c.JSON(http.StatusBadRequest, gin.H{"error": "chunk_index out of range"})
-			return
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-			return
-		}
-	}
-
-	chunkFile, err := c.FormFile("chunk")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "chunk file is required"})
-		return
-	}
-
-	chunkDir := filepath.Join(h.chunkBaseDir(), uploadID)
-	if err := os.MkdirAll(chunkDir, 0o755); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "create chunk directory failed"})
-		return
-	}
-
-	chunkPath := filepath.Join(chunkDir, fmt.Sprintf("%d.part", chunkIndex))
-	uploadRate := h.getUploadRateBytesPerSec(c)
-	if err := h.saveUploadedFileWithRateLimit(c, chunkFile, chunkPath, uploadRate); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "save chunk failed"})
-		return
-	}
-
-	actualMD5, err := computeFileMD5Hex(chunkPath)
-	if err != nil {
-		_ = os.Remove(chunkPath)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "verify chunk md5 failed"})
-		return
-	}
-	if !strings.EqualFold(actualMD5, chunkMD5) {
-		_ = os.Remove(chunkPath)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "chunk md5 mismatch"})
-		return
-	}
-
-	err = h.Svc.MarkChunkUploaded(c.Request.Context(), task, uploadID, chunkIndex, chunkFile.Size, chunkPath)
-	if err != nil {
-		if isUploadContractError(err) {
-			writeFileMutationError(c, err, "chunk rejected")
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "update chunk status failed"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "chunk uploaded"})
-}
-
 // CompleteUpload 合并所有分片，写入 storage/file 记录并完成上传任务。
 func (h *FileHandler) CompleteUpload(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<10)
 	uid := c.GetInt64(middleware.ContextUserIDKey)
 
 	var req CompleteUploadRequest
@@ -430,28 +327,57 @@ func (h *FileHandler) CompleteUpload(c *gin.Context) {
 		}
 	}
 
-	storagePath, mergedSize, fileHash, err := h.mergeChunks(c.Request.Context(), req.UploadID, snapshot.TotalChunk)
+	if snapshot.CompletedFile != nil {
+		c.JSON(http.StatusOK, gin.H{"item": *snapshot.CompletedFile})
+		return
+	}
+	if err := verifyUploadEpoch(c, snapshot.Task.TransferEpoch); err != nil {
+		writeFileMutationError(c, err, "upload epoch rejected")
+		return
+	}
+	candidate, mergedSize, fileHash, err := h.mergeChunks(c.Request.Context(), uid, snapshot)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "merge chunks failed"})
+		// The winner may have committed and removed chunks after our preflight.
+		// Its receipt is authoritative; a missing chunk is not a failed upload.
+		latest, receiptErr := h.Svc.PrepareCompleteUpload(c.Request.Context(), uid, req.UploadID, req.ParentID)
+		if receiptErr == nil && latest.CompletedFile != nil {
+			c.JSON(http.StatusOK, gin.H{"item": *latest.CompletedFile})
+			return
+		}
+		if isUploadContractError(receiptErr) {
+			writeFileMutationError(c, receiptErr, "complete upload failed")
+			return
+		}
+		if errors.Is(err, context.Canceled) && c.Request.Context().Err() == nil {
+			err = contract.ErrUploadContract
+		}
+		writeFileMutationError(c, err, "merge chunks failed")
 		return
 	}
 
-	committed, err := h.Svc.CompleteUpload(c.Request.Context(), uid, req.ParentID, req.UploadID, snapshot, storagePath, h.storageBaseDir(), mergedSize, fileHash, c.ClientIP())
-	if committed.CandidateDisposable {
-		if cleanupErr := os.Remove(storagePath); cleanupErr != nil && !errors.Is(cleanupErr, os.ErrNotExist) {
-			h.recordUploadCleanupFailure(c.Request.Context(), uid, nil, "upload_candidate_cleanup", c.ClientIP())
+	disposable := true
+	defer func() {
+		if err := candidate.Close(disposable); err != nil {
+			h.recordUploadCleanupFailure(context.WithoutCancel(c.Request.Context()), uid, nil, "upload_candidate_cleanup", c.ClientIP())
 		}
-	}
+	}()
+	committed, err := h.Svc.CompleteUpload(candidate.Context(), uid, req.ParentID, req.UploadID, snapshot, candidate.Path(), candidate.Root(), mergedSize, fileHash, candidate.Token(), c.ClientIP())
+	disposable = committed.CandidateDisposable
 	if err != nil {
+		if candidate.Context().Err() != nil && c.Request.Context().Err() == nil {
+			err = contract.ErrUploadContract
+		}
 		writeFileMutationError(c, err, "complete upload failed")
 		return
 	}
 
 	createdFile := committed.File
-
-	if err := os.RemoveAll(filepath.Join(h.chunkBaseDir(), req.UploadID)); err != nil {
-		h.recordUploadCleanupFailure(c.Request.Context(), uid, &createdFile.ID, "upload_chunk_cleanup", c.ClientIP())
+	if committed.Replayed {
+		c.JSON(http.StatusOK, gin.H{"item": createdFile})
+		return
 	}
+
+	h.cleanupChunkManifest(c.Request.Context(), uid, snapshot.Chunks, c.ClientIP())
 	// 上传成功后触发 AI 异步分析：自动生成 tags/description/ocr_text 并写入 ai_metadata。
 	h.triggerAsyncAutoAnalyze(createdFile, uid, c.ClientIP())
 	// 上传完成后尝试自动与同目录同名文件配对绑定 Live Photo（无阻塞失败）。
@@ -655,6 +581,7 @@ func (h *FileHandler) UploadProgress(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"upload_id":       res.UploadID,
+		"transfer_epoch":  res.TransferEpoch,
 		"status":          res.Status,
 		"uploaded_count":  res.UploadedCount,
 		"total_chunks":    res.TotalChunks,
@@ -698,9 +625,13 @@ func (h *FileHandler) Download(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "target is folder, use folder zip download"})
 		return
 	}
-	rate := h.getDownloadRateBytesPerSec(c)
-	if err := h.sendFileWithRateLimit(c, storage.FilePath, f.Filename, rate); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "download failed"})
+	rate, err := h.transferRate(c, "download")
+	if err != nil {
+		writeFileMutationError(c, err, "download policy unavailable")
+		return
+	}
+	if err := h.sendFileWithRateLimit(c, storage.FilePath, f.Filename, rate, &storage); err != nil {
+		writeDownloadError(c, err)
 		return
 	}
 }
@@ -718,8 +649,13 @@ func (h *FileHandler) DownloadVersion(c *gin.Context) {
 		writeFileMutationError(c, err, "download version failed")
 		return
 	}
-	if err := h.sendFileWithRateLimit(c, storage.FilePath, file.Filename, h.getDownloadRateBytesPerSec(c)); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "download failed"})
+	rate, err := h.transferRate(c, "download")
+	if err != nil {
+		writeFileMutationError(c, err, "download policy unavailable")
+		return
+	}
+	if err := h.sendFileWithRateLimit(c, storage.FilePath, file.Filename, rate, &storage); err != nil {
+		writeDownloadError(c, err)
 	}
 }
 
@@ -750,17 +686,21 @@ func (h *FileHandler) DownloadFolderZip(c *gin.Context) {
 		return
 	}
 
-	zipPath, err := h.createFolderZip(c.Request.Context(), uid, folder)
+	rate, err := h.transferRate(c, "download")
+	if err != nil {
+		writeFileMutationError(c, err, "download policy unavailable")
+		return
+	}
+	archive, err := h.createFolderZip(c.Request.Context(), uid, folder)
 	if err != nil {
 		writeFileMutationError(c, err, "create zip failed")
 		return
 	}
-	defer os.Remove(zipPath)
+	defer releaseArchive(archive)
 
 	zipName := sanitizeFileName(folder.Filename) + ".zip"
-	rate := h.getDownloadRateBytesPerSec(c)
-	if err := h.sendFileWithRateLimit(c, zipPath, zipName, rate); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "download failed"})
+	if err := h.sendArchiveWithRateLimit(c, archive, zipName, rate); err != nil {
+		writeDownloadError(c, err)
 		return
 	}
 }
@@ -793,8 +733,25 @@ func (h *FileHandler) BatchDelete(c *gin.Context) {
 func (h *FileHandler) BatchDownload(c *gin.Context) {
 	uid := c.GetInt64(middleware.ContextUserIDKey)
 
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<10)
 	var req BatchDownloadRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	decoder := json.NewDecoder(c.Request.Body)
+	decodeErr := decoder.Decode(&req)
+	if decodeErr == nil {
+		var tail json.RawMessage
+		if err := decoder.Decode(&tail); !errors.Is(err, io.EOF) {
+			decodeErr = err
+			if decodeErr == nil {
+				decodeErr = contract.ErrInvalidInput
+			}
+		}
+	}
+	if err := decodeErr; err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request too large"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
 		return
 	}
@@ -810,66 +767,26 @@ func (h *FileHandler) BatchDownload(c *gin.Context) {
 		writeFileMutationError(c, err, "create zip failed")
 		return
 	}
-	tmpFile, err := os.CreateTemp("", "cloudnest-batch-*.zip")
+	rate, err := h.transferRate(c, "download")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "create zip failed"})
+		writeFileMutationError(c, err, "download policy unavailable")
 		return
 	}
-	zipPath := tmpFile.Name()
-	defer os.Remove(zipPath)
-
-	zw := zip.NewWriter(tmpFile)
-	defer tmpFile.Close()
-	defer zw.Close()
-	usedNames := make(map[string]bool)
-	nextEntryName := func(name string) string {
-		ext := filepath.Ext(name)
-		stem := strings.TrimSuffix(name, ext)
-		candidate := name
-		for n := 1; usedNames[candidate]; n++ {
-			candidate = fmt.Sprintf("%s (%d)%s", stem, n, ext)
-		}
-		usedNames[candidate] = true
-		return candidate
-	}
-	for _, entry := range entries {
-		name := entry.File.Filename
-		source := entry.StoragePath
-		if entry.IsFolderZip {
-			name += ".zip"
-			source, err = createFolderZipFromEntries(entry.FolderEntries)
-			if err != nil {
-				writeFileMutationError(c, err, "create zip failed")
-				return
-			}
-		}
-		err = addZipFileFromPath(zw, nextEntryName(name), source)
-		if entry.IsFolderZip {
-			_ = os.Remove(source)
-		}
-		if err != nil {
-			writeFileMutationError(c, err, "create zip failed")
-			return
-		}
-	}
-
-	if err := zw.Close(); err != nil {
-		_ = tmpFile.Close()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "create zip failed"})
+	archive, err := h.createBatchZip(c.Request.Context(), uid, entries)
+	if err != nil {
+		writeFileMutationError(c, err, "create zip failed")
 		return
 	}
-	if err := tmpFile.Close(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "create zip failed"})
+	defer releaseArchive(archive)
+	if err := h.sendArchiveWithRateLimit(c, archive, "batch_download.zip", rate); err != nil {
+		writeDownloadError(c, err)
 		return
 	}
-
-	rate := h.getDownloadRateBytesPerSec(c)
-	if err := h.sendFileWithRateLimit(c, zipPath, "batch_download.zip", rate); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "download failed"})
-		return
+	if err := h.Svc.RecordOperation(c.Request.Context(), uid, nil, "batch_download", "success", fmt.Sprintf("count=%d", len(ids)), c.ClientIP()); err != nil {
+		// The file response is already sent; report the audit failure without
+		// appending JSON or claiming we can undo the completed network write.
+		log.Print("batch download operation audit unavailable")
 	}
-
-	_ = h.Svc.RecordOperation(c.Request.Context(), uid, nil, "batch_download", "success", fmt.Sprintf("count=%d", len(ids)), c.ClientIP())
 }
 
 // StreamVideo 视频流媒体播放接口，支持 Range 请求和拖拽进度。
@@ -897,28 +814,15 @@ func (h *FileHandler) StreamVideo(c *gin.Context) {
 		return
 	}
 
-	file, err := os.Open(storage.FilePath)
+	rate, err := h.transferRate(c, "download")
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "physical file not found"})
+		writeFileMutationError(c, err, "stream policy unavailable")
 		return
 	}
-	defer file.Close()
-
-	stat, err := file.Stat()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "read file info failed"})
-		return
+	c.Header("Content-Disposition", fmt.Sprintf("inline; filename=%q", sanitizeFileName(f.Filename)))
+	if err := h.sendFileWithRateLimit(c, storage.FilePath, f.Filename, rate, &storage); err != nil {
+		writeDownloadError(c, err)
 	}
-
-	contentType := mime.TypeByExtension(filepath.Ext(f.Filename))
-	if contentType == "" {
-		contentType = "application/octet-stream"
-	}
-
-	// ServeContent 内置处理 Range，能自动返回 206 Partial Content。
-	c.Header("Accept-Ranges", "bytes")
-	c.Header("Content-Type", contentType)
-	http.ServeContent(c.Writer, c.Request, f.Filename, stat.ModTime(), file)
 }
 
 // Thumbnail 生成并缓存图片缩略图，重复请求直接命中缓存。
@@ -954,14 +858,31 @@ func (h *FileHandler) Thumbnail(c *gin.Context) {
 		}
 	}
 
-	thumbPath, err := h.buildOrGetThumbnail(storage.FilePath, f.ID, f.UpdateTime.Unix(), thumbSize)
+	rate, err := h.transferRate(c, "download")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "generate thumbnail failed"})
+		writeFileMutationError(c, err, "thumbnail policy unavailable")
 		return
 	}
-
-	c.Header("Cache-Control", "public, max-age=86400")
-	c.File(thumbPath)
+	if storage.FileSize != nil && *storage.FileSize > thumbnailMaxEncodedBytes {
+		writeThumbnailError(c, errThumbnailLimit)
+		return
+	}
+	source, pinned, err := blob.OpenPinnedStorage(c.Request.Context(), storage)
+	if err != nil {
+		writeDownloadError(c, err)
+		return
+	}
+	defer source.Close()
+	thumb, err := h.buildOrGetThumbnail(c.Request.Context(), source, uid, f.ID, strings.ToLower(pinned.FileHash), thumbSize)
+	if err != nil {
+		writeThumbnailError(c, err)
+		return
+	}
+	defer thumb.Close()
+	c.Header("Content-Disposition", "inline")
+	if err := h.serveFileIdentity(c, thumb.File, thumb.Digest, "thumbnail.jpg", rate); err != nil {
+		writeDownloadError(c, err)
+	}
 }
 
 // SearchFiles 按名称/类型/时间进行检索和筛选，支持分页。
@@ -1039,27 +960,40 @@ func (h *FileHandler) Preview(c *gin.Context) {
 		return
 	}
 
+	rate, err := h.transferRate(c, "download")
+	if err != nil {
+		writeFileMutationError(c, err, "preview policy unavailable")
+		return
+	}
 	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(f.Filename), "."))
 	if isTextPreviewExt(ext) {
 		const maxPreviewBytes = 1024 * 1024
-		content, truncated, readErr := readTextFileWithLimit(storage.FilePath, maxPreviewBytes)
-		if readErr != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "read file failed"})
+		source, _, err := blob.OpenPinnedStorage(c.Request.Context(), storage)
+		if err != nil {
+			writeDownloadError(c, err)
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{
-			"file_id":   f.ID,
-			"filename":  f.Filename,
-			"type":      "text",
-			"content":   content,
-			"truncated": truncated,
-		})
+		defer source.Close()
+		raw, readErr := io.ReadAll(io.LimitReader(&uploadContextReader{ctx: c.Request.Context(), in: source}, maxPreviewBytes+1))
+		if readErr != nil {
+			writeDownloadError(c, readErr)
+			return
+		}
+		truncated := len(raw) > maxPreviewBytes
+		if truncated {
+			raw = raw[:maxPreviewBytes]
+		}
+		if err := h.sendPreviewJSON(c, rate, gin.H{"file_id": f.ID, "filename": f.Filename, "type": "text", "content": string(raw), "truncated": truncated}); err != nil {
+			writeDownloadError(c, err)
+		}
 		return
 	}
 
 	if isInlinePreviewExt(ext) {
 		c.Header("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", sanitizeFileName(f.Filename)))
-		c.File(storage.FilePath)
+		if err := h.sendFileWithRateLimit(c, storage.FilePath, f.Filename, rate, &storage); err != nil {
+			writeDownloadError(c, err)
+		}
 		return
 	}
 
@@ -1071,7 +1005,9 @@ func (h *FileHandler) Preview(c *gin.Context) {
 		}
 		// 提示前端当前使用的是 Office 基础预览策略。
 		c.Header("X-Preview-Strategy", "office-inline")
-		c.File(storage.FilePath)
+		if err := h.sendFileWithRateLimit(c, storage.FilePath, f.Filename, rate, &storage); err != nil {
+			writeDownloadError(c, err)
+		}
 		return
 	}
 
@@ -1342,24 +1278,27 @@ func (h *FileHandler) PublicShareDownload(c *gin.Context) {
 		return
 	}
 
+	rate, err := h.transferRate(c, "download")
+	if err != nil {
+		writeFileMutationError(c, err, "download policy unavailable")
+		return
+	}
 	if file.IsFolder == 1 {
-		zipPath, err := h.createFolderZip(c.Request.Context(), creatorID, file)
+		archive, err := h.createFolderZip(c.Request.Context(), creatorID, file)
 		if err != nil {
 			writeFileMutationError(c, err, "create zip failed")
 			return
 		}
-		defer os.Remove(zipPath)
-		rate := h.getDownloadRateBytesPerSec(c)
-		if err := h.sendFileWithRateLimit(c, zipPath, sanitizeFileName(file.Filename)+".zip", rate); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "download failed"})
+		defer releaseArchive(archive)
+		if err := h.sendArchiveWithRateLimit(c, archive, sanitizeFileName(file.Filename)+".zip", rate); err != nil {
+			writeDownloadError(c, err)
 			return
 		}
 		return
 	}
 
-	rate := h.getDownloadRateBytesPerSec(c)
-	if err := h.sendFileWithRateLimit(c, storage.FilePath, file.Filename, rate); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "download failed"})
+	if err := h.sendFileWithRateLimit(c, storage.FilePath, file.Filename, rate, storage); err != nil {
+		writeDownloadError(c, err)
 		return
 	}
 }
@@ -1488,98 +1427,57 @@ func (h *FileHandler) dataRootDir() string {
 	return base
 }
 
-func (h *FileHandler) chunkBaseDir() string {
-	return filepath.Join(h.dataRootDir(), chunkSubDir)
-}
-
 func (h *FileHandler) storageBaseDir() string {
 	return filepath.Join(h.dataRootDir(), storageSubDir)
 }
 
-func (h *FileHandler) thumbBaseDir() string {
-	return filepath.Join(h.dataRootDir(), thumbSubDir)
-}
-
-func (h *FileHandler) mergeChunks(ctx context.Context, uploadID string, totalChunks int) (path string, size int64, digest string, result error) {
-	if err := os.MkdirAll(h.storageBaseDir(), 0700); err != nil {
-		return "", 0, "", err
-	}
-	root, err := blob.CanonicalRoot(h.storageBaseDir())
+func (h *FileHandler) mergeChunks(ctx context.Context, uid int64, snapshot service.FileUploadTaskSnapshot) (candidate *transfer.Handle, size int64, digest string, result error) {
+	candidate, err := h.Transfers.Create(ctx, uid, snapshot.Task.ID, "merge", max(snapshot.TotalSize, int64(1)), snapshot.Task.TransferEpoch)
 	if err != nil {
-		return "", 0, "", err
+		return nil, 0, "", err
 	}
-	relativeDir := filepath.Join(".managed-v1", time.Now().Format("200601"))
-	storageDir := filepath.Join(root, relativeDir)
-	anchored, err := os.OpenRoot(root)
-	if err != nil {
-		return "", 0, "", err
-	}
-	defer anchored.Close()
-	if err := blob.EnsurePrivateDir(anchored, relativeDir); err != nil {
-		return "", 0, "", err
-	}
-	token, err := blob.RandomToken()
-	if err != nil {
-		return "", 0, "", err
-	}
-	relativeCandidate := filepath.Join(relativeDir, "blob-"+token)
-	out, err := anchored.OpenFile(relativeCandidate, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
-	if err != nil {
-		return "", 0, "", err
-	}
-	candidate := filepath.Join(root, relativeCandidate)
 	complete := false
-	closed := false
+	owned := candidate
 	defer func() {
-		if !closed {
-			result = errors.Join(result, out.Close())
-		}
-		// Before any database call this path belongs only to this request.
 		if !complete {
-			if err := anchored.Remove(relativeCandidate); err != nil && !errors.Is(err, os.ErrNotExist) {
-				result = errors.Join(result, err)
-			}
+			result = errors.Join(result, owned.Close(true))
 		}
 	}()
 	hash := sha256.New()
-	writer := io.MultiWriter(out, hash)
-	for i := 0; i < totalChunks; i++ {
-		in, err := os.Open(filepath.Join(h.chunkBaseDir(), uploadID, fmt.Sprintf("%d.part", i)))
+	writer := io.MultiWriter(candidate, hash)
+	for _, chunk := range snapshot.Chunks {
+		in, err := h.Transfers.OpenChunk(candidate.Context(), uid, snapshot.Task.ID, chunk)
 		if err != nil {
-			return "", 0, "", err
+			return nil, 0, "", err
 		}
-		n, copyErr := io.Copy(writer, &uploadContextReader{ctx: ctx, in: in})
+		info, err := in.Stat()
+		if err != nil || chunk.ChunkSize == nil || info.Size() != *chunk.ChunkSize {
+			in.Close()
+			return nil, 0, "", contract.ErrInvalidInput
+		}
+		partHash := sha256.New()
+		n, copyErr := io.Copy(io.MultiWriter(writer, partHash), io.LimitReader(&uploadContextReader{ctx: candidate.Context(), in: in}, *chunk.ChunkSize+1))
 		closeErr := in.Close()
 		size += n
 		if copyErr != nil {
-			return "", 0, "", copyErr
+			return nil, 0, "", copyErr
 		}
 		if closeErr != nil {
-			return "", 0, "", closeErr
+			return nil, 0, "", closeErr
+		}
+		if n != *chunk.ChunkSize {
+			return nil, 0, "", contract.ErrInvalidInput
+		}
+		if hex.EncodeToString(partHash.Sum(nil)) != chunk.SHA256 {
+			return nil, 0, "", contract.ErrStorageIntegrity
 		}
 	}
-	if err := out.Sync(); err != nil {
-		return "", 0, "", err
-	}
-	closeOutputErr := out.Close()
-	closed = true
-	if closeOutputErr != nil {
-		return "", 0, "", closeOutputErr
-	}
-	// Persist both the candidate entry and newly created namespace directories.
-	for _, path := range []string{storageDir, filepath.Dir(storageDir), root, filepath.Dir(root)} {
-		dir, err := os.Open(path)
-		if err != nil {
-			return "", 0, "", err
-		}
-		syncErr := dir.Sync()
-		closeErr := dir.Close()
-		if err := errors.Join(syncErr, closeErr); err != nil {
-			return "", 0, "", err
-		}
+	digest = hex.EncodeToString(hash.Sum(nil))
+	if err := candidate.Seal(size, digest); err != nil {
+		return nil, 0, "", err
 	}
 	complete = true
-	return candidate, size, hex.EncodeToString(hash.Sum(nil)), nil
+	return candidate, size, digest, nil
 }
 
 type uploadContextReader struct {
@@ -1700,85 +1598,6 @@ func readTextFileWithLimit(path string, limit int64) (string, bool, error) {
 	return string(buf[:n]), false, nil
 }
 
-// buildOrGetThumbnail 根据源文件生成并缓存缩略图。
-func (h *FileHandler) buildOrGetThumbnail(sourcePath string, fileID int64, versionTag int64, size int) (string, error) {
-	thumbBaseDir := h.thumbBaseDir()
-	if err := os.MkdirAll(thumbBaseDir, 0o755); err != nil {
-		return "", err
-	}
-
-	cacheName := fmt.Sprintf("thumb_%d_%d_%d.jpg", fileID, versionTag, size)
-	cachePath := filepath.Join(thumbBaseDir, cacheName)
-	if _, err := os.Stat(cachePath); err == nil {
-		return cachePath, nil
-	}
-
-	srcFile, err := os.Open(sourcePath)
-	if err != nil {
-		return "", err
-	}
-	defer srcFile.Close()
-
-	img, _, err := image.Decode(srcFile)
-	if err != nil {
-		return "", err
-	}
-
-	thumb := resizeToMaxEdge(img, size)
-	outFile, err := os.Create(cachePath)
-	if err != nil {
-		return "", err
-	}
-	defer outFile.Close()
-
-	if err := jpeg.Encode(outFile, thumb, &jpeg.Options{Quality: 82}); err != nil {
-		return "", err
-	}
-
-	return cachePath, nil
-}
-
-// resizeToMaxEdge 将图片按比例缩放到指定最长边，避免原图过大导致预览缓慢。
-func resizeToMaxEdge(src image.Image, maxEdge int) image.Image {
-	b := src.Bounds()
-	sw := b.Dx()
-	sh := b.Dy()
-	if sw <= 0 || sh <= 0 || maxEdge <= 0 {
-		return src
-	}
-
-	if sw <= maxEdge && sh <= maxEdge {
-		return src
-	}
-
-	var dw, dh int
-	if sw >= sh {
-		dw = maxEdge
-		dh = sh * maxEdge / sw
-	} else {
-		dh = maxEdge
-		dw = sw * maxEdge / sh
-	}
-	if dw <= 0 {
-		dw = 1
-	}
-	if dh <= 0 {
-		dh = 1
-	}
-
-	dst := image.NewRGBA(image.Rect(0, 0, dw, dh))
-	// 先填充白底，避免透明图转 jpg 后出现黑底。
-	draw.Draw(dst, dst.Bounds(), &image.Uniform{C: color.White}, image.Point{}, draw.Src)
-	for y := 0; y < dh; y++ {
-		sy := b.Min.Y + y*sh/dh
-		for x := 0; x < dw; x++ {
-			sx := b.Min.X + x*sw/dw
-			dst.Set(x, y, src.At(sx, sy))
-		}
-	}
-	return dst
-}
-
 func generateShareCode(length int) (string, error) {
 	const alphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
 	if length <= 0 {
@@ -1875,326 +1694,26 @@ func (h *FileHandler) checkShareAccessRateLimit(ctx context.Context, shareCode s
 	return count <= int64(maxInWindow), nil
 }
 
-// getUploadRateBytesPerSec 获取上传限速值：query 参数优先，其次读取 system_setting。
-func (h *FileHandler) getUploadRateBytesPerSec(c *gin.Context) int64 {
-	rateKbpsRaw := strings.TrimSpace(c.Query("upload_rate_kbps"))
-	uid := c.GetInt64(middleware.ContextUserIDKey)
-	ctx := c.Request.Context()
-	if rateKbpsRaw == "" {
-		if v, ok, err := h.getSystemSettingInt64(ctx, "upload_speed_limit_kbps"); err == nil && ok && v > 0 {
-			rateKbpsRaw = strconv.FormatInt(v, 10)
-		}
-		if inPeak, err := h.isInPeakWindow(ctx, uid); err == nil && inPeak {
-			if v, ok, err := h.getSystemSettingInt64(ctx, "upload_peak_speed_limit_kbps"); err == nil && ok && v > 0 {
-				rateKbpsRaw = strconv.FormatInt(v, 10)
-			}
-		}
-	}
-	if rateKbpsRaw == "" {
-		return defaultUploadRateBytesPerSec
-	}
-	rateKbps, err := strconv.ParseInt(rateKbpsRaw, 10, 64)
-	if err != nil {
-		return defaultUploadRateBytesPerSec
-	}
-	if rateKbps < minUploadRateKbps {
-		rateKbps = minUploadRateKbps
-	}
-	if rateKbps > maxUploadRateKbps {
-		rateKbps = maxUploadRateKbps
-	}
-	return rateKbps * 1024
-}
-
-// saveUploadedFileWithRateLimit 以限速方式写入上传分片，防止上传突发占满带宽。
-func (h *FileHandler) saveUploadedFileWithRateLimit(c *gin.Context, fh *multipart.FileHeader, dstPath string, bytesPerSec int64) error {
-	src, err := fh.Open()
-	if err != nil {
-		return err
-	}
-	defer src.Close()
-
-	dst, err := os.Create(dstPath)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_ = dst.Close()
-	}()
-
-	if bytesPerSec <= 0 {
-		_, copyErr := io.Copy(dst, src)
-		return copyErr
-	}
-
-	const chunkSize = 32 * 1024
-	buf := make([]byte, chunkSize)
-	start := time.Now()
-	var writtenTotal int64
-
-	for {
-		n, readErr := src.Read(buf)
-		if n > 0 {
-			w, writeErr := dst.Write(buf[:n])
-			if writeErr != nil {
-				return writeErr
-			}
-			writtenTotal += int64(w)
-
-			elapsed := time.Since(start)
-			expected := time.Duration(float64(writtenTotal) / float64(bytesPerSec) * float64(time.Second))
-			if expected > elapsed {
-				time.Sleep(expected - elapsed)
-			}
-		}
-		if readErr != nil {
-			if errors.Is(readErr, io.EOF) {
-				break
-			}
-			return readErr
-		}
-
-		if c.Request.Context().Err() != nil {
-			return c.Request.Context().Err()
-		}
-	}
-
-	return nil
-}
-
-// getSystemSettingInt64 读取整数配置项，返回值、是否存在、错误。
-func (h *FileHandler) getSystemSettingInt64(ctx context.Context, key string) (int64, bool, error) {
-	return h.Svc.GetSystemSettingInt64(ctx, key)
-}
-
-// getSystemSettingString 读取字符串配置项，返回值、是否存在、错误。
-func (h *FileHandler) getSystemSettingString(ctx context.Context, key string) (string, bool, error) {
-	return h.Svc.GetSystemSettingString(ctx, key)
-}
-
-// getDownloadRateBytesPerSec 获取下载限速值：query 参数优先，其次读取 system_setting。
-func (h *FileHandler) getDownloadRateBytesPerSec(c *gin.Context) int64 {
-	rateKbpsRaw := strings.TrimSpace(c.Query("rate_kbps"))
-	uid := c.GetInt64(middleware.ContextUserIDKey)
-	ctx := c.Request.Context()
-	if rateKbpsRaw == "" {
-		if v, ok, err := h.getSystemSettingInt64(ctx, "download_speed_limit_kbps"); err == nil && ok && v > 0 {
-			rateKbpsRaw = strconv.FormatInt(v, 10)
-		}
-		if inPeak, err := h.isInPeakWindow(ctx, uid); err == nil && inPeak {
-			if v, ok, err := h.getSystemSettingInt64(ctx, "download_peak_speed_limit_kbps"); err == nil && ok && v > 0 {
-				rateKbpsRaw = strconv.FormatInt(v, 10)
-			}
-		}
-	}
-	if rateKbpsRaw == "" {
-		return defaultDownloadRateBytesPerSec
-	}
-	rateKbps, err := strconv.ParseInt(rateKbpsRaw, 10, 64)
-	if err != nil {
-		return defaultDownloadRateBytesPerSec
-	}
-	if rateKbps < minDownloadRateKbps {
-		rateKbps = minDownloadRateKbps
-	}
-	if rateKbps > maxDownloadRateKbps {
-		rateKbps = maxDownloadRateKbps
-	}
-	return rateKbps * 1024
-}
-
-// isInPeakWindow 判断当前请求是否处于高峰时段。
-func (h *FileHandler) isInPeakWindow(ctx context.Context, uid int64) (bool, error) {
-	return h.Svc.IsInPeakWindow(ctx, uid)
-}
-
-func (h *FileHandler) resolvePeakWindowSetting(ctx context.Context, uid int64) (bool, string, string, error) {
-	return h.Svc.ResolvePeakWindowSetting(ctx, uid)
-}
-
-func parseHHMMToMinute(v string) (int, bool) {
-	v = strings.TrimSpace(v)
-	if len(v) != 5 || v[2] != ':' {
-		return 0, false
-	}
-	h, errH := strconv.Atoi(v[:2])
-	m, errM := strconv.Atoi(v[3:])
-	if errH != nil || errM != nil {
-		return 0, false
-	}
-	if h < 0 || h > 23 || m < 0 || m > 59 {
-		return 0, false
-	}
-	return h*60 + m, true
-}
-
-// sendFileWithRateLimit 以限速方式输出文件流，避免下载占满带宽。
-func (h *FileHandler) sendFileWithRateLimit(c *gin.Context, filePath string, downloadName string, bytesPerSec int64) error {
-	f, err := os.Open(filePath)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	stat, err := f.Stat()
-	if err != nil {
-		return err
-	}
-
-	c.Header("Accept-Ranges", "bytes")
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", sanitizeFileName(downloadName)))
-
-	if strings.TrimSpace(c.GetHeader("Range")) != "" {
-		http.ServeContent(c.Writer, c.Request, sanitizeFileName(downloadName), stat.ModTime(), f)
-		return nil
-	}
-
-	if bytesPerSec <= 0 {
-		c.Header("Content-Type", "application/octet-stream")
-		c.Header("Content-Length", strconv.FormatInt(stat.Size(), 10))
-		_, err = io.Copy(c.Writer, f)
-		return err
-	}
-
-	c.Header("Content-Type", "application/octet-stream")
-	c.Header("Content-Length", strconv.FormatInt(stat.Size(), 10))
-
-	const chunkSize = 32 * 1024
-	buf := make([]byte, chunkSize)
-	start := time.Now()
-	var sent int64
-
-	for {
-		n, readErr := f.Read(buf)
-		if n > 0 {
-			written, writeErr := c.Writer.Write(buf[:n])
-			if writeErr != nil {
-				return writeErr
-			}
-			sent += int64(written)
-
-			// 按累计发送量控制整体速率，避免短时突发。
-			expectedElapsed := time.Duration(float64(sent) / float64(bytesPerSec) * float64(time.Second))
-			actualElapsed := time.Since(start)
-			if expectedElapsed > actualElapsed {
-				timer := time.NewTimer(expectedElapsed - actualElapsed)
-				select {
-				case <-c.Request.Context().Done():
-					timer.Stop()
-					return c.Request.Context().Err()
-				case <-timer.C:
-				}
-			}
-
-			if flusher, ok := c.Writer.(http.Flusher); ok {
-				flusher.Flush()
-			}
-		}
-
-		if readErr != nil {
-			if errors.Is(readErr, io.EOF) {
-				break
-			}
-			return readErr
-		}
-	}
-
-	return nil
-}
-
-func computeFileMD5Hex(filePath string) (string, error) {
-	f, err := os.Open(filePath)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-
-	h := md5.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(h.Sum(nil)), nil
-}
-
-// createFolderZip validates a complete authorized manifest before opening a ZIP.
-func (h *FileHandler) createFolderZip(ctx context.Context, uid int64, root model.File) (string, error) {
-	entries, err := h.Svc.CollectFolderZipEntries(ctx, uid, root.ID)
-	if err != nil {
-		return "", err
-	}
-	return createFolderZipFromEntries(entries)
-}
-
-func createFolderZipFromEntries(entries []service.FileFolderZipEntry) (string, error) {
-	tmpFile, err := os.CreateTemp("", "cloudnest-folder-*.zip")
-	if err != nil {
-		return "", err
-	}
-	zipPath := tmpFile.Name()
-
-	zw := zip.NewWriter(tmpFile)
-	defer func() {
-		_ = zw.Close()
-		_ = tmpFile.Close()
-	}()
-
-	for _, entry := range entries {
-		if entry.IsDir {
-			if err := addZipDir(zw, entry.RelPath); err != nil {
-				_ = os.Remove(zipPath)
-				return "", err
-			}
-			continue
-		}
-		if err := addZipFileFromPath(zw, entry.RelPath, entry.StoragePath); err != nil {
-			_ = os.Remove(zipPath)
-			return "", err
-		}
-	}
-
-	if err := zw.Close(); err != nil {
-		_ = os.Remove(zipPath)
-		return "", err
-	}
-	if err := tmpFile.Close(); err != nil {
-		_ = os.Remove(zipPath)
-		return "", err
-	}
-
-	return zipPath, nil
-}
-
-// addZipDir 在 zip 中写入目录项，兼容空目录下载。
-func addZipDir(zw *zip.Writer, relPath string) error {
-	entry := filepath.ToSlash(strings.TrimSuffix(relPath, "/")) + "/"
-	_, err := zw.Create(entry)
-	return err
-}
-
-// addZipFileFromPath 读取磁盘文件并写入 zip 指定路径。
-func addZipFileFromPath(zw *zip.Writer, relPath string, sourcePath string) error {
-	in, err := os.Open(sourcePath)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-
-	w, err := zw.Create(filepath.ToSlash(relPath))
-	if err != nil {
-		return err
-	}
-
-	_, err = io.Copy(w, in)
-	return err
-}
-
 func writeFileMutationError(c *gin.Context, err error, fallback string) {
 	status, message := http.StatusInternalServerError, fallback
 	switch {
+	case errors.Is(err, contract.ErrRatePolicy):
+		status, message = http.StatusServiceUnavailable, "transfer rate policy unavailable"
+	case errors.Is(err, contract.ErrTransferSpace):
+		status, message = http.StatusInsufficientStorage, "temporary storage capacity unavailable"
+	case errors.Is(err, contract.ErrTransferBusy):
+		c.Header("Retry-After", "1")
+		status, message = http.StatusConflict, "transfer already in progress; retry later"
+	case errors.Is(err, contract.ErrTransferUnavailable):
+		status, message = http.StatusServiceUnavailable, "transfer storage unavailable"
 	case errors.Is(err, contract.ErrQuotaExceeded):
 		status, message = http.StatusInsufficientStorage, "storage quota exceeded"
 	case errors.Is(err, contract.ErrQuotaAccounting):
 		status, message = http.StatusServiceUnavailable, "storage accounting unavailable"
+	case errors.Is(err, contract.ErrUploadReceipt):
+		status, message = http.StatusServiceUnavailable, "upload completion receipt unavailable"
+	case errors.Is(err, contract.ErrUploadReceiptMissing):
+		status, message = http.StatusConflict, "upload already completed; original result unavailable"
 	case errors.Is(err, contract.ErrUploadContract):
 		status, message = http.StatusConflict, "upload contract changed, expired or not reserved"
 	case errors.Is(err, contract.ErrStorageIntegrity):
@@ -2212,9 +1731,10 @@ func writeFileMutationError(c *gin.Context, err error, fallback string) {
 }
 
 func isUploadContractError(err error) bool {
-	return errors.Is(err, contract.ErrQuotaExceeded) || errors.Is(err, contract.ErrQuotaAccounting) || errors.Is(err, contract.ErrUploadContract)
+	return errors.Is(err, contract.ErrQuotaExceeded) || errors.Is(err, contract.ErrQuotaAccounting) || errors.Is(err, contract.ErrUploadContract) || errors.Is(err, contract.ErrUploadReceipt) || errors.Is(err, contract.ErrUploadReceiptMissing)
 }
 func (h *FileHandler) CancelUpload(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<10)
 	var req struct {
 		UploadID string `json:"upload_id"`
 	}
