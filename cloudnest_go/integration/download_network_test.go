@@ -17,6 +17,23 @@ import (
 	"time"
 )
 
+// Bound the server's queued bytes while retaining the peer's normal receive
+// window. A tiny SO_RCVBUF can leave Linux draining queued bytes for many
+// seconds after a correctly timed-out handler has already closed its socket.
+type networkSmallSendBuffer struct{ net.Listener }
+
+func (l networkSmallSendBuffer) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	if err := conn.(*net.TCPConn).SetWriteBuffer(16 << 10); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	return conn, nil
+}
+
 // Real default 30-second write deadlines are tested separately so they cannot
 // consume the ordinary six-minute correctness-suite budget.
 func TestDownloadNetworkStalledPeersReleaseLeases(t *testing.T) {
@@ -37,6 +54,7 @@ func TestDownloadNetworkStalledPeersReleaseLeases(t *testing.T) {
 			if server.EnableHTTP2 {
 				server.StartTLS()
 			} else {
+				server.Listener = networkSmallSendBuffer{server.Listener}
 				server.Start()
 			}
 			defer server.Close()
@@ -61,9 +79,6 @@ func TestDownloadNetworkStalledPeersReleaseLeases(t *testing.T) {
 				}
 				tcp = conn.(*net.TCPConn)
 				defer tcp.Close()
-				if err := tcp.SetReadBuffer(1024); err != nil {
-					t.Fatal(err)
-				}
 				tcp.SetDeadline(time.Now().Add(time.Minute))
 				if err := req.Write(tcp); err != nil {
 					t.Fatal(err)
@@ -100,9 +115,6 @@ func TestDownloadNetworkStalledPeersReleaseLeases(t *testing.T) {
 			}
 			waitNoReadLeases(t, f, *file.StorageID)
 			if tcp != nil {
-				if err := tcp.SetReadBuffer(1 << 20); err != nil {
-					t.Fatal(err)
-				}
 				tcp.SetReadDeadline(time.Now().Add(15 * time.Second))
 			}
 			data, readErr := io.ReadAll(response.Body)
