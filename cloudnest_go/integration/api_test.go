@@ -207,28 +207,20 @@ func (f *fixture) upload(t *testing.T, token, filename string, payload []byte) m
 	if completed.Item.ID <= 0 || completed.Item.Size != int64(len(payload)) {
 		t.Fatal("invalid completed file")
 	}
-	f.waitAnalysis(t, completed.Item.ID)
+	f.assertIndexQueued(t, completed.Item.ID)
 	return completed.Item
 }
 
-func (f *fixture) waitAnalysis(t *testing.T, fileID int64) {
+// assertIndexQueued verifies durable scheduling only. These API fixtures do not
+// run a worker or claim that extraction/embedding has succeeded.
+func (f *fixture) assertIndexQueued(t *testing.T, fileID int64) {
 	t.Helper()
-	// Existing implementation launches an untracked goroutine. Wait for its terminal
-	// audit entry before fixture cleanup; this is not an AI quality assertion.
-	deadline := time.Now().Add(10 * time.Second)
-	for {
-		var count int64
-		err := f.db.Model(&model.OperationLog{}).Where("file_id = ? AND action = ?", fileID, "ai_auto_analyze").Count(&count).Error
-		if err != nil {
-			t.Fatal(err)
-		}
-		if count > 0 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("background analysis did not terminate")
-		}
-		time.Sleep(20 * time.Millisecond)
+	var job model.AIIndexJob
+	if err := f.db.First(&job, "file_id=?", fileID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if job.Status != "queued" || job.Generation != 1 || job.Attempts != 0 || job.LeaseToken != "" || job.LeaseUntil != nil {
+		t.Fatalf("upload did not atomically queue initial index: %+v", job)
 	}
 }
 

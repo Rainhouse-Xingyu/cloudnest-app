@@ -104,3 +104,12 @@ G03 下载阻塞写入治理追加两个独立 `integration,network` 测试函�
 写入期限与卷初始化修复的产品提交 b8cdfd2 随后独立完成 1 GiB 复测（2026-10-24；用例 219.79s / 包 221.774s）：上传 104.949s / 9.757 MiB/s，complete 4.344s；下载 103.575s / 9.887 MiB/s，初始/Range 首字节 0.570/0.610s；两次服务进程峰值 RSS 30,064,640 / 30,539,776 字节。半程暂停/重启续传、完成回执、实际连接取消后的 206 接续与完整 SHA-256 全部通过，见 TRANSFER-PERFORMANCE 和对应原始 JSON；不把单次本机结果外推多用户或生产性能。
 
 2026-10-25 首次远端 Linux 网络专项揭示夹具的跨平台问题：服务端 handler 已按期限退出、租约已释放，但测试将客户端 SO_RCVBUF 缩至 1 KiB，使 Linux 内核排队数据在关闭后仍缓慢排出，最终命中测试客户端自己的读取期限。该次 PR/push CI 网络项失败，普通 237 项和漏洞检查通过；没有将失败标为产品验收成功。夹具现改为限制测试服务端 SO_SNDBUF（16 KiB），保留客户端正常接收窗口，继续用真实 TCP、默认 30 秒写入期限、租约计数、完整截断前缀和“读取错误不能是客户端 timeout”断言。产品代码未改变。修正后 macOS 独立网络 race 测试两项通过（104.087s）；另以交叉编译的非 race Linux arm64 测试二进制，在新建 MySQL/Redis 共享网络命名空间和 Alpine 容器内实际执行两项，同样通过。Linux 预检没有冒充 race 验收；最终 GitHub Linux race 网络项按新提交重新核验。
+
+## G04 持久索引任务检查点（2026-10-26）
+
+- 新增上传与 outbox 原子提交、并发领取、崩溃重领、旧 token/代次隔离、退避/尝试上限、结果回滚/当前源检查、只读 schema 校验、SKIP LOCKED 与发布末尾过期测试。
+- worker 执行器具有独立 blob Scope、任务续约、三分钟处理期限与停止清理；原后台分析租约测试移接真实队列 worker，仍验证上传 HTTP 完成后物理读保护、失败诊断与租约释放。新增取消 worker 的真实读取/重排队测试；没有删除原保护要求。
+- 首批队列 8 项 race 专项通过（10.014s）；加入 worker 后的 11 项专项通过（11.988s）。这些只证明调度/隔离/生命周期，不证明已完成模型索引或检索。
+- 中间完整运行曾编译失败：旧 `read_lease_test.go` 仍向已经移除的 `FileHandler.HTTPClient` 注入后台 transport。改为在新 worker processor 边界注入失败，保留实际 blob Pin/完整字节校验与释放断言。失败日志 `/tmp/cloudnest-ai-queue-full.log`；没有降低原安全断言。
+- 最终 `make check`（vet/build）、`make test`（race 单元）通过，见 `/tmp/cloudnest-ai-queue-worker-unit.log`。最终完整 **248 项 race 集成全部通过（335.569s）**，保留六分钟期限，见 `/tmp/cloudnest-ai-queue-full-final.log`；无 FAIL 或 DATA RACE。模块完整性和仓库/diff 检查通过。
+- 新队列表仅在隔离容器显式 migrate；没有修改生产库或删除历史 AI 数据。当前服务未接入真实 processor，新任务保持 queued；G04 的真实解析/embedding/index/search/evaluation 尚未验收。
