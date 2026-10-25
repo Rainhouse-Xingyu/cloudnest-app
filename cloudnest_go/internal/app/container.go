@@ -11,6 +11,7 @@ import (
 	"cloudenest_go/internal/middleware"
 	"cloudenest_go/internal/service"
 	storageMysql "cloudenest_go/internal/storage/mysql"
+	"cloudenest_go/internal/transfer"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -121,7 +122,7 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 
 		AuthHandler:          &handler.AuthHandler{Svc: authService},
 		AdminHandler:         &handler.AdminHandler{Svc: adminService},
-		FileHandler:          &handler.FileHandler{Blobs: blobs, RDB: rdb, Cfg: cfg, AISvc: aiService, Svc: fileService},
+		FileHandler:          &handler.FileHandler{Transfers: transfer.NewManager(db, cfg), Blobs: blobs, RDB: rdb, Cfg: cfg, AISvc: aiService, Svc: fileService},
 		SettingsHandler:      &handler.SettingsHandler{Svc: settingsService},
 		StorageHandler:       &handler.StorageHandler{Svc: storageService},
 		CollaborationHandler: &handler.CollaborationHandler{Svc: collaborationService},
@@ -133,7 +134,8 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 
 // NewRouter 统一构建路由与中间件。
 func (c *Container) NewRouter() *gin.Engine {
-	r := gin.Default()
+	r := gin.New()
+	r.Use(gin.Logger(), middleware.RecoverHTTP())
 	r.Use(middleware.ProtectBlobReads(c.Blobs))
 	// Forwarding headers are untrusted until an explicit ingress policy exists.
 	_ = r.SetTrustedProxies(nil)
@@ -173,7 +175,9 @@ func (c *Container) NewRouter() *gin.Engine {
 	api.PUT("/files/:id/rename", c.FileHandler.Rename)
 	api.DELETE("/files/:id", c.FileHandler.Delete)
 	api.POST("/files/upload/init", c.FileHandler.InitUpload)
-	api.POST("/files/upload/chunk", c.FileHandler.UploadChunk)
+	api.POST("/files/upload/chunk", middleware.UploadBodyBudget(c.RDB, middleware.UploadBodyTimeout), c.FileHandler.UploadChunk)
+	api.POST("/files/upload/pause", c.FileHandler.PauseUpload)
+	api.POST("/files/upload/resume", c.FileHandler.ResumeUpload)
 	api.POST("/files/upload/cancel", c.FileHandler.CancelUpload)
 	api.POST("/files/upload/complete", c.FileHandler.CompleteUpload)
 	api.GET("/files/upload/progress", c.FileHandler.UploadProgress)

@@ -51,6 +51,8 @@ func Migrate(db *gorm.DB) error {
 		&model.FileVersion{},
 		&model.FilePermission{},
 		&model.UploadTask{},
+		&model.TransferVolume{},
+		&model.TransferArtifact{},
 		&model.StorageQuotaPolicy{},
 		&model.UserStorageLedger{},
 		&model.UploadChunk{},
@@ -150,5 +152,14 @@ func CheckFileSchema(db *gorm.DB) error {
 	if err := CheckStorageGCSchema(db); err != nil {
 		return err
 	}
-	return CheckQuotaSchema(db)
+	if err := CheckQuotaSchema(db); err != nil {
+		return err
+	}
+	if err := CheckUploadResultSchema(db); err != nil {
+		return err
+	}
+	if err := CheckUploadChunkSchema(db); err != nil {
+		return err
+	}
+	return CheckTransferSchema(db)
 }

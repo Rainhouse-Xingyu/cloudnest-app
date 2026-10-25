@@ -49,6 +49,7 @@ type FileOperationLogQuery struct {
 type UploadCommit struct {
 	File                model.File
 	CandidateDisposable bool
+	Replayed            bool
 }
 
 // FileRepository 定义 File 模块核心查询访问接口。
@@ -65,6 +66,7 @@ type FileRepository interface {
 	GetStorageByID(ctx context.Context, storageID int64) (model.Storage, error)
 	CollectFolderZipEntries(ctx context.Context, uid, rootID int64) ([]FolderZipEntry, error)
 	GetSystemSettingByKey(ctx context.Context, key string) (model.SystemSetting, error)
+	GetTransferRateSettings(ctx context.Context, uid int64) ([]model.SystemSetting, error)
 	CreateFolderRecord(ctx context.Context, uid int64, name string, parentID int64) (model.File, error)
 	RenameFile(ctx context.Context, uid, fileID int64, name string) (model.File, error)
 	CountActiveChildren(ctx context.Context, parentID int64) (int64, error)
@@ -77,9 +79,10 @@ type FileRepository interface {
 	GetUploadTaskAndUploadedChunkIndexes(ctx context.Context, userID int64, uploadID string) (model.UploadTask, []int, error)
 	CreateUploadTask(ctx context.Context, task model.UploadTask) error
 	CancelUploadTask(ctx context.Context, uid int64, uploadID, clientIP string) error
-	UpsertUploadChunkAndRefreshProgress(ctx context.Context, taskID int64, uploadID string, chunkIndex int, chunkSize int64, chunkPath string) error
-	CountDoneUploadChunks(ctx context.Context, uploadID string) (int64, error)
-	CompleteUploadPersist(ctx context.Context, uid int64, parentID int64, uploadID string, task model.UploadTask, totalChunks int, storagePath, storageRoot string, mergedSize int64, fileHash string, clientIP string) (UploadCommit, error)
+	ControlUploadTask(ctx context.Context, uid int64, uploadID string, expectedEpoch int64, paused bool, clientIP string) (model.UploadTask, error)
+	UpsertUploadChunkAndRefreshProgress(ctx context.Context, taskID int64, uploadID string, chunkIndex int, chunkSize int64, chunkPath, chunkRoot, sha256, md5, artifactToken string) (ChunkCommit, error)
+	ListDoneUploadChunks(ctx context.Context, uploadID string) ([]model.UploadChunk, error)
+	CompleteUploadPersist(ctx context.Context, uid int64, parentID int64, uploadID string, task model.UploadTask, totalChunks int, storagePath, storageRoot string, mergedSize int64, fileHash, artifactToken string, clientIP string) (UploadCommit, error)
 	CreateShare(ctx context.Context, uid int64, fileID int64, shareCode string, expireAt *time.Time) (model.Share, error)
 	CreateOperationLog(ctx context.Context, userID int64, fileID *int64, action string, status string, detail string, clientIP string) error
 	ListShares(ctx context.Context, uid int64) ([]model.Share, error)

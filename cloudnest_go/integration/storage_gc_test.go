@@ -399,8 +399,8 @@ func TestStorageGCNeverAdoptsLegacyPathsOrWrongRoots(t *testing.T) {
 		t.Fatal(err)
 	}
 	uploadID := fixturePendingUpload(t, f, f.alice, "unsafe-publication-root.txt", []byte("must-not-be-created"))
-	if w := completeUploadRecorder(f, f.alice, uploadID); w.Code != 500 {
-		t.Fatal("unsafe publication directory accepted:", w.Code)
+	if w := completeUploadRecorder(f, f.alice, uploadID); w.Code != 503 {
+		t.Fatal("unsafe publication directory did not fail closed:", w.Code)
 	}
 	after, err := os.ReadDir(month)
 	if err != nil || len(after) != len(before) {

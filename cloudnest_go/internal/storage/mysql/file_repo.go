@@ -3,6 +3,7 @@ package mysql
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"cloudenest_go/internal/blob"
 	"cloudenest_go/internal/quota"
 	"cloudenest_go/internal/service/contract"
+	"cloudenest_go/internal/transfer"
 	"cloudenest_go/model"
 
 	"gorm.io/gorm"
@@ -168,6 +170,28 @@ func (r *FileRepo) GetSystemSettingByKey(ctx context.Context, key string) (model
 		return model.SystemSetting{}, err
 	}
 	return row, nil
+}
+
+// GetTransferRateSettings shares the existing settings policy lock. No DB
+// connection/lock remains held during IO or limiter waits.
+func (r *FileRepo) GetTransferRateSettings(ctx context.Context, uid int64) ([]model.SystemSetting, error) {
+	ctx, stop := context.WithTimeout(ctx, 5*time.Second)
+	defer stop()
+	var rows []model.SystemSetting
+	keys := []string{"upload_speed_limit_kbps", "download_speed_limit_kbps", "upload_peak_speed_limit_kbps", "download_peak_speed_limit_kbps", "peak_window_enabled", "peak_window_start", "peak_window_end"}
+	if uid > 0 {
+		suffix := fmt.Sprintf("_user_%d", uid)
+		for _, key := range []string{"peak_window_enabled", "peak_window_start", "peak_window_end"} {
+			keys = append(keys, key+suffix)
+		}
+	}
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := quota.LockPolicy(tx, false); err != nil {
+			return err
+		}
+		return tx.Where("setting_key IN ?", keys).Find(&rows).Error
+	}, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	return rows, err
 }
 
 func (r *FileRepo) CreateFolderRecord(ctx context.Context, uid int64, name string, parentID int64) (model.File, error) {
@@ -462,11 +486,17 @@ func (r *FileRepo) GetUploadTaskByUploadID(ctx context.Context, uid int64, uploa
 	if task.UserID == nil || *task.UserID != uid {
 		return model.UploadTask{}, contract.ErrForbidden
 	}
-	if task.ContractVersion != 1 {
+	if task.ContractVersion != 1 || task.TransferEpoch < 0 {
 		return model.UploadTask{}, contract.ErrUploadContract
 	}
-	if task.Status == 0 {
-		if err := quota.RequireLiveTask(r.db.WithContext(ctx), task); err != nil {
+	if task.Status != 1 && (task.ChunkProtocol != 1 || task.TransferProtocol != 1) {
+		return model.UploadTask{}, contract.ErrUploadContract
+	}
+	if task.Status != 1 && task.TotalChunks != nil && (*task.TotalChunks < 0 || *task.TotalChunks > contract.MaxUploadChunks) {
+		return model.UploadTask{}, contract.ErrUploadContract
+	}
+	if task.Status == 0 || task.Status == 2 {
+		if err := quota.RequireRetainedTask(r.db.WithContext(ctx), task); err != nil {
 			return model.UploadTask{}, err
 		}
 	}
@@ -489,7 +519,7 @@ func (r *FileRepo) GetUploadTaskAndUploadedChunkIndexes(ctx context.Context, use
 	err = r.db.WithContext(ctx).
 		Where("upload_id = ? AND status = 1", uploadID).
 		Order("chunk_index ASC").
-		Find(&rows).Error
+		Limit(contract.MaxUploadChunks + 1).Find(&rows).Error
 	if err != nil {
 		return model.UploadTask{}, nil, err
 	}
@@ -503,7 +533,7 @@ func (r *FileRepo) GetUploadTaskAndUploadedChunkIndexes(ctx context.Context, use
 }
 
 func (r *FileRepo) CreateUploadTask(ctx context.Context, task model.UploadTask) error {
-	if task.UserID == nil || task.TotalSize == nil || task.ReservedBytes != *task.TotalSize || task.ReservedBytes <= 0 || task.ContractVersion != 1 {
+	if task.UserID == nil || task.TotalSize == nil || task.ReservedBytes != *task.TotalSize || task.ReservedBytes < 0 || (task.ReservedBytes == 0 && !contract.IsEmptyUpload(task)) || task.ContractVersion != 1 {
 		return contract.ErrInvalidInput
 	}
 	uid := *task.UserID
@@ -541,16 +571,22 @@ func (r *FileRepo) CreateUploadTask(ctx context.Context, task model.UploadTask) 
 	})
 }
 
-func (r *FileRepo) UpsertUploadChunkAndRefreshProgress(ctx context.Context, taskID int64, uploadID string, chunkIndex int, chunkSize int64, chunkPath string) error {
+func (r *FileRepo) UpsertUploadChunkAndRefreshProgress(ctx context.Context, taskID int64, uploadID string, chunkIndex int, chunkSize int64, chunkPath, chunkRoot, sha256, md5, artifactToken string) (contract.ChunkCommit, error) {
 	var owner model.UploadTask
 	if err := r.db.WithContext(ctx).First(&owner, taskID).Error; err != nil {
-		return err
+		return contract.ChunkCommit{CandidateDisposable: true}, err
 	}
 	if owner.UserID == nil {
-		return contract.ErrForbidden
+		return contract.ChunkCommit{CandidateDisposable: true}, contract.ErrForbidden
 	}
-	return fileMetadataTransaction(ctx, r.db, func(tx *gorm.DB) error {
+	prepared, unused := false, false
+	err := fileMetadataTransaction(ctx, r.db, func(tx *gorm.DB) error {
+		// A deadlock retry starts a fresh attempt, never inheriting commit evidence.
+		prepared, unused = false, false
 		if err := quota.Begin(tx, *owner.UserID); err != nil {
+			return err
+		}
+		if err := transfer.CheckVolume(tx, artifactToken); err != nil {
 			return err
 		}
 		var current model.UploadTask
@@ -563,64 +599,79 @@ func (r *FileRepo) UpsertUploadChunkAndRefreshProgress(ctx context.Context, task
 		if err := quota.RequireLiveTask(tx, current); err != nil {
 			return err
 		}
-		if current.TotalChunks == nil || chunkIndex < 0 || chunkIndex >= *current.TotalChunks {
+		if current.MergeArtifact != "" {
+			return contract.ErrTransferBusy
+		}
+		expected, err := contract.ExpectedChunkBytes(current, chunkIndex)
+		if err != nil {
+			return err
+		}
+		if chunkSize != expected || !blob.ValidToken(sha256) || len(md5) != 32 {
 			return contract.ErrInvalidInput
 		}
+		if err := blob.VerifyChunk(ctx, chunkRoot, chunkPath, expected, sha256); err != nil {
+			return contract.ErrStorageIntegrity
+		}
+		if err := transfer.ValidateChunk(tx, artifactToken, current, chunkPath, chunkSize, sha256, true); err != nil {
+			return err
+		}
 		var row model.UploadChunk
-		err := tx.Where("upload_id = ? AND chunk_index = ?", uploadID, chunkIndex).First(&row).Error
-		if err != nil {
+		err = tx.First(&row, "upload_id=? AND chunk_index=?", uploadID, chunkIndex).Error
+		if err == nil {
+			if row.Status != 1 || row.ChunkSize == nil || *row.ChunkSize != chunkSize || row.SHA256 != sha256 || row.MD5 != md5 {
+				return contract.ErrConflict
+			}
+			if err := blob.VerifyChunk(ctx, chunkRoot, row.ChunkPath, expected, row.SHA256); err != nil {
+				return contract.ErrStorageIntegrity
+			}
+			if err := transfer.ValidateChunk(tx, row.ArtifactToken, current, row.ChunkPath, chunkSize, sha256, false); err != nil {
+				return err
+			}
+			unused = true
+		} else {
 			if !errors.Is(err, gorm.ErrRecordNotFound) {
 				return err
 			}
-			chunkSizeVal := chunkSize
-			row = model.UploadChunk{
-				UploadID:   uploadID,
-				ChunkIndex: chunkIndex,
-				ChunkSize:  &chunkSizeVal,
-				ChunkPath:  chunkPath,
-				Status:     1,
-			}
+			row = model.UploadChunk{ArtifactToken: artifactToken, UploadID: uploadID, ChunkIndex: chunkIndex, ChunkSize: &chunkSize, ChunkPath: chunkPath, SHA256: sha256, MD5: md5, Status: 1}
 			if err := tx.Create(&row).Error; err != nil {
 				return err
 			}
-		} else {
-			chunkSizeVal := chunkSize
-			if err := tx.Model(&row).Updates(map[string]interface{}{
-				"chunk_size": chunkSizeVal,
-				"chunk_path": chunkPath,
-				"status":     1,
-			}).Error; err != nil {
+			if err := transfer.AttachChunk(tx, artifactToken, current, chunkPath, chunkSize, sha256); err != nil {
+				return err
+			}
+			var count int64
+			if err := tx.Model(&model.UploadChunk{}).Where("upload_id=? AND status=1", uploadID).Count(&count).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&model.UploadTask{}).Where("id=?", taskID).Update("uploaded_chunks", count).Error; err != nil {
 				return err
 			}
 		}
-
-		var doneCount int64
-		if err := tx.Model(&model.UploadChunk{}).Where("upload_id = ? AND status = 1", uploadID).Count(&doneCount).Error; err != nil {
-			return err
-		}
-		return tx.Model(&model.UploadTask{}).Where("id = ?", taskID).Update("uploaded_chunks", int(doneCount)).Error
+		prepared = true
+		return nil
 	})
-}
-
-func (r *FileRepo) CountDoneUploadChunks(ctx context.Context, uploadID string) (int64, error) {
-	var doneCount int64
-	err := r.db.WithContext(ctx).
-		Model(&model.UploadChunk{}).
-		Where("upload_id = ? AND status = 1", uploadID).
-		Count(&doneCount).Error
 	if err != nil {
-		return 0, err
+		return contract.ChunkCommit{CandidateDisposable: !prepared || unused}, err
 	}
-	return doneCount, nil
+	return contract.ChunkCommit{CandidateDisposable: unused}, nil
+}
+func (r *FileRepo) ListDoneUploadChunks(ctx context.Context, uploadID string) ([]model.UploadChunk, error) {
+	var rows []model.UploadChunk
+	err := r.db.WithContext(ctx).Where("upload_id=? AND status=1", uploadID).Order("chunk_index ASC").Limit(contract.MaxUploadChunks + 1).Find(&rows).Error
+	return rows, err
 }
 
-func (r *FileRepo) CompleteUploadPersist(ctx context.Context, uid int64, parentID int64, uploadID string, task model.UploadTask, totalChunks int, storagePath, storageRoot string, mergedSize int64, fileHash string, clientIP string) (contract.UploadCommit, error) {
+func (r *FileRepo) CompleteUploadPersist(ctx context.Context, uid int64, parentID int64, uploadID string, task model.UploadTask, totalChunks int, storagePath, storageRoot string, mergedSize int64, fileHash, artifactToken string, clientIP string) (contract.UploadCommit, error) {
 	var createdFile model.File
 	var canonical model.Storage
 	var repaired bool
+	var replayed bool
 	prepared := false
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := quota.Begin(tx, uid); err != nil {
+			return err
+		}
+		if err := transfer.CheckVolume(tx, artifactToken); err != nil {
 			return err
 		}
 		if err := lockFileNamespaces(tx, fileNamespaceKey(uid, parentID)); err != nil {
@@ -633,7 +684,27 @@ func (r *FileRepo) CompleteUploadPersist(ctx context.Context, uid int64, parentI
 		if currentTask.UserID == nil || *currentTask.UserID != uid {
 			return contract.ErrForbidden
 		}
+		if currentTask.Status == 1 {
+			var err error
+			createdFile, err = contract.UploadReceipt(currentTask, uid, parentID)
+			replayed = err == nil
+			return err
+		}
 		if err := quota.RequireLiveTask(tx, currentTask); err != nil {
+			return err
+		}
+		if currentTask.TransferEpoch != task.TransferEpoch {
+			return contract.ErrUploadContract
+		}
+		if contract.IsEmptyUpload(currentTask) {
+			var count int64
+			if err := tx.Model(&model.UploadChunk{}).Where("upload_id=?", uploadID).Count(&count).Error; err != nil {
+				return err
+			}
+			if count != 0 {
+				return contract.ErrStorageIntegrity
+			}
+		} else if _, err := contract.ExpectedChunkBytes(currentTask, 0); err != nil {
 			return err
 		}
 		if currentTask.ParentID != parentID {
@@ -685,8 +756,18 @@ func (r *FileRepo) CompleteUploadPersist(ctx context.Context, uid int64, parentI
 		if err := tx.Create(&model.OperationLog{UserID: &uid, FileID: &createdFile.ID, Action: "upload_complete", Status: "success", Detail: fmt.Sprintf("upload_id=%s", uploadID), ClientIP: clientIP}).Error; err != nil {
 			return err
 		}
+		// Read DB defaults before persisting the exact original response. The
+		// receipt is informational and does not retain file/storage rows.
+		if err := tx.First(&createdFile, createdFile.ID).Error; err != nil {
+			return err
+		}
+		payload, err := json.Marshal(createdFile)
+		if err != nil || len(payload) > 8192 {
+			return contract.ErrUploadReceipt
+		}
 		transition := tx.Model(&model.UploadTask{}).Where("id=? AND status=0 AND contract_version=1 AND reserved_bytes=? AND parent_id=? AND expires_at>UTC_TIMESTAMP(6)", task.ID, mergedSize, parentID).Updates(map[string]interface{}{
 			"reserved_bytes": int64(0), "status": 1, "uploaded_chunks": totalChunks,
+			"result_version": int16(1), "result_file_id": createdFile.ID, "result_json": string(payload),
 		})
 		if transition.Error != nil {
 			return transition.Error
@@ -695,6 +776,9 @@ func (r *FileRepo) CompleteUploadPersist(ctx context.Context, uid int64, parentI
 			return contract.ErrUploadContract
 		}
 
+		if err := transfer.Publish(tx, artifactToken, currentTask, storagePath, canonical.FilePath, mergedSize, fileHash); err != nil {
+			return err
+		}
 		if err := tx.Where("upload_id = ?", uploadID).Delete(&model.UploadChunk{}).Error; err != nil {
 			return err
 		}
@@ -708,7 +792,7 @@ func (r *FileRepo) CompleteUploadPersist(ctx context.Context, uid int64, parentI
 	if err != nil {
 		return contract.UploadCommit{CandidateDisposable: !prepared}, normalizeFileNameConstraintError(err)
 	}
-	return contract.UploadCommit{File: createdFile, CandidateDisposable: canonical.FilePath != storagePath}, nil
+	return contract.UploadCommit{File: createdFile, CandidateDisposable: replayed || canonical.FilePath != storagePath, Replayed: replayed}, nil
 }
 
 func (r *FileRepo) ResolveValidShare(ctx context.Context, code string) (model.Share, model.File, error) {

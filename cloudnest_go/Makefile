@@ -2,7 +2,7 @@ BINARY := cloudnest
 CMD := ./cmd/server
 DIST := ./dist
 
-.PHONY: build build-macos build-linux release clean test check integration vuln
+.PHONY: build build-macos build-linux release clean test check integration performance network vuln
 
 test:
 	go test -race -count=1 ./...
@@ -13,6 +13,12 @@ check:
 
 integration:
 	../scripts/test-integration.sh
+
+performance:
+	../scripts/test-transfer-performance.sh
+
+network:
+	../scripts/test-transfer-network.sh
 
 vuln:
 	../scripts/check-vulnerabilities.sh

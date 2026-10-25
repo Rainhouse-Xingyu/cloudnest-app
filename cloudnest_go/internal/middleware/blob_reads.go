@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"cloudenest_go/internal/blob"
+	"cloudenest_go/internal/httpio"
 	"github.com/gin-gonic/gin"
 )
 
@@ -34,8 +35,12 @@ type leaseResponseWriter struct {
 }
 
 func (w *leaseResponseWriter) allow() error {
-	if err := w.scope.Check(); err != nil {
+	if err := w.scope.CheckResponse(); err != nil {
 		if !w.ResponseWriter.Written() {
+			for _, key := range []string{"ETag", "Repr-Digest", "Content-Digest", "Last-Modified"} {
+				w.ResponseWriter.Header().Del(key)
+			}
+			w.ResponseWriter.Header().Set("Cache-Control", "private, no-store, no-transform")
 			w.ResponseWriter.Header().Del("Content-Length")
 			w.ResponseWriter.Header().Del("Content-Disposition")
 			w.ResponseWriter.Header().Del("Content-Range")
@@ -60,7 +65,14 @@ func (w *leaseResponseWriter) WriteString(s string) (int, error) {
 	return w.ResponseWriter.WriteString(s)
 }
 func (w *leaseResponseWriter) Flush() {
-	if w.allow() == nil {
-		w.ResponseWriter.Flush()
-	}
+	_ = w.FlushError()
 }
+func (w *leaseResponseWriter) FlushError() error {
+	if err := w.allow(); err != nil {
+		return err
+	}
+	return httpio.Flush(w.ResponseWriter)
+}
+
+// Unwrap exposes connection deadline control without bypassing protected writes.
+func (w *leaseResponseWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }

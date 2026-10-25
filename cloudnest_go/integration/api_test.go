@@ -108,7 +108,7 @@ func newFixture(t *testing.T) *fixture {
 	}
 	t.Cleanup(func() { _ = rdb.Close() })
 	gin.SetMode(gin.TestMode)
-	f := &fixture{db: db, cfg: cfg, rdb: rdb, router: app.NewContainer(cfg, db, rdb).NewRouter(), remoteAddr: fmt.Sprintf("[2001:db8:1::%x]:12345", fixtureIPSequence.Add(1))}
+	f := &fixture{db: db, cfg: cfg, rdb: rdb, router: fixtureRouter(app.NewContainer(cfg, db, rdb).NewRouter()), remoteAddr: fmt.Sprintf("[2001:db8:1::%x]:12345", fixtureIPSequence.Add(1))}
 	password := "disposable-fixture-password"
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.MinCost)
 	if err != nil {
@@ -273,4 +273,19 @@ func TestAPIFileLifecycle(t *testing.T) {
 	}
 	f.json(t, "POST", "/api/auth/logout", f.alice, nil, http.StatusOK)
 	f.json(t, "GET", "/api/auth/me", f.alice, nil, http.StatusUnauthorized)
+}
+
+// A recorder reads an already materialized request, without a network connection.
+// TCP tests intentionally pass the real writer through to enforce deadlines.
+type fixtureDeadlineWriter struct{ *httptest.ResponseRecorder }
+
+func (w fixtureDeadlineWriter) SetReadDeadline(time.Time) error { return nil }
+func fixtureRouter(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if recorder, ok := w.(*httptest.ResponseRecorder); ok {
+			next.ServeHTTP(fixtureDeadlineWriter{recorder}, r)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }

@@ -26,8 +26,11 @@ import (
 )
 
 func fixturePendingUpload(t *testing.T, f *fixture, token, name string, payload []byte) string {
+	return fixturePendingUploadAt(t, f, token, name, payload, 0)
+}
+func fixturePendingUploadAt(t *testing.T, f *fixture, token, name string, payload []byte, parentID int64) string {
 	t.Helper()
-	w := f.json(t, "POST", "/api/files/upload/init", token, map[string]any{"filename": name, "total_size": len(payload), "chunk_size": len(payload), "total_chunks": 1}, http.StatusOK)
+	w := f.json(t, "POST", "/api/files/upload/init", token, map[string]any{"filename": name, "total_size": len(payload), "chunk_size": len(payload), "total_chunks": 1, "parent_id": parentID}, http.StatusOK)
 	var init struct {
 		UploadID string `json:"upload_id"`
 	}
@@ -82,12 +85,20 @@ func TestConcurrentUploadCompletionCannotDeletePublishedBytes(t *testing.T) {
 	paused := make(chan struct{})
 	release := make(chan struct{})
 	var once sync.Once
-	var seen atomic.Int32
+	taskID := receiptTask(t, f, id).ID
+	var seen atomic.Bool
 	const hook = "test:pause_first_quota_before_write"
 	if err := f.db.Callback().Create().Before("gorm:create").Register(hook, func(tx *gorm.DB) {
-		if row, ok := tx.Statement.Dest.(*model.UserStorageLedger); ok && row.UserID == f.aliceID && seen.Add(1) == 1 {
-			close(paused)
-			<-release
+		if row, ok := tx.Statement.Dest.(*model.UserStorageLedger); ok && row.UserID == f.aliceID {
+			var ready int64
+			if err := f.db.Model(&model.TransferArtifact{}).Where("task_id=? AND kind='merge' AND state='ready'", taskID).Count(&ready).Error; err != nil {
+				tx.AddError(err)
+				return
+			}
+			if ready > 0 && seen.CompareAndSwap(false, true) {
+				close(paused)
+				<-release
+			}
 		}
 	}); err != nil {
 		t.Fatal(err)
@@ -109,8 +120,12 @@ func TestConcurrentUploadCompletionCannotDeletePublishedBytes(t *testing.T) {
 			successful = append(successful, completedBlob(t, f, w))
 		}
 	}
-	if second.Code != http.StatusOK || first.Code != http.StatusConflict {
-		t.Errorf("completion statuses second=%d first=%d, want 200/409", second.Code, first.Code)
+	if second.Code != http.StatusConflict || first.Code != http.StatusOK {
+		t.Errorf("single merge statuses second=%d first=%d, want 409/200", second.Code, first.Code)
+	}
+	retry := completeUploadRecorder(f, f.alice, id)
+	if retry.Code != 200 || retry.Body.String() != first.Body.String() {
+		t.Fatal("completed merge retry did not reuse result")
 	}
 	if len(successful) == 0 {
 		t.Fatal("neither completion published a file")
