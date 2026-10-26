@@ -31,6 +31,10 @@ jobs:
       # transfer in every ordinary CI job. Run it locally via make performance.
       - run: go test -tags=integration,performance -run '^$' ./integration
         working-directory: cloudnest_go
+      # Keep the real-model test compiled; this runner does not have Ollama.
+      # Actual execution is an explicit local make ai-model acceptance step.
+      - run: go test -tags=integration,aimodel -run '^$' ./integration
+        working-directory: cloudnest_go
   vulnerabilities:
     runs-on: ubuntu-latest
     timeout-minutes: 15

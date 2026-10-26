@@ -20,3 +20,31 @@ type AIIndexJob struct {
 }
 
 func (AIIndexJob) TableName() string { return "ai_index_job" }
+
+// AIIndexDocument and its chunks are replaced atomically with a fenced job
+// completion. Search must join the live file and matching done job generation.
+type AIIndexDocument struct {
+	FileID         int64     `gorm:"primaryKey;autoIncrement:false" json:"file_id"`
+	Generation     int64     `gorm:"not null" json:"generation"`
+	SourceHash     string    `gorm:"type:char(64);not null" json:"source_hash"`
+	Pipeline       string    `gorm:"type:varchar(64);not null" json:"pipeline"`
+	EmbeddingModel string    `gorm:"type:varchar(200);not null" json:"embedding_model"`
+	ModelDigest    string    `gorm:"type:char(64);not null" json:"model_digest"`
+	Dimensions     int       `gorm:"not null" json:"dimensions"`
+	ChunkCount     int       `gorm:"not null" json:"chunk_count"`
+	TextBytes      int       `gorm:"not null" json:"text_bytes"`
+	IndexedAt      time.Time `gorm:"type:datetime(6);not null" json:"indexed_at"`
+}
+
+func (AIIndexDocument) TableName() string { return "ai_index_document" }
+
+type AIIndexChunk struct {
+	FileID    int64  `gorm:"primaryKey;autoIncrement:false" json:"file_id"`
+	Ordinal   int    `gorm:"primaryKey;autoIncrement:false" json:"ordinal"`
+	StartRune int    `gorm:"not null" json:"start_rune"`
+	EndRune   int    `gorm:"not null" json:"end_rune"`
+	Content   string `gorm:"type:text;not null" json:"content"`
+	Vector    []byte `gorm:"type:varbinary(16384);not null" json:"-"`
+}
+
+func (AIIndexChunk) TableName() string { return "ai_index_chunk" }

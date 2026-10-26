@@ -16,8 +16,10 @@ import (
 	"syscall"
 	"time"
 
+	"cloudenest_go/internal/aiindex"
 	"cloudenest_go/internal/app"
 	"cloudenest_go/internal/config"
+	"cloudenest_go/internal/indexqueue"
 	storageMaintenance "cloudenest_go/internal/maintenance"
 	"cloudenest_go/internal/service"
 	"cloudenest_go/internal/service/contract"
@@ -193,6 +195,11 @@ func main() {
 	}
 
 	container := app.NewContainer(cfg, db, rdb)
+	embedding, err := aiindex.NewOllama(cfg.AIOllamaBaseURL, cfg.AIEmbeddingModel)
+	if err != nil {
+		log.Fatal("invalid AI embedding configuration")
+	}
+	indexWorker := indexqueue.NewWorker(db, container.Blobs, aiindex.NewProcessor(db, embedding).Process)
 	worker := container.FileHandler.Transfers
 	if cfg.TransferMaintenanceDSN != "" {
 		workerCfg := cfg
@@ -224,6 +231,8 @@ func main() {
 	server.BaseContext = func(net.Listener) context.Context { return lifetime }
 	workerDone := make(chan struct{})
 	go func() { defer close(workerDone); worker.Run(lifetime) }()
+	indexDone := make(chan struct{})
+	go func() { defer close(indexDone); indexWorker.Run(lifetime) }()
 	shutdownDone := make(chan struct{})
 	go func() {
 		defer close(shutdownDone)
@@ -237,6 +246,7 @@ func main() {
 	serveErr := server.ListenAndServe()
 	stop()
 	<-workerDone
+	<-indexDone
 	<-shutdownDone
 	if err := serveErr; err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("启动 HTTP 服务失败: %s", explainStartupError(err))

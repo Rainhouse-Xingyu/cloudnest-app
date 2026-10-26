@@ -452,6 +452,12 @@ func (r *FileRepo) PermanentDeleteFromRecycleBin(ctx context.Context, uid int64,
 		}
 
 		// 先清理依赖 file_id 的子表，避免 file 主表删除时触发外键约束失败。
+		if err := tx.Where("file_id IN ?", ids).Delete(&model.AIIndexChunk{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("file_id IN ?", ids).Delete(&model.AIIndexDocument{}).Error; err != nil {
+			return err
+		}
 		if err := tx.Where("file_id IN ?", ids).Delete(&model.AIIndexJob{}).Error; err != nil {
 			return err
 		}

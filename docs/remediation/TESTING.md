@@ -112,4 +112,15 @@ G03 下载阻塞写入治理追加两个独立 `integration,network` 测试函�
 - 首批队列 8 项 race 专项通过（10.014s）；加入 worker 后的 11 项专项通过（11.988s）。这些只证明调度/隔离/生命周期，不证明已完成模型索引或检索。
 - 中间完整运行曾编译失败：旧 `read_lease_test.go` 仍向已经移除的 `FileHandler.HTTPClient` 注入后台 transport。改为在新 worker processor 边界注入失败，保留实际 blob Pin/完整字节校验与释放断言。失败日志 `/tmp/cloudnest-ai-queue-full.log`；没有降低原安全断言。
 - 最终 `make check`（vet/build）、`make test`（race 单元）通过，见 `/tmp/cloudnest-ai-queue-worker-unit.log`。最终完整 **248 项 race 集成全部通过（335.569s）**，保留六分钟期限，见 `/tmp/cloudnest-ai-queue-full-final.log`；无 FAIL 或 DATA RACE。模块完整性和仓库/diff 检查通过。
-- 新队列表仅在隔离容器显式 migrate；没有修改生产库或删除历史 AI 数据。当前服务未接入真实 processor，新任务保持 queued；G04 的真实解析/embedding/index/search/evaluation 尚未验收。
+- 新队列表仅在隔离容器显式 migrate；没有修改生产库或删除历史 AI 数据。在当时 4c9c6d6 检查点，服务未接入真实 processor，新任务保持 queued；后续文本接入见下节。
+
+## G04 实际文本处理与 embedding（2026-10-26）
+
+- `make ai-model` / `scripts/test-ai-index-model.sh`：需要本机 127.0.0.1:11434 的 Ollama 与 qwen3-embedding:0.6b，明确设置合成文本模型测试开关。脚本仍通过原一次性 MySQL/Redis 守卫；不读取生产 `.env`，不发送真实用户文件。CI 只编译 aimodel 标签，不声称运行真实模型。
+- 新文本单元测试检查 UTF-8/源位置/重叠、体积/取消/不支持格式、专用 embedding 请求、拒绝自动截断、响应维度/数值/数量/模型校验、响应体上限、拒绝重定向及 digest。协议测试中的合成向量不作为模型能力证据。`go test -race ./internal/aiindex` 通过（1.680s）。
+- 正常 MySQL 专项包含模型端点不可达时持久 retry 且零结果、格式不支持/文本超限/实际磁盘损坏/非法 UTF-8 的独立诊断，连同队列和读取 scope 共 14 项顶层 race 测试通过（17.154s）。
+- 第一轮真实本机模型 + 数据库链路通过（函数 4.89s / 包 6.925s），包括中文短文本、长文本多块、实际 1024 维向量内容/归一化/源位置、重建与永久删除。源码 `integration/ai_text_live_test.go` 保存输入与断言。
+- 扩展到独立生产二进制的自动消费/SIGTERM 测试首次失败（包 5.066s）：Ollama 端点不可达。确认 curl connection refused、无 ollama serve 进程，且 embedding/视觉 manifest 引用文件完整后，重新启动本任务的 loopback Ollama。保留 `/tmp/cloudnest-ai-text-live-server.log`，没有把失败标为通过。
+- 恢复后的真实模型 + 独立服务测试通过（函数 9.20s / 包 10.859s），见 `/tmp/cloudnest-ai-text-live-server-retry.log`。生产 server 无直接 Step 调用就消费了持久任务，并正常 SIGTERM 退出、释放读取租约。模型 digest `ac6da0dfba84a81fdbfbaf330198c33cd77c4cdfc53e8bc50eb581914a15621d`；迁移查询与迁移文档 cosine 0.769925、与海边描述文档 0.151140。它们是向量链路冒烟观测，不是完整检索 Recall/MRR。
+- 当前源码 `make check/test` 通过，最终完整 **250 项普通 race 集成全部通过（354.027s）**，仍保留六分钟期限，无 FAIL/DATA RACE，见 `/tmp/cloudnest-ai-text-full.log`。aimodel 标签独立编译通过，仓库/diff 检查通过。前批 4c9c6d6 的 PR CI 40242563377 与 push CI 40242538550 已全部通过，不替代当前未提交代码的验证。
+- PDF/Office/OCR/视觉、查询索引/混合检索/ACL/片段、历史与增量重建及完整效果评估尚未验收。此次新增 document/chunk 表仅在一次性库显式迁移，没有生产变更。

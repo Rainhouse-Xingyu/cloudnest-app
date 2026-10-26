@@ -25,6 +25,7 @@ type Config struct {
 	JWTExpireHours         int
 	AIOllamaBaseURL        string
 	AIOllamaModel          string
+	AIEmbeddingModel       string
 	AIGuideDocPath         string
 	AITimeoutSec           int
 	TransferTempBytes      int64
@@ -45,18 +46,19 @@ func Load() Config {
 	return Config{
 		TransferMaintenanceDSN: os.Getenv("TRANSFER_MAINTENANCE_DSN"),
 		BindAddr:               getEnv("APP_BIND_ADDR", ""), TransferTempBytes: transferSeedLimit(),
-		AppPort:         getEnv("APP_PORT", "8080"),
-		DataDir:         getEnv("DATA_DIR", "data"),
-		MySQLDSN:        os.Getenv("MYSQL_DSN"),
-		RedisAddr:       getEnv("REDIS_ADDR", "127.0.0.1:6379"),
-		RedisPassword:   getEnv("REDIS_PASSWORD", ""),
-		RedisDB:         getEnvInt("REDIS_DB", 0),
-		JWTSecret:       os.Getenv("JWT_SECRET"),
-		JWTExpireHours:  jwtExpireHours,
-		AIOllamaBaseURL: getEnv("AI_OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
-		AIOllamaModel:   getEnv("AI_OLLAMA_MODEL", "qwen3-vl:4b"),
-		AIGuideDocPath:  getEnv("AI_GUIDE_DOC_PATH", "../../项目功能汇总.md"),
-		AITimeoutSec:    getEnvInt("AI_TIMEOUT_SEC", 120),
+		AppPort:          getEnv("APP_PORT", "8080"),
+		DataDir:          getEnv("DATA_DIR", "data"),
+		MySQLDSN:         os.Getenv("MYSQL_DSN"),
+		RedisAddr:        getEnv("REDIS_ADDR", "127.0.0.1:6379"),
+		RedisPassword:    getEnv("REDIS_PASSWORD", ""),
+		RedisDB:          getEnvInt("REDIS_DB", 0),
+		JWTSecret:        os.Getenv("JWT_SECRET"),
+		JWTExpireHours:   jwtExpireHours,
+		AIOllamaBaseURL:  getEnv("AI_OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
+		AIOllamaModel:    getEnv("AI_OLLAMA_MODEL", "qwen3-vl:4b"),
+		AIEmbeddingModel: getEnv("AI_EMBEDDING_MODEL", "qwen3-embedding:0.6b"),
+		AIGuideDocPath:   getEnv("AI_GUIDE_DOC_PATH", "../../项目功能汇总.md"),
+		AITimeoutSec:     getEnvInt("AI_TIMEOUT_SEC", 120),
 	}
 }
 

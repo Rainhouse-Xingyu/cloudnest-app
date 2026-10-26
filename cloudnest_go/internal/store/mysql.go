@@ -66,6 +66,8 @@ func Migrate(db *gorm.DB) error {
 		&model.AiMetadata{},
 		&model.AiTask{},
 		&model.AIIndexJob{},
+		&model.AIIndexDocument{},
+		&model.AIIndexChunk{},
 	); err != nil {
 		return fmt.Errorf("migrate schema failed: %w", err)
 	}
