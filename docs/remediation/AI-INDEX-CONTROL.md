@@ -37,4 +37,4 @@ items 必须为 1–100 个唯一、正 file_id；generation 为状态接口观�
 
 真实模型套件另行使用公开重建 API → 独立生产服务 → 实际 Ollama embedding → 状态 API，验证重建完成。实际执行结果见 [TESTING](TESTING.md)；CI 编译但不执行需要本机模型的套件。
 
-本批未完成文件修改/复制/恢复自动入队、PDF/Office/图片提取、照片拍摄时间或完整检索效果评估，继续纳入 G04。
+后续已接入 [版本/复制/恢复/扩展名变化的增量入队](AI-INDEX-INCREMENTAL.md)。PDF/Office/图片提取、照片拍摄时间或完整检索效果评估继续纳入 G04。

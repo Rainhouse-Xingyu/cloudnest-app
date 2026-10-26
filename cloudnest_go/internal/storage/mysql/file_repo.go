@@ -229,10 +229,30 @@ func (r *FileRepo) RenameFile(ctx context.Context, uid, fileID int64, name strin
 		if err != nil {
 			return err
 		}
-		if err := tx.Model(&file).Update("filename", finalName).Error; err != nil {
+		oldExt := strings.ToLower(filepath.Ext(file.Filename))
+		newExt := strings.ToLower(filepath.Ext(finalName))
+		fileType := strings.TrimPrefix(newExt, ".")
+		// The full filename remains valid even when its unrecognized suffix
+		// cannot fit the varchar(50) classification field. Never truncate it
+		// into a different recognized type.
+		if len([]rune(fileType)) > 50 {
+			fileType = ""
+		}
+		updates := map[string]any{"filename": finalName}
+		if file.IsFolder == 0 {
+			updates["file_type"] = fileType
+		}
+		if err := tx.Model(&file).Updates(updates).Error; err != nil {
 			return err
 		}
 		file.Filename = finalName
+		if file.IsFolder == 0 {
+			file.FileType = fileType
+			// Extraction dispatch depends on the suffix, not only the blob hash.
+			if oldExt != newExt {
+				return indexqueue.Enqueue(tx, file.ID, true)
+			}
+		}
 		return nil
 	})
 	return file, err
@@ -416,6 +436,9 @@ func (r *FileRepo) RestoreFromRecycleBin(ctx context.Context, uid, fileID int64)
 			return err
 		}
 		restored.Filename, restored.IsDeleted = finalName, 0
+		if restored.IsFolder == 0 {
+			return indexqueue.Enqueue(tx, restored.ID, true)
+		}
 		return nil
 	})
 	return restored, err
@@ -1155,6 +1178,9 @@ func copyNodeForFileRepo(tx *gorm.DB, newOwnerID int64, src model.File, targetPa
 
 	if src.IsFolder == 0 {
 		if err := preserveCurrentVersion(tx, newNode, &newOwnerID, "Copied current content"); err != nil {
+			return 0, err
+		}
+		if err := indexqueue.Enqueue(tx, newNode.ID, false); err != nil {
 			return 0, err
 		}
 	}

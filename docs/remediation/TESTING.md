@@ -144,3 +144,14 @@ G03 下载阻塞写入治理追加两个独立 `integration,network` 测试函�
 - `make -C cloudnest_go check test` 构建/vet/全部 race 单元通过，日志 `/tmp/cloudnest-ai-control-checks.log`；`go -C cloudnest_go test -tags=integration,aimodel,aisearch -run '^$' ./integration` 组合编译通过。此批仅增加控制 API，未重跑普通 250 项完整传输回归；前批完整结果 355.678s 仍为历史证据，不能当作本批重新执行。
 - 已确认本机 Ollama /api/version=0.31.1 后，执行 `scripts/test-ai-index-model.sh -run '^TestAITextLiveOllamaPublishesRecoverableChunkVectors$'`，**通过（函数 10.68s / 包 16.700s）**。原直接 queue.Enqueue/Step 重建改为公开状态 API → 202 重建 → 独立生产 server 真实 embedding → 状态 done/generation=2/indexed_current=true，并保留后续上传自动索引、SIGTERM、永久删除与长文片段检查。日志 `/tmp/cloudnest-ai-control-live.log`。本次只运行此一项真实模型测试，未重跑前批 10k 扫描与混合检索模型测试。
 - 本批未修改生产数据库、未部署/合并，格式提取、图片和完整效果评估仍未完成。混合检索提交 d469647 已推送 PR #5，新提交需另查精确 SHA CI。
+
+
+### G04 文件变更增量索引（2026-10-27）
+
+- 文件版本写入/历史版本恢复、递归复制出的每个普通文件、回收恢复、改变扩展名都在元数据事务内入队。入队失败回滚整笔文件修改；搜索期间旧正文不可作为当前代次返回；同后缀改名与移动无需重算正文，目录不排队。
+- 首轮检索/控制/增量 15 项 race 专项通过（18.177s），日志 `/tmp/cloudnest-ai-incremental-special.log`。随后补充未知超长后缀 file_type 不截断/不溢出处理及断言，最终 15 项通过 **20.437s**，日志 `/tmp/cloudnest-ai-incremental-special-final.log`。没有删除旧断言或把服务错误列为正常成功；故障注入用例明确要求文件及任务均回滚。
+- 真实模型 `scripts/test-ai-index-model.sh -run '^TestAITextLiveIncrementalFileChangesRebuildActualVectors$'` 通过（函数 **4.49s / 包 6.358s**），日志 `/tmp/cloudnest-ai-incremental-live.log`。真实公开 API 版本替换、历史恢复、复制、回收恢复均自动生成新任务并生成对应原文的实际 1024 维向量；改为 .bin 明确 failed/unsupported_type，再改 .md 自动恢复处理，最终第六代 done/current。仅该项实测，不冒充重跑四项模型套件/完整质量评估。
+- 最终 `make -C cloudnest_go check test` 构建/vet/全部 race 单元通过，日志 `/tmp/cloudnest-ai-incremental-checks-final.log`；组合 integration,aimodel,aisearch 标签编译通过。本批改变文件事务入口，因此另外运行普通完整集成回归，结果在下条补记。
+- d469647 的 PR/push CI 被后续 a0b943e 提交按工作流并发策略取消，不记为通过。a0b943e 已推送并更新 PR #5，增量提交需另行核验精确 SHA。
+
+- 普通完整 `scripts/test-integration.sh` **250 项顶层测试全部 PASS（354.739s）**，exit 0，六分钟期限未改变，无 FAIL/DATA RACE。日志 `/tmp/cloudnest-ai-incremental-full.log`；该次构建包含最终长后缀生产代码，后加测试仅在 aisearch/aimodel 标签，不改变普通套件源码范围。

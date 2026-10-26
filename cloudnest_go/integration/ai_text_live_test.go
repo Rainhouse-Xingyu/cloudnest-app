@@ -283,3 +283,66 @@ func TestAITextLiveHybridSearchReturnsRealSemanticMatchesAndFallback(t *testing.
 		t.Fatalf("model outage lost actual indexed text: %+v", r)
 	}
 }
+
+// Uses real bytes and model vectors for automatic version/copy/recycle updates;
+// lexical fixture rows in the protocol suite do not establish model execution.
+func TestAITextLiveIncrementalFileChangesRebuildActualVectors(t *testing.T) {
+	if os.Getenv("CLOUDNEST_TEST_AI_MODEL") != "1" {
+		t.Fatal("run scripts/test-ai-index-model.sh")
+	}
+	f, _ := indexFixture(t)
+	const base = "http://127.0.0.1:11434"
+	original := "数据库迁移方案：升级 MySQL 前进行备份和一致性验证。"
+	replacement := "Spring Boot 权限管理：角色、资源授权和审计日志。"
+	a := f.upload(t, f.alice, "incremental.md", []byte(original))
+	assertProcessed := func(id, generation int64, want string) {
+		t.Helper()
+		worked, err := textWorker(t, f, base).Step(context.Background())
+		if !worked || err != nil {
+			t.Fatal("real incremental processing", worked, err)
+		}
+		var status struct {
+			Item contract.AIIndexStatus `json:"item"`
+		}
+		decode(t, f.json(t, "GET", fmt.Sprintf("/api/ai/index/%d", id), f.alice, nil, 200), &status)
+		if !status.Item.IndexedCurrent || status.Item.Generation != generation || status.Item.Status != "done" {
+			t.Fatal(status)
+		}
+		var chunk model.AIIndexChunk
+		if err := f.db.First(&chunk, "file_id=? AND ordinal=0", id).Error; err != nil {
+			t.Fatal(err)
+		}
+		if chunk.Content != want {
+			t.Fatal("wrong actual indexed source", chunk.Content)
+		}
+		decodeVector(t, chunk.Vector)
+	}
+	assertProcessed(a.ID, 1, original)
+	b := f.upload(t, f.alice, "source.md", []byte(replacement))
+	assertProcessed(b.ID, 1, replacement)
+	path := fmt.Sprintf("/api/files/%d", a.ID)
+	f.json(t, "POST", path+"/versions", f.alice, map[string]any{"storage_id": b.StorageID, "base_version": 1}, 200)
+	assertProcessed(a.ID, 2, replacement)
+	f.json(t, "POST", path+"/versions/1/restore", f.alice, map[string]any{"base_version": 2}, 200)
+	assertProcessed(a.ID, 3, original)
+	var copied struct {
+		IDs []int64 `json:"new_ids"`
+	}
+	decode(t, f.json(t, "POST", "/api/files/copy", f.alice, map[string]any{"file_ids": []int64{a.ID}}, 200), &copied)
+	if len(copied.IDs) != 1 {
+		t.Fatal(copied)
+	}
+	assertProcessed(copied.IDs[0], 1, original)
+	f.json(t, "DELETE", path, f.alice, nil, 200)
+	f.json(t, "POST", path+"/restore", f.alice, nil, 200)
+	assertProcessed(a.ID, 4, original)
+	f.json(t, "PUT", path+"/rename", f.alice, map[string]any{"name": "unsupported.bin"}, 200)
+	if worked, err := textWorker(t, f, base).Step(context.Background()); !worked || err == nil {
+		t.Fatal("unsupported suffix silently succeeded", worked, err)
+	}
+	if j := readIndex(t, f, a.ID); j.Generation != 5 || j.Status != "failed" || j.ErrorCode != "unsupported_type" {
+		t.Fatal(j)
+	}
+	f.json(t, "PUT", path+"/rename", f.alice, map[string]any{"name": "readable.md"}, 200)
+	assertProcessed(a.ID, 6, original)
+}
