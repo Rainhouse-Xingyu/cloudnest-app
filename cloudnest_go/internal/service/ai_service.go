@@ -65,15 +65,15 @@ type AISummaryResult struct {
 }
 
 type AISearchQuery struct {
-	Keyword   string
-	FileType  string
-	Location  string
-	Landmark  string
-	StartTime string
-	EndTime   string
-	TagOnly   bool
-	Page      int
-	Limit     int
+	Keyword   string `json:"keyword"`
+	FileType  string `json:"file_type"`
+	Location  string `json:"location"`
+	Landmark  string `json:"landmark"`
+	StartTime string `json:"start_time"`
+	EndTime   string `json:"end_time"`
+	TagOnly   bool   `json:"tag_only"`
+	Page      int    `json:"page"`
+	Limit     int    `json:"limit"`
 }
 
 type NLSearchPlan struct {
@@ -91,9 +91,11 @@ type AISearchResult struct {
 }
 
 type AINLSearchResult struct {
-	Search AISearchResult
-	Query  AISearchQuery
-	Source string
+	Search        AISearchResult
+	Query         AISearchQuery
+	Source        string
+	Warnings      []string
+	WindowLimited bool
 }
 
 type AIAskResult struct {
@@ -206,29 +208,7 @@ func (s *AIService) Search(ctx context.Context, uid int64, q AISearchQuery) (AIS
 }
 
 func (s *AIService) NLSearch(ctx context.Context, uid int64, question string, page int, limit int) (AINLSearchResult, error) {
-	plan, source := s.parseNLSearchPlan(ctx, question)
-	q := AISearchQuery{
-		Keyword:   strings.TrimSpace(plan.Keyword),
-		FileType:  strings.ToLower(strings.TrimSpace(plan.FileType)),
-		Location:  strings.TrimSpace(plan.Location),
-		Landmark:  strings.TrimSpace(plan.Landmark),
-		StartTime: strings.TrimSpace(plan.StartTime),
-		EndTime:   strings.TrimSpace(plan.EndTime),
-		Page:      page,
-		Limit:     limit,
-	}
-	q.TagOnly = shouldUseTagOnlyForNL(question, q)
-	if q.Page <= 0 {
-		q.Page = 1
-	}
-	if q.Limit <= 0 || q.Limit > 100 {
-		q.Limit = 20
-	}
-	items, total, err := s.executeAISearch(ctx, uid, q)
-	if err != nil {
-		return AINLSearchResult{}, err
-	}
-	return AINLSearchResult{Search: AISearchResult{Items: items, Total: total}, Query: q, Source: source}, nil
+	return s.hybridSearch(ctx, uid, question, page, limit)
 }
 
 func (s *AIService) Summarize(ctx context.Context, uid int64, fileID int64, maxPoints int) (AISummaryResult, error) {

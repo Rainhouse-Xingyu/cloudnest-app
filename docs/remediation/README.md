@@ -33,6 +33,7 @@
 - [大文件恢复与性能验收](TRANSFER-PERFORMANCE.md)
 - [下载写入期限与连接释放](DOWNLOAD-WRITE-BOUNDS.md)
 - [G04 持久索引任务与实现边界](G04-AI-INDEXING.md)
+- [混合检索、精确向量索引与规模证据](AI-HYBRID-SEARCH.md)
 
 状态定义：待做、进行中、代码完成待审、验收完成、外部阻塞。代码存在、构建通过、单项测试通过均不等同于业务验收完成。每个后续 PR 必须更新问题、测试结果及本表，保留失败和未执行项。
 
@@ -66,4 +67,4 @@ G03 已补齐下载写入/刷新 30 秒期限、上下文取消唤醒和最终�
 
 本批最终普通 237 项 race 回归通过（329.401s），独立网络两项通过（106.183s），空文件并发完成重复 30 轮通过；完整失败诊断和验证边界已保留于 TESTING。
 
-G04 已提交独立 [草稿 PR #5](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/5)（base 为 PR #4 分支）：上传事务与持久索引任务原子提交，增加租约领取/重试/代次隔离/结果事务；移除吞错的上传后 goroutine。初始 4c9c6d6 检查点仅排队，其远端 CI 已全通过；后续已接入实际文本/切块/embedding 和原子向量保存、服务 worker 生命周期，查询索引、混合检索及评估仍待实现，详见 [G04 记录](G04-AI-INDEXING.md)。G03 最新 a34ba25 的 PR/push CI 均已通过，Linux 网络夹具修复不改变产品源码。
+G04 已提交独立 [草稿 PR #5](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/5)（base 为 PR #4 分支）：上传事务与持久索引任务原子提交，增加租约领取/重试/代次隔离/结果事务；移除吞错的上传后 goroutine。初始 4c9c6d6 检查点仅排队，其远端 CI 已全通过；后续已接入实际文本/切块/embedding 和原子向量保存、服务 worker 生命周期，后续又接入精确向量/关键词融合、权限与代次复核、原文片段及模型故障降级，10k 向量实测通过；多格式提取、完整评估和增量/历史重建仍待完成，详见 [G04 记录](G04-AI-INDEXING.md)。G03 最新 a34ba25 的 PR/push CI 均已通过，Linux 网络夹具修复不改变产品源码。

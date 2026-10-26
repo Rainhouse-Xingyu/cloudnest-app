@@ -124,3 +124,14 @@ G03 下载阻塞写入治理追加两个独立 `integration,network` 测试函�
 - 恢复后的真实模型 + 独立服务测试通过（函数 9.20s / 包 10.859s），见 `/tmp/cloudnest-ai-text-live-server-retry.log`。生产 server 无直接 Step 调用就消费了持久任务，并正常 SIGTERM 退出、释放读取租约。模型 digest `ac6da0dfba84a81fdbfbaf330198c33cd77c4cdfc53e8bc50eb581914a15621d`；迁移查询与迁移文档 cosine 0.769925、与海边描述文档 0.151140。它们是向量链路冒烟观测，不是完整检索 Recall/MRR。
 - 当前源码 `make check/test` 通过，最终完整 **250 项普通 race 集成全部通过（354.027s）**，仍保留六分钟期限，无 FAIL/DATA RACE，见 `/tmp/cloudnest-ai-text-full.log`。aimodel 标签独立编译通过，仓库/diff 检查通过。前批 4c9c6d6 的 PR CI 40242563377 与 push CI 40242538550 已全部通过，不替代当前未提交代码的验证。
 - PDF/Office/OCR/视觉、查询索引/混合检索/ACL/片段、历史与增量重建及完整效果评估尚未验收。此次新增 document/chunk 表仅在一次性库显式迁移，没有生产变更。
+
+## G04 混合检索（2026-10-26 开发，2026-10-27 核对终态）
+
+- `make ai-search` / `scripts/test-ai-search.sh` 新增独立三分钟 `integration,aisearch` 套件，CI 实际运行全部六项；原普通 250 项仍执行完整六分钟/race，没有移出或删除旧断言。新套件检查跨用户/共享/撤权、代次与源变更、返回前复核、尾部候选、窗口、时间过滤、请求边界及旧关键词接口。
+- 单元覆盖中文/英文词法、Unicode 片段位置、日期边界、不能用上传时间冒充拍摄时间、坏向量、有限候选排序、最终权限复核。补充 `nl_plan.query` snake_case 序列化契约，匹配冻结客户端既有 DTO；当前 make check/test 通过，见 `/tmp/cloudnest-ai-hybrid-checks-final.log`。
+- 中间编译曾因新增 handler 引用 contract 但漏 import 失败，已补齐；首次搜索专项中，重建词法夹具直接重复 INSERT document 导致主键冲突（6.435s 的失败日志 `/tmp/cloudnest-ai-hybrid-integration.log`）。修复夹具为同事务替换旧文档/块，生产 processor 原本即支持替换，未降低断言；修复后六项通过（9.551s），最终 DTO 契约修正后的六项再次通过（10.479s），见 `/tmp/cloudnest-ai-hybrid-wire-final.log`。
+- 真实模型的语义检索、跨用户近似内容隔离、模型 digest 隔离和断开模型后的正文关键词降级通过，第一名 cosine=0.818942。单独加入检索后的真实模型套件两项通过（16.201s），见 `/tmp/cloudnest-ai-hybrid-live.log`；不把成功示例当作完整检索评估。
+- 扩展到 10,000 个 1024 维实际向量的逻辑副本扫描后，真实模型三项全部通过（21.717s）：规模测试函数 8.76s，索引/独立生产服务 8.56s，实际混合检索 2.35s。向量数据 40,960,000 字节，单次 API handler 查询 1.510170792s，数据末尾的相关文件第一名。输入为两个真实 embedding 的重复逻辑副本，不是 10k 篇独立语料；未测并发、生产网络延迟或峰值 RSS。见 `/tmp/cloudnest-ai-hybrid-live-scale.log` 与 `ai_search_scale_test.go`。
+- 普通完整 **250 项 race 集成通过（355.678s）**，无 FAIL/DATA RACE，见 `/tmp/cloudnest-ai-hybrid-full.log`。该运行启动后另补了 query DTO 的 JSON 命名；这项纯序列化修正由最终完整单元和六项搜索专项验证，未为它重跑全部传输测试。仓库/diff 检查通过。前提交 1fe9edd 的远端 PR/push 构建和漏洞 CI 均通过，新提交需按精确 SHA 另行核验。
+- 本机 qwen3-vl:4b 合成票据 OCR 预检通过（20.581s）；keep_alive=0，之后 /api/ps 确认 models=[]。图片索引尚未接入，证据在 `/tmp/cloudnest-vision-preflight/report.json`，不计入产品图像检索验收。
+- 当前仍缺 PDF/Office/OCR/图片处理、拍摄时间索引、完整六类查询评估、增量/历史重建和查询状态 API；没有生产数据操作。

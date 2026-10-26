@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"cloudenest_go/internal/aiindex"
+	"cloudenest_go/internal/app"
 	"cloudenest_go/internal/indexqueue"
 	"cloudenest_go/model"
 	"gorm.io/gorm"
@@ -202,4 +203,78 @@ func decodeVector(t *testing.T, raw []byte) []float32 {
 		t.Fatal("vector not normalized", norm)
 	}
 	return v
+}
+
+func TestAITextLiveHybridSearchReturnsRealSemanticMatchesAndFallback(t *testing.T) {
+	if os.Getenv("CLOUDNEST_TEST_AI_MODEL") != "1" {
+		t.Fatal("run scripts/test-ai-index-model.sh")
+	}
+	f, _ := indexFixture(t)
+	f.cfg.AIOllamaBaseURL = "http://127.0.0.1:11434"
+	f.cfg.AIEmbeddingModel = "qwen3-embedding:0.6b"
+	f.router = fixtureRouter(app.NewContainer(f.cfg, f.db, f.rdb).NewRouter())
+	texts := []string{"数据库迁移方案：MySQL 升级前先备份，并验证迁移后的数据一致性。", "海边日落的风景照片，沙滩与海浪。", "数据库迁移方案：MySQL 升级前先备份，并验证迁移后的数据一致性。PRIVATE BOB"}
+	files := make([]model.File, len(texts))
+	for i, text := range texts {
+		token := f.alice
+		if i == 2 {
+			token = f.bob
+		}
+		files[i] = f.upload(t, token, fmt.Sprintf("neutral-%d.md", i), []byte(text))
+		if worked, err := textWorker(t, f, f.cfg.AIOllamaBaseURL).Step(context.Background()); !worked || err != nil {
+			t.Fatal("actual text indexing", worked, err)
+		}
+	}
+	type response struct {
+		Items []struct {
+			ID       int64    `json:"id"`
+			Snippet  string   `json:"snippet"`
+			Sources  []string `json:"match_sources"`
+			Semantic *float64 `json:"semantic_score"`
+		} `json:"items"`
+		Retrieval struct {
+			Mode     string   `json:"mode"`
+			Warnings []string `json:"warnings"`
+		} `json:"retrieval"`
+	}
+	var r response
+	decode(t, f.json(t, "POST", "/api/ai/search/nl", f.alice, map[string]any{"question": "寻找数据搬迁与 MySQL 升级的执行步骤"}, 200), &r)
+	if r.Retrieval.Mode != "hybrid" || len(r.Items) == 0 || r.Items[0].ID != files[0].ID || r.Items[0].Semantic == nil {
+		t.Fatalf("actual semantic retrieval failed: %+v", r)
+	}
+	for _, item := range r.Items {
+		if item.ID == files[2].ID || strings.Contains(item.Snippet, "PRIVATE BOB") {
+			t.Fatal("cross-user semantic leak")
+		}
+	}
+	if !strings.Contains(r.Items[0].Snippet, "迁移") {
+		t.Fatal("semantic hit missing original excerpt")
+	}
+	t.Logf("actual hybrid first_file=%d semantic_score=%.6f sources=%v", r.Items[0].ID, *r.Items[0].Semantic, r.Items[0].Sources)
+	// Changing model identity must exclude vectors, while current text remains
+	// usable by lexical ranking. No cross-model cosine is permitted.
+	if err := f.db.Model(&model.AIIndexDocument{}).Where("file_id=?", files[0].ID).Update("model_digest", strings.Repeat("0", 64)).Error; err != nil {
+		t.Fatal(err)
+	}
+	r = response{}
+	decode(t, f.json(t, "POST", "/api/ai/search/nl", f.alice, map[string]any{"question": "数据库迁移"}, 200), &r)
+	found := false
+	for _, item := range r.Items {
+		if item.ID == files[0].ID {
+			found = true
+			if item.Semantic != nil {
+				t.Fatal("mixed model identities")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("model identity change removed valid keyword content")
+	}
+	f.cfg.AIOllamaBaseURL = "http://127.0.0.1:1"
+	f.router = fixtureRouter(app.NewContainer(f.cfg, f.db, f.rdb).NewRouter())
+	r = response{}
+	decode(t, f.json(t, "POST", "/api/ai/search/nl", f.alice, map[string]any{"question": "数据库迁移"}, 200), &r)
+	if r.Retrieval.Mode != "keyword_fallback" || len(r.Retrieval.Warnings) == 0 || len(r.Items) != 1 || r.Items[0].ID != files[0].ID {
+		t.Fatalf("model outage lost actual indexed text: %+v", r)
+	}
 }

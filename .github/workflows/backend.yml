@@ -27,6 +27,7 @@ jobs:
         working-directory: cloudnest_go
       - run: ./scripts/test-integration.sh
       - run: ./scripts/test-transfer-network.sh
+      - run: ./scripts/test-ai-search.sh
       # Compile the opt-in real-server benchmark without running another GiB
       # transfer in every ordinary CI job. Run it locally via make performance.
       - run: go test -tags=integration,performance -run '^$' ./integration

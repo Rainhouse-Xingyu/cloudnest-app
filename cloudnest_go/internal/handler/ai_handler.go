@@ -18,6 +18,7 @@ import (
 	"cloudenest_go/internal/config"
 	"cloudenest_go/internal/middleware"
 	"cloudenest_go/internal/service"
+	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
 
 	"github.com/gin-gonic/gin"
@@ -205,6 +206,7 @@ func (h *AIHandler) Search(c *gin.Context) {
 // NLSearch 自然语言检索：将用户问题转换为检索条件并返回文件列表。
 func (h *AIHandler) NLSearch(c *gin.Context) {
 	uid := c.GetInt64(middleware.ContextUserIDKey)
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<10)
 
 	var req NLSearchRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -219,7 +221,11 @@ func (h *AIHandler) NLSearch(c *gin.Context) {
 
 	res, err := h.Svc.NLSearch(c.Request.Context(), uid, req.Question, req.Page, req.Limit)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+		if errors.Is(err, contract.ErrInvalidInput) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid search query"})
+		} else {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "search temporarily unavailable"})
+		}
 		return
 	}
 
@@ -234,6 +240,7 @@ func (h *AIHandler) NLSearch(c *gin.Context) {
 			"source": res.Source,
 			"query":  res.Query,
 		},
+		"retrieval": gin.H{"mode": res.Source, "warnings": res.Warnings, "window_limited": res.WindowLimited, "window_size": 200},
 	})
 }
 

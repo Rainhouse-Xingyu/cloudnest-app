@@ -4,7 +4,7 @@
 
 已接入上传事务内持久任务、带租约和代次的 worker，以及真实 UTF-8 文本提取、切块、独立 Ollama embedding 和原子向量保存。生产服务启动时运行 worker，并在 SIGTERM 时取消和等待退出。原上传后吞错 goroutine 已移除。
 
-**目前支持文本类文件，不支持 PDF/Office/图片处理，也尚无新的混合检索 API。** 这些格式会明确失败为 `unsupported_type`；模型不可用会记录 `model_unavailable` 并重试，不写“分析成功”。手动 OCR、摘要和原关键词搜索接口仍保留，不能据此认定完整 G04 已完成。
+**目前支持文本类文件和实际混合检索；PDF/Office/图片处理与完整效果评估仍未完成。** 这些格式会明确失败为 `unsupported_type`；模型不可用会记录 `model_unavailable` 并重试，不写“分析成功”。手动 OCR、摘要和原关键词搜索接口仍保留，不能据此认定完整 G04 已完成。
 
 旧 `ai_task` 和 `ai_metadata` 保留，新 `ai_index_job` 单独记录文件当前期望的索引代次。没有修改既有用户数据，也没有执行生产迁移。本分支为开发中的阶段检查点，不能作为完成的 AI 系统发布。
 
@@ -35,7 +35,7 @@ worker 单次处理默认三分钟、领取/续约/发布操作五秒上限，�
 - `AI_EMBEDDING_MODEL` 默认 `qwen3-embedding:0.6b`，与 `AI_OLLAMA_MODEL` 的视觉/生成用途分离。每次调用专用 `/api/embed`，最多 8 块，明确 truncate=false；HTTP 120 秒、响应 2 MiB 上限，拒绝重定向。当前 keep_alive=1m，便于分批重用后自动卸载。
 - 严格校验返回模型、数量、维度（1–4096）、有限值和非零范数；归一化后按 float32 little endian 保存。任一块失败不发布部分结果。
 - 文档保存源 hash、pipeline、generation、模型名/digest/维度、块数与原文字节数。embedding 前后读取 `/api/tags` 的 digest，不一致则 model_changed/retry。远端接口无原子模型快照，运维不可在索引过程中反复改写同一模型 tag；后续模型切换须按 digest 重建并隔离检索空间。
-- 块、文档摘要、成功审计与任务 done 在同一受租约保护的 MySQL 事务发布。重建替换旧块；永久删除一起删除文档/块/任务。向量暂存于既有 MySQL，作为持久可重建数据；查询索引、规模验证与 Qdrant 取舍仍需随混合检索实现，不能把“保存向量”称为已经完成语义检索。
+- 块、文档摘要、成功审计与任务 done 在同一受租约保护的 MySQL 事务发布。重建替换旧块；永久删除一起删除文档/块/任务。向量暂存于既有 MySQL，作为持久可重建数据；现已接入流式精确向量扫描、关键词/RRF 融合、当前文件权限/代次复核及片段；当前选择和 10k 向量实测见 [混合检索协议](AI-HYBRID-SEARCH.md)。这不代表完整 G04 验收。
 
 接口契约来自 [Ollama embedding](https://docs.ollama.com/api/embed) 和 [模型 digest 列表](https://docs.ollama.com/api/tags)。
 
@@ -43,7 +43,7 @@ worker 单次处理默认三分钟、领取/续约/发布操作五秒上限，�
 
 已在 loopback Ollama 0.31.1 下载并实际调用 `qwen3-embedding:0.6b`。2026-10-25 的三个合成文本返回 3 × 1024 维有限向量；输入、digest 和观测值见 [原始预检记录](AI-MODEL-PREFLIGHT-20261025.json)。请求关闭自动截断并设置 keep_alive=0，调用后模型已卸载。结果只是 provider 可用性验证，不是 CloudNest 检索 Recall/MRR，也不是模型选型最终质量结论。
 
-现有 qwen3-vl:4b、deepseek-ocr:3b、deepseek-r1:1.5b 虽有 manifest，但预检时其引用的权重/config blob 缺失；不能认定视觉/OCR 已可用，没有删除这些旧记录。2026-10-26 已通过官方 pull 恢复 qwen3-vl:4b，manifest 引用的 5 个 blob 均存在；尚未做实际视觉调用。deepseek 的两项旧缓存仍不完整，没有删除。图片、扫描 PDF 与真实视觉标签仍需建立并验证处理链路。
+现有 qwen3-vl:4b、deepseek-ocr:3b、deepseek-r1:1.5b 虽有 manifest，但预检时其引用的权重/config blob 缺失；不能认定视觉/OCR 已可用，没有删除这些旧记录。2026-10-26 已通过官方 pull 恢复 qwen3-vl:4b，manifest 引用的 5 个 blob 均存在；已对合成票据图片实际调用成功，商品、金额、测试 IP 转录准确（20.581s），仍不是 CloudNest 图片索引验收。deepseek 的两项旧缓存仍不完整，没有删除。图片、扫描 PDF 与真实视觉标签仍需建立并验证处理链路。
 
 ## 验证与剩余工作
 
@@ -55,8 +55,8 @@ worker 单次处理默认三分钟、领取/续约/发布操作五秒上限，�
 
 1. 将提取扩展到 PDF/Office/OCR/视觉，并进行真实模型错误与资源预算测试。
 2. 统一旧 AI helper 与新处理器，清理重复提取实现。
-3. 可维护查询索引、规模测量及完整技术选型依据；不能拿 LIKE 冒充语义检索。
-4. 混合检索、文件级权限、片段/排名/来源、模型不可用时关键词降级。
+3. 扩展真实语料和并发规模测量，校准词法/语义阈值与是否需要 ANN/rerank。
+4. 完善混合检索的复杂意图、EXIF 时间与继承权限，保留当前文件级过滤及降级。
 5. 修改/复制/恢复后的增量更新、删除失效、历史重建与状态 API。
 6. 用户六类查询及干扰/跨用户/时间/故障评估集，实际 Recall@K/MRR 和失败案例。
 
