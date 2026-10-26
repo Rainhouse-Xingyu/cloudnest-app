@@ -135,3 +135,12 @@ G03 下载阻塞写入治理追加两个独立 `integration,network` 测试函�
 - 普通完整 **250 项 race 集成通过（355.678s）**，无 FAIL/DATA RACE，见 `/tmp/cloudnest-ai-hybrid-full.log`。该运行启动后另补了 query DTO 的 JSON 命名；这项纯序列化修正由最终完整单元和六项搜索专项验证，未为它重跑全部传输测试。仓库/diff 检查通过。前提交 1fe9edd 的远端 PR/push 构建和漏洞 CI 均通过，新提交需按精确 SHA 另行核验。
 - 本机 qwen3-vl:4b 合成票据 OCR 预检通过（20.581s）；keep_alive=0，之后 /api/ps 确认 models=[]。图片索引尚未接入，证据在 `/tmp/cloudnest-vision-preflight/report.json`，不计入产品图像检索验收。
 - 当前仍缺 PDF/Office/OCR/图片处理、拍摄时间索引、完整六类查询评估、增量/历史重建和查询状态 API；没有生产数据操作。
+
+
+### G04 索引控制与历史重建（2026-10-27）
+
+- 增加 GET /ai/index 游标历史列表、GET /ai/index/:id 诊断和 POST /ai/index/rebuild 所有者代次 CAS 批量重建，固定诊断字段、不暴露 worker 令牌。语义与错误契约见 AI-INDEX-CONTROL.md。
+- `scripts/test-ai-search.sh` 现执行六项检索与五项控制专项，真实一次性 MySQL/Redis + race **11 项全部通过（12.838s）**，日志 `/tmp/cloudnest-ai-control-integration.log`。包括历史 generation=0、单项共享读/不可调度、撤权、整批授权/冲突回滚、八路并发只有一次 202/七次 409、审计失败回滚、源变更诊断与请求边界。
+- `make -C cloudnest_go check test` 构建/vet/全部 race 单元通过，日志 `/tmp/cloudnest-ai-control-checks.log`；`go -C cloudnest_go test -tags=integration,aimodel,aisearch -run '^$' ./integration` 组合编译通过。此批仅增加控制 API，未重跑普通 250 项完整传输回归；前批完整结果 355.678s 仍为历史证据，不能当作本批重新执行。
+- 已确认本机 Ollama /api/version=0.31.1 后，执行 `scripts/test-ai-index-model.sh -run '^TestAITextLiveOllamaPublishesRecoverableChunkVectors$'`，**通过（函数 10.68s / 包 16.700s）**。原直接 queue.Enqueue/Step 重建改为公开状态 API → 202 重建 → 独立生产 server 真实 embedding → 状态 done/generation=2/indexed_current=true，并保留后续上传自动索引、SIGTERM、永久删除与长文片段检查。日志 `/tmp/cloudnest-ai-control-live.log`。本次只运行此一项真实模型测试，未重跑前批 10k 扫描与混合检索模型测试。
+- 本批未修改生产数据库、未部署/合并，格式提取、图片和完整效果评估仍未完成。混合检索提交 d469647 已推送 PR #5，新提交需另查精确 SHA CI。

@@ -18,9 +18,8 @@ import (
 
 	"cloudenest_go/internal/aiindex"
 	"cloudenest_go/internal/app"
-	"cloudenest_go/internal/indexqueue"
+	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
-	"gorm.io/gorm"
 )
 
 // This opt-in test uses the real local model and disposable application DB.
@@ -81,15 +80,21 @@ func TestAITextLiveOllamaPublishesRecoverableChunkVectors(t *testing.T) {
 		t.Fatal("actual model smoke ranking reversed", scores)
 	}
 	t.Logf("real model=%s digest=%s dimensions=1024 migration_cosine=%.6f photo_cosine=%.6f", provider.Model(), digest, scores[0], scores[1])
-	// Rebuild replaces chunks atomically and is recoverable with a new worker.
-	if err := f.db.Transaction(func(tx *gorm.DB) error { return indexqueue.Enqueue(tx, files[0].ID, true) }); err != nil {
-		t.Fatal(err)
+	// Historical recovery uses the public CAS API and an actual restarted
+	// production server, with no direct queue Enqueue or Step call.
+	var status struct {
+		Item contract.AIIndexStatus `json:"item"`
 	}
-	if worked, err := textWorker(t, f, base).Step(ctx); !worked || err != nil {
-		t.Fatal("reconstructed worker rebuild", worked, err)
+	statusPath := fmt.Sprintf("/api/ai/index/%d", files[0].ID)
+	decode(t, f.json(t, "GET", statusPath, f.alice, nil, 200), &status)
+	if !status.Item.IndexedCurrent || status.Item.Generation != 1 {
+		t.Fatal(status)
 	}
-	if j := readIndex(t, f, files[0].ID); j.Status != "done" || j.Generation != 2 {
-		t.Fatal("rebuild generation", j)
+	f.json(t, "POST", "/api/ai/index/rebuild", f.alice, map[string]any{"items": []contract.AIRebuildItem{{FileID: files[0].ID, Generation: status.Item.Generation}}}, 202)
+	runLiveIndexServer(t, f, files[0].ID)
+	decode(t, f.json(t, "GET", statusPath, f.alice, nil, 200), &status)
+	if status.Item.Status != "done" || status.Item.Generation != 2 || !status.Item.IndexedCurrent || status.Item.ChunkCount != 1 {
+		t.Fatal("API/server rebuild", status)
 	}
 	// A longer UTF-8 document verifies multiple persisted chunks and source spans.
 	longText := strings.Repeat("Spring Boot 权限管理：角色授权、资源级检查与审计日志。\n", 55)

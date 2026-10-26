@@ -37,6 +37,9 @@ type AISearchRow struct {
 
 // AIRepository 定义 AI 模块存储访问能力。
 type AIRepository interface {
+	ListIndex(ctx context.Context, uid, after int64, limit int) ([]AIIndexStatus, error)
+	IndexStatus(ctx context.Context, uid, id int64) (AIIndexStatus, error)
+	RebuildIndex(ctx context.Context, uid int64, items []AIRebuildItem, ip string) ([]AIRebuildItem, error)
 	ScanHybrid(ctx context.Context, uid int64, filter AIHybridFilter, visit func(AIHybridRow) error) error
 	ValidateHybrid(ctx context.Context, uid int64, rows []AIHybridRow) (map[int64]bool, error)
 	ApplySettingWithAudit(ctx context.Context, uid int64, key string, value string, description string, clientIP string) error

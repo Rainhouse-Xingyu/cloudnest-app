@@ -42,7 +42,7 @@
 | FILE-010 P2 | Go `sendFileWithRateLimit` 已 ServeContent/io.Copy/固定缓冲；客户端 NetworkClient 使用 data(for:) | 大文件峰值内存测试 | G03/G08 新客户端 URLSession 文件下载任务；不重写已流式 Go 普通下载 | 后端整文件内存假设未成立；性能未测 |
 | FILE-011 P1 | Share 模型及 CreateShare 只有 code/expiry，无提取码/访问次数约束 | 查看真实字段/API | G06 提取码哈希/访问计数、限速、撤销/到期测试 | 缺功能 |
 | FILE-012 P1 | 文件版本只创建/列出，没有专用恢复/上传完整协议；客户端可传 size | 版本覆盖/恢复与配额一致性测试 | G01 先保护 storage_id；G02 版本引用/恢复协议 | 上传/复制初始引用、旧当前快照、历史下载、追加式恢复和事务审计已实现；配额已接入；版本专用上传票据及 AI 增量更新仍待后续 |
-| AI-001 P1 | `triggerAsyncAutoAnalyze` 内存 goroutine，AiTask 仅写状态记录 | 上传后杀进程重启；任务无恢复 worker | G04 事务 outbox、持久任务、租约/超时/重试/诊断 | 进行中：原子入队、租约/重领/退避/结果隔离已实现；服务 worker/独立 blob 读取与文本处理已接入；状态/重建 API 待做 |
+| AI-001 P1 | `triggerAsyncAutoAnalyze` 内存 goroutine，AiTask 仅写状态记录 | 上传后杀进程重启；任务无恢复 worker | G04 事务 outbox、持久任务、租约/超时/重试/诊断 | 进行中：原子入队、租约/重领/退避/结果隔离已实现；服务 worker/独立 blob 读取与文本处理已接入；状态/游标历史回填/代次 CAS 批量重建 API 已实现，真实服务重建通过 |
 | AI-002 P1 | `service/ai_service.go:NLSearch` 解析条件后调用 `storage/mysql/ai_repo.go:Search` 的 LIKE；无 embedding/vector | 执行语义同义查询/带无关干扰的评估集 | G04 独立 embedding、chunk、向量索引、混合检索/文件级 ACL/片段 | 已接入实际文本 embedding 与精确扫描/关键词融合、权限和代次复核、片段及降级；10k 向量扫描通过，多格式与完整检索评估待做 |
 | AI-003 P1 | `buildAutoAnalyzeResult` 忽略 OCR/模型错误并写“分析完成”；照片标签描述请求仅文本 | 关闭 Ollama 上传图片；查看任务状态和描述 | G04 区分提取/OCR/视觉失败、真实视觉输入、可诊断降级 | 原上传后吞错入口已移除，文本实际解析/embedding 失败持久记录并重试；实际 OCR/视觉处理与手动 API 统一尚待实现 |
 | AI-004 P1 | `os.ReadFile` 图片全量载入，PDF/OpenXML 提取有上限但无完整资源预算 | 大图/损坏 PDF/压缩炸弹，受限容器观察资源 | G04 文档解析隔离、页/像素/展开字节限额和取消 | 待安全实测 |
