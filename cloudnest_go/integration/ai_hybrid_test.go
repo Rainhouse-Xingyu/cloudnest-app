@@ -170,7 +170,7 @@ func TestAIHybridRanksBeyondWindowAndReportsWindowLimit(t *testing.T) {
 	}
 }
 
-func TestAIHybridUploadTimeFilterAndUnsupportedCaptureTime(t *testing.T) {
+func TestAIHybridUploadTimeFilterDoesNotInventCaptureTime(t *testing.T) {
 	f, _ := indexFixture(t)
 	old := f.upload(t, f.alice, "合同-old.md", []byte("contract old"))
 	current := f.upload(t, f.alice, "合同-new.md", []byte("contract new"))
@@ -188,7 +188,7 @@ func TestAIHybridUploadTimeFilterAndUnsupportedCaptureTime(t *testing.T) {
 		t.Fatal("upload calendar wrong", r)
 	}
 	r = hybridQuery(t, f, f.alice, "去年拍摄的海边照片")
-	if len(r.Items) != 0 || len(r.Retrieval.Warnings) != 1 || r.Retrieval.Warnings[0] != "capture_time_not_indexed" {
+	if len(r.Items) != 0 || !strings.Contains(strings.Join(r.Retrieval.Warnings, ","), "capture_time_uses_exif_camera_local_calendar") {
 		t.Fatal("capture time invented", r)
 	}
 }
@@ -198,4 +198,66 @@ func TestAIHybridBoundsRequestInput(t *testing.T) {
 	f.json(t, "POST", "/api/ai/search/nl", f.alice, map[string]any{"question": strings.Repeat("x", 4097)}, 400)
 	f.json(t, "POST", "/api/ai/search/nl", f.alice, map[string]any{"question": strings.Repeat("x", 20<<10)}, 400)
 	f.json(t, "POST", "/api/ai/search/nl", f.alice, map[string]any{"question": "hello", "page": 10001}, 400)
+}
+
+// These explicit metadata fixtures test SQL calendar/ACL semantics, not EXIF
+// extraction or model accuracy (both are exercised by the live image suite).
+func TestAIHybridCaptureCalendarBoundariesAndUnknownDates(t *testing.T) {
+	f, _ := indexFixture(t)
+	year := time.Now().In(time.FixedZone("Asia/Shanghai", 8*3600)).Year() - 1
+	var wanted []int64
+	for i, tc := range []struct {
+		captured string
+		include  bool
+	}{
+		{fmt.Sprintf("%d-12-31 23:59:59", year-1), false},
+		{fmt.Sprintf("%d-01-01 00:00:00", year), true},
+		{fmt.Sprintf("%d-12-31 23:59:59", year), true},
+		{fmt.Sprintf("%d-01-01 00:00:00", year+1), false},
+		{"", false},
+	} {
+		file := f.upload(t, f.alice, fmt.Sprintf("calendar-%d.png", i), []byte(fmt.Sprintf("synthetic calendar fixture %d", i)))
+		lexicalIndexFixture(t, f, file, "海边照片 沙滩 海水")
+		if tc.captured != "" {
+			if err := f.db.Model(&model.AIIndexDocument{}).Where("file_id=?", file.ID).Updates(map[string]any{"captured_at_local": tc.captured, "capture_offset": "-12:00", "extraction_kind": "image"}).Error; err != nil {
+				t.Fatal(err)
+			}
+		}
+		if tc.include {
+			wanted = append(wanted, file.ID)
+		}
+	}
+	r := hybridQuery(t, f, f.alice, "去年拍的海边照片")
+	if len(r.Items) != len(wanted) {
+		t.Fatal("wrong calendar result count", r)
+	}
+	seen := map[int64]bool{}
+	for _, item := range r.Items {
+		seen[item.ID] = true
+	}
+	for _, id := range wanted {
+		if !seen[id] {
+			t.Fatal("camera calendar was shifted", id, r)
+		}
+	}
+	if len(hybridQuery(t, f, f.bob, "去年拍的海边照片").Items) != 0 {
+		t.Fatal("capture metadata bypassed ACL")
+	}
+	if err := f.db.Create(&model.FilePermission{FileID: wanted[0], UserID: f.bobID, Permission: "read"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	shared := hybridQuery(t, f, f.bob, "去年拍的海边照片")
+	if len(shared.Items) != 1 || shared.Items[0].ID != wanted[0] {
+		t.Fatal("shared capture search", shared)
+	}
+	if err := f.db.Where("file_id=? AND user_id=?", wanted[0], f.bobID).Delete(&model.FilePermission{}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(hybridQuery(t, f, f.bob, "去年拍的海边照片").Items) != 0 {
+		t.Fatal("revoked capture metadata leaked")
+	}
+	// Every upload was made this year; camera dates must not satisfy upload filters.
+	if len(hybridQuery(t, f, f.alice, "去年上传的海边照片").Items) != 0 {
+		t.Fatal("capture substituted for upload time")
+	}
 }

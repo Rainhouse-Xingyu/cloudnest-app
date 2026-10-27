@@ -181,3 +181,20 @@ G03 下载阻塞写入治理追加两个独立 `integration,network` 测试函�
 - Ollama 端点连接拒绝且进程/端口均不存在后，恢复本任务 loopback 服务；未仅凭观察超时重启。首次 PDF 上传→实际提取/OCR→真实向量→公开语义检索通过（64.746s）。最终完整 **六项真实模型测试通过（77.525s）**：10k 扫描 8.02s、实际生产服务/重建 9.42s、混合检索 2.18s、增量 2.43s、Office 2.85s、PDF 50.70s。新增 PDF 文字文档由独立生产 server 自动消费并 SIGTERM 退出，扫描票据经真实 qwen3-vl 转录后落库，断言 Laptop、5999.00、192.0.2.42 和 OCR 页标记，目标检索第一且含 semantic 来源。日志 `/tmp/cloudnest-pdf-all-model.log`。
 - 本轮 10k 单次查询 1.495824291s，40,960,000 向量字节，第一 cosine=0.818942；仍为两个真实向量的逻辑副本，不是 10k 独立语料、并发或 Recall/MRR 评价。
 - 首次完整普通 race 回归在 239 项已通过后触发原六分钟总期限（363.927s 包退出），当时运行 TCP 上传暂停 remote 子项 15 秒，此前无断言失败；同机有真实模型与其他一次性数据库套件并行。保留 `/tmp/cloudnest-pdf-full.log`，不计通过，其他工作已退出后按原六分钟期限单独重跑：**最终普通 250 项 race 全部通过（359.521s）**，exit 0、无 FAIL/DATA RACE，日志 `/tmp/cloudnest-pdf-full-isolated.log`。G04 尚未完成：独立图片/视觉/EXIF、旧二进制 Office、复杂 PDF/OCR 准确率与六类查询完整评估仍待做，生产数据库未操作。前 Office 提交 a6f039d 的 PR/push CI 均已完成且成功（40433982449 / 40433980215）。
+
+
+## 2026-10-28 图片视觉与 EXIF 日历检查点
+
+- `make -C cloudnest_go check test`：build/vet/全部 race 单元通过。新增图像/EXIF/结构化响应测试；缩略图预算测试移入共享 imageprep 包，原断言保留。
+- `CLOUDNEST_TEST_POPPLER_BIN=<实际 Poppler bin> ./scripts/test-ai-search.sh`：21 项顶层测试 PASS，49.355s，包含新增拍摄年份半开边界/未知日期/授权撤销和坏图片/模型不可用不发布；随后新增 Schema 专项单独 PASS（3.988s），证明只读检查不修表、显式迁移保留旧正文且不伪造拍摄/OCR 来源。CI 将运行全部 22 项。
+- 单独实际图片模型测试最终 PASS（函数 127.72s / 包 129.651s）。实际上传无语义文件名的合成海边图和票据，调用 qwen3-vl:4b 与 qwen3-embedding:0.6b；分别持久化无文字/有文字标记、真实描述/标签/digest/1024 维向量，票据断言 Laptop、5999、192.0.2.42。海边图的合成 EXIF 保持本地日历，票据无拍摄时间；真实查询目标首位且含 semantic，跨用户/回收查询为空。
+- 图片协议首次真实调用失败：Ollama 0.31.1 原生 grammar 拒绝 JSON Schema 的 `maxLength: 8192`，返回 400，任务保持 retry 而无部分发布。去掉模型端字符串长度约束，保留生成 token/HTTP 体积与本地严格校验后成功。第二次运行海边通过，随后日志时间从 21:41 跳到 22:14，读租约取消并失去任务租约，整组判失败；恢复后重新运行通过，没有将失败计作成功。
+- 初次恢复测试还因 Docker daemon 未运行而未进入套件；通过本机 Docker 应用恢复后继续，只使用脚本创建的新 MySQL/Redis 容器。全部组合标签编译通过（0.722s），仓库卫生检查通过。
+
+这些图片仅是功能冒烟夹具，生成方式、原始提示和合成日期见 integration/testdata/images/README.md；未获得真实语料 Recall/MRR 或峰值 RSS 结论。旧手动 OCR、GPS/相机信息解析和其余格式继续列为未完成。
+
+最终全部真实模型七项 PASS（172.409s）：10k 精确扫描 6.56s、生产服务/重建 10.26s、混合检索 2.12s、增量 2.67s、Office 2.78s、PDF 47.07s、图片 98.96s。全部使用本机真实 Ollama 与一次性数据库；图片两项实际查询首位含 semantic，旧普通回归独立于模型套件执行。
+
+最终复查发现 encoding/json 会替换非法 UTF-8，因此模型 HTTP 层新增原始字节校验；故障响应实际包含 0xff，确认整项拒绝且不返回部分描述/digest。最终 aiindex race 单元通过（2.618s）。该拒绝路径修正在上述完整模型/普通回归启动后加入，不将此前运行声称为已覆盖这条新错误路径。
+
+普通完整 250 项 race 集成最终全部 PASS（342.872s，exit 0），无 FAIL/DATA RACE，保持原六分钟期限；日志 `/tmp/cloudnest-image-full.log`。本机模型套件全部结束后单独启动普通回归。最终提交的 Linux CI 另按精确 SHA 核验，不以旧提交通过状态代替。

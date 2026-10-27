@@ -481,3 +481,96 @@ func TestAITextLivePDFAndScannedPagesProduceSearchableRealVectors(t *testing.T) 
 		t.Logf("real PDF index/search: %s bytes=%d chunks=%d first_file=%d", tc.name, len(body), len(chunks), file.ID)
 	}
 }
+
+func TestAITextLiveImagesUsePixelsEXIFAndRealSemanticSearch(t *testing.T) {
+	if os.Getenv("CLOUDNEST_TEST_AI_MODEL") != "1" {
+		t.Fatal("run real-model script")
+	}
+	f, _ := indexFixture(t)
+	f.cfg.AIOllamaBaseURL = "http://127.0.0.1:11434"
+	f.cfg.AIEmbeddingModel = "qwen3-embedding:0.6b"
+	f.router = fixtureRouter(app.NewContainer(f.cfg, f.db, f.rdb).NewRouter())
+	capture := time.Date(time.Now().Year()-1, 6, 15, 10, 20, 30, 0, time.UTC)
+	var beachID int64
+	for _, tc := range []struct {
+		name, question string
+		ocr            bool
+	}{
+		{"beach-synthetic.png", "去年拍的海边照片", false},
+		{"invoice-synthetic.png", "购买电脑的发票 5999", true},
+	} {
+		body, err := os.ReadFile(filepath.Join("testdata/images", tc.name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !tc.ocr {
+			body = syntheticCapturePNG(t, body, capture)
+		}
+		file := f.upload(t, f.alice, "snapshot-"+fmt.Sprint(tc.ocr)+".png", body)
+		if !tc.ocr {
+			beachID = file.ID
+		}
+		if worked, err := textWorker(t, f, f.cfg.AIOllamaBaseURL).Step(context.Background()); !worked || err != nil {
+			t.Fatal("actual image indexing", worked, err)
+		}
+		var doc model.AIIndexDocument
+		if err := f.db.First(&doc, "file_id=?", file.ID).Error; err != nil {
+			t.Fatal(err)
+		}
+		if doc.ExtractionKind != "image" || doc.VisionModel != "qwen3-vl:4b" || len(doc.VisionDigest) != 64 || doc.HasOCR != tc.ocr || doc.VisualDescription == "" || doc.VisualTags == "" {
+			t.Fatalf("bad actual vision provenance: %+v", doc)
+		}
+		if !tc.ocr && (doc.CapturedAtLocal == nil || doc.CapturedAtLocal.Format("2006-01-02 15:04:05") != capture.Format("2006-01-02 15:04:05") || doc.CaptureOffset != "+08:00") {
+			t.Fatal("EXIF camera clock lost or shifted", doc)
+		}
+		if tc.ocr && doc.CapturedAtLocal != nil {
+			t.Fatal("upload date invented as capture date")
+		}
+		var chunks []model.AIIndexChunk
+		if err := f.db.Where("file_id=?", file.ID).Find(&chunks).Error; err != nil {
+			t.Fatal(err)
+		}
+		var all strings.Builder
+		for _, chunk := range chunks {
+			decodeVector(t, chunk.Vector)
+			all.WriteString(chunk.Content)
+		}
+		if tc.ocr {
+			for _, needle := range []string{"Laptop", "5999", "192.0.2.42"} {
+				if !strings.Contains(all.String(), needle) {
+					t.Fatalf("actual image OCR lost %q: %q", needle, all.String())
+				}
+			}
+		}
+		var reply struct {
+			Items []struct {
+				ID          int64    `json:"id"`
+				HasOCR      bool     `json:"has_ocr_index"`
+				Description string   `json:"description"`
+				Kind        string   `json:"extraction_kind"`
+				Sources     []string `json:"match_sources"`
+			} `json:"items"`
+		}
+		decode(t, f.json(t, "POST", "/api/ai/search/nl", f.alice, map[string]any{"question": tc.question}, 200), &reply)
+		if len(reply.Items) == 0 || reply.Items[0].ID != file.ID || reply.Items[0].HasOCR != tc.ocr || reply.Items[0].Description == "" || reply.Items[0].Kind != "image" {
+			t.Fatal("actual image retrieval", reply)
+		}
+		if !strings.Contains(strings.Join(reply.Items[0].Sources, ","), "semantic") {
+			t.Fatal("image result lacks real semantic match", reply)
+		}
+		waitNoReadLeases(t, f, *file.StorageID)
+		t.Logf("real image %s chunks=%d has_ocr=%v captured=%v vision=%s", tc.name, len(chunks), doc.HasOCR, doc.CapturedAtLocal != nil, doc.VisionModel)
+	}
+	var foreign struct {
+		Items []map[string]any `json:"items"`
+	}
+	decode(t, f.json(t, "POST", "/api/ai/search/nl", f.bob, map[string]any{"question": "去年拍的海边照片"}, 200), &foreign)
+	if len(foreign.Items) != 0 {
+		t.Fatal("image description or capture metadata leaked", foreign)
+	}
+	f.json(t, "DELETE", fmt.Sprintf("/api/files/%d", beachID), f.alice, nil, 200)
+	decode(t, f.json(t, "POST", "/api/ai/search/nl", f.alice, map[string]any{"question": "去年拍的海边照片"}, 200), &foreign)
+	if len(foreign.Items) != 0 {
+		t.Fatal("recycled image remains in capture search", foreign)
+	}
+}

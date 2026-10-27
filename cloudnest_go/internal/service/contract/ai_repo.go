@@ -54,6 +54,8 @@ type AIRepository interface {
 }
 
 type AIHybridFilter struct {
+	CapturedAfter  *time.Time
+	CapturedBefore *time.Time
 	FileTypes      []string
 	UploadedAfter  *time.Time
 	UploadedBefore *time.Time
@@ -62,6 +64,15 @@ type AIHybridFilter struct {
 // Rows are streamed in file_id/ordinal order; only live authorized files and
 // chunks from the matching completed source generation may be exposed.
 type AIHybridRow struct {
+	ExtractionKind    string
+	VisionModel       string
+	VisionDigest      string
+	HasOCR            bool
+	CapturedAtLocal   *time.Time
+	CaptureOffset     string
+	VisualDescription string
+	VisualTags        string
+
 	ID             int64
 	Filename       string
 	FileType       string

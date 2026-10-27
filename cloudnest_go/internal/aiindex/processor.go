@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"cloudenest_go/internal/blob"
+	"cloudenest_go/internal/imageprep"
 	"cloudenest_go/internal/indexqueue"
 	"cloudenest_go/internal/pdfextract"
 	"cloudenest_go/model"
@@ -48,7 +49,7 @@ func (p *Processor) Process(ctx context.Context, j model.AIIndexJob) (func(*gorm
 	}
 	ext := filepath.Ext(f.Filename)
 	isPDF := strings.EqualFold(ext, ".pdf")
-	if !SupportsText(ext) && !SupportsOffice(ext) && !isPDF {
+	if !SupportsText(ext) && !SupportsOffice(ext) && !isPDF && !SupportsImage(ext) {
 		return nil, failure("unsupported_type", false)
 	}
 	maxSource := int64(MaxTextBytes)
@@ -57,6 +58,9 @@ func (p *Processor) Process(ctx context.Context, j model.AIIndexJob) (func(*gorm
 	}
 	if isPDF {
 		maxSource = pdfextract.MaxSourceBytes
+	}
+	if SupportsImage(ext) {
+		maxSource = imageprep.MaxEncodedBytes
 	}
 	if f.Size > maxSource {
 		return nil, failure("extraction_limit", false)
@@ -70,13 +74,55 @@ func (p *Processor) Process(ctx context.Context, j model.AIIndexJob) (func(*gorm
 		return nil, indexqueue.ErrSourceChanged
 	}
 	var text string
-	if isPDF {
+	kind, visionDigest, description, tags := "text", "", "", ""
+	hasOCR := false
+	var capturedLocal any
+	captureOffset := ""
+	if SupportsImage(ext) {
+		kind = "image"
+		var prepared imageprep.Prepared
+		prepared, err = imageprep.Prepare(ctx, in)
+		if err == nil {
+			if p.vision == nil {
+				err = ErrModelUnavailable
+			} else {
+				var analysis ImageAnalysis
+				analysis, visionDigest, err = p.vision.AnalyzeImage(ctx, prepared.PNG)
+				if err == nil {
+					description = analysis.Description
+					tags = strings.Join(analysis.Tags, ",")
+					hasOCR = analysis.HasText
+					text = "[Visual description]\n" + description + "\n[Visual tags]\n" + tags
+					if hasOCR {
+						text += "\n[Visible text OCR]\n" + analysis.Text
+					}
+					if prepared.Metadata.CapturedLocal != nil {
+						capturedLocal = prepared.Metadata.CapturedLocal.Format("2006-01-02 15:04:05")
+					}
+					captureOffset = prepared.Metadata.Offset
+				}
+			}
+		}
+	} else if isPDF {
+		kind = "pdf"
 		var ocr pdfextract.OCR
 		if p.vision != nil {
-			ocr = p.vision.Transcribe
+			ocr = func(ctx context.Context, image []byte) (string, error) {
+				value, digest, err := p.vision.TranscribeWithDigest(ctx, image)
+				if err != nil {
+					return "", err
+				}
+				if visionDigest != "" && visionDigest != digest {
+					return "", ErrModelChanged
+				}
+				visionDigest = digest
+				hasOCR = true
+				return value, nil
+			}
 		}
 		text, err = p.pdf.Read(ctx, in, ocr)
 	} else if SupportsOffice(ext) {
+		kind = "office"
 		info, statErr := in.Stat()
 		if statErr != nil {
 			in.Close()
@@ -103,10 +149,10 @@ func (p *Processor) Process(ctx context.Context, j model.AIIndexJob) (func(*gorm
 		if errors.Is(err, ErrModelChanged) {
 			return nil, failure("model_changed", true)
 		}
-		if errors.Is(err, ErrExtractionBusy) || errors.Is(err, pdfextract.ErrBusy) {
+		if errors.Is(err, ErrExtractionBusy) || errors.Is(err, pdfextract.ErrBusy) || errors.Is(err, imageprep.ErrBusy) {
 			return nil, failure("extraction_busy", true)
 		}
-		if errors.Is(err, ErrTextLimit) || errors.Is(err, pdfextract.ErrLimit) {
+		if errors.Is(err, ErrTextLimit) || errors.Is(err, pdfextract.ErrLimit) || errors.Is(err, imageprep.ErrLimit) {
 			return nil, failure("extraction_limit", false)
 		}
 		return nil, failure("extraction_failed", false)
@@ -169,12 +215,17 @@ func (p *Processor) Process(ctx context.Context, j model.AIIndexJob) (func(*gorm
 				return err
 			}
 		}
+		visionModel := ""
+		if visionDigest != "" {
+			visionModel = p.vision.Model()
+		}
 		document := map[string]any{
+			"extraction_kind": kind, "vision_model": visionModel, "vision_digest": visionDigest, "has_ocr": hasOCR, "captured_at_local": capturedLocal, "capture_offset": captureOffset, "visual_description": description, "visual_tags": tags,
 			"file_id": f.ID, "generation": j.Generation, "source_hash": j.SourceHash, "pipeline": j.Pipeline,
 			"embedding_model": p.embed.Model(), "model_digest": digest, "dimensions": dimensions,
 			"chunk_count": len(rows), "text_bytes": len(text), "indexed_at": gorm.Expr("UTC_TIMESTAMP(6)"),
 		}
-		if err := tx.Model(&model.AIIndexDocument{}).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "file_id"}}, DoUpdates: clause.AssignmentColumns([]string{"generation", "source_hash", "pipeline", "embedding_model", "model_digest", "dimensions", "chunk_count", "text_bytes", "indexed_at"})}).Create(document).Error; err != nil {
+		if err := tx.Model(&model.AIIndexDocument{}).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "file_id"}}, DoUpdates: clause.AssignmentColumns([]string{"generation", "source_hash", "pipeline", "embedding_model", "model_digest", "dimensions", "chunk_count", "text_bytes", "indexed_at", "extraction_kind", "vision_model", "vision_digest", "has_ocr", "captured_at_local", "capture_offset", "visual_description", "visual_tags"})}).Create(document).Error; err != nil {
 			return err
 		}
 		return tx.Create(&model.OperationLog{UserID: &f.UserID, FileID: &f.ID, Action: "ai_index", Status: "success", Detail: "content chunks and embeddings published"}).Error

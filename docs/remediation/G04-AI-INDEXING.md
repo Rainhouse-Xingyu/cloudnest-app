@@ -4,7 +4,7 @@
 
 已接入上传事务内持久任务、带租约和代次的 worker，以及真实 UTF-8 与 DOCX/XLSX/PPTX 结构化文本提取、切块、独立 Ollama embedding 和原子向量保存。生产服务启动时运行 worker，并在 SIGTERM 时取消和等待退出。原上传后吞错 goroutine 已移除。
 
-**目前支持文本类、DOCX/XLSX/PPTX、PDF 文本与扫描页真实 OCR，以及实际混合检索；独立图片/视觉、旧二进制 Office 与完整效果评估仍未完成。** 未支持的后缀会明确失败为 `unsupported_type`；模型不可用会记录 `model_unavailable` 并重试，不写“分析成功”。手动 OCR、摘要和原关键词搜索接口仍保留，不能据此认定完整 G04 已完成。
+**目前支持文本类、DOCX/XLSX/PPTX、PDF 文本与扫描页真实 OCR，以及实际混合检索；JPEG/PNG/GIF 图片视觉与 EXIF 日历检索也已接入；其他图片格式、旧二进制 Office 与完整效果评估仍未完成。** 未支持的后缀会明确失败为 `unsupported_type`；模型不可用会记录 `model_unavailable` 并重试，不写“分析成功”。手动 OCR、摘要和原关键词搜索接口仍保留，不能据此认定完整 G04 已完成。
 
 旧 `ai_task` 和 `ai_metadata` 保留，新 `ai_index_job` 单独记录文件当前期望的索引代次。没有修改既有用户数据，也没有执行生产迁移。本分支为开发中的阶段检查点，不能作为完成的 AI 系统发布。
 
@@ -53,10 +53,10 @@ worker 单次处理默认三分钟、领取/续约/发布操作五秒上限，�
 
 接下来的必要实现：
 
-1. DOCX/XLSX/PPTX 已接入有界结构解析与真实模型链路，见 [Office 提取](AI-OFFICE-EXTRACTION.md)；PDF/扫描页已接入独立进程与真实视觉转录，见 [PDF 提取](AI-PDF-EXTRACTION.md)；继续扩展旧二进制 Office、独立图片/视觉并验证完整效果。
+1. DOCX/XLSX/PPTX 已接入有界结构解析与真实模型链路，见 [Office 提取](AI-OFFICE-EXTRACTION.md)；PDF/扫描页已接入独立进程与真实视觉转录，见 [PDF 提取](AI-PDF-EXTRACTION.md)；图片视觉与 EXIF 日历见 [图片索引](AI-IMAGE-INDEXING.md)；继续扩展旧二进制 Office、其余图片格式并验证完整效果。
 2. 统一旧 AI helper 与新处理器，清理重复提取实现。
 3. 扩展真实语料和并发规模测量，校准词法/语义阈值与是否需要 ANN/rerank。
-4. 完善混合检索的复杂意图、EXIF 时间与继承权限，保留当前文件级过滤及降级。
+4. 完善混合检索的复杂意图、其余 EXIF 元数据与继承权限，保留当前文件级过滤及降级。
 5. 状态、历史回填/重建及版本/复制/回收恢复/扩展名变化的增量入队已实现，见 [索引控制](AI-INDEX-CONTROL.md) 与 [增量索引](AI-INDEX-INCREMENTAL.md)。后续格式扩展须继续保留代次/删除隔离与回归验证。
 6. 用户六类查询及干扰/跨用户/时间/故障评估集，实际 Recall@K/MRR 和失败案例。
 
@@ -67,3 +67,5 @@ G04 尚未完成，G05–G11 仍按里程碑推进。
 2026-10-27：Office parser 已按 OPC 关系提取 Word 正文/引用页眉注脚、Excel 实际单元格值与公式缓存标记、PowerPoint 顺序/备注；摘要接口复用同一解析器，移除旧重复正则提取。源 32 MiB、XML/展开/节点/并发及输出上限、三种真实生成器文件与真实 Ollama 检索验收见 AI-OFFICE-EXTRACTION 和 TESTING。
 
 2026-10-27：PDF 同 FD 原生提取、空文本页渲染与实际 qwen3-vl 转录已接入持久任务及摘要 API。Linux 地址空间限额、macOS RSS 监测边界、依赖配置和未完成项见 AI-PDF-EXTRACTION。Office 提交 a6f039d 的 PR/push CI 均已通过。
+
+2026-10-28：JPEG/PNG/GIF 首帧经共享解码预算、EXIF 方向纠正和真实像素视觉调用生成描述/标签/文字，再由独立 embedding 索引。新增八个来源字段须显式迁移；拍摄时间采用相机本地日历且不回退上传时间。范围、兼容性故障和剩余工作见 AI-IMAGE-INDEXING 与 TESTING。

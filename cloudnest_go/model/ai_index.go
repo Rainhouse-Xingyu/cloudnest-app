@@ -24,6 +24,15 @@ func (AIIndexJob) TableName() string { return "ai_index_job" }
 // AIIndexDocument and its chunks are replaced atomically with a fenced job
 // completion. Search must join the live file and matching done job generation.
 type AIIndexDocument struct {
+	ExtractionKind    string     `gorm:"type:varchar(32);not null;default:''" json:"extraction_kind"`
+	VisionModel       string     `gorm:"type:varchar(200);not null;default:''" json:"vision_model"`
+	VisionDigest      string     `gorm:"type:char(64);not null;default:''" json:"vision_digest"`
+	HasOCR            bool       `gorm:"not null;default:false" json:"has_ocr"`
+	CapturedAtLocal   *time.Time `gorm:"type:datetime(6)" json:"-"`
+	CaptureOffset     string     `gorm:"type:varchar(6);not null;default:''" json:"capture_offset"`
+	VisualDescription string     `gorm:"type:varchar(4096);not null;default:''" json:"visual_description"`
+	VisualTags        string     `gorm:"type:varchar(4096);not null;default:''" json:"visual_tags"`
+
 	FileID         int64     `gorm:"primaryKey;autoIncrement:false" json:"file_id"`
 	Generation     int64     `gorm:"not null" json:"generation"`
 	SourceHash     string    `gorm:"type:char(64);not null" json:"source_hash"`

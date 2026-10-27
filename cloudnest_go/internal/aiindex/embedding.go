@@ -76,7 +76,9 @@ func (o *Ollama) request(ctx context.Context, method, path string, body any, out
 		}
 		return ErrModelUnavailable
 	}
-	if len(raw) > 2<<20 || json.Unmarshal(raw, output) != nil {
+	// encoding/json replaces invalid UTF-8 with U+FFFD. Reject the original
+	// bytes first so corrupted model text cannot become valid-looking content.
+	if len(raw) > 2<<20 || !utf8.Valid(raw) || json.Unmarshal(raw, output) != nil {
 		return ErrEmbedding
 	}
 	return nil

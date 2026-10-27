@@ -63,7 +63,7 @@ func TestHybridIntentUsesUploadCalendarAndDoesNotInventCaptureTime(t *testing.T)
 		t.Fatal(f, warning)
 	}
 	f, warning = hybridIntent("去年拍摄的海边照片", now)
-	if warning != "capture_time_not_indexed" || f.UploadedAfter != nil || len(f.FileTypes) == 0 {
+	if warning != "" || f.UploadedAfter != nil || len(f.FileTypes) == 0 || f.CapturedAfter == nil || f.CapturedAfter.Year() != now.Year()-1 || f.CapturedBefore == nil || f.CapturedBefore.Year() != now.Year() {
 		t.Fatal("capture time silently became upload time")
 	}
 }

@@ -1,22 +1,18 @@
 package handler
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
-	"image/gif"
 	"image/jpeg"
-	"image/png"
-	"io"
 	"net/http"
 	"os"
-	"sync"
 	"time"
 
+	"cloudenest_go/internal/imageprep"
 	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/internal/transfer"
 	"crypto/sha256"
@@ -25,186 +21,26 @@ import (
 )
 
 const (
-	thumbnailMaxEncodedBytes int64 = 64 << 20
-	thumbnailMaxHeaderBytes  int64 = 1 << 20
-	thumbnailMaxDimension          = 16384
-	thumbnailMaxPixels       int64 = 24_000_000
-	thumbnailMemoryBudget    int64 = 512 << 20
-	thumbnailBuildTimeout          = 15 * time.Second
-	thumbnailWaitTimeout           = time.Second
+	thumbnailMaxEncodedBytes = imageprep.MaxEncodedBytes
+	thumbnailMaxHeaderBytes  = imageprep.MaxHeaderBytes
+	thumbnailMemoryBudget    = imageprep.MemoryBudget
+	thumbnailBuildTimeout    = imageprep.BuildTimeout
+	thumbnailWaitTimeout     = imageprep.WaitTimeout
 )
 
 var (
-	errThumbnailLimit      = errors.New("image exceeds thumbnail processing limits")
-	errThumbnailFormat     = errors.New("thumbnail format is not supported")
-	errThumbnailInvalid    = errors.New("invalid image data")
-	errThumbnailBusy       = errors.New("thumbnail processing unavailable; retry later")
-	processThumbnailBudget = newThumbnailBudget()
+	errThumbnailLimit   = imageprep.ErrLimit
+	errThumbnailFormat  = imageprep.ErrFormat
+	errThumbnailInvalid = imageprep.ErrInvalid
+	errThumbnailBusy    = imageprep.ErrBusy
 )
 
-// This is an admission estimate, not an OS memory limit. It includes a
-// conservative pixel working set and overhead; see THUMBNAIL-RESOURCES.md.
-func thumbnailWeight(width, height int) (int64, error) {
-	if width <= 0 || height <= 0 {
-		return 0, errThumbnailInvalid
-	}
-	if width > thumbnailMaxDimension || height > thumbnailMaxDimension || int64(width) > thumbnailMaxPixels/int64(height) {
-		return 0, errThumbnailLimit
-	}
-	return int64(width)*int64(height)*16 + (16 << 20), nil
+func thumbnailWeight(width, height int) (int64, error) { return imageprep.Weight(width, height) }
+func thumbnailConfig(ctx context.Context, in *os.File) (image.Config, string, error) {
+	return imageprep.Config(ctx, in)
 }
-
-type thumbnailBudget struct {
-	mu              sync.Mutex
-	used            int64
-	active, waiting int
-	changed         chan struct{}
-}
-
-func newThumbnailBudget() *thumbnailBudget { return &thumbnailBudget{changed: make(chan struct{})} }
-
-// At most two builds and sixteen waiters per process, shared by every router.
-// Requests wait at most one second; no goroutine outlives its request.
-func (b *thumbnailBudget) acquire(ctx context.Context, weight int64) (func(), error) {
-	if weight <= 0 || weight > thumbnailMemoryBudget {
-		return nil, errThumbnailLimit
-	}
-	wait, cancel := context.WithTimeout(ctx, thumbnailWaitTimeout)
-	defer cancel()
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	queued := false
-	defer func() {
-		if queued {
-			b.waiting--
-		}
-	}()
-	for {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		if wait.Err() != nil {
-			return nil, errThumbnailBusy
-		}
-		if b.active < 2 && weight <= thumbnailMemoryBudget-b.used {
-			b.active++
-			b.used += weight
-			var once sync.Once
-			return func() {
-				once.Do(func() {
-					b.mu.Lock()
-					defer b.mu.Unlock()
-					b.active--
-					b.used -= weight
-					close(b.changed)
-					b.changed = make(chan struct{})
-				})
-			}, nil
-		}
-		if !queued {
-			if b.waiting >= 16 {
-				return nil, errThumbnailBusy
-			}
-			b.waiting++
-			queued = true
-		}
-		changed := b.changed
-		b.mu.Unlock()
-		select {
-		case <-changed:
-		case <-wait.Done():
-		}
-		b.mu.Lock()
-	}
-}
-
-func thumbnailConfig(ctx context.Context, source *os.File) (image.Config, string, error) {
-	var cfg image.Config
-	info, err := source.Stat()
-	if err != nil {
-		return cfg, "", err
-	}
-	if !info.Mode().IsRegular() || info.Size() < 0 {
-		return cfg, "", contract.ErrStorageIntegrity
-	}
-	if info.Size() > thumbnailMaxEncodedBytes {
-		return cfg, "", errThumbnailLimit
-	}
-	if _, err = source.Seek(0, io.SeekStart); err != nil {
-		return cfg, "", err
-	}
-	var magic [8]byte
-	n, err := io.ReadFull(&uploadContextReader{ctx: ctx, in: source}, magic[:])
-	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
-		return cfg, "", err
-	}
-	var format string
-	var decodeConfig func(io.Reader) (image.Config, error)
-	switch {
-	case n >= 2 && magic[0] == 0xff && magic[1] == 0xd8:
-		format, decodeConfig = "jpeg", jpeg.DecodeConfig
-	case n == 8 && bytes.Equal(magic[:], []byte("\x89PNG\r\n\x1a\n")):
-		format, decodeConfig = "png", png.DecodeConfig
-	case n >= 6 && (string(magic[:6]) == "GIF87a" || string(magic[:6]) == "GIF89a"):
-		format, decodeConfig = "gif", gif.DecodeConfig
-	default:
-		return cfg, "", errThumbnailFormat
-	}
-	if _, err = source.Seek(0, io.SeekStart); err != nil {
-		return cfg, "", err
-	}
-	limited := &io.LimitedReader{R: &uploadContextReader{ctx: ctx, in: source}, N: thumbnailMaxHeaderBytes}
-	cfg, err = decodeConfig(limited)
-	if ctx.Err() != nil {
-		return cfg, "", ctx.Err()
-	}
-	if limited.N == 0 {
-		return cfg, "", errThumbnailLimit
-	}
-	if err != nil {
-		return cfg, "", errThumbnailInvalid
-	}
-	if _, err = thumbnailWeight(cfg.Width, cfg.Height); err != nil {
-		return cfg, "", err
-	}
-	return cfg, format, nil
-}
-
-func decodeThumbnail(ctx context.Context, source *os.File, cfg image.Config, format string) (image.Image, error) {
-	if _, err := source.Seek(0, io.SeekStart); err != nil {
-		return nil, err
-	}
-	limited := &io.LimitedReader{R: &uploadContextReader{ctx: ctx, in: source}, N: thumbnailMaxEncodedBytes + 1}
-	var img image.Image
-	var err error
-	switch format {
-	case "jpeg":
-		img, err = jpeg.Decode(limited)
-	case "png":
-		img, err = png.Decode(limited)
-	case "gif":
-		img, err = gif.Decode(limited) // First frame only, never DecodeAll.
-	default:
-		return nil, errThumbnailFormat
-	}
-	if ctx.Err() != nil {
-		return nil, ctx.Err()
-	}
-	if limited.N == 0 {
-		return nil, errThumbnailLimit
-	}
-	if err != nil {
-		return nil, errThumbnailInvalid
-	}
-	b := img.Bounds()
-	// GIF's first frame can occupy a subrectangle of its logical screen.
-	if b.Dx() > cfg.Width || b.Dy() > cfg.Height {
-		return nil, errThumbnailInvalid
-	}
-	if _, err := thumbnailWeight(b.Dx(), b.Dy()); err != nil {
-		return nil, err
-	}
-	return img, nil
+func decodeThumbnail(ctx context.Context, in *os.File, cfg image.Config, format string) (image.Image, error) {
+	return imageprep.Decode(ctx, in, cfg, format)
 }
 
 func writeThumbnailError(c *gin.Context, err error) {
@@ -273,7 +109,7 @@ func (h *FileHandler) buildOrGetThumbnail(parent context.Context, source *os.Fil
 	if err != nil {
 		return nil, err
 	}
-	release, err := processThumbnailBudget.acquire(ctx, weight)
+	release, err := imageprep.ProcessBudget.Acquire(ctx, weight)
 	if err != nil {
 		return nil, err
 	}

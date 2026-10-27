@@ -62,6 +62,19 @@ func checkAIIndexResultSchema(db *gorm.DB) error {
 	if count != 10 {
 		return errors.New("AI index document fields missing or changed; review explicit migrate before starting")
 	}
+	if err := db.Raw(`SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='ai_index_document' AND (
+ (column_name='extraction_kind' AND data_type='varchar' AND character_maximum_length=32 AND is_nullable='NO') OR
+ (column_name='vision_model' AND data_type='varchar' AND character_maximum_length=200 AND is_nullable='NO') OR
+ (column_name='vision_digest' AND data_type='char' AND character_maximum_length=64 AND is_nullable='NO') OR
+ (column_name='has_ocr' AND column_type='tinyint(1)' AND is_nullable='NO') OR
+ (column_name='captured_at_local' AND data_type='datetime' AND datetime_precision=6 AND is_nullable='YES') OR
+ (column_name='capture_offset' AND data_type='varchar' AND character_maximum_length=6 AND is_nullable='NO') OR
+ (column_name IN ('visual_description','visual_tags') AND data_type='varchar' AND character_maximum_length=4096 AND is_nullable='NO'))`).Scan(&count).Error; err != nil {
+		return err
+	}
+	if count != 8 {
+		return errors.New("AI image provenance fields missing or changed; review explicit migrate before starting")
+	}
 	if err := db.Raw(`SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='ai_index_chunk' AND is_nullable='NO' AND (
  (column_name IN ('file_id','ordinal','start_rune','end_rune') AND column_type='bigint') OR
  (column_name='content' AND data_type='text') OR

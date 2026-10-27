@@ -27,7 +27,9 @@ func (r *AIRepo) ScanHybrid(ctx context.Context, uid int64, filter contract.AIHy
  COALESCE(s.file_hash,'') AS source_hash,COALESCE(d.generation,0) AS generation,
  COALESCE(d.embedding_model,'') AS embedding_model,COALESCE(d.model_digest,'') AS model_digest,
  COALESCE(d.dimensions,0) AS dimensions,COALESCE(c.ordinal,0) AS ordinal,
- COALESCE(c.start_rune,0) AS start_rune,COALESCE(c.content,'') AS content,c.vector`).
+ COALESCE(c.start_rune,0) AS start_rune,COALESCE(c.content,'') AS content,c.vector,
+ COALESCE(d.extraction_kind,'') AS extraction_kind,COALESCE(d.vision_model,'') AS vision_model,COALESCE(d.vision_digest,'') AS vision_digest,COALESCE(d.has_ocr,0) AS has_ocr,
+ d.captured_at_local,COALESCE(d.capture_offset,'') AS capture_offset,COALESCE(d.visual_description,'') AS visual_description,COALESCE(d.visual_tags,'') AS visual_tags`).
 		Order("f.id,c.ordinal")
 	if len(filter.FileTypes) > 0 {
 		query = query.Where("LOWER(f.file_type) IN ?", filter.FileTypes)
@@ -37,6 +39,14 @@ func (r *AIRepo) ScanHybrid(ctx context.Context, uid int64, filter contract.AIHy
 	}
 	if filter.UploadedBefore != nil {
 		query = query.Where("f.create_time<?", *filter.UploadedBefore)
+	}
+	// Capture filters are camera wall-clock dates, never guessed UTC instants.
+	// Bind formatted wall-clock strings so DSN loc cannot shift the value.
+	if filter.CapturedAfter != nil {
+		query = query.Where("d.captured_at_local>=?", filter.CapturedAfter.Format("2006-01-02 15:04:05"))
+	}
+	if filter.CapturedBefore != nil {
+		query = query.Where("d.captured_at_local<?", filter.CapturedBefore.Format("2006-01-02 15:04:05"))
 	}
 	rows, err := query.Rows()
 	if err != nil {

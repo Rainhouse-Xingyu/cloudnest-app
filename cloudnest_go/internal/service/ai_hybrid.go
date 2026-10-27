@@ -56,6 +56,11 @@ func (s *AIService) hybridSearch(parent context.Context, uid int64, question str
 	if filter.UploadedBefore != nil {
 		result.Query.EndTime = filter.UploadedBefore.Format(time.RFC3339)
 	}
+	if filter.CapturedAfter != nil {
+		result.Query.StartTime = filter.CapturedAfter.Format("2006-01-02 15:04:05")
+		result.Query.EndTime = filter.CapturedBefore.Format("2006-01-02 15:04:05")
+		result.Warnings = append(result.Warnings, "capture_time_uses_exif_camera_local_calendar")
+	}
 	if len(filter.FileTypes) > 0 {
 		result.Query.FileType = strings.Join(filter.FileTypes, ",")
 	}
@@ -200,8 +205,14 @@ func (s *AIService) hybridSearch(parent context.Context, uid int64, question str
 		}
 		snippet, offset := hybridSnippet(h.row.Content, terms)
 		item := map[string]interface{}{"id": h.row.ID, "filename": h.row.Filename, "file_type": h.row.FileType, "size": h.row.Size, "parent_id": h.row.ParentID, "user_id": h.row.UserID, "create_time": h.row.CreateTime, "update_time": h.row.UpdateTime,
-			"tags": "", "description": "", "ocr_snippet": snippet, "has_ocr_index": false, "has_text_index": h.row.Generation > 0,
+			"tags": h.row.VisualTags, "description": h.row.VisualDescription, "ocr_snippet": snippet, "has_ocr_index": h.row.HasOCR,
+			"extraction_kind": h.row.ExtractionKind, "vision_model": h.row.VisionModel, "vision_digest": h.row.VisionDigest, "has_text_index": h.row.Generation > 0,
 			"snippet": snippet, "snippet_offset_basis": "extracted_text_runes", "snippet_start_rune": h.row.StartRune + offset, "chunk_ordinal": h.row.Ordinal, "index_generation": h.row.Generation, "match_sources": sources, "score": h.score}
+		if h.row.CapturedAtLocal != nil {
+			item["captured_at_local"] = h.row.CapturedAtLocal.Format("2006-01-02 15:04:05")
+			item["capture_offset"] = h.row.CaptureOffset
+			item["capture_time_basis"] = "exif_camera_local"
+		}
 		if h.vector {
 			item["semantic_score"] = h.semantic
 		}
@@ -361,8 +372,10 @@ func hybridIntent(question string, now time.Time) (contract.AIHybridFilter, stri
 		end = start.AddDate(1, 0, 0)
 	}
 	if !start.IsZero() {
-		if strings.Contains(question, "拍摄") {
-			return f, "capture_time_not_indexed"
+		if !strings.Contains(question, "上传") && (strings.Contains(question, "拍摄") || strings.Contains(question, "拍的") || len(f.FileTypes) > 0) {
+			f.CapturedAfter = &start
+			f.CapturedBefore = &end
+			return f, ""
 		}
 		a, b := start.UTC(), end.UTC()
 		f.UploadedAfter = &a

@@ -17,16 +17,21 @@ var ErrVisionResponse = errors.New("invalid vision transcription response")
 // The image is untrusted source data, never an instruction to execute actions.
 // Protocol validation does not prove OCR accuracy; evaluate on labelled images.
 func (o *Ollama) Transcribe(ctx context.Context, image []byte) (string, error) {
+	text, _, err := o.TranscribeWithDigest(ctx, image)
+	return text, err
+}
+
+func (o *Ollama) TranscribeWithDigest(ctx context.Context, image []byte) (string, string, error) {
 	if len(image) == 0 || len(image) > 8<<20 {
-		return "", ErrTextLimit
+		return "", "", ErrTextLimit
 	}
 	cfg, err := png.DecodeConfig(bytes.NewReader(image))
 	if err != nil || cfg.Width < 1 || cfg.Height < 1 || cfg.Width > 1600 || cfg.Height > 1600 {
-		return "", ErrDocument
+		return "", "", ErrDocument
 	}
 	digest, err := o.Digest(ctx)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	body := map[string]any{
 		"model": o.model, "stream": false, "think": false, "keep_alive": "1m",
@@ -47,20 +52,20 @@ func (o *Ollama) Transcribe(ctx context.Context, image []byte) (string, error) {
 	}
 	if err := o.request(ctx, http.MethodPost, "/api/chat", body, &response); err != nil {
 		if errors.Is(err, ErrEmbedding) {
-			return "", ErrVisionResponse
+			return "", "", ErrVisionResponse
 		}
-		return "", err
+		return "", "", err
 	}
 	text := strings.TrimSpace(response.Message.Content)
 	if response.Model != o.model || !response.Done || response.Reason != "stop" || response.Message.Role != "assistant" || !utf8.ValidString(text) || strings.IndexByte(text, 0) >= 0 || text == "" || len(text) > 32<<10 {
-		return "", ErrVisionResponse
+		return "", "", ErrVisionResponse
 	}
 	confirmed, err := o.Digest(ctx)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	if confirmed != digest {
-		return "", ErrModelChanged
+		return "", "", ErrModelChanged
 	}
-	return text, nil
+	return text, digest, nil
 }
