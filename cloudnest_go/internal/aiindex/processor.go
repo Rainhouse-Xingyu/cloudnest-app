@@ -6,20 +6,32 @@ import (
 	"errors"
 	"math"
 	"path/filepath"
+	"strings"
 
 	"cloudenest_go/internal/blob"
 	"cloudenest_go/internal/indexqueue"
+	"cloudenest_go/internal/pdfextract"
 	"cloudenest_go/model"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
 type Processor struct {
-	db    *gorm.DB
-	embed *Ollama
+	db     *gorm.DB
+	embed  *Ollama
+	pdf    pdfextract.Reader
+	vision *Ollama
 }
 
-func NewProcessor(db *gorm.DB, embed *Ollama) *Processor { return &Processor{db, embed} }
+func NewProcessor(db *gorm.DB, embed *Ollama) *Processor { return &Processor{db: db, embed: embed} }
+
+// WithPDF configures native extraction and the separate OCR model. Configure
+// before starting the worker; the processor is immutable while running.
+func (p *Processor) WithPDF(binDir string, vision *Ollama) *Processor {
+	p.pdf = pdfextract.Reader{BinDir: binDir}
+	p.vision = vision
+	return p
+}
 
 func failure(code string, retry bool) error { return &indexqueue.Failure{Code: code, Retryable: retry} }
 
@@ -35,12 +47,16 @@ func (p *Processor) Process(ctx context.Context, j model.AIIndexJob) (func(*gorm
 		return nil, indexqueue.ErrSourceChanged
 	}
 	ext := filepath.Ext(f.Filename)
-	if !SupportsText(ext) && !SupportsOffice(ext) {
+	isPDF := strings.EqualFold(ext, ".pdf")
+	if !SupportsText(ext) && !SupportsOffice(ext) && !isPDF {
 		return nil, failure("unsupported_type", false)
 	}
 	maxSource := int64(MaxTextBytes)
 	if SupportsOffice(ext) {
 		maxSource = MaxOfficeBytes
+	}
+	if isPDF {
+		maxSource = pdfextract.MaxSourceBytes
 	}
 	if f.Size > maxSource {
 		return nil, failure("extraction_limit", false)
@@ -54,7 +70,13 @@ func (p *Processor) Process(ctx context.Context, j model.AIIndexJob) (func(*gorm
 		return nil, indexqueue.ErrSourceChanged
 	}
 	var text string
-	if SupportsOffice(ext) {
+	if isPDF {
+		var ocr pdfextract.OCR
+		if p.vision != nil {
+			ocr = p.vision.Transcribe
+		}
+		text, err = p.pdf.Read(ctx, in, ocr)
+	} else if SupportsOffice(ext) {
 		info, statErr := in.Stat()
 		if statErr != nil {
 			in.Close()
@@ -66,10 +88,25 @@ func (p *Processor) Process(ctx context.Context, j model.AIIndexJob) (func(*gorm
 	}
 	closeErr := in.Close()
 	if err != nil {
-		if errors.Is(err, ErrExtractionBusy) {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			return nil, failure("extraction_limit", false)
+		}
+		if errors.Is(err, pdfextract.ErrUnavailable) {
+			return nil, failure("extraction_unavailable", true)
+		}
+		if errors.Is(err, ErrModelUnavailable) || errors.Is(err, ErrVisionResponse) || errors.Is(err, ErrEmbedding) || errors.Is(err, pdfextract.ErrOCRRequired) {
+			return nil, failure("model_unavailable", true)
+		}
+		if errors.Is(err, ErrModelChanged) {
+			return nil, failure("model_changed", true)
+		}
+		if errors.Is(err, ErrExtractionBusy) || errors.Is(err, pdfextract.ErrBusy) {
 			return nil, failure("extraction_busy", true)
 		}
-		if errors.Is(err, ErrTextLimit) {
+		if errors.Is(err, ErrTextLimit) || errors.Is(err, pdfextract.ErrLimit) {
 			return nil, failure("extraction_limit", false)
 		}
 		return nil, failure("extraction_failed", false)

@@ -21,6 +21,7 @@ import (
 	"cloudenest_go/internal/config"
 	"cloudenest_go/internal/indexqueue"
 	storageMaintenance "cloudenest_go/internal/maintenance"
+	"cloudenest_go/internal/pdfextract"
 	"cloudenest_go/internal/service"
 	"cloudenest_go/internal/service/contract"
 	storageMysql "cloudenest_go/internal/storage/mysql"
@@ -37,6 +38,9 @@ var (
 )
 
 func main() {
+	if handled, code := pdfextract.Helper(os.Args[1:]); handled {
+		os.Exit(code)
+	}
 	loadEnv()
 
 	cfg := config.Load()
@@ -199,7 +203,11 @@ func main() {
 	if err != nil {
 		log.Fatal("invalid AI embedding configuration")
 	}
-	indexWorker := indexqueue.NewWorker(db, container.Blobs, aiindex.NewProcessor(db, embedding).Process)
+	vision, err := aiindex.NewOllama(cfg.AIOllamaBaseURL, cfg.AIOCRModel)
+	if err != nil {
+		log.Fatal("invalid OCR configuration")
+	}
+	indexWorker := indexqueue.NewWorker(db, container.Blobs, aiindex.NewProcessor(db, embedding).WithPDF(cfg.AIPDFBinDir, vision).Process)
 	worker := container.FileHandler.Transfers
 	if cfg.TransferMaintenanceDSN != "" {
 		workerCfg := cfg

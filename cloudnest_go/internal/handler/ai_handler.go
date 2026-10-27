@@ -17,6 +17,7 @@ import (
 	"cloudenest_go/internal/aiindex"
 	"cloudenest_go/internal/config"
 	"cloudenest_go/internal/middleware"
+	"cloudenest_go/internal/pdfextract"
 	"cloudenest_go/internal/service"
 	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
@@ -573,15 +574,23 @@ func (h *AIHandler) writeAIErr(c *gin.Context, err error) {
 	if err == nil {
 		return
 	}
-	if errors.Is(err, aiindex.ErrExtractionBusy) {
+	if errors.Is(err, pdfextract.ErrUnavailable) {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "PDF extraction unavailable"})
+		return
+	}
+	if errors.Is(err, aiindex.ErrModelUnavailable) || errors.Is(err, aiindex.ErrVisionResponse) || errors.Is(err, aiindex.ErrModelChanged) {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "OCR model unavailable"})
+		return
+	}
+	if errors.Is(err, aiindex.ErrExtractionBusy) || errors.Is(err, pdfextract.ErrBusy) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "document extraction busy"})
 		return
 	}
-	if errors.Is(err, aiindex.ErrTextLimit) {
+	if errors.Is(err, aiindex.ErrTextLimit) || errors.Is(err, pdfextract.ErrLimit) {
 		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "document extraction limit exceeded"})
 		return
 	}
-	if errors.Is(err, aiindex.ErrDocument) {
+	if errors.Is(err, aiindex.ErrDocument) || errors.Is(err, pdfextract.ErrInvalid) {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "document content cannot be extracted"})
 		return
 	}

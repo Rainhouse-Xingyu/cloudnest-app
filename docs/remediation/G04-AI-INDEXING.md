@@ -4,7 +4,7 @@
 
 已接入上传事务内持久任务、带租约和代次的 worker，以及真实 UTF-8 与 DOCX/XLSX/PPTX 结构化文本提取、切块、独立 Ollama embedding 和原子向量保存。生产服务启动时运行 worker，并在 SIGTERM 时取消和等待退出。原上传后吞错 goroutine 已移除。
 
-**目前支持文本类、DOCX/XLSX/PPTX 与实际混合检索；PDF、图片/OCR、旧二进制 Office 与完整效果评估仍未完成。** 未支持的后缀会明确失败为 `unsupported_type`；模型不可用会记录 `model_unavailable` 并重试，不写“分析成功”。手动 OCR、摘要和原关键词搜索接口仍保留，不能据此认定完整 G04 已完成。
+**目前支持文本类、DOCX/XLSX/PPTX、PDF 文本与扫描页真实 OCR，以及实际混合检索；独立图片/视觉、旧二进制 Office 与完整效果评估仍未完成。** 未支持的后缀会明确失败为 `unsupported_type`；模型不可用会记录 `model_unavailable` 并重试，不写“分析成功”。手动 OCR、摘要和原关键词搜索接口仍保留，不能据此认定完整 G04 已完成。
 
 旧 `ai_task` 和 `ai_metadata` 保留，新 `ai_index_job` 单独记录文件当前期望的索引代次。没有修改既有用户数据，也没有执行生产迁移。本分支为开发中的阶段检查点，不能作为完成的 AI 系统发布。
 
@@ -43,7 +43,7 @@ worker 单次处理默认三分钟、领取/续约/发布操作五秒上限，�
 
 已在 loopback Ollama 0.31.1 下载并实际调用 `qwen3-embedding:0.6b`。2026-10-25 的三个合成文本返回 3 × 1024 维有限向量；输入、digest 和观测值见 [原始预检记录](AI-MODEL-PREFLIGHT-20261025.json)。请求关闭自动截断并设置 keep_alive=0，调用后模型已卸载。结果只是 provider 可用性验证，不是 CloudNest 检索 Recall/MRR，也不是模型选型最终质量结论。
 
-现有 qwen3-vl:4b、deepseek-ocr:3b、deepseek-r1:1.5b 虽有 manifest，但预检时其引用的权重/config blob 缺失；不能认定视觉/OCR 已可用，没有删除这些旧记录。2026-10-26 已通过官方 pull 恢复 qwen3-vl:4b，manifest 引用的 5 个 blob 均存在；已对合成票据图片实际调用成功，商品、金额、测试 IP 转录准确（20.581s），仍不是 CloudNest 图片索引验收。deepseek 的两项旧缓存仍不完整，没有删除。图片、扫描 PDF 与真实视觉标签仍需建立并验证处理链路。
+现有 qwen3-vl:4b、deepseek-ocr:3b、deepseek-r1:1.5b 虽有 manifest，但预检时其引用的权重/config blob 缺失；不能认定视觉/OCR 已可用，没有删除这些旧记录。2026-10-26 已通过官方 pull 恢复 qwen3-vl:4b，manifest 引用的 5 个 blob 均存在；已对合成票据图片实际调用成功，商品、金额、测试 IP 转录准确（20.581s），仍不是 CloudNest 图片索引验收。deepseek 的两项旧缓存仍不完整，没有删除。后续 PDF 检查点已接入扫描页真实 OCR；独立图片与真实视觉标签仍需建立并验证处理链路。
 
 ## 验证与剩余工作
 
@@ -53,7 +53,7 @@ worker 单次处理默认三分钟、领取/续约/发布操作五秒上限，�
 
 接下来的必要实现：
 
-1. DOCX/XLSX/PPTX 已接入有界结构解析与真实模型链路，见 [Office 提取](AI-OFFICE-EXTRACTION.md)；继续扩展 PDF、旧二进制 Office、OCR/视觉，并验证资源与错误边界。
+1. DOCX/XLSX/PPTX 已接入有界结构解析与真实模型链路，见 [Office 提取](AI-OFFICE-EXTRACTION.md)；PDF/扫描页已接入独立进程与真实视觉转录，见 [PDF 提取](AI-PDF-EXTRACTION.md)；继续扩展旧二进制 Office、独立图片/视觉并验证完整效果。
 2. 统一旧 AI helper 与新处理器，清理重复提取实现。
 3. 扩展真实语料和并发规模测量，校准词法/语义阈值与是否需要 ANN/rerank。
 4. 完善混合检索的复杂意图、EXIF 时间与继承权限，保留当前文件级过滤及降级。
@@ -65,3 +65,5 @@ G04 尚未完成，G05–G11 仍按里程碑推进。
 2026-10-27：新增公开状态/历史回填/重建接口，五项控制测试与原六项检索专项通过（12.838s）。真实模型测试已改为通过公开重建 API 交由独立生产服务消费，最终状态 done/current（函数 10.68s / 包 16.700s），详见 AI-INDEX-CONTROL 与 TESTING。
 
 2026-10-27：Office parser 已按 OPC 关系提取 Word 正文/引用页眉注脚、Excel 实际单元格值与公式缓存标记、PowerPoint 顺序/备注；摘要接口复用同一解析器，移除旧重复正则提取。源 32 MiB、XML/展开/节点/并发及输出上限、三种真实生成器文件与真实 Ollama 检索验收见 AI-OFFICE-EXTRACTION 和 TESTING。
+
+2026-10-27：PDF 同 FD 原生提取、空文本页渲染与实际 qwen3-vl 转录已接入持久任务及摘要 API。Linux 地址空间限额、macOS RSS 监测边界、依赖配置和未完成项见 AI-PDF-EXTRACTION。Office 提交 a6f039d 的 PR/push CI 均已通过。

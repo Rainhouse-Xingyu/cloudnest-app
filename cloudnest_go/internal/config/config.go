@@ -26,6 +26,8 @@ type Config struct {
 	AIOllamaBaseURL        string
 	AIOllamaModel          string
 	AIEmbeddingModel       string
+	AIPDFBinDir            string
+	AIOCRModel             string
 	AIGuideDocPath         string
 	AITimeoutSec           int
 	TransferTempBytes      int64
@@ -56,6 +58,8 @@ func Load() Config {
 		JWTExpireHours:   jwtExpireHours,
 		AIOllamaBaseURL:  getEnv("AI_OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
 		AIOllamaModel:    getEnv("AI_OLLAMA_MODEL", "qwen3-vl:4b"),
+		AIPDFBinDir:      os.Getenv("AI_PDF_BIN_DIR"),
+		AIOCRModel:       getEnv("AI_OCR_MODEL", "qwen3-vl:4b"),
 		AIEmbeddingModel: getEnv("AI_EMBEDDING_MODEL", "qwen3-embedding:0.6b"),
 		AIGuideDocPath:   getEnv("AI_GUIDE_DOC_PATH", "../../项目功能汇总.md"),
 		AITimeoutSec:     getEnvInt("AI_TIMEOUT_SEC", 120),

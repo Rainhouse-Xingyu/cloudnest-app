@@ -146,7 +146,7 @@ func runLiveIndexServer(t *testing.T, f *fixture, fileID int64) {
 	listener.Close()
 	command := exec.Command(binary)
 	command.Dir = t.TempDir()
-	command.Env = []string{"MYSQL_DSN=" + f.cfg.MySQLDSN, "REDIS_ADDR=" + f.cfg.RedisAddr, "JWT_SECRET=" + f.cfg.JWTSecret, "JWT_EXPIRE_HOURS=1", "DATA_DIR=" + f.cfg.DataDir, "APP_BIND_ADDR=127.0.0.1", fmt.Sprintf("APP_PORT=%d", port), "AI_OLLAMA_BASE_URL=http://127.0.0.1:11434", "AI_EMBEDDING_MODEL=qwen3-embedding:0.6b"}
+	command.Env = []string{"MYSQL_DSN=" + f.cfg.MySQLDSN, "REDIS_ADDR=" + f.cfg.RedisAddr, "JWT_SECRET=" + f.cfg.JWTSecret, "JWT_EXPIRE_HOURS=1", "DATA_DIR=" + f.cfg.DataDir, "APP_BIND_ADDR=127.0.0.1", fmt.Sprintf("APP_PORT=%d", port), "AI_OLLAMA_BASE_URL=http://127.0.0.1:11434", "AI_EMBEDDING_MODEL=qwen3-embedding:0.6b", "AI_PDF_BIN_DIR=" + f.cfg.AIPDFBinDir, "AI_OCR_MODEL=qwen3-vl:4b"}
 	logFile, err := os.Create(filepath.Join(command.Dir, "server.log"))
 	if err != nil {
 		t.Fatal(err)
@@ -405,5 +405,79 @@ func TestAITextLiveOfficeDocumentsProduceSearchableRealVectors(t *testing.T) {
 			t.Fatal("Office retrieval never used actual vector", reply)
 		}
 		t.Logf("real Office index/search: %s bytes=%d chunks=%d first_file=%d", tc.name, len(body), len(chunks), file.ID)
+	}
+}
+
+func TestAITextLivePDFAndScannedPagesProduceSearchableRealVectors(t *testing.T) {
+	if os.Getenv("CLOUDNEST_TEST_AI_MODEL") != "1" {
+		t.Fatal("run scripts/test-ai-index-model.sh")
+	}
+	f, _ := indexFixture(t)
+	f.cfg.AIOllamaBaseURL = "http://127.0.0.1:11434"
+	f.cfg.AIEmbeddingModel = "qwen3-embedding:0.6b"
+	f.cfg.AIPDFBinDir = os.Getenv("CLOUDNEST_TEST_POPPLER_BIN")
+	if f.cfg.AIPDFBinDir == "" {
+		t.Fatal("CLOUDNEST_TEST_POPPLER_BIN required for PDF acceptance")
+	}
+	f.router = fixtureRouter(app.NewContainer(f.cfg, f.db, f.rdb).NewRouter())
+	for _, tc := range []struct{ name, needle, question string }{
+		{"migration.pdf", "192.0.2.42", "MySQL database migration backup rollback"},
+		{"scanned-invoice.pdf", "5999", "Laptop computer purchase invoice"},
+	} {
+		body, err := os.ReadFile(filepath.Join("testdata/pdf", tc.name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		file := f.upload(t, f.alice, tc.name, body)
+		if tc.name == "migration.pdf" {
+			runLiveIndexServer(t, f, file.ID)
+		} else if worked, err := textWorker(t, f, f.cfg.AIOllamaBaseURL).Step(context.Background()); !worked || err != nil {
+			t.Fatal("actual PDF indexing failed", worked, err)
+		}
+		j := readIndex(t, f, file.ID)
+		if j.Status != "done" {
+			t.Fatal(j)
+		}
+		var chunks []model.AIIndexChunk
+		if err := f.db.Where("file_id=?", file.ID).Order("ordinal").Find(&chunks).Error; err != nil {
+			t.Fatal(err)
+		}
+		var content strings.Builder
+		for _, c := range chunks {
+			content.WriteString(c.Content)
+			decodeVector(t, c.Vector)
+		}
+		if len(chunks) == 0 || !strings.Contains(content.String(), tc.needle) {
+			t.Fatal("PDF text lost", content.String())
+		}
+		if tc.name == "scanned-invoice.pdf" {
+			for _, needle := range []string{"[Page 1 OCR]", "Laptop", "5999.00", "192.0.2.42"} {
+				if !strings.Contains(content.String(), needle) {
+					t.Fatalf("OCR lost %q: %q", needle, content.String())
+				}
+			}
+		}
+		var reply struct {
+			Items []struct {
+				ID      int64    `json:"id"`
+				Snippet string   `json:"snippet"`
+				Sources []string `json:"match_sources"`
+			} `json:"items"`
+		}
+		decode(t, f.json(t, "POST", "/api/ai/search/nl", f.alice, map[string]any{"question": tc.question}, 200), &reply)
+		if len(reply.Items) == 0 || reply.Items[0].ID != file.ID || reply.Items[0].Snippet == "" {
+			t.Fatal("PDF retrieval not relevant", tc.name, reply)
+		}
+		semantic := false
+		for _, s := range reply.Items[0].Sources {
+			if s == "semantic" {
+				semantic = true
+			}
+		}
+		if !semantic {
+			t.Fatal("PDF retrieval never used actual vector", reply)
+		}
+		waitNoReadLeases(t, f, *file.StorageID)
+		t.Logf("real PDF index/search: %s bytes=%d chunks=%d first_file=%d", tc.name, len(body), len(chunks), file.ID)
 	}
 }

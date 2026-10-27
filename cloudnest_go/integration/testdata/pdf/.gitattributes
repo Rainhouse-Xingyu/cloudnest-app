@@ -1,0 +1,2 @@
+# Preserve PDF byte offsets and avoid text diffs of compressed/encrypted streams.
+*.pdf binary

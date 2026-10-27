@@ -19,10 +19,10 @@ import (
 	"cloudenest_go/internal/aiindex"
 	"cloudenest_go/internal/blob"
 	"cloudenest_go/internal/config"
+	"cloudenest_go/internal/pdfextract"
 	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
 
-	pdf "github.com/ledongthuc/pdf"
 	"github.com/rwcarlsen/goexif/exif"
 	"gorm.io/gorm"
 )
@@ -220,11 +220,15 @@ func (s *AIService) Summarize(ctx context.Context, uid int64, fileID int64, maxP
 	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(f.Filename), "."))
 	var body string
 	var truncated bool
-	if aiindex.SupportsOffice(ext) {
+	if aiindex.SupportsOffice(ext) || ext == "pdf" {
 		if f.Size > aiindex.MaxOfficeBytes {
 			return AISummaryResult{}, aiindex.ErrTextLimit
 		}
-		op, end := context.WithTimeout(ctx, 30*time.Second)
+		parseTimeout := 30 * time.Second
+		if ext == "pdf" {
+			parseTimeout = 2 * time.Minute
+		}
+		op, end := context.WithTimeout(ctx, parseTimeout)
 		defer end()
 		in, _, openErr := blob.OpenPinnedStorage(op, storage)
 		if openErr != nil {
@@ -235,9 +239,18 @@ func (s *AIService) Summarize(ctx context.Context, uid int64, fileID int64, maxP
 			in.Close()
 			return AISummaryResult{}, fmt.Errorf("read file failed")
 		}
-		body, err = aiindex.ReadOffice(op, in, info.Size(), ext)
+		if ext == "pdf" {
+			vision, initErr := aiindex.NewOllama(s.cfg.AIOllamaBaseURL, s.cfg.AIOCRModel)
+			if initErr != nil {
+				in.Close()
+				return AISummaryResult{}, pdfextract.ErrUnavailable
+			}
+			body, err = (pdfextract.Reader{BinDir: s.cfg.AIPDFBinDir}).Read(op, in, vision.Transcribe)
+		} else {
+			body, err = aiindex.ReadOffice(op, in, info.Size(), ext)
+		}
 		closeErr := in.Close()
-		if errors.Is(err, aiindex.ErrExtractionBusy) || errors.Is(err, aiindex.ErrTextLimit) || errors.Is(err, aiindex.ErrDocument) {
+		if errors.Is(err, aiindex.ErrExtractionBusy) || errors.Is(err, pdfextract.ErrUnavailable) || errors.Is(err, pdfextract.ErrBusy) || errors.Is(err, pdfextract.ErrLimit) || errors.Is(err, pdfextract.ErrInvalid) || errors.Is(err, aiindex.ErrModelUnavailable) || errors.Is(err, aiindex.ErrVisionResponse) || errors.Is(err, aiindex.ErrModelChanged) || errors.Is(err, aiindex.ErrTextLimit) || errors.Is(err, aiindex.ErrDocument) {
 			return AISummaryResult{}, err
 		}
 		if err == nil {
@@ -670,8 +683,6 @@ func extractDocumentText(filePath string, ext string, limit int64) (string, bool
 	switch ext {
 	case "txt", "md", "json", "xml", "yaml", "yml", "csv", "log", "sql", "go", "swift", "java", "py", "js", "ts", "html", "css":
 		return readTextFileWithLimit(filePath, limit)
-	case "pdf":
-		return extractTextFromPDF(filePath, limit)
 	default:
 		return "", false, fmt.Errorf("unsupported document format")
 	}
@@ -692,33 +703,6 @@ func readTextFileWithLimit(filePath string, limit int64) (string, bool, error) {
 		raw = raw[:limit]
 	}
 	return strings.TrimSpace(string(raw)), truncated, nil
-}
-
-func extractTextFromPDF(filePath string, limit int64) (string, bool, error) {
-	f, r, err := pdf.Open(filePath)
-	if err != nil {
-		return "", false, err
-	}
-	defer f.Close()
-	b, err := r.GetPlainText()
-	if err != nil {
-		return "", false, err
-	}
-	raw, err := io.ReadAll(io.LimitReader(b, limit+1))
-	if err != nil {
-		return "", false, err
-	}
-	truncated := int64(len(raw)) > limit
-	if truncated {
-		raw = raw[:limit]
-	}
-	text := normalizeWhitespace(string(raw))
-	return text, truncated, nil
-}
-
-func normalizeWhitespace(s string) string {
-	fields := strings.Fields(s)
-	return strings.TrimSpace(strings.Join(fields, " "))
 }
 
 func mergeTags(parts ...string) string {

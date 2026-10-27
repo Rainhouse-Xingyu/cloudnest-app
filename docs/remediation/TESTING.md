@@ -169,3 +169,15 @@ G03 下载阻塞写入治理追加两个独立 `integration,network` 测试函�
 - 前提交 0fc5e77 的 PR/push CI 已精确核对全部成功（40390249796、40390240294）。当前 Office 提交须另查精确 SHA；没有合并、部署或修改生产库。
 
 - 最后对最终生产源码运行完整 `scripts/test-ai-index-model.sh`，**五项真实模型测试全部 PASS（26.010s）**，exit 0：10k 精确扫描 7.50s、实际生产服务/公开重建 9.20s、实际混合查询 2.07s、增量更新 2.42s、三种 Office 检索 2.87s。日志 `/tmp/cloudnest-office-model-suite.log`；本轮 10k 单次查询 1.494429875s，仍是两个真实向量的逻辑副本实验，不是独立语料/生产并发质量。它覆盖最终 Word 引用与 PPT 自动字段过滤、固定 fixture 和偏移标记。
+
+### G04 PDF 与扫描页 OCR（2026-10-27）
+
+- 增加 `internal/pdfextract`：真实 Poppler 子进程、同 FD 输入、分页文本、无文字页 PNG 渲染、大小/页数/并发/CPU/时间/输出限额；Linux 内核 AS 限额与 macOS RSS 监测采用不同实现，未把采样阈值冒充硬 RSS 保证。配置和限制见 AI-PDF-EXTRACTION。
+- 四个 reportlab/Pillow/pypdf 合成 PDF 已入库，生成两次 SHA-256 一致。双页文字和扫描票据渲染检查通过；票据无文字层，由真实视觉模型读取商品/金额/IP，不使用预制转录。
+- 首次子进程输出限额测试失败（20.690s）：嵌入 `bytes.Buffer` 暴露 `ReadFrom`，`io.Copy` 绕过自定义 Write。已改私有 buffer，输出超限立即取消；后续真实 parser/race 测试通过（2.766s），扩展限额/环境/源大小和替换路径仍读原 FD 的最终专项通过（pdfextract 3.291s / service 1.682s）。首次失败未计为通过。
+- 独立一次性 Alpine 3.22 容器安装真实 Poppler 后，Linux arm64 编译的 8 项 parser 测试全部通过，包括真实文字/扫描渲染、加密与页数拒绝、取消/输出限额，以及原生 exec 后 CPU=15s、FD=64、文件增长=0、AS=786432 KiB、无父进程测试秘密环境。容器已自动删除；Linux 运行早于新增的替换路径断言，该断言最终已在 macOS 通过。此测试未测恶意解析样本的峰值内存。
+- `make check test` 构建/vet/全部 race 单元通过，组合 `integration,aisearch,aimodel,performance,network` 编译通过（0.740s），最终 vet/仓库/diff 检查通过。单元新增视觉协议拒绝：错模型/未完成/长度截断/空输出/无效 JSON/前后 digest 改变；合成 HTTP 响应不当作 OCR 能力证据。
+- 检索/控制/增量/Office/PDF 共 18 项 race 专项通过（28.138s）。其后新增 PDF 手动摘要权限测试，PDF 两项专项通过（10.464s）：工具缺失和模型故障 retry、加密与页数限制 failed、无部分 document/chunk、读取租约释放；摘要先拒绝跨用户 403、坏 PDF 422 不触达模型、真实提取文本进入生成请求且注入 503 后返回 502/不写成功。CI 已显式安装 Poppler 并运行 PDF 专项。
+- Ollama 端点连接拒绝且进程/端口均不存在后，恢复本任务 loopback 服务；未仅凭观察超时重启。首次 PDF 上传→实际提取/OCR→真实向量→公开语义检索通过（64.746s）。最终完整 **六项真实模型测试通过（77.525s）**：10k 扫描 8.02s、实际生产服务/重建 9.42s、混合检索 2.18s、增量 2.43s、Office 2.85s、PDF 50.70s。新增 PDF 文字文档由独立生产 server 自动消费并 SIGTERM 退出，扫描票据经真实 qwen3-vl 转录后落库，断言 Laptop、5999.00、192.0.2.42 和 OCR 页标记，目标检索第一且含 semantic 来源。日志 `/tmp/cloudnest-pdf-all-model.log`。
+- 本轮 10k 单次查询 1.495824291s，40,960,000 向量字节，第一 cosine=0.818942；仍为两个真实向量的逻辑副本，不是 10k 独立语料、并发或 Recall/MRR 评价。
+- 首次完整普通 race 回归在 239 项已通过后触发原六分钟总期限（363.927s 包退出），当时运行 TCP 上传暂停 remote 子项 15 秒，此前无断言失败；同机有真实模型与其他一次性数据库套件并行。保留 `/tmp/cloudnest-pdf-full.log`，不计通过，其他工作已退出后按原六分钟期限单独重跑：**最终普通 250 项 race 全部通过（359.521s）**，exit 0、无 FAIL/DATA RACE，日志 `/tmp/cloudnest-pdf-full-isolated.log`。G04 尚未完成：独立图片/视觉/EXIF、旧二进制 Office、复杂 PDF/OCR 准确率与六类查询完整评估仍待做，生产数据库未操作。前 Office 提交 a6f039d 的 PR/push CI 均已完成且成功（40433982449 / 40433980215）。

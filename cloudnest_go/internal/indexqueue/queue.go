@@ -156,7 +156,7 @@ func (q *Queue) Renew(ctx context.Context, j model.AIIndexJob) error {
 // content, paths or credentials. retryable errors receive bounded backoff.
 func (q *Queue) Fail(ctx context.Context, j model.AIIndexJob, code string, retryable bool) error {
 	switch code {
-	case "extraction_busy", "model_unavailable", "model_changed", "extraction_failed", "extraction_limit", "invalid_embedding", "source_changed", "unsupported_type", "worker_stopped", "index_write_failed", "source_integrity":
+	case "extraction_unavailable", "extraction_busy", "model_unavailable", "model_changed", "extraction_failed", "extraction_limit", "invalid_embedding", "source_changed", "unsupported_type", "worker_stopped", "index_write_failed", "source_integrity":
 	default:
 		return ErrInvalid
 	}
