@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -15,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"cloudenest_go/internal/aiindex"
 	"cloudenest_go/internal/config"
 	"cloudenest_go/internal/middleware"
 	"cloudenest_go/internal/service"
@@ -22,7 +22,6 @@ import (
 	"cloudenest_go/model"
 
 	"github.com/gin-gonic/gin"
-	pdf "github.com/ledongthuc/pdf"
 	"github.com/rwcarlsen/goexif/exif"
 	"gorm.io/gorm"
 )
@@ -422,120 +421,6 @@ func (h *AIHandler) Summarize(c *gin.Context) {
 	})
 }
 
-func extractDocumentText(filePath string, ext string, limit int64) (string, bool, error) {
-	ext = strings.ToLower(strings.TrimSpace(ext))
-	switch ext {
-	case "txt", "md", "json", "xml", "yaml", "yml", "csv", "log", "sql", "go", "swift", "java", "py", "js", "ts", "html", "css":
-		return readTextFileWithLimit(filePath, limit)
-	case "pdf":
-		return extractTextFromPDF(filePath, limit)
-	case "docx", "xlsx", "pptx":
-		return extractTextFromOpenXML(filePath, ext, limit)
-	default:
-		return "", false, fmt.Errorf("unsupported document format")
-	}
-}
-
-func extractTextFromPDF(filePath string, limit int64) (string, bool, error) {
-	f, r, err := pdf.Open(filePath)
-	if err != nil {
-		return "", false, err
-	}
-	defer f.Close()
-
-	b, err := r.GetPlainText()
-	if err != nil {
-		return "", false, err
-	}
-	raw, err := io.ReadAll(io.LimitReader(b, limit+1))
-	if err != nil {
-		return "", false, err
-	}
-	truncated := int64(len(raw)) > limit
-	if truncated {
-		raw = raw[:limit]
-	}
-	text := normalizeWhitespace(string(raw))
-	return text, truncated, nil
-}
-
-func extractTextFromOpenXML(filePath string, ext string, limit int64) (string, bool, error) {
-	zr, err := zip.OpenReader(filePath)
-	if err != nil {
-		return "", false, err
-	}
-	defer zr.Close()
-
-	builder := strings.Builder{}
-	truncated := false
-	appendLimited := func(s string) {
-		if s == "" || truncated {
-			return
-		}
-		remain := int(limit) - builder.Len()
-		if remain <= 0 {
-			truncated = true
-			return
-		}
-		if len(s) > remain {
-			builder.WriteString(s[:remain])
-			truncated = true
-			return
-		}
-		builder.WriteString(s)
-		builder.WriteString("\n")
-	}
-
-	for _, f := range zr.File {
-		name := strings.ToLower(f.Name)
-		if !strings.HasSuffix(name, ".xml") {
-			continue
-		}
-		if ext == "docx" && !strings.HasPrefix(name, "word/") {
-			continue
-		}
-		if ext == "xlsx" && !(strings.HasPrefix(name, "xl/worksheets/") || strings.HasPrefix(name, "xl/sharedstrings")) {
-			continue
-		}
-		if ext == "pptx" && !strings.HasPrefix(name, "ppt/slides/") {
-			continue
-		}
-
-		rc, err := f.Open()
-		if err != nil {
-			continue
-		}
-		raw, _ := io.ReadAll(io.LimitReader(rc, 2*1024*1024))
-		_ = rc.Close()
-
-		clean := stripXMLTags(string(raw))
-		clean = normalizeWhitespace(clean)
-		appendLimited(clean)
-		if truncated {
-			break
-		}
-	}
-
-	return strings.TrimSpace(builder.String()), truncated, nil
-}
-
-var xmlTagRegex = regexp.MustCompile(`<[^>]+>`)
-
-func stripXMLTags(s string) string {
-	s = strings.ReplaceAll(s, "&lt;", "<")
-	s = strings.ReplaceAll(s, "&gt;", ">")
-	s = strings.ReplaceAll(s, "&amp;", "&")
-	s = strings.ReplaceAll(s, "&quot;", "\"")
-	s = strings.ReplaceAll(s, "&apos;", "'")
-	s = xmlTagRegex.ReplaceAllString(s, " ")
-	return s
-}
-
-func normalizeWhitespace(s string) string {
-	fields := strings.Fields(s)
-	return strings.TrimSpace(strings.Join(fields, " "))
-}
-
 // AskAssistant 针对项目操作与设置进行问答。
 func (h *AIHandler) AskAssistant(c *gin.Context) {
 	var req AskAssistantRequest
@@ -686,6 +571,18 @@ func (h *AIHandler) createAITask(ctx context.Context, userID int64, fileID int64
 
 func (h *AIHandler) writeAIErr(c *gin.Context, err error) {
 	if err == nil {
+		return
+	}
+	if errors.Is(err, aiindex.ErrExtractionBusy) {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "document extraction busy"})
+		return
+	}
+	if errors.Is(err, aiindex.ErrTextLimit) {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "document extraction limit exceeded"})
+		return
+	}
+	if errors.Is(err, aiindex.ErrDocument) {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "document content cannot be extracted"})
 		return
 	}
 	msg := strings.ToLower(err.Error())

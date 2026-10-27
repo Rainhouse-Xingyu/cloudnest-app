@@ -346,3 +346,64 @@ func TestAITextLiveIncrementalFileChangesRebuildActualVectors(t *testing.T) {
 	f.json(t, "PUT", path+"/rename", f.alice, map[string]any{"name": "readable.md"}, 200)
 	assertProcessed(a.ID, 6, original)
 }
+
+func TestAITextLiveOfficeDocumentsProduceSearchableRealVectors(t *testing.T) {
+	if os.Getenv("CLOUDNEST_TEST_AI_MODEL") != "1" {
+		t.Fatal("run scripts/test-ai-index-model.sh")
+	}
+	f, _ := indexFixture(t)
+	f.cfg.AIOllamaBaseURL = "http://127.0.0.1:11434"
+	f.cfg.AIEmbeddingModel = "qwen3-embedding:0.6b"
+	f.router = fixtureRouter(app.NewContainer(f.cfg, f.db, f.rdb).NewRouter())
+	for _, tc := range []struct{ name, needle, question string }{
+		{"migration.docx", "192.0.2.42", "数据库迁移 MySQL 升级备份"},
+		{"invoice.xlsx", "5999", "电脑购买发票 笔记本电脑"},
+		{"permissions.pptx", "跨用户读取", "Spring Boot 资源权限授权"},
+	} {
+		body, err := os.ReadFile(filepath.Join("testdata/office", tc.name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		file := f.upload(t, f.alice, tc.name, body)
+		if worked, err := textWorker(t, f, f.cfg.AIOllamaBaseURL).Step(context.Background()); !worked || err != nil {
+			t.Fatal("actual Office indexing failed", worked, err)
+		}
+		j := readIndex(t, f, file.ID)
+		if j.Status != "done" {
+			t.Fatal(j)
+		}
+		var chunks []model.AIIndexChunk
+		if err := f.db.Where("file_id=?", file.ID).Order("ordinal").Find(&chunks).Error; err != nil {
+			t.Fatal(err)
+		}
+		var content strings.Builder
+		for _, c := range chunks {
+			content.WriteString(c.Content)
+			decodeVector(t, c.Vector)
+		}
+		if len(chunks) == 0 || !strings.Contains(content.String(), tc.needle) {
+			t.Fatal("Office text lost", content.String())
+		}
+		var reply struct {
+			Items []struct {
+				ID      int64    `json:"id"`
+				Snippet string   `json:"snippet"`
+				Sources []string `json:"match_sources"`
+			} `json:"items"`
+		}
+		decode(t, f.json(t, "POST", "/api/ai/search/nl", f.alice, map[string]any{"question": tc.question}, 200), &reply)
+		if len(reply.Items) == 0 || reply.Items[0].ID != file.ID || reply.Items[0].Snippet == "" {
+			t.Fatal("Office retrieval not relevant", tc.name, reply)
+		}
+		semantic := false
+		for _, s := range reply.Items[0].Sources {
+			if s == "semantic" {
+				semantic = true
+			}
+		}
+		if !semantic {
+			t.Fatal("Office retrieval never used actual vector", reply)
+		}
+		t.Logf("real Office index/search: %s bytes=%d chunks=%d first_file=%d", tc.name, len(body), len(chunks), file.ID)
+	}
+}

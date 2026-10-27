@@ -31,4 +31,4 @@
 
 `integration,aimodel` 新增真实模型测试，通过公开文件 API 完成版本写入/恢复、复制、回收恢复、改为不支持后缀再恢复。每次成功处理检查实际 chunk 文本、1024 维归一化向量和当前状态；不支持格式必须明确 failed/unsupported_type。执行时长与完整回归见 [TESTING](TESTING.md)。
 
-PDF/Office/OCR/视觉与 EXIF、完整标注评估仍未完成。历史未索引文件可按 [索引控制协议](AI-INDEX-CONTROL.md) 回填；已有文件的新合法变更已接入增量任务。
+DOCX/XLSX/PPTX 提取已实现（AI-OFFICE-EXTRACTION）；PDF/旧二进制 Office/OCR/视觉与 EXIF、完整标注评估仍未完成。历史未索引文件可按 [索引控制协议](AI-INDEX-CONTROL.md) 回填；已有文件的新合法变更已接入增量任务。

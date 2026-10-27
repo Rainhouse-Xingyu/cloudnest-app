@@ -1,7 +1,6 @@
 package service
 
 import (
-	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/base64"
@@ -17,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"cloudenest_go/internal/aiindex"
 	"cloudenest_go/internal/blob"
 	"cloudenest_go/internal/config"
 	"cloudenest_go/internal/service/contract"
@@ -218,7 +218,34 @@ func (s *AIService) Summarize(ctx context.Context, uid int64, fileID int64, maxP
 	}
 
 	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(f.Filename), "."))
-	body, truncated, err := extractDocumentText(storage.FilePath, ext, aiReadMaxBytes)
+	var body string
+	var truncated bool
+	if aiindex.SupportsOffice(ext) {
+		if f.Size > aiindex.MaxOfficeBytes {
+			return AISummaryResult{}, aiindex.ErrTextLimit
+		}
+		op, end := context.WithTimeout(ctx, 30*time.Second)
+		defer end()
+		in, _, openErr := blob.OpenPinnedStorage(op, storage)
+		if openErr != nil {
+			return AISummaryResult{}, fmt.Errorf("read file failed")
+		}
+		info, statErr := in.Stat()
+		if statErr != nil {
+			in.Close()
+			return AISummaryResult{}, fmt.Errorf("read file failed")
+		}
+		body, err = aiindex.ReadOffice(op, in, info.Size(), ext)
+		closeErr := in.Close()
+		if errors.Is(err, aiindex.ErrExtractionBusy) || errors.Is(err, aiindex.ErrTextLimit) || errors.Is(err, aiindex.ErrDocument) {
+			return AISummaryResult{}, err
+		}
+		if err == nil {
+			err = closeErr
+		}
+	} else {
+		body, truncated, err = extractDocumentText(storage.FilePath, ext, aiReadMaxBytes)
+	}
 	if err != nil {
 		return AISummaryResult{}, fmt.Errorf("read file failed")
 	}
@@ -645,8 +672,6 @@ func extractDocumentText(filePath string, ext string, limit int64) (string, bool
 		return readTextFileWithLimit(filePath, limit)
 	case "pdf":
 		return extractTextFromPDF(filePath, limit)
-	case "docx", "xlsx", "pptx":
-		return extractTextFromOpenXML(filePath, ext, limit)
 	default:
 		return "", false, fmt.Errorf("unsupported document format")
 	}
@@ -689,78 +714,6 @@ func extractTextFromPDF(filePath string, limit int64) (string, bool, error) {
 	}
 	text := normalizeWhitespace(string(raw))
 	return text, truncated, nil
-}
-
-func extractTextFromOpenXML(filePath string, ext string, limit int64) (string, bool, error) {
-	zr, err := zip.OpenReader(filePath)
-	if err != nil {
-		return "", false, err
-	}
-	defer zr.Close()
-
-	builder := strings.Builder{}
-	truncated := false
-	appendLimited := func(s string) {
-		if s == "" || truncated {
-			return
-		}
-		remain := int(limit) - builder.Len()
-		if remain <= 0 {
-			truncated = true
-			return
-		}
-		if len(s) > remain {
-			builder.WriteString(s[:remain])
-			truncated = true
-			return
-		}
-		builder.WriteString(s)
-		builder.WriteString("\n")
-	}
-
-	for _, f := range zr.File {
-		name := strings.ToLower(f.Name)
-		if !strings.HasSuffix(name, ".xml") {
-			continue
-		}
-		if ext == "docx" && !strings.HasPrefix(name, "word/") {
-			continue
-		}
-		if ext == "xlsx" && !(strings.HasPrefix(name, "xl/worksheets/") || strings.HasPrefix(name, "xl/sharedstrings")) {
-			continue
-		}
-		if ext == "pptx" && !strings.HasPrefix(name, "ppt/slides/") {
-			continue
-		}
-
-		rc, err := f.Open()
-		if err != nil {
-			continue
-		}
-		raw, _ := io.ReadAll(io.LimitReader(rc, 2*1024*1024))
-		_ = rc.Close()
-
-		clean := stripXMLTags(string(raw))
-		clean = normalizeWhitespace(clean)
-		appendLimited(clean)
-		if truncated {
-			break
-		}
-	}
-
-	return strings.TrimSpace(builder.String()), truncated, nil
-}
-
-var xmlTagRegex = regexp.MustCompile(`<[^>]+>`)
-
-func stripXMLTags(s string) string {
-	s = strings.ReplaceAll(s, "&lt;", "<")
-	s = strings.ReplaceAll(s, "&gt;", ">")
-	s = strings.ReplaceAll(s, "&amp;", "&")
-	s = strings.ReplaceAll(s, "&quot;", "\"")
-	s = strings.ReplaceAll(s, "&apos;", "'")
-	s = xmlTagRegex.ReplaceAllString(s, " ")
-	return s
 }
 
 func normalizeWhitespace(s string) string {

@@ -12,7 +12,7 @@
 - 语义：仅比较同 embedding 模型名、digest、维度的归一化向量；坏尺寸、非有限值或坏范数不参与。当前 cosine 候选门槛 0.25 是待完整评估校准的初始值，不是准确率保证或相关概率。
 - 每文件只保留各通道最高块分数。两个通道各留前 200 个文件，使用 `1/(60+rank)` 相加（rank 从 1 开始），最终按分数和 file_id 稳定排序。扫描不按文件 ID 截掉输入前缀，靠后的高相关向量仍能胜出。
 - 返回最多 200 个候选组成分页窗口，每页最多 100 个。`pagination.total` 是当前可返回窗口内的文件数量，**不是所有命中文件的库级总数**。超过窗口时 `retrieval.window_limited=true`，`retrieval.window_size=200`。
-- 每项包含 `score`（融合分数）、`match_sources`（keyword/semantic）、可选 `semantic_score`、`snippet`、`snippet_start_rune`、`chunk_ordinal`、`index_generation`、`has_text_index`。片段最多 240 个 Unicode 字符，位置对应原文 rune 偏移，未伪造模型摘要。
+- 每项包含 `score`（融合分数）、`match_sources`（keyword/semantic）、可选 `semantic_score`、`snippet`、`snippet_start_rune`、`chunk_ordinal`、`index_generation`、`has_text_index`。片段最多 240 个 Unicode 字符，位置对应提取文本流的 rune 偏移（snippet_offset_basis=extracted_text_runes），未伪造模型摘要。
 - 为现有客户端保留原文件字段、空 tags/description、`ocr_snippet` 别名；文本片段不等同 OCR，`has_ocr_index=false`。`nl_plan.query` 现明确使用 snake_case，修复原 Go 字段名与既有客户端 DTO 不一致的问题。
 - `retrieval.mode` 为 hybrid 或 keyword_fallback；模型端点/响应/身份不可用时提供 `embedding_unavailable` 警告并继续匹配现有正文与文件名。没有成功索引的文件仍能匹配文件名。模型故障不使旧关键词接口依赖模型。
 
@@ -37,4 +37,4 @@ Qdrant 具备带过滤的 HNSW，也会根据匹配集合大小选择精确扫�
 - 规模测试使用两份真实上传内容及其两个真实 embedding，构造 9,999 个干扰逻辑副本和最后一个相关副本，共 10,000 × 1024 维、40,960,000 字节向量。真实 MySQL/Ollama + 进程内 Gin handler（race）单次查询 1.510170792s，相关文件仍第一名。它是单用户、本机、重复内容的扫描实验，不是 10,000 次上传、10,000 篇独立文档评估，也不是生产网络延迟/并发性能。
 - 最终真实模型三项测试通过（包 21.717s），包含独立生产服务自动索引/SIGTERM 测试；普通完整 250 项 race 回归通过（355.678s），新检索专项单独执行并纳入 CI，仍保留原六分钟普通套件期限。完整命令、失败记录与先后范围见 [TESTING](TESTING.md)。
 
-尚未完成：六类用户查询的完整标注语料、Recall@K/MRR/负查询与失败案例；阈值/词法/rerank 校准；PDF/Office/OCR/图片与 EXIF；更大规模与并发。状态/历史重建 API 与修改/复制/恢复增量入队已另行实现（见 AI-INDEX-CONTROL、AI-INDEX-INCREMENTAL）。G04 继续进行，不能以这几项成功示例代替完整验收。
+尚未完成：六类用户查询的完整标注语料、Recall@K/MRR/负查询与失败案例；阈值/词法/rerank 校准；PDF/旧二进制 Office/OCR/图片与 EXIF（DOCX/XLSX/PPTX 已接入）；更大规模与并发。状态/历史重建 API 与修改/复制/恢复增量入队已另行实现（见 AI-INDEX-CONTROL、AI-INDEX-INCREMENTAL）。G04 继续进行，不能以这几项成功示例代替完整验收。

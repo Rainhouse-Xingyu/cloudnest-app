@@ -13,7 +13,7 @@
 - `source_current` 表示任务的源 hash 和 pipeline 与当前文件一致。
 - `indexed_current` 仅在任务 done 且 document 的源、代次和 pipeline 匹配时为 true。陈旧 document 不暴露块数或索引时间。
 - status 是任务状态，不把 `done` 独立解释为当前可搜索；例如历史写入未更新任务时，可能为 done 但 source_current/indexed_current=false。
-- 错误码使用队列的固定诊断码，如 model_unavailable、extraction_limit、unsupported_type、source_integrity、attempts_exhausted。重试遵循既有最多五次及有界退避；此接口不会隐藏失败或写入假结果。
+- 错误码使用队列的固定诊断码，如 model_unavailable、extraction_busy、extraction_limit、unsupported_type、source_integrity、attempts_exhausted。重试遵循既有最多五次及有界退避；此接口不会隐藏失败或写入假结果。
 
 ## 重建与失败重试
 
@@ -37,4 +37,4 @@ items 必须为 1–100 个唯一、正 file_id；generation 为状态接口观�
 
 真实模型套件另行使用公开重建 API → 独立生产服务 → 实际 Ollama embedding → 状态 API，验证重建完成。实际执行结果见 [TESTING](TESTING.md)；CI 编译但不执行需要本机模型的套件。
 
-后续已接入 [版本/复制/恢复/扩展名变化的增量入队](AI-INDEX-INCREMENTAL.md)。PDF/Office/图片提取、照片拍摄时间或完整检索效果评估继续纳入 G04。
+后续已接入 [版本/复制/恢复/扩展名变化的增量入队](AI-INDEX-INCREMENTAL.md)。DOCX/XLSX/PPTX 提取已实现（AI-OFFICE-EXTRACTION）；PDF/旧二进制 Office/图片提取、照片拍摄时间及完整检索效果评估继续纳入 G04。

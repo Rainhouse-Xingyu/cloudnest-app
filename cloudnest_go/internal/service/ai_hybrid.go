@@ -201,7 +201,7 @@ func (s *AIService) hybridSearch(parent context.Context, uid int64, question str
 		snippet, offset := hybridSnippet(h.row.Content, terms)
 		item := map[string]interface{}{"id": h.row.ID, "filename": h.row.Filename, "file_type": h.row.FileType, "size": h.row.Size, "parent_id": h.row.ParentID, "user_id": h.row.UserID, "create_time": h.row.CreateTime, "update_time": h.row.UpdateTime,
 			"tags": "", "description": "", "ocr_snippet": snippet, "has_ocr_index": false, "has_text_index": h.row.Generation > 0,
-			"snippet": snippet, "snippet_start_rune": h.row.StartRune + offset, "chunk_ordinal": h.row.Ordinal, "index_generation": h.row.Generation, "match_sources": sources, "score": h.score}
+			"snippet": snippet, "snippet_offset_basis": "extracted_text_runes", "snippet_start_rune": h.row.StartRune + offset, "chunk_ordinal": h.row.Ordinal, "index_generation": h.row.Generation, "match_sources": sources, "score": h.score}
 		if h.vector {
 			item["semantic_score"] = h.semantic
 		}

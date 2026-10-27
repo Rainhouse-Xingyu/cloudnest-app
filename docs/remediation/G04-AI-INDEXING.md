@@ -2,9 +2,9 @@
 
 ## 当前实际能力
 
-已接入上传事务内持久任务、带租约和代次的 worker，以及真实 UTF-8 文本提取、切块、独立 Ollama embedding 和原子向量保存。生产服务启动时运行 worker，并在 SIGTERM 时取消和等待退出。原上传后吞错 goroutine 已移除。
+已接入上传事务内持久任务、带租约和代次的 worker，以及真实 UTF-8 与 DOCX/XLSX/PPTX 结构化文本提取、切块、独立 Ollama embedding 和原子向量保存。生产服务启动时运行 worker，并在 SIGTERM 时取消和等待退出。原上传后吞错 goroutine 已移除。
 
-**目前支持文本类文件和实际混合检索；PDF/Office/图片处理与完整效果评估仍未完成。** 这些格式会明确失败为 `unsupported_type`；模型不可用会记录 `model_unavailable` 并重试，不写“分析成功”。手动 OCR、摘要和原关键词搜索接口仍保留，不能据此认定完整 G04 已完成。
+**目前支持文本类、DOCX/XLSX/PPTX 与实际混合检索；PDF、图片/OCR、旧二进制 Office 与完整效果评估仍未完成。** 未支持的后缀会明确失败为 `unsupported_type`；模型不可用会记录 `model_unavailable` 并重试，不写“分析成功”。手动 OCR、摘要和原关键词搜索接口仍保留，不能据此认定完整 G04 已完成。
 
 旧 `ai_task` 和 `ai_metadata` 保留，新 `ai_index_job` 单独记录文件当前期望的索引代次。没有修改既有用户数据，也没有执行生产迁移。本分支为开发中的阶段检查点，不能作为完成的 AI 系统发布。
 
@@ -31,7 +31,7 @@ worker 单次处理默认三分钟、领取/续约/发布操作五秒上限，�
 ## 文本与 embedding 边界
 
 - 支持 TXT/Markdown、JSON/YAML/XML/TOML/INI/CONF/ENV、日志、CSV/SQL 和常见源码后缀；读取上限 256 KiB，超过直接记录 extraction_limit。拒绝非法 UTF-8 和 NUL，不把截断内容冒充完整提取。
-- 每块最多 768 个 Unicode 字符，优先在末段句末/换行处分割，保留 96 字符重叠；存储原文 rune 起止位置，最多 512 块。空白文件可以完成为零块，不伪造向量。
+- 每块最多 768 个 Unicode 字符，优先在末段句末/换行处分割，保留 96 字符重叠；存储提取文本流的 rune 起止位置，最多 512 块。空白文件可以完成为零块，不伪造向量。
 - `AI_EMBEDDING_MODEL` 默认 `qwen3-embedding:0.6b`，与 `AI_OLLAMA_MODEL` 的视觉/生成用途分离。每次调用专用 `/api/embed`，最多 8 块，明确 truncate=false；HTTP 120 秒、响应 2 MiB 上限，拒绝重定向。当前 keep_alive=1m，便于分批重用后自动卸载。
 - 严格校验返回模型、数量、维度（1–4096）、有限值和非零范数；归一化后按 float32 little endian 保存。任一块失败不发布部分结果。
 - 文档保存源 hash、pipeline、generation、模型名/digest/维度、块数与原文字节数。embedding 前后读取 `/api/tags` 的 digest，不一致则 model_changed/retry。远端接口无原子模型快照，运维不可在索引过程中反复改写同一模型 tag；后续模型切换须按 digest 重建并隔离检索空间。
@@ -53,7 +53,7 @@ worker 单次处理默认三分钟、领取/续约/发布操作五秒上限，�
 
 接下来的必要实现：
 
-1. 将提取扩展到 PDF/Office/OCR/视觉，并进行真实模型错误与资源预算测试。
+1. DOCX/XLSX/PPTX 已接入有界结构解析与真实模型链路，见 [Office 提取](AI-OFFICE-EXTRACTION.md)；继续扩展 PDF、旧二进制 Office、OCR/视觉，并验证资源与错误边界。
 2. 统一旧 AI helper 与新处理器，清理重复提取实现。
 3. 扩展真实语料和并发规模测量，校准词法/语义阈值与是否需要 ANN/rerank。
 4. 完善混合检索的复杂意图、EXIF 时间与继承权限，保留当前文件级过滤及降级。
@@ -63,3 +63,5 @@ worker 单次处理默认三分钟、领取/续约/发布操作五秒上限，�
 G04 尚未完成，G05–G11 仍按里程碑推进。
 
 2026-10-27：新增公开状态/历史回填/重建接口，五项控制测试与原六项检索专项通过（12.838s）。真实模型测试已改为通过公开重建 API 交由独立生产服务消费，最终状态 done/current（函数 10.68s / 包 16.700s），详见 AI-INDEX-CONTROL 与 TESTING。
+
+2026-10-27：Office parser 已按 OPC 关系提取 Word 正文/引用页眉注脚、Excel 实际单元格值与公式缓存标记、PowerPoint 顺序/备注；摘要接口复用同一解析器，移除旧重复正则提取。源 32 MiB、XML/展开/节点/并发及输出上限、三种真实生成器文件与真实 Ollama 检索验收见 AI-OFFICE-EXTRACTION 和 TESTING。

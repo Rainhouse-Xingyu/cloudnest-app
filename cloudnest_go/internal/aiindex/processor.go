@@ -35,10 +35,14 @@ func (p *Processor) Process(ctx context.Context, j model.AIIndexJob) (func(*gorm
 		return nil, indexqueue.ErrSourceChanged
 	}
 	ext := filepath.Ext(f.Filename)
-	if !SupportsText(ext) {
+	if !SupportsText(ext) && !SupportsOffice(ext) {
 		return nil, failure("unsupported_type", false)
 	}
-	if f.Size > MaxTextBytes {
+	maxSource := int64(MaxTextBytes)
+	if SupportsOffice(ext) {
+		maxSource = MaxOfficeBytes
+	}
+	if f.Size > maxSource {
 		return nil, failure("extraction_limit", false)
 	}
 	in, object, err := blob.OpenPinnedStorage(ctx, model.Storage{ID: *f.StorageID})
@@ -49,9 +53,22 @@ func (p *Processor) Process(ctx context.Context, j model.AIIndexJob) (func(*gorm
 		in.Close()
 		return nil, indexqueue.ErrSourceChanged
 	}
-	text, err := ReadText(ctx, in, ext)
+	var text string
+	if SupportsOffice(ext) {
+		info, statErr := in.Stat()
+		if statErr != nil {
+			in.Close()
+			return nil, failure("source_integrity", false)
+		}
+		text, err = ReadOffice(ctx, in, info.Size(), ext)
+	} else {
+		text, err = ReadText(ctx, in, ext)
+	}
 	closeErr := in.Close()
 	if err != nil {
+		if errors.Is(err, ErrExtractionBusy) {
+			return nil, failure("extraction_busy", true)
+		}
 		if errors.Is(err, ErrTextLimit) {
 			return nil, failure("extraction_limit", false)
 		}

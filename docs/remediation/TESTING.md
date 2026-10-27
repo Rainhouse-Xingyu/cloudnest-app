@@ -155,3 +155,17 @@ G03 下载阻塞写入治理追加两个独立 `integration,network` 测试函�
 - d469647 的 PR/push CI 被后续 a0b943e 提交按工作流并发策略取消，不记为通过。a0b943e 已推送并更新 PR #5，增量提交需另行核验精确 SHA。
 
 - 普通完整 `scripts/test-integration.sh` **250 项顶层测试全部 PASS（354.739s）**，exit 0，六分钟期限未改变，无 FAIL/DATA RACE。日志 `/tmp/cloudnest-ai-incremental-full.log`；该次构建包含最终长后缀生产代码，后加测试仅在 aisearch/aimodel 标签，不改变普通套件源码范围。
+
+
+### G04 DOCX/XLSX/PPTX 解析与真实检索（2026-10-27）
+
+- 增加共享的有界 OOXML parser：Word 结构与引用故事、Excel 实际单元格字符串/数值/缓存公式、PowerPoint 显示顺序和备注；沿用同一已校验 FD、持久队列及真实 embedding。摘要 Office 路径复用，移除正则去 XML 标签/吞读取错误的重复代码。详细支持范围与资源限额见 AI-OFFICE-EXTRACTION。
+- 标准生成器文件使用 python-docx 1.2.0、openpyxl 3.1.5、python-pptx 1.0.2。固定 ZIP/core 时间后两次生成字节一致，最终 DOCX 830849 B、XLSX 5092 B、PPTX 34039 B；SHA 见 `/tmp/cloudnest-office-fixture-hashes.json`，生成器与文件一同入库。没有模型输出 fixture。
+- 单元验证包括三种生成器文件、XML实体/跨run/共享字符串/工作表及slide顺序/注释、Strict命名空间，以及坏包/CRC/DTD/深度/展开/输出/中央目录/并发/取消；最终追加 Word 孤立页眉排除、PPT 自动页码不能假装正文和 snippet_offset_basis 断言。`make -C cloudnest_go check test` 最终构建/vet/全部 race 单元通过，日志 `/tmp/cloudnest-office-verified.log`；组合标签编译、仓库/diff 检查通过。
+- `scripts/test-ai-search.sh` 第一轮 16 项顶层测试通过（22.360s）；加入摘要接口复用后 **17 项通过（24.839s）**，日志 `/tmp/cloudnest-office-integration-final.log`。其中五个 Office 子用例分别验证三个有效文件在模型断开后 retry/model_unavailable，以及坏包 extraction_failed、旧 .doc unsupported_type，均无部分结果；摘要测试证明实际提取文本被发送给生成端点，跨用户 403、生成端点注入 503 后接口 502、坏包 422 且不送模型/不记成功。注入端点只用于错误/请求协议验证，不冒充真实摘要。
+- 随后 Word 引用筛选及提取偏移标记的最终相关单元通过（aiindex 2.672s/service 2.311s）；Office 两项专门回归再次通过（10.084s，`/tmp/cloudnest-office-target-final.log`）。最后 PPT 自动页码排除另由最终全部单元覆盖。
+- 普通完整 **250 项顶层 race PASS（360.572s）**，exit 0，无 FAIL/DATA RACE，原 `-timeout=6m` 未调整；日志 `/tmp/cloudnest-office-full.log`。这轮在最后的 Word 引用筛选、PPT 自动页码排除及新增偏移字段之前启动，最终这些变更由对应单元/Office 专项/真实模型验证；不声称重新执行了另一轮全部传输测试。
+- 首次真实 Office 测试因错误调用不存在的 app.NewRouter **编译失败**（`/tmp/cloudnest-office-live.log`）；修复为既有容器路由构造后实际模型链路通过（6.580s）。固定 fixture core 元数据后再次通过（6.523s）；Word 引用筛选后的三格式实际链路通过（函数 5.19s / 包 7.823s，`/tmp/cloudnest-office-live-reference-final.log`）。真实模型使用 1024 维 Ollama embedding，实际上传/切块/向量入库/公开混合查询，每种目标文件第一且含 semantic 来源和片段；这不是完整质量评估。
+- 前提交 0fc5e77 的 PR/push CI 已精确核对全部成功（40390249796、40390240294）。当前 Office 提交须另查精确 SHA；没有合并、部署或修改生产库。
+
+- 最后对最终生产源码运行完整 `scripts/test-ai-index-model.sh`，**五项真实模型测试全部 PASS（26.010s）**，exit 0：10k 精确扫描 7.50s、实际生产服务/公开重建 9.20s、实际混合查询 2.07s、增量更新 2.42s、三种 Office 检索 2.87s。日志 `/tmp/cloudnest-office-model-suite.log`；本轮 10k 单次查询 1.494429875s，仍是两个真实向量的逻辑副本实验，不是独立语料/生产并发质量。它覆盖最终 Word 引用与 PPT 自动字段过滤、固定 fixture 和偏移标记。

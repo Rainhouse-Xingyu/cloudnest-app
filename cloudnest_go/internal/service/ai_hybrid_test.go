@@ -113,6 +113,9 @@ func TestHybridKeywordFallbackRevalidatesBeforeReturningSnippets(t *testing.T) {
 	if err != nil || result.Source != "keyword_fallback" || len(result.Search.Items) != 1 || result.Search.Items[0]["id"] != int64(1) {
 		t.Fatal(result, err)
 	}
+	if result.Search.Items[0]["snippet_offset_basis"] != "extracted_text_runes" {
+		t.Fatal("ambiguous snippet coordinate system")
+	}
 	if strings.Contains(result.Search.Items[0]["snippet"].(string), "secret") {
 		t.Fatal("revoked excerpt leaked")
 	}
