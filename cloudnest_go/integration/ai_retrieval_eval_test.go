@@ -32,8 +32,10 @@ type evalHit struct {
 	Snippet  string   `json:"snippet"`
 }
 type evalResponse struct {
-	Items     []evalHit `json:"items"`
-	Total     int       `json:"total"`
+	Items      []evalHit `json:"items"`
+	Pagination struct {
+		Total int `json:"total"`
+	} `json:"pagination"`
 	Retrieval struct {
 		Mode          string   `json:"mode"`
 		Warnings      []string `json:"warnings"`
@@ -272,8 +274,8 @@ func TestAIRetrievalEvaluation(t *testing.T) {
 			}
 			r.Items[i].Document = id
 		}
-		if r.Retrieval.WindowLimited || r.Total != len(r.Items) {
-			t.Fatal("evaluation results truncated", r.Total, len(r.Items))
+		if r.Retrieval.WindowLimited || r.Pagination.Total != len(r.Items) {
+			t.Fatal("evaluation results truncated", r.Pagination.Total, len(r.Items))
 		}
 		return r
 	}
@@ -359,4 +361,12 @@ func stringTrim(b []byte) string {
 		b = b[:len(b)-1]
 	}
 	return string(b)
+}
+
+func TestAIEvaluationResponsePagination(t *testing.T) {
+	var r evalResponse
+	err := json.Unmarshal([]byte(`{"items":[{"id":1}],"pagination":{"page":1,"limit":100,"total":1},"retrieval":{"mode":"hybrid","window_limited":false}}`), &r)
+	if err != nil || r.Pagination.Total != len(r.Items) || r.Pagination.Total != 1 {
+		t.Fatal(r, err)
+	}
 }
