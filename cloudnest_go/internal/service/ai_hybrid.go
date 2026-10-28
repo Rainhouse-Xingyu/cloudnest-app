@@ -102,6 +102,7 @@ func (s *AIService) hybridSearch(parent context.Context, uid int64, question str
 		result.Warnings = append(result.Warnings, "embedding_unavailable")
 	}
 	terms := hybridTerms(question)
+	minCosine, minLexical := s.cfg.SearchThresholds()
 	var lexical, semantic []hybridHit
 	var bestLex, bestSemantic hybridHit
 	var currentID int64
@@ -110,13 +111,13 @@ func (s *AIService) hybridSearch(parent context.Context, uid int64, question str
 		if currentID == 0 {
 			return
 		}
-		if bestLex.lexical > 0 || bestSemantic.semantic >= .25 {
+		if bestLex.lexical > 0 || bestSemantic.semantic >= minCosine {
 			matched++
 		}
 		if bestLex.lexical > 0 {
 			lexical = retainHybrid(lexical, bestLex, false)
 		}
-		if bestSemantic.semantic >= .25 {
+		if bestSemantic.semantic >= minCosine {
 			semantic = retainHybrid(semantic, bestSemantic, true)
 		}
 	}
@@ -128,7 +129,15 @@ func (s *AIService) hybridSearch(parent context.Context, uid int64, question str
 			bestLex = hybridHit{}
 			bestSemantic = hybridHit{semantic: -1}
 		}
-		lex := lexicalScore(row.Filename, terms)*3 + lexicalScore(row.Content, terms)
+		// A single generic bigram in a long query must not gain a full RRF vote.
+		nameCoverage, bodyCoverage := lexicalScore(row.Filename, terms), lexicalScore(row.Content, terms)
+		lex := 0.0
+		if nameCoverage >= minLexical {
+			lex += nameCoverage * 3
+		}
+		if bodyCoverage >= minLexical {
+			lex += bodyCoverage
+		}
 		sem := -1.0
 		if len(query) > 0 && row.ModelDigest == digest && row.EmbeddingModel == model && row.Dimensions == len(query) {
 			sem = vectorDot(query, row.Vector)
@@ -280,7 +289,7 @@ func lexicalScore(text string, terms []string) float64 {
 
 func hybridTerms(question string) []string {
 	question = strings.ToLower(question)
-	for _, filler := range []string{"帮我", "找出", "找到", "寻找", "查找", "搜索", "相关的", "相关", "有哪些", "之前", "上传的", "上个月", "本月", "去年", "今年", "拍摄的", "的文档", "的资料", "的文件", "请"} {
+	for _, filler := range []string{"帮我", "找出", "找到", "寻找", "查找", "搜索", "相关的", "相关", "有哪些", "之前", "上传的", "上个月", "上月", "本月", "上一年", "去年", "今年", "拍摄的", "的文档", "的资料", "的文件", "请"} {
 		question = strings.ReplaceAll(question, filler, " ")
 	}
 	seen := map[string]bool{}
@@ -351,20 +360,24 @@ func hybridSnippet(text string, terms []string) (string, int) {
 // to UTC before SQL. Capture time is not substituted with upload time.
 func hybridIntent(question string, now time.Time) (contract.AIHybridFilter, string) {
 	var f contract.AIHybridFilter
-	if strings.Contains(question, "照片") || strings.Contains(question, "图片") {
+	imageQuery := strings.Contains(question, "照片") || strings.Contains(question, "图片")
+	if imageQuery {
 		f.FileTypes = []string{"jpg", "jpeg", "png", "gif", "webp", "heic", "heif"}
+	}
+	if !imageQuery && (strings.Contains(question, "配置文件") || strings.Contains(question, "设置文件")) {
+		f.FileTypes = []string{"json", "xml", "yaml", "yml", "toml", "ini", "conf", "config", "env", "properties", "txt"}
 	}
 	zone := time.FixedZone("Asia/Shanghai", 8*3600)
 	now = now.In(zone)
 	var start, end time.Time
 	switch {
-	case strings.Contains(question, "上个月"):
+	case strings.Contains(question, "上个月") || strings.Contains(question, "上月"):
 		end = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, zone)
 		start = end.AddDate(0, -1, 0)
 	case strings.Contains(question, "本月"):
 		start = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, zone)
 		end = start.AddDate(0, 1, 0)
-	case strings.Contains(question, "去年"):
+	case strings.Contains(question, "去年") || strings.Contains(question, "上一年"):
 		start = time.Date(now.Year()-1, 1, 1, 0, 0, 0, 0, zone)
 		end = start.AddDate(1, 0, 0)
 	case strings.Contains(question, "今年"):
@@ -372,7 +385,7 @@ func hybridIntent(question string, now time.Time) (contract.AIHybridFilter, stri
 		end = start.AddDate(1, 0, 0)
 	}
 	if !start.IsZero() {
-		if !strings.Contains(question, "上传") && (strings.Contains(question, "拍摄") || strings.Contains(question, "拍的") || len(f.FileTypes) > 0) {
+		if !strings.Contains(question, "上传") && (strings.Contains(question, "拍摄") || strings.Contains(question, "拍的") || imageQuery) {
 			f.CapturedAfter = &start
 			f.CapturedBefore = &end
 			return f, ""

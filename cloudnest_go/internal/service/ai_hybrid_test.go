@@ -120,3 +120,34 @@ func TestHybridKeywordFallbackRevalidatesBeforeReturningSnippets(t *testing.T) {
 		t.Fatal("revoked excerpt leaked")
 	}
 }
+
+func TestHybridGenericFragmentsDoNotOutrankCompleteSubject(t *testing.T) {
+	repo := hybridFixtureRepo{rows: []contract.AIHybridRow{
+		{ID: 1, Filename: "neutral.md", Content: "季度报告：系统维护工作已经结束。", Generation: 1},
+		{ID: 2, Filename: "neutral.md", Content: "水稻基因测序实验报告。", Generation: 1},
+	}, allowed: map[int64]bool{1: true, 2: true}}
+	s := NewAIService(repo, config.Config{}, nil)
+	result, err := s.NLSearch(context.Background(), 1, "寻找水稻基因测序实验报告", 1, 20)
+	if err != nil || len(result.Search.Items) != 1 || result.Search.Items[0]["id"] != int64(2) {
+		t.Fatal("generic report fragment survived", result, err)
+	}
+	// A short direct keyword still works without an available model.
+	result, err = s.NLSearch(context.Background(), 1, "报告", 1, 20)
+	if err != nil || len(result.Search.Items) != 2 {
+		t.Fatal("direct keyword lost", result, err)
+	}
+}
+
+func TestHybridConfigurationDatesStayUploadDates(t *testing.T) {
+	now := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
+	for _, q := range []string{"上个月上传的配置文件", "上月的设置文件"} {
+		f, _ := hybridIntent(q, now)
+		if len(f.FileTypes) == 0 || f.CapturedAfter != nil || f.UploadedAfter == nil || f.UploadedAfter.Format(time.RFC3339) != "2025-11-30T16:00:00Z" {
+			t.Fatal("configuration date treated as capture", q, f)
+		}
+	}
+	f, _ := hybridIntent("上一年拍下的照片", now)
+	if f.CapturedAfter == nil || f.CapturedAfter.Year() != 2025 || f.UploadedAfter != nil {
+		t.Fatal("previous-year calendar lost", f)
+	}
+}

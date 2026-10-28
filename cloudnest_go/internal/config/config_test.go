@@ -80,3 +80,28 @@ func TestTransferLimitEnvironmentIsStrict(t *testing.T) {
 		t.Fatal("valid transfer seed limit rejected")
 	}
 }
+
+func TestSearchThresholdsStrictAndExplicit(t *testing.T) {
+	t.Setenv("MYSQL_DSN", "app:disposable@tcp(127.0.0.1:3306)/test")
+	t.Setenv("JWT_SECRET", "test-only-random-key-at-least-thirty-two-bytes")
+	for _, key := range []string{"AI_SEARCH_MIN_COSINE", "AI_SEARCH_MIN_LEXICAL"} {
+		t.Setenv(key, "")
+		for _, input := range []string{"0", "-0.2", "1.1", "NaN", "Inf", "-Inf", "unknown", "1e999"} {
+			t.Setenv(key, input)
+			if err := Load().Validate(); err == nil {
+				t.Fatal("invalid search threshold accepted", key, input)
+			}
+		}
+		t.Setenv(key, "0.6")
+		c := Load()
+		a, b := c.SearchThresholds()
+		if c.Validate() != nil || (key == "AI_SEARCH_MIN_COSINE" && a != .6) || (key == "AI_SEARCH_MIN_LEXICAL" && b != .6) {
+			t.Fatal("explicit threshold ignored")
+		}
+		t.Setenv(key, "")
+	}
+	a, b := (Config{}).SearchThresholds()
+	if a != .4 || b != .25 {
+		t.Fatal("literal config defaults differ", a, b)
+	}
+}

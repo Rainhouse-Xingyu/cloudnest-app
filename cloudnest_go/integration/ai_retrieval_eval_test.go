@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -59,6 +60,8 @@ type evalDocumentResult struct {
 	LatencyMS      int64     `json:"latency_ms"`
 }
 type evalReport struct {
+	MinCosine         float64                           `json:"min_cosine"`
+	MinLexical        float64                           `json:"min_lexical_coverage"`
 	Version           int                               `json:"version"`
 	Started           time.Time                         `json:"started"`
 	Finished          time.Time                         `json:"finished"`
@@ -187,6 +190,7 @@ func TestAIRetrievalEvaluation(t *testing.T) {
 	f.cfg.AIOllamaBaseURL = base
 	f.cfg.AIEmbeddingModel = report.EmbeddingModel
 	f.cfg.AIOCRModel = report.VisionModel
+	report.MinCosine, report.MinLexical = f.cfg.SearchThresholds()
 	f.cfg.AIPDFBinDir = os.Getenv("CLOUDNEST_TEST_POPPLER_BIN")
 	if f.cfg.AIPDFBinDir == "" {
 		t.Fatal("CLOUDNEST_TEST_POPPLER_BIN required")
@@ -247,6 +251,12 @@ func TestAIRetrievalEvaluation(t *testing.T) {
 		if job.Status != "done" || doc.Generation != job.Generation || doc.SourceHash != sourceHash || doc.Dimensions != 1024 || doc.ModelDigest != report.EmbeddingDigest || (doc.VisionDigest != "" && doc.VisionDigest != report.VisionDigest) {
 			t.Fatalf("index provenance mismatch for %s", d.ID)
 		}
+		if capture != "" && (doc.CapturedAtLocal == nil || doc.CapturedAtLocal.Format("2006-01-02 15:04:05") != capture || doc.CaptureOffset != "+08:00") {
+			t.Fatal("synthetic capture not preserved", d.ID)
+		}
+		if d.ID == "photo-unknown" && doc.CapturedAtLocal != nil {
+			t.Fatal("capture invented from upload")
+		}
 		var chunks []model.AIIndexChunk
 		if err = f.db.Where("file_id=?", file.ID).Find(&chunks).Error; err != nil {
 			t.Fatal(err)
@@ -273,15 +283,33 @@ func TestAIRetrievalEvaluation(t *testing.T) {
 				t.Fatalf("unknown or unauthorized search hit: %d", r.Items[i].ID)
 			}
 			r.Items[i].Document = id
+			if strings.Contains(r.Items[i].Snippet, "PRIVATE_ONLY_") {
+				t.Fatal("private excerpt leaked")
+			}
 		}
 		if r.Retrieval.WindowLimited || r.Pagination.Total != len(r.Items) {
 			t.Fatal("evaluation results truncated", r.Pagination.Total, len(r.Items))
 		}
 		return r
 	}
+	report.Boundaries["relative_calendar_filters"] = true
 	for _, q := range dataset.Queries {
 		started := time.Now()
 		r := search(q.Question)
+		for _, h := range r.Items {
+			badDate := q.Family == "beach" && h.Document != "photo-last"
+			if q.Family == "contracts" {
+				for _, d := range dataset.Documents {
+					if d.ID == h.Document && d.Uploaded != "previous_month" {
+						badDate = true
+					}
+				}
+			}
+			if badDate {
+				report.Boundaries["relative_calendar_filters"] = false
+				t.Errorf("query %s returned wrong/unknown calendar: %s", q.ID, h.Document)
+			}
+		}
 		ranked := make([]string, len(r.Items))
 		for i, h := range r.Items {
 			ranked[i] = h.Document
@@ -311,6 +339,16 @@ func TestAIRetrievalEvaluation(t *testing.T) {
 	}
 	report.Boundaries["all_queries_authorized"] = true
 	shared := files["shared-migration"]
+	visible := false
+	for _, h := range search("共享数据库搬迁检查单").Items {
+		if h.Document == "shared-migration" {
+			visible = true
+		}
+	}
+	if !visible {
+		t.Fatal("explicitly shared current document was not retrievable")
+	}
+	report.Boundaries["explicit_shared_read"] = true
 	if err = f.db.Where("file_id=? AND user_id=?", shared.ID, f.aliceID).Delete(&model.FilePermission{}).Error; err != nil {
 		t.Fatal(err)
 	}
