@@ -2,7 +2,7 @@ BINARY := cloudnest
 CMD := ./cmd/server
 DIST := ./dist
 
-.PHONY: build build-macos build-linux release clean test check integration performance network ai-model ai-search vuln
+.PHONY: build build-macos build-linux release clean test check integration performance network ai-model ai-search ai-eval vuln
 
 test:
 	go test -race -count=1 ./...
@@ -22,6 +22,9 @@ network:
 
 ai-model:
 	../scripts/test-ai-index-model.sh
+
+ai-eval:
+	../scripts/test-ai-retrieval-eval.sh
 
 ai-search:
 	../scripts/test-ai-search.sh
