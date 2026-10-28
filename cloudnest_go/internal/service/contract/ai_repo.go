@@ -37,6 +37,7 @@ type AISearchRow struct {
 
 // AIRepository 定义 AI 模块存储访问能力。
 type AIRepository interface {
+	PublishOCR(ctx context.Context, uid int64, source model.File, sourceHash string, tags, description, text string) (model.AiMetadata, error)
 	ListIndex(ctx context.Context, uid, after int64, limit int) ([]AIIndexStatus, error)
 	IndexStatus(ctx context.Context, uid, id int64) (AIIndexStatus, error)
 	RebuildIndex(ctx context.Context, uid int64, items []AIRebuildItem, ip string) ([]AIRebuildItem, error)

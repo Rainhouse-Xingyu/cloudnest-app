@@ -10,12 +10,12 @@ import (
 	"net/http"
 	"os"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
 	"cloudenest_go/internal/aiindex"
 	"cloudenest_go/internal/config"
+	"cloudenest_go/internal/imageprep"
 	"cloudenest_go/internal/middleware"
 	"cloudenest_go/internal/pdfextract"
 	"cloudenest_go/internal/service"
@@ -23,7 +23,6 @@ import (
 	"cloudenest_go/model"
 
 	"github.com/gin-gonic/gin"
-	"github.com/rwcarlsen/goexif/exif"
 	"gorm.io/gorm"
 )
 
@@ -105,17 +104,8 @@ type ollamaGenerateResponse struct {
 	Error    string `json:"error"`
 }
 
-type exifInfo struct {
-	Latitude    *float64
-	Longitude   *float64
-	Altitude    *float64
-	CapturedAt  string
-	CameraMake  string
-	CameraModel string
-}
-
-// OCR 对图片执行 OCR 并写入 ai_metadata 索引。
 func (h *AIHandler) OCR(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<10)
 	uid := c.GetInt64(middleware.ContextUserIDKey)
 
 	var req OCRRequest
@@ -144,14 +134,19 @@ func (h *AIHandler) OCR(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"item": res.Metadata,
 		"exif": gin.H{
-			"latitude":     res.EXIF.Latitude,
-			"longitude":    res.EXIF.Longitude,
-			"altitude":     res.EXIF.Altitude,
-			"captured_at":  res.EXIF.CapturedAt,
-			"camera_make":  res.EXIF.CameraMake,
-			"camera_model": res.EXIF.CameraModel,
+			"latitude":           res.EXIF.Latitude,
+			"longitude":          res.EXIF.Longitude,
+			"altitude":           res.EXIF.Altitude,
+			"captured_at":        res.EXIF.CapturedAt,
+			"capture_offset":     res.EXIF.CaptureOffset,
+			"capture_time_basis": "exif_camera_local",
+			"camera_make":        res.EXIF.CameraMake,
+			"camera_model":       res.EXIF.CameraModel,
 		},
-		"doc_summary": res.DocSummary,
+		"doc_summary":  res.DocSummary,
+		"has_text":     res.HasText,
+		"model":        res.Model,
+		"model_digest": res.ModelDigest,
 	})
 }
 
@@ -574,24 +569,44 @@ func (h *AIHandler) writeAIErr(c *gin.Context, err error) {
 	if err == nil {
 		return
 	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "AI operation timed out"})
+		return
+	}
 	if errors.Is(err, pdfextract.ErrUnavailable) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "PDF extraction unavailable"})
 		return
 	}
-	if errors.Is(err, aiindex.ErrModelUnavailable) || errors.Is(err, aiindex.ErrVisionResponse) || errors.Is(err, aiindex.ErrModelChanged) {
+	if errors.Is(err, aiindex.ErrModelUnavailable) || errors.Is(err, aiindex.ErrVisionResponse) || errors.Is(err, aiindex.ErrModelChanged) || errors.Is(err, aiindex.ErrEmbedding) {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "OCR model unavailable"})
 		return
 	}
-	if errors.Is(err, aiindex.ErrExtractionBusy) || errors.Is(err, pdfextract.ErrBusy) {
+	if errors.Is(err, aiindex.ErrExtractionBusy) || errors.Is(err, pdfextract.ErrBusy) || errors.Is(err, imageprep.ErrBusy) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "document extraction busy"})
 		return
 	}
-	if errors.Is(err, aiindex.ErrTextLimit) || errors.Is(err, pdfextract.ErrLimit) {
+	if errors.Is(err, aiindex.ErrTextLimit) || errors.Is(err, pdfextract.ErrLimit) || errors.Is(err, imageprep.ErrLimit) {
 		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "document extraction limit exceeded"})
 		return
 	}
-	if errors.Is(err, aiindex.ErrDocument) || errors.Is(err, pdfextract.ErrInvalid) {
+	if errors.Is(err, aiindex.ErrDocument) || errors.Is(err, pdfextract.ErrInvalid) || errors.Is(err, imageprep.ErrInvalid) || errors.Is(err, imageprep.ErrFormat) {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "document content cannot be extracted"})
+		return
+	}
+	if errors.Is(err, contract.ErrConflict) {
+		c.JSON(http.StatusConflict, gin.H{"error": "file changed during OCR"})
+		return
+	}
+	if errors.Is(err, contract.ErrForbidden) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+		return
+	}
+	if errors.Is(err, contract.ErrInvalidInput) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid OCR metadata"})
+		return
+	}
+	if errors.Is(err, contract.ErrStorageIntegrity) {
+		c.JSON(http.StatusConflict, gin.H{"error": "stored content failed verification"})
 		return
 	}
 	msg := strings.ToLower(err.Error())
@@ -653,96 +668,4 @@ func mergeTags(parts ...string) string {
 		}
 	}
 	return strings.Join(out, ",")
-}
-
-// extractEXIFInfo 解析图片 EXIF 信息；解析失败时返回空结构，不中断主流程。
-func extractEXIFInfo(imagePath string) exifInfo {
-	info := exifInfo{}
-	f, err := os.Open(imagePath)
-	if err != nil {
-		return info
-	}
-	defer f.Close()
-
-	x, err := exif.Decode(f)
-	if err != nil {
-		return info
-	}
-
-	if lat, lon, err := x.LatLong(); err == nil {
-		latCopy := lat
-		lonCopy := lon
-		info.Latitude = &latCopy
-		info.Longitude = &lonCopy
-	}
-
-	if dt, err := x.DateTime(); err == nil {
-		info.CapturedAt = dt.Format("2006-01-02 15:04:05")
-	}
-
-	if tag, err := x.Get(exif.Make); err == nil {
-		if v, e := tag.StringVal(); e == nil {
-			info.CameraMake = strings.TrimSpace(v)
-		}
-	}
-	if tag, err := x.Get(exif.Model); err == nil {
-		if v, e := tag.StringVal(); e == nil {
-			info.CameraModel = strings.TrimSpace(v)
-		}
-	}
-	if tag, err := x.Get(exif.GPSAltitude); err == nil {
-		if n, d, e := tag.Rat2(0); e == nil && d != 0 {
-			alt := float64(n) / float64(d)
-			info.Altitude = &alt
-		}
-	}
-
-	return info
-}
-
-func formatEXIFLocationTag(info exifInfo) string {
-	if info.Latitude == nil || info.Longitude == nil {
-		return ""
-	}
-	lat := strconv.FormatFloat(*info.Latitude, 'f', 6, 64)
-	lon := strconv.FormatFloat(*info.Longitude, 'f', 6, 64)
-	if info.Altitude == nil {
-		return "gps:" + lat + "," + lon
-	}
-	alt := strconv.FormatFloat(*info.Altitude, 'f', 1, 64)
-	return "gps:" + lat + "," + lon + ",alt=" + alt
-}
-
-// summarizeDocumentPhoto 从 OCR 文本提炼关键信息，便于文档照片场景快速浏览。
-func (h *AIHandler) summarizeDocumentPhoto(ctx context.Context, ocrText string) string {
-	ocrText = strings.TrimSpace(ocrText)
-	if ocrText == "" || ocrText == "未识别到有效文本" {
-		return ""
-	}
-	// 文本较短时直接截断返回，避免不必要的模型调用。
-	if len(ocrText) < 120 {
-		if len(ocrText) > 80 {
-			return ocrText[:80]
-		}
-		return ocrText
-	}
-
-	source := ocrText
-	if len(source) > 4000 {
-		source = source[:4000]
-	}
-	prompt := "请将以下OCR文本提炼为3-5条中文关键点，适合文档照片快速阅读；仅输出要点，不要解释。\\n\\n" + source
-	res, err := h.callOllamaGenerate(ctx, prompt, nil)
-	if err != nil {
-		fallback := source
-		if len(fallback) > 200 {
-			fallback = fallback[:200]
-		}
-		return strings.TrimSpace(fallback)
-	}
-	res = strings.TrimSpace(res)
-	if len(res) > 500 {
-		res = res[:500]
-	}
-	return res
 }

@@ -19,3 +19,5 @@ Two fixtures establish a functional smoke test only. They do not measure general
 | invoice-synthetic.png | 1100 × 480 | 651e5ea7e9b0de70197a8d697de442692d2aa1025e3369dce0131e17651c7d1f |
 
 Both images were visually inspected; the invoice text fits within the canvas.
+
+The manual OCR test also injects explicit synthetic camera/GPS fields into the invoice: ACME! / Camera1, latitude -33.5, longitude 151.2, altitude -10 m. These are parser test inputs, not a claim about the generated image or an actual purchase location.

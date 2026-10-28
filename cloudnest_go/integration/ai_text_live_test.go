@@ -574,3 +574,67 @@ func TestAITextLiveImagesUsePixelsEXIFAndRealSemanticSearch(t *testing.T) {
 		t.Fatal("recycled image remains in capture search", foreign)
 	}
 }
+
+func TestAITextLiveManualOCRUsesSharedPixelsAndPreservesMetadata(t *testing.T) {
+	if os.Getenv("CLOUDNEST_TEST_AI_MODEL") != "1" {
+		t.Fatal("run real-model script")
+	}
+	f, _ := indexFixture(t)
+	f.cfg.AIOllamaBaseURL = "http://127.0.0.1:11434"
+	f.cfg.AIOCRModel = "qwen3-vl:4b"
+	f.router = fixtureRouter(app.NewContainer(f.cfg, f.db, f.rdb).NewRouter())
+	for _, tc := range []struct {
+		name    string
+		hasText bool
+	}{{"invoice-synthetic.png", true}, {"beach-synthetic.png", false}} {
+		body, err := os.ReadFile(filepath.Join("testdata/images", tc.name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if tc.hasText {
+			body = syntheticCameraGPSPNG(t, body)
+		} else {
+			body = syntheticCapturePNG(t, body, time.Date(2025, 6, 15, 10, 20, 30, 0, time.UTC))
+		}
+		file := f.upload(t, f.alice, "manual-"+fmt.Sprint(tc.hasText)+".png", body)
+		var reply struct {
+			Item    model.AiMetadata `json:"item"`
+			HasText bool             `json:"has_text"`
+			Model   string           `json:"model"`
+			Digest  string           `json:"model_digest"`
+			Summary string           `json:"doc_summary"`
+			EXIF    struct {
+				Latitude, Longitude, Altitude *float64
+				CapturedAt                    string `json:"captured_at"`
+				Make                          string `json:"camera_make"`
+				Model                         string `json:"camera_model"`
+				Offset                        string `json:"capture_offset"`
+			} `json:"exif"`
+		}
+		decode(t, f.json(t, "POST", "/api/ai/ocr", f.alice, map[string]any{"file_id": file.ID, "tags": "manual-test"}, 200), &reply)
+		if reply.Item.FileID != file.ID || reply.HasText != tc.hasText || reply.Model != "qwen3-vl:4b" || len(reply.Digest) != 64 {
+			t.Fatal("bad real manual OCR provenance", reply)
+		}
+		if tc.hasText {
+			for _, needle := range []string{"Laptop", "5999", "192.0.2.42"} {
+				if !strings.Contains(reply.Item.OcrText, needle) {
+					t.Fatal("actual manual OCR lost text", needle, reply)
+				}
+			}
+			if reply.EXIF.Latitude == nil || reply.EXIF.Longitude == nil || reply.EXIF.Altitude == nil || *reply.EXIF.Latitude != -33.5 || math.Abs(*reply.EXIF.Longitude-151.2) > 1e-9 || *reply.EXIF.Altitude != -10 || reply.EXIF.Make != "ACME!" || reply.EXIF.Model != "Camera1" || reply.EXIF.CapturedAt != "" || reply.Summary == "" {
+				t.Fatal("GPS/camera contract changed", reply)
+			}
+		} else if reply.Item.OcrText != "" || reply.Summary != "" || reply.EXIF.CapturedAt != "2025-06-15 10:20:30" || reply.EXIF.Offset != "+08:00" {
+			t.Fatal("blank text invented or capture date shifted", reply)
+		}
+		var count int64
+		if err := f.db.Model(&model.AiTask{}).Where("file_id=? AND task_type='ocr' AND status='success'", file.ID).Count(&count).Error; err != nil || count != 1 {
+			t.Fatal("manual success missing", count, err)
+		}
+		if readIndex(t, f, file.ID).Status != "queued" {
+			t.Fatal("manual OCR bypassed durable queue")
+		}
+		waitNoReadLeases(t, f, *file.StorageID)
+		t.Logf("real manual OCR %s has_text=%v model=%s", tc.name, reply.HasText, reply.Model)
+	}
+}

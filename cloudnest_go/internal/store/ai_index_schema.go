@@ -45,6 +45,12 @@ WHERE table_schema=DATABASE() AND table_name='ai_index_job' AND (
 
 func checkAIIndexResultSchema(db *gorm.DB) error {
 	var count int64
+	if err := db.Raw(`SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='ai_metadata' AND column_name='source_hash' AND data_type='char' AND character_maximum_length=64 AND is_nullable='NO'`).Scan(&count).Error; err != nil {
+		return err
+	}
+	if count != 1 {
+		return errors.New("manual OCR source identity missing or changed; review explicit migrate before starting")
+	}
 	if err := db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('ai_index_document','ai_index_chunk') AND engine='InnoDB'").Scan(&count).Error; err != nil {
 		return err
 	}

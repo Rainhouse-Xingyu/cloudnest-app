@@ -8,10 +8,12 @@ import (
 	"errors"
 	"image"
 	"image/png"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Synthetic HTTP fixtures only validate the protocol and rejection behavior.
@@ -110,4 +112,64 @@ func TestImageAnalysisRejectsInvalidUTF8BeforeJSONReplacement(t *testing.T) {
 	if !errors.Is(err, ErrVisionResponse) || got.Description != "" || digest != "" {
 		t.Fatal("corrupted text published", got, digest, err)
 	}
+}
+
+func TestVisionAdmissionSharedAcrossImageAndPDFAndReleasedOnCancel(t *testing.T) {
+	var pixels bytes.Buffer
+	if err := png.Encode(&pixels, image.NewNRGBA(image.Rect(0, 0, 1, 1))); err != nil {
+		t.Fatal(err)
+	}
+	entered := make(chan struct{}, 2)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/tags" {
+			json.NewEncoder(w).Encode(map[string]any{"models": []any{map[string]string{"name": "vision:test", "digest": strings.Repeat("a", 64)}}})
+			return
+		}
+		if _, err := io.Copy(io.Discard, r.Body); err != nil {
+			return
+		}
+		entered <- struct{}{}
+		<-r.Context().Done()
+	}))
+	defer func() { cancel(); srv.Close() }()
+	o, err := NewOllama(srv.URL, "vision:test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	finished := make(chan error, 2)
+	go func() { _, _, err := o.AnalyzeImage(ctx, pixels.Bytes()); finished <- err }()
+	go func() { _, _, err := o.TranscribeWithDigest(ctx, pixels.Bytes()); finished <- err }()
+	for i := 0; i < 2; i++ {
+		select {
+		case <-entered:
+		case <-ctx.Done():
+			t.Fatal("vision requests not admitted")
+		}
+	}
+	if _, _, err := o.AnalyzeImage(ctx, pixels.Bytes()); !errors.Is(err, ErrExtractionBusy) {
+		t.Fatal("third vision call was not rejected", err)
+	}
+	cancel()
+	for i := 0; i < 2; i++ {
+		select {
+		case err := <-finished:
+			if !errors.Is(err, context.Canceled) {
+				t.Fatal(err)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("cancellation retained vision request")
+		}
+	}
+	// Both slots must be available after the canceled requests returned.
+	first, err := admitVision(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first()
+	second, err := admitVision(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second()
 }

@@ -3,7 +3,6 @@ package service
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,15 +14,16 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"cloudenest_go/internal/aiindex"
 	"cloudenest_go/internal/blob"
 	"cloudenest_go/internal/config"
+	"cloudenest_go/internal/imageprep"
 	"cloudenest_go/internal/pdfextract"
 	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
 
-	"github.com/rwcarlsen/goexif/exif"
 	"gorm.io/gorm"
 )
 
@@ -50,9 +50,11 @@ type AIOCRInput struct {
 }
 
 type AIOCRResult struct {
-	Metadata   model.AiMetadata
-	EXIF       exifInfo
-	DocSummary string
+	Metadata           model.AiMetadata
+	EXIF               exifInfo
+	DocSummary         string
+	HasText            bool
+	Model, ModelDigest string
 }
 
 type AISummaryResult struct {
@@ -117,46 +119,80 @@ type ollamaGenerateResponse struct {
 }
 
 type exifInfo struct {
-	Latitude    *float64
-	Longitude   *float64
-	Altitude    *float64
-	CapturedAt  string
-	CameraMake  string
-	CameraModel string
+	Latitude      *float64
+	Longitude     *float64
+	Altitude      *float64
+	CapturedAt    string
+	CameraMake    string
+	CameraModel   string
+	CaptureOffset string
 }
 
 // OCR 对图片执行 OCR 并写入 ai_metadata 索引。
 func (s *AIService) OCR(ctx context.Context, uid int64, req AIOCRInput) (AIOCRResult, error) {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+	defer cancel()
 	f, storage, err := s.getReadableFileAndStorage(ctx, uid, req.FileID)
 	if err != nil {
 		return AIOCRResult{}, err
 	}
 
-	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(f.Filename), "."))
-	if !isImageExt(ext) && !isAIImageExt(ext) {
+	if !aiindex.SupportsImage(filepath.Ext(f.Filename)) {
 		return AIOCRResult{}, fmt.Errorf("ocr only supports image files")
 	}
-
-	raw, err := os.ReadFile(storage.FilePath)
+	if f.Size > imageprep.MaxEncodedBytes {
+		return AIOCRResult{}, imageprep.ErrLimit
+	}
+	if len(req.Description) > 8192 || len(req.CapturedAt) > 64 || utf8.RuneCountInString(mergeTags(req.Tags, req.Location, req.Landmark)) > 255 {
+		return AIOCRResult{}, contract.ErrInvalidInput
+	}
+	in, verified, err := blob.OpenPinnedStorage(ctx, storage)
 	if err != nil {
-		return AIOCRResult{}, fmt.Errorf("read image failed")
+		if ctx.Err() != nil {
+			return AIOCRResult{}, ctx.Err()
+		}
+		return AIOCRResult{}, contract.ErrStorageIntegrity
 	}
-
-	exifMeta := extractEXIFInfo(storage.FilePath)
-	prompt := "请执行OCR识别，完整提取图片中的可见文字，尽量保留原始顺序与换行。"
-	ocrText, callErr := s.callOllamaGenerate(ctx, prompt, []string{base64.StdEncoding.EncodeToString(raw)})
-	if callErr != nil {
-		_ = s.createAITask(ctx, uid, req.FileID, "ocr", "failed", callErr.Error())
-		return AIOCRResult{}, fmt.Errorf("ollama call failed")
+	prepared, err := imageprep.Prepare(ctx, in)
+	closeErr := in.Close()
+	if err != nil {
+		return AIOCRResult{}, err
 	}
-	ocrText = strings.TrimSpace(ocrText)
-	if ocrText == "" {
-		ocrText = "未识别到有效文本"
+	if closeErr != nil {
+		return AIOCRResult{}, contract.ErrStorageIntegrity
 	}
-
-	photoSummary := s.summarizeDocumentPhoto(ctx, ocrText)
+	exifMeta := exifInfo{Latitude: prepared.Metadata.Latitude, Longitude: prepared.Metadata.Longitude, Altitude: prepared.Metadata.Altitude, CameraMake: prepared.Metadata.CameraMake, CameraModel: prepared.Metadata.CameraModel, CaptureOffset: prepared.Metadata.Offset}
+	if prepared.Metadata.CapturedLocal != nil {
+		exifMeta.CapturedAt = prepared.Metadata.CapturedLocal.Format("2006-01-02 15:04:05")
+	}
 	exifLocationTag := formatEXIFLocationTag(exifMeta)
 	tags := mergeTags(req.Tags, req.Location, req.Landmark, exifLocationTag)
+	if utf8.RuneCountInString(tags) > 255 {
+		return AIOCRResult{}, contract.ErrInvalidInput
+	}
+	vision, err := aiindex.NewOllama(s.cfg.AIOllamaBaseURL, s.cfg.AIOCRModel)
+	if err != nil {
+		return AIOCRResult{}, aiindex.ErrModelUnavailable
+	}
+	analysis, digest, err := vision.AnalyzeImage(ctx, prepared.PNG)
+	if err != nil {
+		code := "model_unavailable"
+		switch {
+		case errors.Is(err, aiindex.ErrExtractionBusy):
+			code = "extraction_busy"
+		case errors.Is(err, aiindex.ErrModelChanged):
+			code = "model_changed"
+		case errors.Is(err, aiindex.ErrVisionResponse), errors.Is(err, aiindex.ErrEmbedding):
+			code = "invalid_model_response"
+		}
+		_ = s.createAITask(ctx, uid, req.FileID, "ocr", "failed", code)
+		return AIOCRResult{}, err
+	}
+	ocrText := analysis.Text
+	photoSummary := ""
+	if analysis.HasText {
+		photoSummary = analysis.Description
+	}
 	desc := strings.TrimSpace(req.Description)
 	if capAt := strings.TrimSpace(req.CapturedAt); capAt != "" {
 		if desc == "" {
@@ -190,13 +226,15 @@ func (s *AIService) OCR(ctx context.Context, uid int64, req AIOCRInput) (AIOCRRe
 		}
 	}
 
-	meta, err := s.upsertAIMetadata(ctx, req.FileID, tags, desc, ocrText)
-	if err != nil {
-		return AIOCRResult{}, fmt.Errorf("save ai metadata failed")
+	if err := blob.Check(ctx); err != nil {
+		return AIOCRResult{}, err
 	}
-	_ = s.createAITask(ctx, uid, req.FileID, "ocr", "success", ocrText)
+	meta, err := s.repo.PublishOCR(ctx, uid, f, verified.FileHash, tags, desc, ocrText)
+	if err != nil {
+		return AIOCRResult{}, err
+	}
 
-	return AIOCRResult{Metadata: meta, EXIF: exifMeta, DocSummary: photoSummary}, nil
+	return AIOCRResult{Metadata: meta, EXIF: exifMeta, DocSummary: photoSummary, HasText: analysis.HasText, Model: vision.Model(), ModelDigest: digest}, nil
 }
 
 func (s *AIService) Search(ctx context.Context, uid int64, q AISearchQuery) (AISearchResult, error) {
@@ -575,38 +613,6 @@ func (s *AIService) createAITask(ctx context.Context, userID int64, fileID int64
 	return s.repo.CreateAITask(ctx, row)
 }
 
-func (s *AIService) summarizeDocumentPhoto(ctx context.Context, ocrText string) string {
-	ocrText = strings.TrimSpace(ocrText)
-	if ocrText == "" || ocrText == "未识别到有效文本" {
-		return ""
-	}
-	if len(ocrText) < 120 {
-		if len(ocrText) > 80 {
-			return ocrText[:80]
-		}
-		return ocrText
-	}
-
-	source := ocrText
-	if len(source) > 4000 {
-		source = source[:4000]
-	}
-	prompt := "请将以下OCR文本提炼为3-5条中文关键点，适合文档照片快速阅读；仅输出要点，不要解释。\\n\\n" + source
-	res, err := s.callOllamaGenerate(ctx, prompt, nil)
-	if err != nil {
-		fallback := source
-		if len(fallback) > 200 {
-			fallback = fallback[:200]
-		}
-		return strings.TrimSpace(fallback)
-	}
-	res = strings.TrimSpace(res)
-	if len(res) > 500 {
-		res = res[:500]
-	}
-	return res
-}
-
 func refineNLSearchPlan(plan NLSearchPlan, question string) NLSearchPlan {
 	plan.Keyword = strings.TrimSpace(plan.Keyword)
 	plan.FileType = strings.TrimSpace(plan.FileType)
@@ -726,46 +732,6 @@ func mergeTags(parts ...string) string {
 	return strings.Join(out, ",")
 }
 
-func extractEXIFInfo(imagePath string) exifInfo {
-	info := exifInfo{}
-	f, err := os.Open(imagePath)
-	if err != nil {
-		return info
-	}
-	defer f.Close()
-
-	x, err := exif.Decode(f)
-	if err != nil {
-		return info
-	}
-	if lat, lon, err := x.LatLong(); err == nil {
-		latCopy := lat
-		lonCopy := lon
-		info.Latitude = &latCopy
-		info.Longitude = &lonCopy
-	}
-	if dt, err := x.DateTime(); err == nil {
-		info.CapturedAt = dt.Format("2006-01-02 15:04:05")
-	}
-	if tag, err := x.Get(exif.Make); err == nil {
-		if v, e := tag.StringVal(); e == nil {
-			info.CameraMake = strings.TrimSpace(v)
-		}
-	}
-	if tag, err := x.Get(exif.Model); err == nil {
-		if v, e := tag.StringVal(); e == nil {
-			info.CameraModel = strings.TrimSpace(v)
-		}
-	}
-	if tag, err := x.Get(exif.GPSAltitude); err == nil {
-		if n, d, e := tag.Rat2(0); e == nil && d != 0 {
-			alt := float64(n) / float64(d)
-			info.Altitude = &alt
-		}
-	}
-	return info
-}
-
 func formatEXIFLocationTag(info exifInfo) string {
 	if info.Latitude == nil || info.Longitude == nil {
 		return ""
@@ -782,11 +748,6 @@ func formatEXIFLocationTag(info exifInfo) string {
 func isImageExt(ext string) bool {
 	allowed := map[string]bool{"jpg": true, "jpeg": true, "png": true, "gif": true, "webp": true, "heic": true, "heif": true}
 	return allowed[strings.ToLower(strings.TrimSpace(ext))]
-}
-
-func isAIImageExt(ext string) bool {
-	allowed := map[string]bool{"jpg": true, "jpeg": true, "heic": true, "heif": true}
-	return allowed[ext]
 }
 
 func parseFlexibleTime(raw string) (time.Time, error) {

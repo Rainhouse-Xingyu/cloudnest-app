@@ -36,6 +36,11 @@ func (o *Ollama) AnalyzeImage(ctx context.Context, image []byte) (ImageAnalysis,
 	if err != nil || cfg.Width < 1 || cfg.Height < 1 || cfg.Width > 1600 || cfg.Height > 1600 {
 		return result, "", ErrDocument
 	}
+	release, err := admitVision(ctx)
+	if err != nil {
+		return result, "", err
+	}
+	defer release()
 	digest, err := o.Digest(ctx)
 	if err != nil {
 		return result, "", err

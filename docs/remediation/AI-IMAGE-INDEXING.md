@@ -8,7 +8,7 @@ G04 图片检查点支持 JPEG、PNG 和 GIF 首帧：上传事务入队 → 校
 
 处理全部八种 EXIF 方向，按最长边 1600 缩放，输出 PNG 不超过 8 MiB；模型调用前释放解码预算。解码、变换和编码共用十五秒上下文，读入/逐行处理/写出检查取消；标准库编解码内部 CPU 不能强制抢占。源始终为已校验 FD，不重新按路径打开。GIF 只读取首帧，不声称索引所有动画画面。
 
-JPEG APP1 和 PNG eXIf 解析有界，最多检查 4096 个标记/块，PNG EXIF 上限 256 KiB 并检查 CRC。仅访问 IFD0 与 EXIF 子目录，每目录最多 256 项，检查偏移/重复标签/环；不遍历缩略图、MakerNote 或任意 next-IFD。捕获 Orientation、DateTimeOriginal 和 OffsetTimeOriginal，不用文件修改时间、上传时间或模型推断补齐日期。损坏元数据明确失败。
+JPEG APP1 和 PNG eXIf 解析有界，最多检查 4096 个标记/块，PNG EXIF 上限 256 KiB 并检查 CRC。仅访问 IFD0、EXIF 与 GPS 子目录，每目录最多 256 项，检查偏移/重复标签/环；不遍历缩略图、MakerNote 或任意 next-IFD。捕获 Orientation、DateTimeOriginal、OffsetTimeOriginal，以及有界的相机/GPS 字段，不用文件修改时间、上传时间或模型推断补齐日期。损坏元数据明确失败。
 
 ## 真实视觉输出及来源
 
@@ -34,4 +34,4 @@ JPEG APP1 和 PNG eXIf 解析有界，最多检查 4096 个标记/块，PNG EXIF
 
 素材来源与完整生成提示见 [图片夹具说明](../../cloudnest_go/integration/testdata/images/README.md)。合成 EXIF 是测试输入，不是现实拍摄事实。这两张图只证明功能链路，不能代表准确率、Recall/MRR 或真实照片分布。
 
-仍需：旧手动 OCR 接口统一（保留其 GPS/相机字段契约）、GPS/相机元数据的有界解析、HEIC/HEIF/WebP、复杂图片/中文和手写评估、模型资源并发压力和完整六类查询评估。G04 和整体 G00–G11 目标均未完成。
+手动 OCR 统一及 GPS/相机有界解析已接入，见 [手动 OCR](AI-MANUAL-OCR.md)。仍需：HEIC/HEIF/WebP、复杂图片/中文和手写评估、模型资源并发压力和完整六类查询评估。G04 和整体 G00–G11 目标均未完成。

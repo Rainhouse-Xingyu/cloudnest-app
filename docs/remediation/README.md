@@ -78,3 +78,5 @@ G04 已提交独立 [草稿 PR #5](https://github.com/Rainhouse-Xingyu/cloudnest
 - [PDF 提取与扫描页 OCR](AI-PDF-EXTRACTION.md)：独立解析进程、平台资源限制、实际视觉转录与剩余边界。
 
 - [图片视觉索引与 EXIF 日历](AI-IMAGE-INDEXING.md)：真实像素、共享解码预算、结构化输出、来源字段和拍摄时间语义。
+
+- [手动 OCR 统一与源身份](AI-MANUAL-OCR.md)：有界 EXIF/GPS、实际像素、撤权/换版隔离和原子成功记录。

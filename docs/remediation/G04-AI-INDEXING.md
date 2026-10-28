@@ -54,7 +54,7 @@ worker 单次处理默认三分钟、领取/续约/发布操作五秒上限，�
 接下来的必要实现：
 
 1. DOCX/XLSX/PPTX 已接入有界结构解析与真实模型链路，见 [Office 提取](AI-OFFICE-EXTRACTION.md)；PDF/扫描页已接入独立进程与真实视觉转录，见 [PDF 提取](AI-PDF-EXTRACTION.md)；图片视觉与 EXIF 日历见 [图片索引](AI-IMAGE-INDEXING.md)；继续扩展旧二进制 Office、其余图片格式并验证完整效果。
-2. 统一旧 AI helper 与新处理器，清理重复提取实现。
+2. 手动 OCR 与新图片处理器、Office/PDF 摘要已统一；继续评审其余旧生成/问答 helper。
 3. 扩展真实语料和并发规模测量，校准词法/语义阈值与是否需要 ANN/rerank。
 4. 完善混合检索的复杂意图、其余 EXIF 元数据与继承权限，保留当前文件级过滤及降级。
 5. 状态、历史回填/重建及版本/复制/回收恢复/扩展名变化的增量入队已实现，见 [索引控制](AI-INDEX-CONTROL.md) 与 [增量索引](AI-INDEX-INCREMENTAL.md)。后续格式扩展须继续保留代次/删除隔离与回归验证。
@@ -69,3 +69,5 @@ G04 尚未完成，G05–G11 仍按里程碑推进。
 2026-10-27：PDF 同 FD 原生提取、空文本页渲染与实际 qwen3-vl 转录已接入持久任务及摘要 API。Linux 地址空间限额、macOS RSS 监测边界、依赖配置和未完成项见 AI-PDF-EXTRACTION。Office 提交 a6f039d 的 PR/push CI 均已通过。
 
 2026-10-28：JPEG/PNG/GIF 首帧经共享解码预算、EXIF 方向纠正和真实像素视觉调用生成描述/标签/文字，再由独立 embedding 索引。新增八个来源字段须显式迁移；拍摄时间采用相机本地日历且不回退上传时间。范围、兼容性故障和剩余工作见 AI-IMAGE-INDEXING 与 TESTING。
+
+2026-10-28：手动 OCR 改为同 FD 有界处理与真实结构化视觉调用，保留 GPS/相机/日期字段，新增 source_hash 升级检查、源/权限发布复核与成功审计事务；旧关键词查询排除不同源的 OCR，详见 AI-MANUAL-OCR。
