@@ -162,3 +162,15 @@ func (o *Ollama) Embed(ctx context.Context, input []string) ([][]float32, error)
 	}
 	return out, nil
 }
+
+// EmbeddingQueryText follows Qwen3's asymmetric retrieval format: task
+// instructions belong to queries only, never to indexed document chunks.
+// Other model families keep their existing input contract. Custom aliases
+// cannot be inferred from their name and need separate evaluation.
+func EmbeddingQueryText(model, question string) string {
+	family, _, _ := strings.Cut(model, ":")
+	if family != "qwen3-embedding" {
+		return question
+	}
+	return "Instruct: Given a request to find files, retrieve file contents that satisfy the request.\nQuery: " + question
+}

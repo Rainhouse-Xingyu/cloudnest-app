@@ -80,7 +80,7 @@ func (s *AIService) hybridSearch(parent context.Context, uid int64, question str
 		var vectors [][]float32
 		digest, providerErr = provider.Digest(op)
 		if providerErr == nil {
-			vectors, providerErr = provider.Embed(op, []string{question})
+			vectors, providerErr = provider.Embed(op, []string{aiindex.EmbeddingQueryText(model, hybridContentQuestion(question, filter))})
 		}
 		if providerErr == nil {
 			confirmed, e := provider.Digest(op)
@@ -395,4 +395,23 @@ func hybridIntent(question string, now time.Time) (contract.AIHybridFilter, stri
 		f.UploadedBefore = &b
 	}
 	return f, ""
+}
+
+// Calendar constraints are already enforced by SQL. Embedding those words
+// again can favor incidental dates over the actual subject of the file.
+func hybridContentQuestion(question string, filter contract.AIHybridFilter) string {
+	if filter.CapturedAfter == nil && filter.UploadedAfter == nil {
+		return question
+	}
+	for _, phrase := range []string{"上个月", "上月", "本月", "上一年", "去年", "今年"} {
+		question = strings.ReplaceAll(question, phrase, " ")
+	}
+	if filter.CapturedAfter != nil {
+		for _, phrase := range []string{"拍摄的", "拍下的", "拍的"} {
+			question = strings.ReplaceAll(question, phrase, " ")
+		}
+	} else {
+		question = strings.ReplaceAll(question, "上传的", " ")
+	}
+	return strings.TrimSpace(question)
 }

@@ -43,10 +43,10 @@
 | FILE-011 P1 | Share 模型及 CreateShare 只有 code/expiry，无提取码/访问次数约束 | 查看真实字段/API | G06 提取码哈希/访问计数、限速、撤销/到期测试 | 缺功能 |
 | FILE-012 P1 | 文件版本只创建/列出，没有专用恢复/上传完整协议；客户端可传 size | 版本覆盖/恢复与配额一致性测试 | G01 先保护 storage_id；G02 版本引用/恢复协议 | 上传/复制初始引用、旧当前快照、历史下载、追加式恢复和事务审计已实现；配额已接入；AI 增量更新已在 G04 接入；版本专用上传票据仍待后续 |
 | AI-001 P1 | `triggerAsyncAutoAnalyze` 内存 goroutine，AiTask 仅写状态记录 | 上传后杀进程重启；任务无恢复 worker | G04 事务 outbox、持久任务、租约/超时/重试/诊断 | 进行中：原子入队、租约/重领/退避/结果隔离已实现；服务 worker/独立 blob 读取与文本处理已接入；状态/游标历史回填/代次 CAS 批量重建 API 已实现，真实服务重建通过；版本/复制/回收恢复/扩展名增量入队及其事务回滚已接入 |
-| AI-002 P1 | `service/ai_service.go:NLSearch` 解析条件后调用 `storage/mysql/ai_repo.go:Search` 的 LIKE；无 embedding/vector | 执行语义同义查询/带无关干扰的评估集 | G04 独立 embedding、chunk、向量索引、混合检索/文件级 ACL/片段 | 已接入实际文本 embedding 与精确扫描/关键词融合、权限和代次复核、片段及降级；10k 向量扫描通过，DOCX/XLSX/PPTX 有界解析/实际模型链路已实现；PDF/扫描页真实 OCR 已接入；独立图片/视觉与完整检索评估待做 |
-| AI-003 P1 | `buildAutoAnalyzeResult` 忽略 OCR/模型错误并写“分析完成”；照片标签描述请求仅文本 | 关闭 Ollama 上传图片；查看任务状态和描述 | G04 区分提取/OCR/视觉失败、真实视觉输入、可诊断降级 | 原上传后吞错入口已移除，文本实际解析/embedding 失败持久记录并重试；PDF 扫描页已接真实视觉 OCR 与失败拒绝；独立图片/场景描述和旧手动 OCR API 统一仍待实现 |
-| AI-004 P1 | `os.ReadFile` 图片全量载入，PDF/OpenXML 提取有上限但无完整资源预算 | 大图/损坏 PDF/压缩炸弹，受限容器观察资源 | G04 文档解析隔离、页/像素/展开字节限额和取消 | Office 部分已补 ZIP/展开/XML/节点/输出/并发限制及对抗测试；PDF 已改原生子进程及有界输出/Linux AS 限额/macOS RSS watchdog；图像解析统一、完整沙箱与恶意样本峰值实测待做 |
-| AI-005 P2 | `handler/ai_handler.go` 与 `service/ai_service.go` 重复提取/模型 helper | 函数清单对比；调用图核对 | G04 统一 provider/parser 接口，保留单一实现与测试 | Office 已统一到新 parser，删除旧正则提取及 handler 未用副本；PDF 索引/摘要已共用新 parser/OCR，旧进程内 PDF 依赖已移除；旧图片 OCR/生成 provider 仍待整合 |
+| AI-002 P1 | `service/ai_service.go:NLSearch` 解析条件后调用 `storage/mysql/ai_repo.go:Search` 的 LIKE；无 embedding/vector | 执行语义同义查询/带无关干扰的评估集 | G04 独立 embedding、chunk、向量索引、混合检索/文件级 ACL/片段 | 已接入实际文本 embedding 与精确扫描/关键词融合、权限和代次复核、片段及降级；10k 向量扫描通过，DOCX/XLSX/PPTX 有界解析/实际模型链路已实现；PDF/扫描页真实 OCR 已接入；JPEG/PNG/GIF 真实视觉已接入；六类合成评估已执行且初始基线失败，候选阈值/配置类型整改中，更大独立语料与完整验收待做 |
+| AI-003 P1 | `buildAutoAnalyzeResult` 忽略 OCR/模型错误并写“分析完成”；照片标签描述请求仅文本 | 关闭 Ollama 上传图片；查看任务状态和描述 | G04 区分提取/OCR/视觉失败、真实视觉输入、可诊断降级 | 原上传后吞错入口已移除，文本实际解析/embedding 失败持久记录并重试；PDF 扫描页已接真实视觉 OCR 与失败拒绝；JPEG/PNG/GIF 场景描述及手动 OCR 统一已经接入；其余格式/复杂 OCR 与峰值资源验证待做 |
+| AI-004 P1 | `os.ReadFile` 图片全量载入，PDF/OpenXML 提取有上限但无完整资源预算 | 大图/损坏 PDF/压缩炸弹，受限容器观察资源 | G04 文档解析隔离、页/像素/展开字节限额和取消 | Office 部分已补 ZIP/展开/XML/节点/输出/并发限制及对抗测试；PDF 已改原生子进程及有界输出/Linux AS 限额/macOS RSS watchdog；图像解析已统一到共享预算；完整沙箱与恶意样本峰值实测待做 |
+| AI-005 P2 | `handler/ai_handler.go` 与 `service/ai_service.go` 重复提取/模型 helper | 函数清单对比；调用图核对 | G04 统一 provider/parser 接口，保留单一实现与测试 | Office 已统一到新 parser，删除旧正则提取及 handler 未用副本；PDF 索引/摘要已共用新 parser/OCR，旧进程内 PDF 依赖已移除；旧图片 OCR 已统一；其余旧生成/问答 helper 仍待评审 |
 | FRP-001 P1 | `PullNextCommand` LPop 后更新状态，没有租约回收任务 | 领取后 Agent 崩溃；队列命令丢失/卡 running | G05 持久命令/ACK/幂等/超时重发/终态约束 | 已确认，待做 |
 | FRP-002 P1 | 仓库没有设备 Agent/frpc 进程管理实现 | 检查 Go cmd 与 Swift 调用，不存在可启动 Agent | G05 官方 frpc、白名单 start/stop/reload/diagnose、自动恢复 | 缺功能；未测隧道 |
 | FRP-003 P1 | YAML 使用用户 serverAddr/token/domain 原文拼接 | 输入换行/冒号/特殊字符串，运行 frpc verify | G05 typed config 序列化+官方验证，拒绝注入 | 已确认，待修 |
@@ -98,3 +98,5 @@ FILE-027 P2（代码完成待审）：本轮完整回归发现首次并发创建
 G04 图片子项（代码完成待审）：JPEG/PNG/GIF 首帧的真实视觉描述/标签/OCR、共享有界解码、八方向 EXIF、相机日历筛选与索引来源字段已接入。旧手动 OCR 统一、GPS/相机字段有界解析、HEIC/HEIF/WebP、效果评估和峰值资源验证仍待完成，见 AI-IMAGE-INDEXING；不以两张合成图片冒烟测试认定完整 AI 能力完成。
 
 G04 手动 OCR 子项（代码完成待审）：已移除整文件读取、重复 goexif 与字节截断摘要；共用图片处理及视觉名额，保留有界 GPS/相机字段。新增 ai_metadata.source_hash 显式迁移、发布前源/权限复核与审计回滚，旧关键词结果不再跨源沿用。历史行保留，来源未知须重新 OCR；未改生产库。验证和剩余格式/效果范围见 AI-MANUAL-OCR。
+
+AI-006 P1：固定六类开发集真实基线 Recall@5=72.08%，配置查询前五无正确项，六条无答案查询均产生无关结果。根因包含弱双字词全额 RRF 投票、0.25 初始语义门槛偏宽、缺少配置类型约束。现加入配置阈值和类型/日历整改，仍需重测；保留原始失败报告，不改标签/门槛掩盖结果。详见 AI-RETRIEVAL-EVALUATION。

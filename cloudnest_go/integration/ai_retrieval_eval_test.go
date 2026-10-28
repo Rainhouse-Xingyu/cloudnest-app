@@ -60,6 +60,8 @@ type evalDocumentResult struct {
 	LatencyMS      int64     `json:"latency_ms"`
 }
 type evalReport struct {
+	EvaluationSplit   string                            `json:"evaluation_split"`
+	QueryPolicy       string                            `json:"query_policy"`
 	MinCosine         float64                           `json:"min_cosine"`
 	MinLexical        float64                           `json:"min_lexical_coverage"`
 	Version           int                               `json:"version"`
@@ -92,6 +94,13 @@ func TestAIRetrievalEvaluation(t *testing.T) {
 	if os.Getenv("CLOUDNEST_TEST_AI_MODEL") != "1" || os.Getenv("CLOUDNEST_TEST_AI_EVAL") != "1" {
 		t.Fatal("run scripts/test-ai-retrieval-eval.sh")
 	}
+	split := os.Getenv("CLOUDNEST_AI_EVAL_SPLIT")
+	if split == "" {
+		split = "all"
+	}
+	if split != "all" && split != "dev" {
+		t.Fatal("CLOUDNEST_AI_EVAL_SPLIT must be all or dev")
+	}
 	raw, err := os.ReadFile("testdata/retrieval/dataset-v1.json")
 	if err != nil {
 		t.Fatal(err)
@@ -114,7 +123,7 @@ func TestAIRetrievalEvaluation(t *testing.T) {
 		t.Fatal(err)
 	}
 	anchor := time.Now().In(loc)
-	report := evalReport{Version: 1, Started: anchor, ManifestSHA256: fmt.Sprintf("%x", sha256.Sum256(raw)), GoVersion: runtime.Version(), Platform: runtime.GOOS + "/" + runtime.GOARCH, Gates: dataset.Gates, Summaries: map[string]*retrievaleval.Summary{}, Boundaries: map[string]bool{}, Limitations: []string{
+	report := evalReport{EvaluationSplit: split, Version: 1, Started: anchor, ManifestSHA256: fmt.Sprintf("%x", sha256.Sum256(raw)), GoVersion: runtime.Version(), Platform: runtime.GOOS + "/" + runtime.GOARCH, Gates: dataset.Gates, Summaries: map[string]*retrievaleval.Summary{}, Boundaries: map[string]bool{}, Limitations: []string{
 		"Synthetic development corpus, not production generalization or an SLA.",
 		"Three beach files share pixels and differ only in synthetic EXIF; scanned invoice and invoice image reuse pixels.",
 		"Labels and splits fixed before execution; heldout queries visible to implementer, not a blind external test.",
@@ -191,6 +200,7 @@ func TestAIRetrievalEvaluation(t *testing.T) {
 	f.cfg.AIEmbeddingModel = report.EmbeddingModel
 	f.cfg.AIOCRModel = report.VisionModel
 	report.MinCosine, report.MinLexical = f.cfg.SearchThresholds()
+	report.QueryPolicy = "qwen3-task-instruction-calendar-separated-v1"
 	f.cfg.AIPDFBinDir = os.Getenv("CLOUDNEST_TEST_POPPLER_BIN")
 	if f.cfg.AIPDFBinDir == "" {
 		t.Fatal("CLOUDNEST_TEST_POPPLER_BIN required")
@@ -294,6 +304,9 @@ func TestAIRetrievalEvaluation(t *testing.T) {
 	}
 	report.Boundaries["relative_calendar_filters"] = true
 	for _, q := range dataset.Queries {
+		if split == "dev" && q.Split != "dev" {
+			continue
+		}
 		started := time.Now()
 		r := search(q.Question)
 		for _, h := range r.Items {
@@ -382,7 +395,11 @@ func TestAIRetrievalEvaluation(t *testing.T) {
 		t.Fatal("calendar boundary crossed; rerun with a fresh anchor")
 	}
 	report.Completed = true
-	for _, split := range []string{"dev", "heldout"} {
+	splits := []string{"dev", "heldout"}
+	if split == "dev" {
+		splits = []string{"dev"}
+	}
+	for _, split := range splits {
 		s := *report.Summaries[split]
 		if !dataset.Gates.Pass(s) {
 			t.Errorf("quality gate FAILED %s: %+v", split, s)

@@ -80,3 +80,5 @@ G04 已提交独立 [草稿 PR #5](https://github.com/Rainhouse-Xingyu/cloudnest
 - [图片视觉索引与 EXIF 日历](AI-IMAGE-INDEXING.md)：真实像素、共享解码预算、结构化输出、来源字段和拍摄时间语义。
 
 - [手动 OCR 统一与源身份](AI-MANUAL-OCR.md)：有界 EXIF/GPS、实际像素、撤权/换版隔离和原子成功记录。
+
+- [六类检索效果评估](AI-RETRIEVAL-EVALUATION.md)：固定标签/开发集与保留集、真实模型排序和失败报告、候选门槛校准；更大独立语料与误匹配仍待完善。

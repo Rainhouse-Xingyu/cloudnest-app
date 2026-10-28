@@ -217,3 +217,15 @@ HTTP 协议夹具只用于错误/并发边界测试，不替代模型识别验�
 最后将手动服务的三分钟上下文提前到授权/Pin 之前，并保留源验证被取消时的原始上下文错误；service race 单元通过（1.752s），handler 使用已通过缓存。这项期限覆盖修正晚于完整模型/普通回归编译，前述运行不声称覆盖新增期限位置。
 
 本批普通完整 **250 项 race 集成 PASS（347.529s，exit 0）**，无 FAIL/DATA RACE，原六分钟期限不变；真实模型套件结束后独立执行。日志 `/tmp/cloudnest-manual-full.log`。最终提交的 Linux CI 状态另按 SHA 核验。
+
+## 2026-10-28：六类真实检索评估（进行中）
+
+`make ai-eval` / `scripts/test-ai-retrieval-eval.sh` 与原 `make ai-model` 分开。前者要求绝对新报告路径 CLOUDNEST_AI_EVAL_REPORT 和原生 Poppler 目录 CLOUDNEST_TEST_POPPLER_BIN，使用 `integration,aimodel,aieval`、race、15 分钟总限额、全新 MySQL/Redis；未改变普通六分钟期限或生产请求预算。CI 编译完整标签并执行无需模型/数据库的分页响应契约测试，不执行真实质量评估。
+
+- 指标/清单 race 单元通过（1.732s）；首次标签编译通过（0.719s）。
+- 首次实际执行 30 文件索引成功，但评估器误读 total，第一查询断言失败，包 259.916s。日志 `/tmp/cloudnest-eval-baseline.log`，报告 AI-RETRIEVAL-BASELINE-20261028.json（completed=false）。改为 pagination.total；一次字段替换不完整导致编译失败，修复后契约测试通过（0.912s/0.720s）。
+- 第二次实际执行包 219.828s，24 查询全部执行，质量失败。完整原始报告 AI-RETRIEVAL-BASELINE-V2-20261028.json；日志 `/tmp/cloudnest-eval-baseline-v2.log`。不将非零退出隐藏为成功，也未修改标签或质量门槛。
+- 初始评估器 `make check`、完整 race 单元通过（`/tmp/cloudnest-eval-check.log`、`/tmp/cloudnest-eval-unit.log`）。候选门槛/配置类型修改后 config/service race 单元通过（1.640s/1.806s）；最终 `make check test` 通过（`/tmp/cloudnest-eval-final-unit.log`）。
+- 上一手动 OCR 提交 210e0a29dda66af957c83182c92a874ccdf3093b 的 PR 40650376141 / push 40650369377 两次 Backend verification 均 SUCCESS。它们不验证本轮新代码，后续 CI 按精确 SHA 核验。
+
+校准后真实效果、专项协议和完整集成回归仍在执行，结果另补；G04 和总体目标保持进行中。

@@ -8,15 +8,17 @@
 
 ## 排序与接口字段
 
-- 关键词：英文词/标识符、中文相邻双字，去除部分检索套话，最多 32 个去重词；单个有效汉字可检索。按命中比例计算，文件名权重为正文三倍。该算法不是 BM25，词法优化仍须评估。
-- 语义：仅比较同 embedding 模型名、digest、维度的归一化向量；坏尺寸、非有限值或坏范数不参与。当前 cosine 候选门槛 0.25 是待完整评估校准的初始值，不是准确率保证或相关概率。
+- 关键词：英文词/标识符、中文相邻双字，去除部分检索套话，最多 32 个去重词；单个有效汉字可检索。按命中比例计算，文件名/正文各自至少覆盖 25% 查询词才参与词法投票（AI_SEARCH_MIN_LEXICAL 可配置），文件名权重为正文三倍。该算法不是 BM25，词法优化仍须评估。
+- 语义：仅比较同 embedding 模型名、digest、维度的归一化向量；坏尺寸、非有限值或坏范数不参与。当前 cosine 候选门槛默认 0.40（AI_SEARCH_MIN_COSINE 可配置），由合成开发集负例最高约 0.35、正例最低约 0.445 暂定；不是准确率保证或相关概率，切换模型/语料须重测。最初 0.25 基线的六条负查询均产生无关结果。
 - 每文件只保留各通道最高块分数。两个通道各留前 200 个文件，使用 `1/(60+rank)` 相加（rank 从 1 开始），最终按分数和 file_id 稳定排序。扫描不按文件 ID 截掉输入前缀，靠后的高相关向量仍能胜出。
 - 返回最多 200 个候选组成分页窗口，每页最多 100 个。`pagination.total` 是当前可返回窗口内的文件数量，**不是所有命中文件的库级总数**。超过窗口时 `retrieval.window_limited=true`，`retrieval.window_size=200`。
 - 每项包含 `score`（融合分数）、`match_sources`（keyword/semantic）、可选 `semantic_score`、`snippet`、`snippet_start_rune`、`chunk_ordinal`、`index_generation`、`has_text_index`。片段最多 240 个 Unicode 字符，位置对应提取文本流的 rune 偏移（snippet_offset_basis=extracted_text_runes），未伪造模型摘要。
 - 为现有客户端保留原文件字段和 `ocr_snippet` 别名；tags/description/has_ocr_index 现在读取当前索引来源，纯文本不会被标成 OCR。新增 extraction_kind、vision_model、vision_digest；有拍摄时间时返回相机本地时间、偏移和时间基础。`nl_plan.query` 现明确使用 snake_case，修复原 Go 字段名与既有客户端 DTO 不一致的问题。
 - `retrieval.mode` 为 hybrid 或 keyword_fallback；模型端点/响应/身份不可用时提供 `embedding_unavailable` 警告并继续匹配现有正文与文件名。没有成功索引的文件仍能匹配文件名。模型故障不使旧关键词接口依赖模型。
 
-上个月/本月/去年/今年按产品 Asia/Shanghai 日历确定范围。明确“上传”或普通文档查询使用转换到 UTC 的 create_time；照片/图片或明确“拍摄/拍的”且没有“上传”时使用 EXIF 相机本地日历（含起点、不含终点），返回 `capture_time_uses_exif_camera_local_calendar`。无拍摄日期的图片被排除，不拿上传时间替代。偏移单独保存，不改变相机日历分类，细节见 [图片索引](AI-IMAGE-INDEXING.md)。
+明确“配置文件/设置文件”采用 json/xml/yaml/yml/toml/ini/conf/config/env/properties/txt 扩展名集合，防止 IP 说明和发票挤掉实际配置；不声称判断了配置内容可部署性。
+
+上个月（上月）/本月/去年（上一年）/今年按产品 Asia/Shanghai 日历确定范围。明确“上传”或普通文档查询使用转换到 UTC 的 create_time；照片/图片或明确“拍摄/拍的”且没有“上传”时使用 EXIF 相机本地日历（含起点、不含终点），返回 `capture_time_uses_exif_camera_local_calendar`。无拍摄日期的图片被排除，不拿上传时间替代。偏移单独保存，不改变相机日历分类，细节见 [图片索引](AI-IMAGE-INDEXING.md)。
 
 JSON 请求体上限 16 KiB、question 上限 4096 字节；非法请求返回 400。单进程最多同时两次混合检索，模型阶段最多六秒，扫描阶段十秒，总期限二十秒；忙或数据库/扫描失败返回 503，不把未扫描完的前缀冒充完整结果。该准入不是跨实例集群配额。
 
@@ -37,4 +39,4 @@ Qdrant 具备带过滤的 HNSW，也会根据匹配集合大小选择精确扫�
 - 规模测试使用两份真实上传内容及其两个真实 embedding，构造 9,999 个干扰逻辑副本和最后一个相关副本，共 10,000 × 1024 维、40,960,000 字节向量。真实 MySQL/Ollama + 进程内 Gin handler（race）单次查询 1.510170792s，相关文件仍第一名。它是单用户、本机、重复内容的扫描实验，不是 10,000 次上传、10,000 篇独立文档评估，也不是生产网络延迟/并发性能。
 - 最终真实模型三项测试通过（包 21.717s），包含独立生产服务自动索引/SIGTERM 测试；普通完整 250 项 race 回归通过（355.678s），新检索专项单独执行并纳入 CI，仍保留原六分钟普通套件期限。完整命令、失败记录与先后范围见 [TESTING](TESTING.md)。
 
-尚未完成：六类用户查询的完整标注语料、Recall@K/MRR/负查询与失败案例；阈值/词法/rerank 校准；旧二进制 Office、其余图片格式及复杂 OCR/图片评估（DOCX/XLSX/PPTX、PDF 与 JPEG/PNG/GIF 视觉/EXIF 日历已接入）；更大规模与并发。状态/历史重建 API 与修改/复制/恢复增量入队已另行实现（见 AI-INDEX-CONTROL、AI-INDEX-INCREMENTAL）。G04 继续进行，不能以这几项成功示例代替完整验收。
+已增加六类查询的 30 文件/24 查询合成评估，初始真实基线失败及校准依据见 [效果报告](AI-RETRIEVAL-EVALUATION.md)。尚未完成：更大独立语料的泛化/语义否定与 rerank 验证；旧二进制 Office、其余图片格式及复杂 OCR/图片评估（DOCX/XLSX/PPTX、PDF 与 JPEG/PNG/GIF 视觉/EXIF 日历已接入）；更大规模与并发。状态/历史重建 API 与修改/复制/恢复增量入队已另行实现（见 AI-INDEX-CONTROL、AI-INDEX-INCREMENTAL）。G04 继续进行，不能以这几项成功示例代替完整验收。

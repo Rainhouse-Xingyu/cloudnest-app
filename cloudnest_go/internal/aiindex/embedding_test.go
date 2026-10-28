@@ -103,3 +103,17 @@ func TestEmbeddingDigestAndConfiguration(t *testing.T) {
 		}
 	}
 }
+
+func TestEmbeddingQueryInstructionsAreModelSpecific(t *testing.T) {
+	for _, name := range []string{"qwen3-embedding", "qwen3-embedding:0.6b", "qwen3-embedding:4b"} {
+		q := EmbeddingQueryText(name, "海边照片")
+		if !strings.HasPrefix(q, "Instruct: ") || !strings.HasSuffix(q, "\nQuery: 海边照片") {
+			t.Fatal(q)
+		}
+	}
+	for _, name := range []string{"other-model", "custom-qwen3-embedding:0.6b"} {
+		if q := EmbeddingQueryText(name, "literal query"); q != "literal query" {
+			t.Fatal("unknown model input changed", q)
+		}
+	}
+}

@@ -151,3 +151,22 @@ func TestHybridConfigurationDatesStayUploadDates(t *testing.T) {
 		t.Fatal("previous-year calendar lost", f)
 	}
 }
+
+func TestHybridContentQuestionKeepsUnfilteredMeaning(t *testing.T) {
+	now := time.Date(2026, 10, 28, 10, 0, 0, 0, time.UTC)
+	for _, tc := range []struct{ input, keep string }{
+		{"去年拍摄的海边照片", "海边照片"},
+		{"上一年在海岸拍下的照片", "海岸"},
+		{"上个月上传的合同", "合同"},
+	} {
+		filter, _ := hybridIntent(tc.input, now)
+		q := hybridContentQuestion(tc.input, filter)
+		if !strings.Contains(q, tc.keep) || strings.Contains(q, "去年") || strings.Contains(q, "上一年") || strings.Contains(q, "上个月") {
+			t.Fatal(q)
+		}
+	}
+	original := "网络时钟中的年份字符串"
+	if q := hybridContentQuestion(original, contract.AIHybridFilter{}); q != original {
+		t.Fatal("unfiltered subject changed", q)
+	}
+}
