@@ -2,7 +2,7 @@
 
 ## 当前链路
 
-`POST /api/ai/search/nl` 已从“LLM 解析条件后 LIKE”改为：确定性元数据约束 → 独立 embedding 查询向量 → 按当前文件权限流式扫描 → 每文件聚合关键词/精确 cosine → RRF 融合 → 再次核对权限与源代次 → 返回片段。当前已有文本索引可以实际参与语义搜索。原 `GET /api/ai/search` 关键词接口保留。
+`POST /api/ai/search/nl` 已从“LLM 解析条件后 LIKE”改为：确定性元数据约束 → 独立 embedding 查询向量（Qwen3 查询采用任务指令，已过滤年月从内容输入中分离，索引正文不加指令） → 按当前文件权限流式扫描 → 每文件聚合关键词/精确 cosine → RRF 融合 → 再次核对权限与源代次 → 返回片段。当前已有文本索引可以实际参与语义搜索。原 `GET /api/ai/search` 关键词接口保留。
 
 支持文件所有者及显式 read/write 文件授权，默认不把管理员或共享存储对象当作文件读取权限。扫描 SQL 使用 EXISTS 避免多条授权重复结果；内容必须来自当前 storage hash、done 任务、匹配 generation/pipeline 的 document/chunk。返回前再次核对文件未回收、当前授权、文件名、源 hash 和代次。并发撤权、重建、版本内容变更等使旧候选失效。目录继承权限仍按 G06 待办推进，此处不声称已经支持继承授权。
 

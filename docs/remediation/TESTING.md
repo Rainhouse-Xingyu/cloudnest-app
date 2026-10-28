@@ -218,7 +218,7 @@ HTTP 协议夹具只用于错误/并发边界测试，不替代模型识别验�
 
 本批普通完整 **250 项 race 集成 PASS（347.529s，exit 0）**，无 FAIL/DATA RACE，原六分钟期限不变；真实模型套件结束后独立执行。日志 `/tmp/cloudnest-manual-full.log`。最终提交的 Linux CI 状态另按 SHA 核验。
 
-## 2026-10-28：六类真实检索评估（进行中）
+## 2026-10-28：六类真实检索评估
 
 `make ai-eval` / `scripts/test-ai-retrieval-eval.sh` 与原 `make ai-model` 分开。前者要求绝对新报告路径 CLOUDNEST_AI_EVAL_REPORT 和原生 Poppler 目录 CLOUDNEST_TEST_POPPLER_BIN，使用 `integration,aimodel,aieval`、race、15 分钟总限额、全新 MySQL/Redis；未改变普通六分钟期限或生产请求预算。CI 编译完整标签并执行无需模型/数据库的分页响应契约测试，不执行真实质量评估。
 
@@ -228,4 +228,13 @@ HTTP 协议夹具只用于错误/并发边界测试，不替代模型识别验�
 - 初始评估器 `make check`、完整 race 单元通过（`/tmp/cloudnest-eval-check.log`、`/tmp/cloudnest-eval-unit.log`）。候选门槛/配置类型修改后 config/service race 单元通过（1.640s/1.806s）；最终 `make check test` 通过（`/tmp/cloudnest-eval-final-unit.log`）。
 - 上一手动 OCR 提交 210e0a29dda66af957c83182c92a874ccdf3093b 的 PR 40650376141 / push 40650369377 两次 Backend verification 均 SUCCESS。它们不验证本轮新代码，后续 CI 按精确 SHA 核验。
 
-校准后真实效果、专项协议和完整集成回归仍在执行，结果另补；G04 和总体目标保持进行中。
+后续真实运行和回归证据如下；G04 和总体目标保持进行中。
+
+- 候选阈值校准 `0a55bdc` 的全量评估 **FAIL（262.479s）**：dev 通过、heldout 因海岸图片漏召回和发票排序失败，完整报告 AI-RETRIEVAL-CALIBRATED-20261028.json，日志 `/tmp/cloudnest-eval-calibrated.log`。没有据 dev 通过提前认定质量完成。
+- 查询指令/日历分离后 aiindex/service race 单元通过（2.793s/2.406s），组合标签/分页契约通过（0.933s），`make check test` 通过（`/tmp/cloudnest-eval-query-check.log`）。
+- 同一清单先执行 dev-only 实际评估 **PASS（263.238s）**，再执行 all **PASS（252.296s）**。报告 AI-RETRIEVAL-QUERY-DEV-20261028.json、AI-RETRIEVAL-QUERY-ALL-20261028.json，日志 `/tmp/cloudnest-eval-query-dev.log`、`/tmp/cloudnest-eval-query-all.log`。全量两组 R@5=0.958333、MRR=1/0.916667，负例6/6空结果、六项边界通过；发票族 R@5=0.75 及误匹配仍未解决。已暴露保留集不等于盲测。未再次重复上一检查点的八项模型冒烟作为本轮证据。
+- 最终本地 `scripts/test-ai-search.sh` **27 项 PASS（45.716s）**，无 FAIL/DATA RACE，日志 `/tmp/cloudnest-eval-protocol.log`，没有降低三分钟专项期限。
+- `e72e7898c632abf28f334630559719c15eabac53` 的 PR CI **40698520271** / push CI **40698511791** 均 SUCCESS。已核对 steps：依赖校验、构建/vet/race 单元、普通隔离集成、真实网络套件、AI 专项、performance/aimodel/aieval 编译/分页契约、漏洞扫描均通过。普通完整集成本轮以该 Linux CI 为证据，不冒称又执行了一遍本地 250 项。
+- 一次 push 返回本地代理 1082 连接失败和非零退出；直接 `ls-remote` 核实远端已是 e72e789，随后 CI 也确认同 SHA。没有据错误文本重建分支或改系统代理。此前 afebb0674503a657d91fc0257be61d0513f2152f 的 PR/push CI 40695344082 / 40695333973 也均通过。
+
+后续只补报告/说明的提交以新 SHA 单独核验 CI；上面的全量评估证明的是 e72e789 代码，标签/门槛保持固定。HEIC/HEIF/WebP、旧二进制 Office、复杂语义/rerank、独立语料与资源压力仍未完成。
