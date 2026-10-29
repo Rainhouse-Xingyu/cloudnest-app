@@ -1,0 +1,1854 @@
+{
+  "completed": true,
+  "model": "Qwen/Qwen3-Reranker-0.6B",
+  "revision": "e61197ed45024b0ed8a2d74b80b4d909f1255473",
+  "dataset_name": "stress-v2",
+  "weights_sha256": "27cd75a405b9c1b46b59abfd88aaa209e6fed2a1972cde9b70e7659537c5e65b",
+  "manifest_sha256": "a60973d6b4b4d6ee7cab5fa1df732526e53af61f8a6669c18f4c9a70e2da9776",
+  "script_sha256": "3bf704b619a85293dfc121e1f1db3afa8953563b1449f1d2c42c4ad9bc66b312",
+  "platform": "Darwin/arm64",
+  "device": "mps",
+  "document_count": 34,
+  "query_count": 13,
+  "model_file_sha256": {
+    "config.json": "d479c427a9ca5295218063d4f9aca4f297ab4ac27487cca7af42c84643d51ef0",
+    "generation_config.json": "81051cd3f6e77013827148d0b8a6ead93f8ac390d5ab805f849199f0af6a08db",
+    "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+    "tokenizer_config.json": "253153d0738ceb4c668d2eff957714dd2bea0b56de772a9fdccd96cbf517e6a0",
+    "vocab.json": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+    "merges.txt": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"
+  },
+  "limitations": [
+    "Reduced text-only development subset; not the full API/visual/ACL benchmark.",
+    "No heldout queries used; no corpus labels changed.",
+    "Binary model score is not a calibrated probability of real-world relevance.",
+    "A single local run is not a latency or resource SLA.",
+    "Known previous-month/config-extension fixture filters are applied before scoring; this is not SQL execution."
+  ],
+  "queries": [
+    {
+      "id": "migration-stress-1",
+      "query": "PostgreSQL 主库换到新主机，失败时切回旧库的实施方案",
+      "fixture_filters": [],
+      "candidate_count": 34,
+      "relevant_text_ids": [
+        "postgres-cutover"
+      ],
+      "results": [
+        {
+          "document": "postgres-cutover",
+          "score": 0.9997387528419495,
+          "relevant": true
+        },
+        {
+          "document": "postgres-backup",
+          "score": 0.5698526501655579,
+          "relevant": false
+        },
+        {
+          "document": "shared-migration",
+          "score": 0.11201594769954681,
+          "relevant": false
+        },
+        {
+          "document": "migration-runbook",
+          "score": 0.0627891942858696,
+          "relevant": false
+        },
+        {
+          "document": "config-postgres",
+          "score": 0.014842416159808636,
+          "relevant": false
+        },
+        {
+          "document": "migration-plan",
+          "score": 0.014842416159808636,
+          "relevant": false
+        },
+        {
+          "document": "config-hostname",
+          "score": 0.012722707353532314,
+          "relevant": false
+        },
+        {
+          "document": "config-production",
+          "score": 0.012431648559868336,
+          "relevant": false
+        },
+        {
+          "document": "config-ip-notes",
+          "score": 0.006850479636341333,
+          "relevant": false
+        },
+        {
+          "document": "redis-migration",
+          "score": 0.0033244367223232985,
+          "relevant": false
+        },
+        {
+          "document": "config-staging",
+          "score": 0.0025114631280303,
+          "relevant": false
+        },
+        {
+          "document": "contract-signed-maintenance",
+          "score": 0.00041731575038284063,
+          "relevant": false
+        },
+        {
+          "document": "ip-explanation",
+          "score": 0.0001349924859823659,
+          "relevant": false
+        },
+        {
+          "document": "permissions-settings",
+          "score": 0.00012830941705033183,
+          "relevant": false
+        },
+        {
+          "document": "meeting-notes",
+          "score": 9.915271220961586e-05,
+          "relevant": false
+        },
+        {
+          "document": "invoice-receipt",
+          "score": 8.34962775115855e-05,
+          "relevant": false
+        },
+        {
+          "document": "contract-negotiation",
+          "score": 7.226080924738199e-05,
+          "relevant": false
+        },
+        {
+          "document": "invoice-refund",
+          "score": 4.851476478506811e-05,
+          "relevant": false
+        },
+        {
+          "document": "travel-notes",
+          "score": 4.006368908449076e-05,
+          "relevant": false
+        },
+        {
+          "document": "exercise",
+          "score": 3.4944347135024145e-05,
+          "relevant": false
+        },
+        {
+          "document": "laptop-review",
+          "score": 3.4944347135024145e-05,
+          "relevant": false
+        },
+        {
+          "document": "contract-older",
+          "score": 2.9541421099565923e-05,
+          "relevant": false
+        },
+        {
+          "document": "invoice-quote",
+          "score": 2.6274772608303465e-05,
+          "relevant": false
+        },
+        {
+          "document": "contract-draft",
+          "score": 2.4682902221684344e-05,
+          "relevant": false
+        },
+        {
+          "document": "invoice-camera",
+          "score": 2.3187474653241225e-05,
+          "relevant": false
+        },
+        {
+          "document": "invoice-paid-ultrabook",
+          "score": 2.1953486793790944e-05,
+          "relevant": false
+        },
+        {
+          "document": "contract-service",
+          "score": 1.7097478121286258e-05,
+          "relevant": false
+        },
+        {
+          "document": "recipe",
+          "score": 1.5750954844406806e-05,
+          "relevant": false
+        },
+        {
+          "document": "contract-current",
+          "score": 1.550676279293839e-05,
+          "relevant": false
+        },
+        {
+          "document": "django-object-permissions",
+          "score": 1.479666661907686e-05,
+          "relevant": false
+        },
+        {
+          "document": "spring-metrics",
+          "score": 1.1212865501875058e-05,
+          "relevant": false
+        },
+        {
+          "document": "contract-purchase",
+          "score": 1.053351934388047e-05,
+          "relevant": false
+        },
+        {
+          "document": "spring-method-authorization",
+          "score": 1.0169637789658736e-05,
+          "relevant": false
+        },
+        {
+          "document": "permissions-guide",
+          "score": 4.917741534882225e-06,
+          "relevant": false
+        }
+      ],
+      "batch_seconds": [
+        0.8348862499697134,
+        0.6938543749856763,
+        0.7582137080025859,
+        0.6442509169573896,
+        0.8221205839654431,
+        0.7359271250315942,
+        0.6694128749659285,
+        0.7276332919718698,
+        0.4301657500327565
+      ]
+    },
+    {
+      "id": "migration-stress-2",
+      "query": "查找 Redis 缓存集群迁到新节点的计划",
+      "fixture_filters": [],
+      "candidate_count": 34,
+      "relevant_text_ids": [
+        "redis-migration"
+      ],
+      "results": [
+        {
+          "document": "redis-migration",
+          "score": 0.9999110698699951,
+          "relevant": true
+        },
+        {
+          "document": "migration-plan",
+          "score": 0.4263215959072113,
+          "relevant": false
+        },
+        {
+          "document": "migration-runbook",
+          "score": 0.39606815576553345,
+          "relevant": false
+        },
+        {
+          "document": "shared-migration",
+          "score": 0.06512754410505295,
+          "relevant": false
+        },
+        {
+          "document": "config-production",
+          "score": 0.023509448394179344,
+          "relevant": false
+        },
+        {
+          "document": "config-staging",
+          "score": 0.013020488433539867,
+          "relevant": false
+        },
+        {
+          "document": "exercise",
+          "score": 0.012722707353532314,
+          "relevant": false
+        },
+        {
+          "document": "config-hostname",
+          "score": 0.01016965601593256,
+          "relevant": false
+        },
+        {
+          "document": "postgres-cutover",
+          "score": 0.004468383267521858,
+          "relevant": false
+        },
+        {
+          "document": "contract-signed-maintenance",
+          "score": 0.0020190139766782522,
+          "relevant": false
+        },
+        {
+          "document": "postgres-backup",
+          "score": 0.0019267344614490867,
+          "relevant": false
+        },
+        {
+          "document": "config-postgres",
+          "score": 0.0012545943027362227,
+          "relevant": false
+        },
+        {
+          "document": "permissions-settings",
+          "score": 0.000779366004280746,
+          "relevant": false
+        },
+        {
+          "document": "config-ip-notes",
+          "score": 0.0004728544154204428,
+          "relevant": false
+        },
+        {
+          "document": "meeting-notes",
+          "score": 0.00042720785131677985,
+          "relevant": false
+        },
+        {
+          "document": "invoice-receipt",
+          "score": 0.0004140694800298661,
+          "relevant": false
+        },
+        {
+          "document": "contract-negotiation",
+          "score": 0.00028910321998409927,
+          "relevant": false
+        },
+        {
+          "document": "ip-explanation",
+          "score": 0.0002591582015156746,
+          "relevant": false
+        },
+        {
+          "document": "contract-older",
+          "score": 0.00018522572645451874,
+          "relevant": false
+        },
+        {
+          "document": "invoice-refund",
+          "score": 0.00016734047676436603,
+          "relevant": false
+        },
+        {
+          "document": "contract-service",
+          "score": 0.00012780925317201763,
+          "relevant": false
+        },
+        {
+          "document": "contract-draft",
+          "score": 0.00010190105240326375,
+          "relevant": false
+        },
+        {
+          "document": "laptop-review",
+          "score": 7.484621892217547e-05,
+          "relevant": false
+        },
+        {
+          "document": "travel-notes",
+          "score": 7.114058826118708e-05,
+          "relevant": false
+        },
+        {
+          "document": "invoice-camera",
+          "score": 6.402005965355784e-05,
+          "relevant": false
+        },
+        {
+          "document": "invoice-quote",
+          "score": 6.085040149628185e-05,
+          "relevant": false
+        },
+        {
+          "document": "invoice-paid-ultrabook",
+          "score": 5.2252264140406623e-05,
+          "relevant": false
+        },
+        {
+          "document": "recipe",
+          "score": 4.757645365316421e-05,
+          "relevant": false
+        },
+        {
+          "document": "spring-metrics",
+          "score": 4.0853839891497046e-05,
+          "relevant": false
+        },
+        {
+          "document": "contract-current",
+          "score": 3.822910730377771e-05,
+          "relevant": false
+        },
+        {
+          "document": "contract-purchase",
+          "score": 3.647853372967802e-05,
+          "relevant": false
+        },
+        {
+          "document": "django-object-permissions",
+          "score": 3.156969614792615e-05,
+          "relevant": false
+        },
+        {
+          "document": "spring-method-authorization",
+          "score": 2.3552614948130213e-05,
+          "relevant": false
+        },
+        {
+          "document": "permissions-guide",
+          "score": 1.4971081327530555e-05,
+          "relevant": false
+        }
+      ],
+      "batch_seconds": [
+        0.7426240830100141,
+        0.6960110829677433,
+        0.7537723329733126,
+        0.6084663340006955,
+        0.7677804999984801,
+        0.7197629159782082,
+        0.7119930839980952,
+        0.6508632079930976,
+        0.3755733330035582
+      ]
+    },
+    {
+      "id": "permissions-stress-1",
+      "query": "Spring Boot 使用 @PreAuthorize 做方法级权限控制的资料",
+      "fixture_filters": [],
+      "candidate_count": 34,
+      "relevant_text_ids": [
+        "spring-method-authorization"
+      ],
+      "results": [
+        {
+          "document": "spring-method-authorization",
+          "score": 0.9997240900993347,
+          "relevant": true
+        },
+        {
+          "document": "permissions-guide",
+          "score": 0.9900636076927185,
+          "relevant": false
+        },
+        {
+          "document": "permissions-settings",
+          "score": 0.1710611879825592,
+          "relevant": false
+        },
+        {
+          "document": "spring-metrics",
+          "score": 0.06754668802022934,
+          "relevant": false
+        },
+        {
+          "document": "contract-signed-maintenance",
+          "score": 0.01233609952032566,
+          "relevant": false
+        },
+        {
+          "document": "django-object-permissions",
+          "score": 0.008847354911267757,
+          "relevant": false
+        },
+        {
+          "document": "config-production",
+          "score": 0.0035106486175209284,
+          "relevant": false
+        },
+        {
+          "document": "meeting-notes",
+          "score": 0.0022170129232108593,
+          "relevant": false
+        },
+        {
+          "document": "config-ip-notes",
+          "score": 0.0016103573143482208,
+          "relevant": false
+        },
+        {
+          "document": "contract-negotiation",
+          "score": 0.0012351677287369967,
+          "relevant": false
+        },
+        {
+          "document": "ip-explanation",
+          "score": 0.0010322309099137783,
+          "relevant": false
+        },
+        {
+          "document": "invoice-receipt",
+          "score": 0.0009039677097462118,
+          "relevant": false
+        },
+        {
+          "document": "contract-service",
+          "score": 0.0008830457809381187,
+          "relevant": false
+        },
+        {
+          "document": "config-hostname",
+          "score": 0.0007264874293468893,
+          "relevant": false
+        },
+        {
+          "document": "config-staging",
+          "score": 0.00046917630243115127,
+          "relevant": false
+        },
+        {
+          "document": "contract-older",
+          "score": 0.0003301527176517993,
+          "relevant": false
+        },
+        {
+          "document": "contract-current",
+          "score": 0.0003006163169629872,
+          "relevant": false
+        },
+        {
+          "document": "contract-draft",
+          "score": 0.0002673825656529516,
+          "relevant": false
+        },
+        {
+          "document": "invoice-paid-ultrabook",
+          "score": 0.0002511867496650666,
+          "relevant": false
+        },
+        {
+          "document": "invoice-refund",
+          "score": 0.00022167808492667973,
+          "relevant": false
+        },
+        {
+          "document": "invoice-quote",
+          "score": 0.00020825010142289102,
+          "relevant": false
+        },
+        {
+          "document": "exercise",
+          "score": 0.0001686527393758297,
+          "relevant": false
+        },
+        {
+          "document": "invoice-camera",
+          "score": 0.00014883845869917423,
+          "relevant": false
+        },
+        {
+          "document": "config-postgres",
+          "score": 0.00012436223914846778,
+          "relevant": false
+        },
+        {
+          "document": "laptop-review",
+          "score": 0.00011682839249260724,
+          "relevant": false
+        },
+        {
+          "document": "contract-purchase",
+          "score": 0.00010071399447042495,
+          "relevant": false
+        },
+        {
+          "document": "migration-runbook",
+          "score": 9.242111991625279e-05,
+          "relevant": false
+        },
+        {
+          "document": "shared-migration",
+          "score": 9.242111991625279e-05,
+          "relevant": false
+        },
+        {
+          "document": "travel-notes",
+          "score": 8.750299457460642e-05,
+          "relevant": false
+        },
+        {
+          "document": "recipe",
+          "score": 6.89519802108407e-05,
+          "relevant": false
+        },
+        {
+          "document": "postgres-backup",
+          "score": 5.944088115938939e-05,
+          "relevant": false
+        },
+        {
+          "document": "postgres-cutover",
+          "score": 1.5812600395292975e-05,
+          "relevant": false
+        },
+        {
+          "document": "migration-plan",
+          "score": 1.550676279293839e-05,
+          "relevant": false
+        },
+        {
+          "document": "redis-migration",
+          "score": 9.08047422853997e-06,
+          "relevant": false
+        }
+      ],
+      "batch_seconds": [
+        0.7387296659871936,
+        0.6673881669994444,
+        0.7722679159487598,
+        0.6321869579842314,
+        0.7877789170015603,
+        0.6614085420151241,
+        0.674383667006623,
+        0.6685105000506155,
+        0.400220958981663
+      ]
+    },
+    {
+      "id": "permissions-stress-2",
+      "query": "Django REST Framework 对象级权限和列表 queryset 过滤指南",
+      "fixture_filters": [],
+      "candidate_count": 34,
+      "relevant_text_ids": [
+        "django-object-permissions"
+      ],
+      "results": [
+        {
+          "document": "django-object-permissions",
+          "score": 0.9997817873954773,
+          "relevant": true
+        },
+        {
+          "document": "permissions-settings",
+          "score": 0.009559398517012596,
+          "relevant": false
+        },
+        {
+          "document": "spring-method-authorization",
+          "score": 0.0021157031878829002,
+          "relevant": false
+        },
+        {
+          "document": "contract-signed-maintenance",
+          "score": 0.0016484828665852547,
+          "relevant": false
+        },
+        {
+          "document": "config-production",
+          "score": 0.0012545943027362227,
+          "relevant": false
+        },
+        {
+          "document": "config-hostname",
+          "score": 0.0007613258203491569,
+          "relevant": false
+        },
+        {
+          "document": "permissions-guide",
+          "score": 0.000755405577365309,
+          "relevant": false
+        },
+        {
+          "document": "meeting-notes",
+          "score": 0.0006719277589581907,
+          "relevant": false
+        },
+        {
+          "document": "invoice-receipt",
+          "score": 0.00040133504080586135,
+          "relevant": false
+        },
+        {
+          "document": "contract-negotiation",
+          "score": 0.0003199982165824622,
+          "relevant": false
+        },
+        {
+          "document": "config-staging",
+          "score": 0.00031503866193816066,
+          "relevant": false
+        },
+        {
+          "document": "ip-explanation",
+          "score": 0.000257141946349293,
+          "relevant": false
+        },
+        {
+          "document": "config-postgres",
+          "score": 0.0002002737601287663,
+          "relevant": false
+        },
+        {
+          "document": "contract-older",
+          "score": 0.0001837845629779622,
+          "relevant": false
+        },
+        {
+          "document": "contract-service",
+          "score": 0.0001686527393758297,
+          "relevant": false
+        },
+        {
+          "document": "invoice-paid-ultrabook",
+          "score": 0.00016734047676436603,
+          "relevant": false
+        },
+        {
+          "document": "contract-current",
+          "score": 0.00012148174573667347,
+          "relevant": false
+        },
+        {
+          "document": "exercise",
+          "score": 9.098838927457109e-05,
+          "relevant": false
+        },
+        {
+          "document": "contract-purchase",
+          "score": 8.750299457460642e-05,
+          "relevant": false
+        },
+        {
+          "document": "migration-runbook",
+          "score": 8.481102850055322e-05,
+          "relevant": false
+        },
+        {
+          "document": "invoice-refund",
+          "score": 6.35218748357147e-05,
+          "relevant": false
+        },
+        {
+          "document": "config-ip-notes",
+          "score": 5.851939204148948e-05,
+          "relevant": false
+        },
+        {
+          "document": "contract-draft",
+          "score": 5.605828482657671e-05,
+          "relevant": false
+        },
+        {
+          "document": "laptop-review",
+          "score": 5.286815940053202e-05,
+          "relevant": false
+        },
+        {
+          "document": "invoice-quote",
+          "score": 4.794957931153476e-05,
+          "relevant": false
+        },
+        {
+          "document": "travel-notes",
+          "score": 4.683887891587801e-05,
+          "relevant": false
+        },
+        {
+          "document": "shared-migration",
+          "score": 4.539786095847376e-05,
+          "relevant": false
+        },
+        {
+          "document": "spring-metrics",
+          "score": 4.365877612144686e-05,
+          "relevant": false
+        },
+        {
+          "document": "invoice-camera",
+          "score": 3.748972085304558e-05,
+          "relevant": false
+        },
+        {
+          "document": "postgres-backup",
+          "score": 1.9833365513477474e-05,
+          "relevant": false
+        },
+        {
+          "document": "recipe",
+          "score": 1.1796966646215878e-05,
+          "relevant": false
+        },
+        {
+          "document": "migration-plan",
+          "score": 8.171548870450351e-06,
+          "relevant": false
+        },
+        {
+          "document": "postgres-cutover",
+          "score": 7.016860763542354e-06,
+          "relevant": false
+        },
+        {
+          "document": "redis-migration",
+          "score": 3.3275152873102343e-06,
+          "relevant": false
+        }
+      ],
+      "batch_seconds": [
+        0.7124078330234624,
+        0.6987745419610292,
+        0.7539822499966249,
+        0.6373927499516867,
+        0.7799168339697644,
+        0.6859201249899343,
+        0.706359000003431,
+        0.716464500001166,
+        0.39978116704151034
+      ]
+    },
+    {
+      "id": "contracts-stress-1",
+      "query": "已签署软件维护服务合同",
+      "fixture_filters": [
+        "previous_month_upload"
+      ],
+      "candidate_count": 8,
+      "relevant_text_ids": [
+        "contract-service",
+        "contract-signed-maintenance"
+      ],
+      "results": [
+        {
+          "document": "contract-signed-maintenance",
+          "score": 0.9978677034378052,
+          "relevant": true
+        },
+        {
+          "document": "contract-draft",
+          "score": 0.937210738658905,
+          "relevant": false
+        },
+        {
+          "document": "contract-negotiation",
+          "score": 0.7718434929847717,
+          "relevant": false
+        },
+        {
+          "document": "contract-service",
+          "score": 0.6926419734954834,
+          "relevant": true
+        },
+        {
+          "document": "meeting-notes",
+          "score": 0.029760092496871948,
+          "relevant": false
+        },
+        {
+          "document": "contract-purchase",
+          "score": 0.013636833056807518,
+          "relevant": false
+        },
+        {
+          "document": "invoice-receipt",
+          "score": 0.010408313944935799,
+          "relevant": false
+        },
+        {
+          "document": "invoice-paid-ultrabook",
+          "score": 0.008916125632822514,
+          "relevant": false
+        }
+      ],
+      "batch_seconds": [
+        0.594380833033938,
+        0.6358452080166899
+      ]
+    },
+    {
+      "id": "contracts-stress-2",
+      "query": "尚未签字、尚未生效的软件维护合同草案",
+      "fixture_filters": [
+        "previous_month_upload"
+      ],
+      "candidate_count": 8,
+      "relevant_text_ids": [
+        "contract-draft"
+      ],
+      "results": [
+        {
+          "document": "contract-draft",
+          "score": 0.9971103668212891,
+          "relevant": true
+        },
+        {
+          "document": "contract-negotiation",
+          "score": 0.7956581711769104,
+          "relevant": false
+        },
+        {
+          "document": "contract-signed-maintenance",
+          "score": 0.28140556812286377,
+          "relevant": false
+        },
+        {
+          "document": "contract-service",
+          "score": 0.13846178352832794,
+          "relevant": false
+        },
+        {
+          "document": "meeting-notes",
+          "score": 0.048496000468730927,
+          "relevant": false
+        },
+        {
+          "document": "contract-purchase",
+          "score": 0.0012843080330640078,
+          "relevant": false
+        },
+        {
+          "document": "invoice-receipt",
+          "score": 0.0011424493277445436,
+          "relevant": false
+        },
+        {
+          "document": "invoice-paid-ultrabook",
+          "score": 0.000487857119878754,
+          "relevant": false
+        }
+      ],
+      "batch_seconds": [
+        0.6646290419739671,
+        0.7013549589901231
+      ]
+    },
+    {
+      "id": "invoice-stress-1",
+      "query": "购买笔记本电脑的费用发票，用于支出报销",
+      "fixture_filters": [],
+      "candidate_count": 34,
+      "relevant_text_ids": [
+        "invoice-receipt",
+        "invoice-paid-ultrabook"
+      ],
+      "results": [
+        {
+          "document": "invoice-paid-ultrabook",
+          "score": 0.9998118281364441,
+          "relevant": true
+        },
+        {
+          "document": "invoice-quote",
+          "score": 0.9997448325157166,
+          "relevant": false
+        },
+        {
+          "document": "invoice-receipt",
+          "score": 0.99935382604599,
+          "relevant": true
+        },
+        {
+          "document": "contract-purchase",
+          "score": 0.9985221028327942,
+          "relevant": false
+        },
+        {
+          "document": "invoice-refund",
+          "score": 0.9965165853500366,
+          "relevant": false
+        },
+        {
+          "document": "laptop-review",
+          "score": 0.8887588381767273,
+          "relevant": false
+        },
+        {
+          "document": "meeting-notes",
+          "score": 0.057071391493082047,
+          "relevant": false
+        },
+        {
+          "document": "invoice-camera",
+          "score": 0.042087722569704056,
+          "relevant": false
+        },
+        {
+          "document": "contract-older",
+          "score": 0.025760557502508163,
+          "relevant": false
+        },
+        {
+          "document": "contract-signed-maintenance",
+          "score": 0.013955708593130112,
+          "relevant": false
+        },
+        {
+          "document": "contract-service",
+          "score": 0.012527931481599808,
+          "relevant": false
+        },
+        {
+          "document": "contract-draft",
+          "score": 0.008315778337419033,
+          "relevant": false
+        },
+        {
+          "document": "contract-negotiation",
+          "score": 0.006850479636341333,
+          "relevant": false
+        },
+        {
+          "document": "shared-migration",
+          "score": 0.0018821858102455735,
+          "relevant": false
+        },
+        {
+          "document": "migration-runbook",
+          "score": 0.0013993981992825866,
+          "relevant": false
+        },
+        {
+          "document": "contract-current",
+          "score": 0.0013885231455788016,
+          "relevant": false
+        },
+        {
+          "document": "config-ip-notes",
+          "score": 0.0007672924548387527,
+          "relevant": false
+        },
+        {
+          "document": "ip-explanation",
+          "score": 0.000682501879055053,
+          "relevant": false
+        },
+        {
+          "document": "config-production",
+          "score": 0.0003569705586414784,
+          "relevant": false
+        },
+        {
+          "document": "permissions-settings",
+          "score": 0.0003514382115099579,
+          "relevant": false
+        },
+        {
+          "document": "exercise",
+          "score": 0.00026119028916582465,
+          "relevant": false
+        },
+        {
+          "document": "config-hostname",
+          "score": 0.00018093574908562005,
+          "relevant": false
+        },
+        {
+          "document": "travel-notes",
+          "score": 0.00014596007531508803,
+          "relevant": false
+        },
+        {
+          "document": "config-staging",
+          "score": 0.00014425984409172088,
+          "relevant": false
+        },
+        {
+          "document": "django-object-permissions",
+          "score": 0.0001425794034730643,
+          "relevant": false
+        },
+        {
+          "document": "spring-method-authorization",
+          "score": 0.0001039106646203436,
+          "relevant": false
+        },
+        {
+          "document": "spring-metrics",
+          "score": 0.00010032138379756361,
+          "relevant": false
+        },
+        {
+          "document": "recipe",
+          "score": 9.424379823030904e-05,
+          "relevant": false
+        },
+        {
+          "document": "postgres-backup",
+          "score": 7.114058826118708e-05,
+          "relevant": false
+        },
+        {
+          "document": "permissions-guide",
+          "score": 6.427060725400224e-05,
+          "relevant": false
+        },
+        {
+          "document": "postgres-cutover",
+          "score": 6.253712490433827e-05,
+          "relevant": false
+        },
+        {
+          "document": "config-postgres",
+          "score": 5.084291842649691e-05,
+          "relevant": false
+        },
+        {
+          "document": "migration-plan",
+          "score": 4.629321483662352e-05,
+          "relevant": false
+        },
+        {
+          "document": "redis-migration",
+          "score": 1.9679022443597205e-05,
+          "relevant": false
+        }
+      ],
+      "batch_seconds": [
+        0.6652405830100179,
+        0.661303750006482,
+        0.7090661249822006,
+        0.5572056249948218,
+        0.7308621249976568,
+        0.6928871250129305,
+        0.6281287500169128,
+        0.6426587500027381,
+        0.34594225004548207
+      ]
+    },
+    {
+      "id": "invoice-stress-2",
+      "query": "找已付款的数码相机购买发票",
+      "fixture_filters": [],
+      "candidate_count": 34,
+      "relevant_text_ids": [
+        "invoice-camera"
+      ],
+      "results": [
+        {
+          "document": "invoice-camera",
+          "score": 0.9990378618240356,
+          "relevant": true
+        },
+        {
+          "document": "contract-purchase",
+          "score": 0.1081889420747757,
+          "relevant": false
+        },
+        {
+          "document": "invoice-receipt",
+          "score": 0.02112519182264805,
+          "relevant": false
+        },
+        {
+          "document": "invoice-paid-ultrabook",
+          "score": 0.01784873753786087,
+          "relevant": false
+        },
+        {
+          "document": "invoice-refund",
+          "score": 0.015424549579620361,
+          "relevant": false
+        },
+        {
+          "document": "invoice-quote",
+          "score": 0.005774929188191891,
+          "relevant": false
+        },
+        {
+          "document": "laptop-review",
+          "score": 0.0038844766095280647,
+          "relevant": false
+        },
+        {
+          "document": "meeting-notes",
+          "score": 0.0021827162709087133,
+          "relevant": false
+        },
+        {
+          "document": "contract-negotiation",
+          "score": 0.0008830457809381187,
+          "relevant": false
+        },
+        {
+          "document": "contract-signed-maintenance",
+          "score": 0.0008626076742075384,
+          "relevant": false
+        },
+        {
+          "document": "contract-service",
+          "score": 0.0006312433979474008,
+          "relevant": false
+        },
+        {
+          "document": "contract-current",
+          "score": 0.0006070755189284682,
+          "relevant": false
+        },
+        {
+          "document": "contract-older",
+          "score": 0.0005484791472554207,
+          "relevant": false
+        },
+        {
+          "document": "migration-runbook",
+          "score": 0.00037702854024246335,
+          "relevant": false
+        },
+        {
+          "document": "shared-migration",
+          "score": 0.00036829785676673055,
+          "relevant": false
+        },
+        {
+          "document": "contract-draft",
+          "score": 0.00018887828628066927,
+          "relevant": false
+        },
+        {
+          "document": "travel-notes",
+          "score": 0.0001392770209349692,
+          "relevant": false
+        },
+        {
+          "document": "config-hostname",
+          "score": 0.00013658353418577462,
+          "relevant": false
+        },
+        {
+          "document": "config-production",
+          "score": 0.00012387744209263474,
+          "relevant": false
+        },
+        {
+          "document": "ip-explanation",
+          "score": 0.00012100819003535435,
+          "relevant": false
+        },
+        {
+          "document": "config-ip-notes",
+          "score": 9.954075358109549e-05,
+          "relevant": false
+        },
+        {
+          "document": "permissions-settings",
+          "score": 8.34962775115855e-05,
+          "relevant": false
+        },
+        {
+          "document": "django-object-permissions",
+          "score": 7.28275190340355e-05,
+          "relevant": false
+        },
+        {
+          "document": "postgres-backup",
+          "score": 7.114058826118708e-05,
+          "relevant": false
+        },
+        {
+          "document": "spring-metrics",
+          "score": 6.70922381686978e-05,
+          "relevant": false
+        },
+        {
+          "document": "config-staging",
+          "score": 6.657015910604969e-05,
+          "relevant": false
+        },
+        {
+          "document": "exercise",
+          "score": 5.433364276541397e-05,
+          "relevant": false
+        },
+        {
+          "document": "recipe",
+          "score": 3.837872645817697e-05,
+          "relevant": false
+        },
+        {
+          "document": "postgres-cutover",
+          "score": 3.591300992411561e-05,
+          "relevant": false
+        },
+        {
+          "document": "permissions-guide",
+          "score": 3.508111331029795e-05,
+          "relevant": false
+        },
+        {
+          "document": "spring-method-authorization",
+          "score": 2.7108801077702083e-05,
+          "relevant": false
+        },
+        {
+          "document": "redis-migration",
+          "score": 2.689784196263645e-05,
+          "relevant": false
+        },
+        {
+          "document": "config-postgres",
+          "score": 2.221226350229699e-05,
+          "relevant": false
+        },
+        {
+          "document": "migration-plan",
+          "score": 2.221226350229699e-05,
+          "relevant": false
+        }
+      ],
+      "batch_seconds": [
+        0.6284619579673745,
+        0.6295899579999968,
+        0.7089907919871621,
+        0.5888450409984216,
+        0.7205885840230621,
+        0.6496094999602064,
+        0.6450327910133637,
+        0.6399034169735387,
+        0.38390437501948327
+      ]
+    },
+    {
+      "id": "config-stress-1",
+      "query": "找到 PostgreSQL 连接主机设置为 192.0.2.146 的配置文件",
+      "fixture_filters": [
+        "configuration_extensions"
+      ],
+      "candidate_count": 8,
+      "relevant_text_ids": [
+        "config-postgres"
+      ],
+      "results": [
+        {
+          "document": "config-postgres",
+          "score": 0.9845753908157349,
+          "relevant": true
+        },
+        {
+          "document": "config-staging",
+          "score": 0.0443485789000988,
+          "relevant": false
+        },
+        {
+          "document": "config-production",
+          "score": 0.03308597579598427,
+          "relevant": false
+        },
+        {
+          "document": "config-hostname",
+          "score": 0.01186912041157484,
+          "relevant": false
+        },
+        {
+          "document": "permissions-settings",
+          "score": 0.0002531563804950565,
+          "relevant": false
+        },
+        {
+          "document": "invoice-quote",
+          "score": 0.00023968683672137558,
+          "relevant": false
+        },
+        {
+          "document": "migration-runbook",
+          "score": 0.00014539112453348935,
+          "relevant": false
+        },
+        {
+          "document": "contract-purchase",
+          "score": 9.098838927457109e-05,
+          "relevant": false
+        }
+      ],
+      "batch_seconds": [
+        0.8304558749659918,
+        0.7116145000327379
+      ]
+    },
+    {
+      "id": "config-stress-2",
+      "query": "只用 DNS 主机名、不含固定 IP 地址的服务配置文件",
+      "fixture_filters": [
+        "configuration_extensions"
+      ],
+      "candidate_count": 8,
+      "relevant_text_ids": [
+        "config-hostname"
+      ],
+      "results": [
+        {
+          "document": "config-hostname",
+          "score": 0.9954615235328674,
+          "relevant": true
+        },
+        {
+          "document": "config-production",
+          "score": 0.6893056035041809,
+          "relevant": false
+        },
+        {
+          "document": "config-staging",
+          "score": 0.24798740446567535,
+          "relevant": false
+        },
+        {
+          "document": "config-postgres",
+          "score": 0.07107366621494293,
+          "relevant": false
+        },
+        {
+          "document": "permissions-settings",
+          "score": 0.004331501666456461,
+          "relevant": false
+        },
+        {
+          "document": "migration-runbook",
+          "score": 0.0008295891457237303,
+          "relevant": false
+        },
+        {
+          "document": "invoice-quote",
+          "score": 0.0005976692773401737,
+          "relevant": false
+        },
+        {
+          "document": "contract-purchase",
+          "score": 7.543320680269971e-05,
+          "relevant": false
+        }
+      ],
+      "batch_seconds": [
+        0.7829229170456529,
+        0.6794746249797754
+      ]
+    },
+    {
+      "id": "negative-stress-1",
+      "query": "已支付的打印机购买发票",
+      "fixture_filters": [],
+      "candidate_count": 34,
+      "relevant_text_ids": [],
+      "results": [
+        {
+          "document": "invoice-receipt",
+          "score": 0.9518632292747498,
+          "relevant": false
+        },
+        {
+          "document": "contract-purchase",
+          "score": 0.665410578250885,
+          "relevant": false
+        },
+        {
+          "document": "invoice-paid-ultrabook",
+          "score": 0.43014734983444214,
+          "relevant": false
+        },
+        {
+          "document": "invoice-quote",
+          "score": 0.27825677394866943,
+          "relevant": false
+        },
+        {
+          "document": "invoice-camera",
+          "score": 0.18713267147541046,
+          "relevant": false
+        },
+        {
+          "document": "invoice-refund",
+          "score": 0.08151975274085999,
+          "relevant": false
+        },
+        {
+          "document": "meeting-notes",
+          "score": 0.022977367043495178,
+          "relevant": false
+        },
+        {
+          "document": "contract-signed-maintenance",
+          "score": 0.01590638980269432,
+          "relevant": false
+        },
+        {
+          "document": "contract-negotiation",
+          "score": 0.012147168628871441,
+          "relevant": false
+        },
+        {
+          "document": "laptop-review",
+          "score": 0.011597361415624619,
+          "relevant": false
+        },
+        {
+          "document": "contract-older",
+          "score": 0.010735160671174526,
+          "relevant": false
+        },
+        {
+          "document": "contract-service",
+          "score": 0.008511302061378956,
+          "relevant": false
+        },
+        {
+          "document": "contract-draft",
+          "score": 0.00439941231161356,
+          "relevant": false
+        },
+        {
+          "document": "shared-migration",
+          "score": 0.00407013762742281,
+          "relevant": false
+        },
+        {
+          "document": "migration-runbook",
+          "score": 0.003027834929525852,
+          "relevant": false
+        },
+        {
+          "document": "config-production",
+          "score": 0.0010733063099905849,
+          "relevant": false
+        },
+        {
+          "document": "config-staging",
+          "score": 0.000977350166067481,
+          "relevant": false
+        },
+        {
+          "document": "contract-current",
+          "score": 0.0009622125653550029,
+          "relevant": false
+        },
+        {
+          "document": "config-hostname",
+          "score": 0.0009253848111256957,
+          "relevant": false
+        },
+        {
+          "document": "config-ip-notes",
+          "score": 0.0005614786641672254,
+          "relevant": false
+        },
+        {
+          "document": "ip-explanation",
+          "score": 0.0005399803631007671,
+          "relevant": false
+        },
+        {
+          "document": "permissions-settings",
+          "score": 0.0004840623587369919,
+          "relevant": false
+        },
+        {
+          "document": "travel-notes",
+          "score": 0.0004583129193633795,
+          "relevant": false
+        },
+        {
+          "document": "django-object-permissions",
+          "score": 0.00025414692936465144,
+          "relevant": false
+        },
+        {
+          "document": "config-postgres",
+          "score": 0.00019716941460501403,
+          "relevant": false
+        },
+        {
+          "document": "postgres-backup",
+          "score": 0.00017265153292100877,
+          "relevant": false
+        },
+        {
+          "document": "spring-metrics",
+          "score": 0.00016734047676436603,
+          "relevant": false
+        },
+        {
+          "document": "permissions-guide",
+          "score": 0.00016030349070206285,
+          "relevant": false
+        },
+        {
+          "document": "exercise",
+          "score": 0.00012632041762117296,
+          "relevant": false
+        },
+        {
+          "document": "spring-method-authorization",
+          "score": 0.00012582798080984503,
+          "relevant": false
+        },
+        {
+          "document": "recipe",
+          "score": 8.481102850055322e-05,
+          "relevant": false
+        },
+        {
+          "document": "postgres-cutover",
+          "score": 7.782752072671428e-05,
+          "relevant": false
+        },
+        {
+          "document": "migration-plan",
+          "score": 7.426380761899054e-05,
+          "relevant": false
+        },
+        {
+          "document": "redis-migration",
+          "score": 3.0838404200039804e-05,
+          "relevant": false
+        }
+      ],
+      "batch_seconds": [
+        0.6481894159805961,
+        0.6375036659883335,
+        0.6878464589826763,
+        0.5742551670409739,
+        0.7140649170032702,
+        0.6418288329732604,
+        0.5920185000286438,
+        0.6985343339620158,
+        0.41365404200041667
+      ]
+    },
+    {
+      "id": "negative-stress-2",
+      "query": "已签署房屋租赁合同",
+      "fixture_filters": [
+        "previous_month_upload"
+      ],
+      "candidate_count": 8,
+      "relevant_text_ids": [],
+      "results": [
+        {
+          "document": "contract-draft",
+          "score": 0.023330766707658768,
+          "relevant": false
+        },
+        {
+          "document": "contract-signed-maintenance",
+          "score": 0.020964240655303,
+          "relevant": false
+        },
+        {
+          "document": "contract-service",
+          "score": 0.017986206337809563,
+          "relevant": false
+        },
+        {
+          "document": "meeting-notes",
+          "score": 0.011597361415624619,
+          "relevant": false
+        },
+        {
+          "document": "contract-negotiation",
+          "score": 0.007011794485151768,
+          "relevant": false
+        },
+        {
+          "document": "invoice-receipt",
+          "score": 0.0038844766095280647,
+          "relevant": false
+        },
+        {
+          "document": "contract-purchase",
+          "score": 0.0024343819823116064,
+          "relevant": false
+        },
+        {
+          "document": "invoice-paid-ultrabook",
+          "score": 0.0013045065570622683,
+          "relevant": false
+        }
+      ],
+      "batch_seconds": [
+        0.6150410000118427,
+        0.6395203749998473
+      ]
+    },
+    {
+      "id": "negative-stress-3",
+      "query": "记录 Oracle 数据库迁移回退操作的方案",
+      "fixture_filters": [],
+      "candidate_count": 34,
+      "relevant_text_ids": [],
+      "results": [
+        {
+          "document": "migration-plan",
+          "score": 0.9736446738243103,
+          "relevant": false
+        },
+        {
+          "document": "migration-runbook",
+          "score": 0.9005298018455505,
+          "relevant": false
+        },
+        {
+          "document": "shared-migration",
+          "score": 0.6548947095870972,
+          "relevant": false
+        },
+        {
+          "document": "postgres-cutover",
+          "score": 0.15610487759113312,
+          "relevant": false
+        },
+        {
+          "document": "postgres-backup",
+          "score": 0.025760557502508163,
+          "relevant": false
+        },
+        {
+          "document": "contract-signed-maintenance",
+          "score": 0.008779107592999935,
+          "relevant": false
+        },
+        {
+          "document": "meeting-notes",
+          "score": 0.006903837900608778,
+          "relevant": false
+        },
+        {
+          "document": "contract-negotiation",
+          "score": 0.0049822693690657616,
+          "relevant": false
+        },
+        {
+          "document": "config-production",
+          "score": 0.004538430832326412,
+          "relevant": false
+        },
+        {
+          "document": "invoice-refund",
+          "score": 0.0036785088013857603,
+          "relevant": false
+        },
+        {
+          "document": "config-hostname",
+          "score": 0.00359360221773386,
+          "relevant": false
+        },
+        {
+          "document": "exercise",
+          "score": 0.0029810327105224133,
+          "relevant": false
+        },
+        {
+          "document": "contract-older",
+          "score": 0.0004994204500690103,
+          "relevant": false
+        },
+        {
+          "document": "contract-service",
+          "score": 0.0004955358454026282,
+          "relevant": false
+        },
+        {
+          "document": "config-ip-notes",
+          "score": 0.0004765612247865647,
+          "relevant": false
+        },
+        {
+          "document": "invoice-receipt",
+          "score": 0.0004407629312481731,
+          "relevant": false
+        },
+        {
+          "document": "contract-draft",
+          "score": 0.0004140694800298661,
+          "relevant": false
+        },
+        {
+          "document": "config-staging",
+          "score": 0.0003406293399166316,
+          "relevant": false
+        },
+        {
+          "document": "redis-migration",
+          "score": 0.00028910321998409927,
+          "relevant": false
+        },
+        {
+          "document": "config-postgres",
+          "score": 0.0002591582015156746,
+          "relevant": false
+        },
+        {
+          "document": "contract-current",
+          "score": 0.00022254552459344268,
+          "relevant": false
+        },
+        {
+          "document": "invoice-quote",
+          "score": 0.00019110430730506778,
+          "relevant": false
+        },
+        {
+          "document": "laptop-review",
+          "score": 0.00016030349070206285,
+          "relevant": false
+        },
+        {
+          "document": "ip-explanation",
+          "score": 0.00014653129619546235,
+          "relevant": false
+        },
+        {
+          "document": "permissions-settings",
+          "score": 0.00013135177141521126,
+          "relevant": false
+        },
+        {
+          "document": "travel-notes",
+          "score": 0.00012780925317201763,
+          "relevant": false
+        },
+        {
+          "document": "invoice-camera",
+          "score": 0.00010932306031463668,
+          "relevant": false
+        },
+        {
+          "document": "contract-purchase",
+          "score": 7.513914169976488e-05,
+          "relevant": false
+        },
+        {
+          "document": "spring-metrics",
+          "score": 6.683068932034075e-05,
+          "relevant": false
+        },
+        {
+          "document": "invoice-paid-ultrabook",
+          "score": 6.579464388778433e-05,
+          "relevant": false
+        },
+        {
+          "document": "spring-method-authorization",
+          "score": 5.73875913687516e-05,
+          "relevant": false
+        },
+        {
+          "document": "recipe",
+          "score": 4.908661139779724e-05,
+          "relevant": false
+        },
+        {
+          "document": "django-object-permissions",
+          "score": 3.453725003055297e-05,
+          "relevant": false
+        },
+        {
+          "document": "permissions-guide",
+          "score": 2.062341991404537e-05,
+          "relevant": false
+        }
+      ],
+      "batch_seconds": [
+        0.6683394580031745,
+        0.6489415410324,
+        0.7359807919710875,
+        0.618185999977868,
+        0.7789000420016237,
+        0.6578332909848541,
+        0.6191160830203444,
+        0.6504794170032255,
+        0.3965752079966478
+      ]
+    }
+  ],
+  "torch_version": "2.12.1",
+  "transformers_version": "4.57.6",
+  "load_seconds": 0.8071707499912009,
+  "token_ids": {
+    "yes": 9693,
+    "no": 2152
+  }
+}
