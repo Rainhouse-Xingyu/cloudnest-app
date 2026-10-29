@@ -82,3 +82,4 @@ G04 已提交独立 [草稿 PR #5](https://github.com/Rainhouse-Xingyu/cloudnest
 - [手动 OCR 统一与源身份](AI-MANUAL-OCR.md)：有界 EXIF/GPS、实际像素、撤权/换版隔离和原子成功记录。
 
 - [六类检索效果评估](AI-RETRIEVAL-EVALUATION.md)：固定标签/开发集与保留集、真实模型排序和失败报告、候选门槛校准；更大独立语料与误匹配仍待完善。
+- [有界重排](AI-RERANK.md)：可选实际 token 评分、整批回退及推理后的权限/源复核；实际 v1 排序回归通过，独立效果与专用模型仍在评估。

@@ -238,3 +238,17 @@ HTTP 协议夹具只用于错误/并发边界测试，不替代模型识别验�
 - 一次 push 返回本地代理 1082 连接失败和非零退出；直接 `ls-remote` 核实远端已是 e72e789，随后 CI 也确认同 SHA。没有据错误文本重建分支或改系统代理。此前 afebb0674503a657d91fc0257be61d0513f2152f 的 PR/push CI 40695344082 / 40695333973 也均通过。
 
 后续只补报告/说明的提交以新 SHA 单独核验 CI；上面的全量评估证明的是 e72e789 代码，标签/门槛保持固定。HEIC/HEIF/WebP、旧二进制 Office、复杂语义/rerank、独立语料与资源压力仍未完成。
+
+## 2026-10-29 重排协议与 SQL 竞态
+
+- `508a54e`：新增真实 Ollama 二元 token 评分、六秒整批预算和共享 OCR 名额；可选排序前 20 条、保留尾部、失败全量回退、模型后再次 SQL 验证。`make -C cloudnest_go check test` PASS（日志 `/tmp/cloudnest-rerank-check.log`）；服务/provider/config 专项 race PASS（`/tmp/cloudnest-rerank-service-unit.log`）。
+- `scripts/test-ai-search.sh` PASS，包 **51.615s**，日志 `/tmp/cloudnest-rerank-protocol.log`。日志实际有 **27 个顶层测试**；新增一个重排测试包含撤权、撤权后模型失败、重命名、源替换、代次更新五个子用例。模型返回是协议夹具，SQL 与公开 API 为真实执行。此前口头计数“28 项”有误，以此日志计数为准。
+- `integration,aisearch,aimodel,aieval` 组合标签及分页契约 PASS（0.726s），日志 `/tmp/cloudnest-rerank-eval-compile.log`。
+- `14fb1a6`：复核发现 JSON 缺失 logprob 会落成 float64 零值，改为必须存在的指针字段，拒绝缺失/null，不推测概率；aiindex/service race PASS（2.655s/2.297s），日志 `/tmp/cloudnest-rerank-presence-unit.log`。
+- 两轮实际 18 对开发文本预检与来源/提示/模型哈希详见 AI-RERANK；不能代替全 API 评估。首轮预检脚本随后修改，第二轮记录最终源哈希；一轮启动前 503 没有进入评分，已如实记录。
+- 完整真实 API 重排评估以独立 JSON 记录执行状态；只有 completed/pass 及逐条实际 applied 状态才能证明相应范围。当前未把重排或 G04 标记完成。
+
+复现完整实际重排：在六类评估命令设置 `CLOUDNEST_AI_EVAL_RERANK_MODEL=qwen3-vl:4b`（或另一个已安装并验证的兼容模型）；仅改变本轮测试容器的应用配置，不修改用户 .env。仍使用原标签/门槛，报告增加模型 digest 与每条重排状态/分数。配置模型却发生回退时评估失败，即使基础检索指标通过也不冒充重排成功。
+
+- 完整实际重排已执行 **PASS 296.575s**，函数 294.58s。代码 `508a54e`，日志 `/tmp/cloudnest-eval-rerank.log`、报告 AI-RETRIEVAL-RERANK-20261029.json。30 文件/24 查询，15 applied / 9 单候选或空结果 skipped / 0 fallback，dev/已暴露 heldout R@5=1、MRR=1，6/6 负例为空，六项边界通过；发票族 R@5 从 0.75 改善到 1。配置查询及结果尾部仍有误匹配，见 AI-RERANK，未声称全结果精确。
+- `508a54e` 的 PR/push CI 40821274600/40821269034 被后续提交按并发工作流取消，**不是通过**；`14fb1a6` 的 PR/push CI 40821445728/40821438853 已启动，待按精确 SHA 核对结果。不要把上一个 26894d2 的绿色状态冒充本次检查。
