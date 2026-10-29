@@ -98,6 +98,17 @@ type AINLSearchResult struct {
 	Source        string
 	Warnings      []string
 	WindowLimited bool
+	Rerank        AIRerankResult
+}
+
+type AIRerankResult struct {
+	Status         string `json:"status"`
+	FailureReason  string `json:"failure_reason,omitempty"`
+	Model          string `json:"model,omitempty"`
+	ModelDigest    string `json:"model_digest,omitempty"`
+	EvaluatedCount int    `json:"evaluated_count"`
+	WindowSize     int    `json:"window_size"`
+	WindowLimited  bool   `json:"window_limited"`
 }
 
 type AIAskResult struct {

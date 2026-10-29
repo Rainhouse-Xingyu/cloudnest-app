@@ -235,7 +235,7 @@ func (h *AIHandler) NLSearch(c *gin.Context) {
 			"source": res.Source,
 			"query":  res.Query,
 		},
-		"retrieval": gin.H{"mode": res.Source, "warnings": res.Warnings, "window_limited": res.WindowLimited, "window_size": 200},
+		"retrieval": gin.H{"mode": res.Source, "warnings": res.Warnings, "window_limited": res.WindowLimited, "window_size": 200, "rerank": res.Rerank},
 	})
 }
 

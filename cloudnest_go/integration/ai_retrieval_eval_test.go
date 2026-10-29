@@ -21,6 +21,7 @@ import (
 	"cloudenest_go/internal/aiindex"
 	"cloudenest_go/internal/app"
 	"cloudenest_go/internal/retrievaleval"
+	"cloudenest_go/internal/service"
 	"cloudenest_go/model"
 )
 
@@ -29,6 +30,7 @@ type evalHit struct {
 	Document string   `json:"document"`
 	Score    float64  `json:"score"`
 	Semantic *float64 `json:"semantic_score"`
+	Rerank   *float64 `json:"rerank_score,omitempty"`
 	Sources  []string `json:"match_sources"`
 	Snippet  string   `json:"snippet"`
 }
@@ -38,9 +40,10 @@ type evalResponse struct {
 		Total int `json:"total"`
 	} `json:"pagination"`
 	Retrieval struct {
-		Mode          string   `json:"mode"`
-		Warnings      []string `json:"warnings"`
-		WindowLimited bool     `json:"window_limited"`
+		Mode          string                 `json:"mode"`
+		Warnings      []string               `json:"warnings"`
+		WindowLimited bool                   `json:"window_limited"`
+		Rerank        service.AIRerankResult `json:"rerank"`
 	} `json:"retrieval"`
 }
 type evalQueryResult struct {
@@ -80,6 +83,8 @@ type evalReport struct {
 	EmbeddingDigest   string                            `json:"embedding_digest"`
 	VisionModel       string                            `json:"vision_model"`
 	VisionDigest      string                            `json:"vision_digest"`
+	RerankModel       string                            `json:"rerank_model,omitempty"`
+	RerankDigest      string                            `json:"rerank_digest,omitempty"`
 	Gates             retrievaleval.Gates               `json:"quality_gates"`
 	Documents         []evalDocumentResult              `json:"documents"`
 	Queries           []evalQueryResult                 `json:"queries"`
@@ -194,11 +199,16 @@ func TestAIRetrievalEvaluation(t *testing.T) {
 	}
 	report.EmbeddingDigest = digest(report.EmbeddingModel)
 	report.VisionDigest = digest(report.VisionModel)
+	report.RerankModel = strings.TrimSpace(os.Getenv("CLOUDNEST_AI_EVAL_RERANK_MODEL"))
+	if report.RerankModel != "" {
+		report.RerankDigest = digest(report.RerankModel)
+	}
 	save()
 	f, _ := indexFixture(t)
 	f.cfg.AIOllamaBaseURL = base
 	f.cfg.AIEmbeddingModel = report.EmbeddingModel
 	f.cfg.AIOCRModel = report.VisionModel
+	f.cfg.AIRerankModel = report.RerankModel
 	report.MinCosine, report.MinLexical = f.cfg.SearchThresholds()
 	report.QueryPolicy = "qwen3-task-instruction-calendar-separated-v1"
 	f.cfg.AIPDFBinDir = os.Getenv("CLOUDNEST_TEST_POPPLER_BIN")
@@ -348,6 +358,9 @@ func TestAIRetrievalEvaluation(t *testing.T) {
 		if r.Retrieval.Mode != "hybrid" {
 			t.Errorf("quality query %s did not use live embedding: %s", q.ID, r.Retrieval.Mode)
 		}
+		if report.RerankModel != "" && len(r.Items) > 1 && (r.Retrieval.Rerank.Status != "applied" || r.Retrieval.Rerank.ModelDigest != report.RerankDigest) {
+			t.Errorf("quality query %s did not apply the requested real reranker: %+v", q.ID, r.Retrieval.Rerank)
+		}
 		t.Logf("query %s hits=%d metrics=%+v", q.ID, len(r.Items), result.Metrics)
 	}
 	report.Boundaries["all_queries_authorized"] = true
@@ -390,6 +403,9 @@ func TestAIRetrievalEvaluation(t *testing.T) {
 	report.Boundaries["model_outage_keyword_fallback"] = true
 	if digest(report.EmbeddingModel) != report.EmbeddingDigest || digest(report.VisionModel) != report.VisionDigest {
 		t.Fatal("models changed during evaluation")
+	}
+	if report.RerankModel != "" && digest(report.RerankModel) != report.RerankDigest {
+		t.Fatal("reranker changed during evaluation")
 	}
 	if time.Now().In(loc).Format("2006-01") != anchor.Format("2006-01") {
 		t.Fatal("calendar boundary crossed; rerun with a fresh anchor")

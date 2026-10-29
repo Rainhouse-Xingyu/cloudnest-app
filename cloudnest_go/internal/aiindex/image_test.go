@@ -162,12 +162,12 @@ func TestVisionAdmissionSharedAcrossImageAndPDFAndReleasedOnCancel(t *testing.T)
 		}
 	}
 	// Both slots must be available after the canceled requests returned.
-	first, err := admitVision(context.Background())
+	first, err := admitGeneration(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer first()
-	second, err := admitVision(context.Background())
+	second, err := admitGeneration(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

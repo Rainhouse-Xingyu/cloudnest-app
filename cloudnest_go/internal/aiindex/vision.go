@@ -13,17 +13,17 @@ import (
 
 var ErrVisionResponse = errors.New("invalid vision transcription response")
 
-// Shared by manual image analysis and PDF/queued OCR across all routers.
+// Shared by manual image analysis, PDF/queued OCR and reranking across routers.
 // Refuse excess work instead of retaining arbitrarily many base64 payloads.
-var visionSlots = make(chan struct{}, 2)
+var generationSlots = make(chan struct{}, 2)
 
-func admitVision(ctx context.Context) (func(), error) {
+func admitGeneration(ctx context.Context) (func(), error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	select {
-	case visionSlots <- struct{}{}:
-		return func() { <-visionSlots }, nil
+	case generationSlots <- struct{}{}:
+		return func() { <-generationSlots }, nil
 	default:
 		return nil, ErrExtractionBusy
 	}
@@ -45,7 +45,7 @@ func (o *Ollama) TranscribeWithDigest(ctx context.Context, image []byte) (string
 	if err != nil || cfg.Width < 1 || cfg.Height < 1 || cfg.Width > 1600 || cfg.Height > 1600 {
 		return "", "", ErrDocument
 	}
-	release, err := admitVision(ctx)
+	release, err := admitGeneration(ctx)
 	if err != nil {
 		return "", "", err
 	}

@@ -27,6 +27,7 @@ type hybridHit struct {
 	score    float64
 	keyword  bool
 	vector   bool
+	rerank   *float64
 }
 
 func (s *AIService) hybridSearch(parent context.Context, uid int64, question string, page, limit int) (AINLSearchResult, error) {
@@ -50,6 +51,11 @@ func (s *AIService) hybridSearch(parent context.Context, uid int64, question str
 	defer cancel()
 	filter, unsupported := hybridIntent(question, time.Now())
 	result := AINLSearchResult{Query: AISearchQuery{Keyword: question, Page: page, Limit: limit}, Source: "keyword", Warnings: []string{}, Search: AISearchResult{Items: []map[string]interface{}{}}}
+	result.Rerank = AIRerankResult{Status: "disabled", WindowSize: aiindex.MaxRerankDocuments}
+	if s.cfg.AIRerankModel != "" {
+		result.Rerank.Status = "skipped"
+		result.Rerank.Model = s.cfg.AIRerankModel
+	}
 	if filter.UploadedAfter != nil {
 		result.Query.StartTime = filter.UploadedAfter.Format(time.RFC3339)
 	}
@@ -201,6 +207,31 @@ func (s *AIService) hybridSearch(parent context.Context, uid int64, question str
 	if len(hits) > hybridWindow {
 		hits = hits[:hybridWindow]
 	}
+	if s.cfg.AIRerankModel != "" && result.Source == "hybrid" && len(hits) > 1 {
+		if err := s.rerankHybrid(ctx, hybridContentQuestion(question, filter), hits, &result); err != nil {
+			return AINLSearchResult{}, err
+		}
+		// Inference (including a failed attempt) can outlive an ACL revocation,
+		// rename or source/index replacement. Recheck every retained candidate.
+		identities = identities[:0]
+		for _, h := range hits {
+			identities = append(identities, h.row)
+		}
+		valid, err = s.repo.ValidateHybrid(ctx, uid, identities)
+		if err != nil {
+			return AINLSearchResult{}, err
+		}
+		kept := hits[:0]
+		for _, h := range hits {
+			if valid[h.row.ID] {
+				kept = append(kept, h)
+			}
+		}
+		hits = kept
+	}
+	if err := ctx.Err(); err != nil {
+		return AINLSearchResult{}, err
+	}
 	result.Search.Total = int64(len(hits))
 	start := min((page-1)*limit, len(hits))
 	end := min(start+limit, len(hits))
@@ -211,6 +242,9 @@ func (s *AIService) hybridSearch(parent context.Context, uid int64, question str
 		}
 		if h.vector {
 			sources = append(sources, "semantic")
+		}
+		if h.rerank != nil {
+			sources = append(sources, "rerank")
 		}
 		snippet, offset := hybridSnippet(h.row.Content, terms)
 		item := map[string]interface{}{"id": h.row.ID, "filename": h.row.Filename, "file_type": h.row.FileType, "size": h.row.Size, "parent_id": h.row.ParentID, "user_id": h.row.UserID, "create_time": h.row.CreateTime, "update_time": h.row.UpdateTime,
@@ -225,9 +259,60 @@ func (s *AIService) hybridSearch(parent context.Context, uid int64, question str
 		if h.vector {
 			item["semantic_score"] = h.semantic
 		}
+		if h.rerank != nil {
+			item["rerank_score"] = *h.rerank
+		}
 		result.Search.Items = append(result.Search.Items, item)
 	}
 	return result, nil
+}
+
+// Only the bounded prefix changes order. Failed or incomplete model batches
+// retain the entire original RRF order; the unscored tail is never discarded.
+// Scores are not calibrated across queries and must not be used as a cutoff.
+func (s *AIService) rerankHybrid(ctx context.Context, question string, hits []hybridHit, result *AINLSearchResult) error {
+	n := min(len(hits), aiindex.MaxRerankDocuments)
+	result.Rerank.WindowLimited = len(hits) > n
+	provider, err := aiindex.NewOllama(s.cfg.AIOllamaBaseURL, s.cfg.AIRerankModel)
+	var scores []float64
+	var digest string
+	if err == nil {
+		documents := make([]string, n)
+		for i, h := range hits[:n] {
+			documents[i] = "Filename: " + h.row.Filename + "\nContent: " + h.row.Content
+		}
+		scores, digest, err = provider.Rerank(ctx, question, documents)
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if err != nil {
+		result.Rerank.Status = "fallback"
+		switch {
+		case errors.Is(err, context.DeadlineExceeded):
+			result.Rerank.FailureReason = "timeout"
+		case errors.Is(err, aiindex.ErrExtractionBusy):
+			result.Rerank.FailureReason = "busy"
+		case errors.Is(err, aiindex.ErrModelChanged):
+			result.Rerank.FailureReason = "model_changed"
+		case errors.Is(err, aiindex.ErrRerankResponse):
+			result.Rerank.FailureReason = "invalid_response"
+		case errors.Is(err, aiindex.ErrTextLimit):
+			result.Rerank.FailureReason = "input_limit"
+		default:
+			result.Rerank.FailureReason = "unavailable"
+		}
+		result.Warnings = append(result.Warnings, "rerank_unavailable")
+		return nil
+	}
+	for i := range scores {
+		hits[i].rerank = &scores[i]
+	}
+	sort.SliceStable(hits[:n], func(i, j int) bool { return *hits[i].rerank > *hits[j].rerank })
+	result.Rerank.Status = "applied"
+	result.Rerank.ModelDigest = digest
+	result.Rerank.EvaluatedCount = n
+	return nil
 }
 
 func retainHybrid(hits []hybridHit, h hybridHit, semantic bool) []hybridHit {
