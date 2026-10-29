@@ -41,27 +41,34 @@ def main():
     parser.add_argument('--model-dir', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--device', choices=('cpu', 'mps'), default='mps')
+    parser.add_argument('--dataset', choices=('v1', 'stress-v2'), default='v1')
     args = parser.parse_args()
     if not args.output.is_absolute() or not args.model_dir.is_absolute():
         parser.error('model and new output paths must be absolute')
     weights = args.model_dir / 'model.safetensors'
     if digest(weights) != WEIGHTS_SHA256:
         parser.error('weights do not match the pinned official revision')
-    raw = MANIFEST.read_bytes()
+    manifest = MANIFEST.with_name('dataset-' + args.dataset + '.json')
+    raw = manifest.read_bytes()
     dataset = json.loads(raw)
     documents = [d for d in dataset['documents'] if d.get('text') and (d['owner'] == 'alice' or d.get('share_read'))]
+    filenames = {d['id']: f"entry-{i+1:02d}.{d['extension']}" for i, d in enumerate(dataset['documents'])}
     ids = {d['id'] for d in documents}
     queries = [q for q in dataset['queries'] if q['split'] == 'dev' and (not q['relevant'] or set(q['relevant']) & ids)]
     report = {
-        'completed': False, 'model': MODEL, 'revision': REVISION,
+        'completed': False, 'model': MODEL, 'revision': REVISION, 'dataset_name': args.dataset,
         'weights_sha256': WEIGHTS_SHA256, 'manifest_sha256': hashlib.sha256(raw).hexdigest(),
         'script_sha256': digest(Path(__file__)), 'platform': platform.system() + '/' + platform.machine(),
         'device': args.device, 'document_count': len(documents), 'query_count': len(queries),
+        'model_file_sha256': {name: digest(args.model_dir / name) for name in
+                             ('config.json', 'generation_config.json', 'tokenizer.json',
+                              'tokenizer_config.json', 'vocab.json', 'merges.txt')},
         'limitations': [
             'Reduced text-only development subset; not the full API/visual/ACL benchmark.',
             'No heldout queries used; no corpus labels changed.',
             'Binary model score is not a calibrated probability of real-world relevance.',
             'A single local run is not a latency or resource SLA.',
+            'Known previous-month/config-extension fixture filters are applied before scoring; this is not SQL execution.',
         ], 'queries': [],
     }
     # Reserve the path before model execution; retain a partial report on errors.
@@ -96,11 +103,23 @@ def main():
             for q in queries:
                 # The application's SQL enforces calendar constraints. This
                 # preflight tests content classification, not date parsing.
-                question = q['question'].replace('上个月上传的', '')
-                result = {'id': q['id'], 'query': question, 'relevant_text_ids': [i for i in q['relevant'] if i in ids], 'results': [], 'batch_seconds': []}
-                for start in range(0, len(documents), 4):
-                    batch = documents[start:start + 4]
-                    inputs = tokenizer([prompt(question, d['text']) for d in batch], padding=True, truncation=False, return_tensors='pt')
+                question = q['question']
+                candidates = documents
+                filters = []
+                if '上个月' in question or '上月' in question:
+                    candidates = [d for d in candidates if d['uploaded'] == 'previous_month']
+                    question = question.replace('上个月', ' ').replace('上月', ' ').replace('上传的', ' ').strip()
+                    filters.append('previous_month_upload')
+                if '配置文件' in question or '设置文件' in question:
+                    extensions = {'json', 'xml', 'yaml', 'yml', 'toml', 'ini', 'conf', 'config', 'env', 'properties', 'txt'}
+                    candidates = [d for d in candidates if d['extension'] in extensions]
+                    filters.append('configuration_extensions')
+                result = {'id': q['id'], 'query': question, 'fixture_filters': filters, 'candidate_count': len(candidates),
+                          'relevant_text_ids': [i for i in q['relevant'] if i in ids], 'results': [], 'batch_seconds': []}
+                for start in range(0, len(candidates), 4):
+                    batch = candidates[start:start + 4]
+                    texts = ['Filename: ' + filenames[d['id']] + '\nContent: ' + d['text'].strip() for d in batch]
+                    inputs = tokenizer([prompt(question, text) for text in texts], padding=True, truncation=False, return_tensors='pt')
                     if inputs['input_ids'].shape[1] > 2048:
                         raise RuntimeError('input exceeds preflight token budget; refusing silent truncation')
                     inputs = {k: v.to(args.device) for k, v in inputs.items()}
