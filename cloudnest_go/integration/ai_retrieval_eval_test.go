@@ -63,6 +63,7 @@ type evalDocumentResult struct {
 	LatencyMS      int64     `json:"latency_ms"`
 }
 type evalReport struct {
+	DatasetName       string                            `json:"dataset_name"`
 	EvaluationSplit   string                            `json:"evaluation_split"`
 	QueryPolicy       string                            `json:"query_policy"`
 	MinCosine         float64                           `json:"min_cosine"`
@@ -106,7 +107,14 @@ func TestAIRetrievalEvaluation(t *testing.T) {
 	if split != "all" && split != "dev" {
 		t.Fatal("CLOUDNEST_AI_EVAL_SPLIT must be all or dev")
 	}
-	raw, err := os.ReadFile("testdata/retrieval/dataset-v1.json")
+	datasetName := os.Getenv("CLOUDNEST_AI_EVAL_DATASET")
+	if datasetName == "" {
+		datasetName = "v1"
+	}
+	if datasetName != "v1" && datasetName != "stress-v2" {
+		t.Fatal("CLOUDNEST_AI_EVAL_DATASET must be v1 or stress-v2")
+	}
+	raw, err := os.ReadFile("testdata/retrieval/dataset-" + datasetName + ".json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +136,7 @@ func TestAIRetrievalEvaluation(t *testing.T) {
 		t.Fatal(err)
 	}
 	anchor := time.Now().In(loc)
-	report := evalReport{EvaluationSplit: split, Version: 1, Started: anchor, ManifestSHA256: fmt.Sprintf("%x", sha256.Sum256(raw)), GoVersion: runtime.Version(), Platform: runtime.GOOS + "/" + runtime.GOARCH, Gates: dataset.Gates, Summaries: map[string]*retrievaleval.Summary{}, Boundaries: map[string]bool{}, Limitations: []string{
+	report := evalReport{DatasetName: datasetName, EvaluationSplit: split, Version: 1, Started: anchor, ManifestSHA256: fmt.Sprintf("%x", sha256.Sum256(raw)), GoVersion: runtime.Version(), Platform: runtime.GOOS + "/" + runtime.GOARCH, Gates: dataset.Gates, Summaries: map[string]*retrievaleval.Summary{}, Boundaries: map[string]bool{}, Limitations: []string{
 		"Synthetic development corpus, not production generalization or an SLA.",
 		"Three beach files share pixels and differ only in synthetic EXIF; scanned invoice and invoice image reuse pixels.",
 		"Labels and splits fixed before execution; heldout queries visible to implementer, not a blind external test.",
