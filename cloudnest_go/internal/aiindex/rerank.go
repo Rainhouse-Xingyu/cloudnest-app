@@ -16,9 +16,9 @@ const RerankTimeout = 6 * time.Second
 var ErrRerankResponse = errors.New("invalid reranker response")
 
 type tokenProbability struct {
-	Token   string  `json:"token"`
-	Bytes   []int   `json:"bytes"`
-	Logprob float64 `json:"logprob"`
+	Token   string   `json:"token"`
+	Bytes   []int    `json:"bytes"`
+	Logprob *float64 `json:"logprob"`
 }
 type rerankResponse struct {
 	Model     string `json:"model"`
@@ -107,7 +107,7 @@ func binaryRerankScore(r rerankResponse, model string) (float64, error) {
 	}
 	chosen := r.Logprobs[0]
 	validProbability := func(p tokenProbability) bool {
-		if p.Token == "" || !utf8.ValidString(p.Token) || math.IsNaN(p.Logprob) || math.IsInf(p.Logprob, 0) || p.Logprob > 0 {
+		if p.Token == "" || !utf8.ValidString(p.Token) || p.Logprob == nil || math.IsNaN(*p.Logprob) || math.IsInf(*p.Logprob, 0) || *p.Logprob > 0 {
 			return false
 		}
 		raw := []byte(p.Token)
@@ -132,11 +132,11 @@ func binaryRerankScore(r rerankResponse, model string) (float64, error) {
 		if _, duplicate := probabilities[p.Token]; duplicate {
 			return 0, ErrRerankResponse
 		}
-		probabilities[p.Token] = p.Logprob
+		probabilities[p.Token] = *p.Logprob
 	}
 	yes, hasYes := probabilities["yes"]
 	no, hasNo := probabilities["no"]
-	if !hasYes || !hasNo || math.Abs(probabilities[chosen.Token]-chosen.Logprob) > 1e-6 {
+	if !hasYes || !hasNo || math.Abs(probabilities[chosen.Token]-*chosen.Logprob) > 1e-6 {
 		return 0, ErrRerankResponse
 	}
 	// Stable even for highly confident finite logits: never exp(large positive).

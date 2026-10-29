@@ -45,6 +45,7 @@ func rerankFixtureParsed(t *testing.T) rerankResponse {
 }
 
 func TestBinaryRerankRequiresBothCanonicalTokenProbabilities(t *testing.T) {
+	prob := func(p float64) *float64 { return &p }
 	r := rerankFixtureParsed(t)
 	score, err := binaryRerankScore(r, rerankTestModel)
 	if err != nil || math.Abs(score-.8) > 1e-6 {
@@ -58,10 +59,12 @@ func TestBinaryRerankRequiresBothCanonicalTokenProbabilities(t *testing.T) {
 		func(r *rerankResponse) { r.Logprobs[0].Top[1] = r.Logprobs[0].Top[0] },
 		func(r *rerankResponse) { r.Logprobs[0].Top[1].Token = "NO" },
 		func(r *rerankResponse) { r.Logprobs[0].Top[1].Bytes[0] = 1 },
-		func(r *rerankResponse) { r.Logprobs[0].Top[1].Logprob = math.NaN() },
-		func(r *rerankResponse) { r.Logprobs[0].Top[1].Logprob = math.Inf(-1) },
-		func(r *rerankResponse) { r.Logprobs[0].Top[1].Logprob = .1 },
-		func(r *rerankResponse) { r.Logprobs[0].Logprob = -99 },
+		func(r *rerankResponse) { r.Logprobs[0].Top[1].Logprob = prob(math.NaN()) },
+		func(r *rerankResponse) { r.Logprobs[0].Top[1].Logprob = prob(math.Inf(-1)) },
+		func(r *rerankResponse) { r.Logprobs[0].Top[1].Logprob = prob(.1) },
+		func(r *rerankResponse) { r.Logprobs[0].Logprob = prob(-99) },
+		func(r *rerankResponse) { r.Logprobs[0].Logprob = nil },
+		func(r *rerankResponse) { r.Logprobs[0].Top[1].Logprob = nil },
 		func(r *rerankResponse) { r.Logprobs[0].Bytes = nil },
 	} {
 		r := rerankFixtureParsed(t)
@@ -72,14 +75,14 @@ func TestBinaryRerankRequiresBothCanonicalTokenProbabilities(t *testing.T) {
 	}
 	for _, yesHigh := range []bool{false, true} {
 		r := rerankFixtureParsed(t)
-		r.Logprobs[0].Top[0].Logprob = -1000
-		r.Logprobs[0].Top[1].Logprob = 0
+		r.Logprobs[0].Top[0].Logprob = prob(-1000)
+		r.Logprobs[0].Top[1].Logprob = prob(0)
 		r.Response = "no"
 		r.Logprobs[0].tokenProbability = r.Logprobs[0].Top[1]
 		expected := 0.0
 		if yesHigh {
-			r.Logprobs[0].Top[0].Logprob = 0
-			r.Logprobs[0].Top[1].Logprob = -1000
+			r.Logprobs[0].Top[0].Logprob = prob(0)
+			r.Logprobs[0].Top[1].Logprob = prob(-1000)
 			r.Response = "yes"
 			r.Logprobs[0].tokenProbability = r.Logprobs[0].Top[0]
 			expected = 1
