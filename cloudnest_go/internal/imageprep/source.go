@@ -14,6 +14,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"golang.org/x/image/webp"
 )
 
 const (
@@ -125,7 +127,7 @@ func Config(ctx context.Context, source *os.File) (image.Config, string, error) 
 	if _, err = source.Seek(0, io.SeekStart); err != nil {
 		return cfg, "", err
 	}
-	var magic [8]byte
+	var magic [12]byte
 	n, err := io.ReadFull(&contextReader{ctx: ctx, in: source}, magic[:])
 	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
 		return cfg, "", err
@@ -135,10 +137,15 @@ func Config(ctx context.Context, source *os.File) (image.Config, string, error) 
 	switch {
 	case n >= 2 && magic[0] == 0xff && magic[1] == 0xd8:
 		format, decodeConfig = "jpeg", jpeg.DecodeConfig
-	case n == 8 && bytes.Equal(magic[:], []byte("\x89PNG\r\n\x1a\n")):
+	case n >= 8 && bytes.Equal(magic[:8], []byte("\x89PNG\r\n\x1a\n")):
 		format, decodeConfig = "png", png.DecodeConfig
 	case n >= 6 && (string(magic[:6]) == "GIF87a" || string(magic[:6]) == "GIF89a"):
 		format, decodeConfig = "gif", gif.DecodeConfig
+	case n == 12 && string(magic[:4]) == "RIFF" && string(magic[8:]) == "WEBP":
+		if _, err := readWebP(ctx, source); err != nil {
+			return cfg, "", err
+		}
+		format, decodeConfig = "webp", webp.DecodeConfig
 	default:
 		return cfg, "", ErrFormat
 	}
@@ -176,6 +183,8 @@ func Decode(ctx context.Context, source *os.File, cfg image.Config, format strin
 		img, err = png.Decode(limited)
 	case "gif":
 		img, err = gif.Decode(limited) // First frame only, never DecodeAll.
+	case "webp":
+		img, err = webp.Decode(limited) // Static files only; Config rejects animation.
 	default:
 		return nil, ErrFormat
 	}

@@ -57,7 +57,7 @@ func TestThumbnailMalformedAndUnsupportedDataHaveStableErrors(t *testing.T) {
 		{thumbnailPNGHeader(64, 64), 422},
 		{[]byte{0xff, 0xd8, 0xff}, 422},
 		{[]byte("GIF89a"), 422},
-		{[]byte("RIFFxxxxWEBPunsupported"), 415},
+		{[]byte("RIFFxxxxWEBPunsupported"), 422},
 		{[]byte("not an image"), 415},
 	} {
 		file := f.upload(t, f.alice, fmt.Sprintf("invalid-%d.png", i), tc.data)

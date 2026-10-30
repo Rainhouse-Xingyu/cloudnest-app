@@ -17,7 +17,9 @@ func TestAIImageFailuresNeverPublishPartialResults(t *testing.T) {
 		valid              bool
 	}{
 		{"valid.png", "model_unavailable", "retry", true},
+		{"valid.webp", "model_unavailable", "retry", true},
 		{"broken.png", "extraction_failed", "failed", false},
+		{"broken.webp", "extraction_failed", "failed", false},
 		{"legacy.heic", "unsupported_type", "failed", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -25,7 +27,11 @@ func TestAIImageFailuresNeverPublishPartialResults(t *testing.T) {
 			body := []byte("invalid image source")
 			if tc.valid {
 				var err error
-				body, err = os.ReadFile("testdata/images/invoice-synthetic.png")
+				source := "testdata/images/invoice-synthetic.png"
+				if tc.name == "valid.webp" {
+					source = "testdata/images/invoice-synthetic.webp"
+				}
+				body, err = os.ReadFile(source)
 				if err != nil {
 					t.Fatal(err)
 				}

@@ -26,7 +26,12 @@ func ReadMetadata(ctx context.Context, in *os.File, format string) (Metadata, er
 		return none, err
 	}
 	var exif []byte
-	if format == "jpeg" {
+	if format == "webp" {
+		exif, err = readWebP(ctx, in)
+		if err != nil {
+			return none, err
+		}
+	} else if format == "jpeg" {
 		offset := int64(2)
 		for n := 0; n < 4096; n++ {
 			if err := ctx.Err(); err != nil {

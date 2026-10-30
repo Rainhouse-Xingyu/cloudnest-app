@@ -21,7 +21,7 @@ type ImageAnalysis struct {
 
 func SupportsImage(ext string) bool {
 	switch strings.ToLower(strings.TrimPrefix(ext, ".")) {
-	case "jpg", "jpeg", "png", "gif":
+	case "jpg", "jpeg", "png", "gif", "webp":
 		return true
 	}
 	return false

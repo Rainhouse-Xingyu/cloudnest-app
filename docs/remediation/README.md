@@ -83,3 +83,5 @@ G04 已提交独立 [草稿 PR #5](https://github.com/Rainhouse-Xingyu/cloudnest
 
 - [六类检索效果评估](AI-RETRIEVAL-EVALUATION.md)：固定标签/开发集与保留集、真实模型排序和失败报告、候选门槛校准；更大独立语料与误匹配仍待完善。
 - [有界重排](AI-RERANK.md)：可选实际 token 评分、整批回退及推理后的权限/源复核；实际 v1 排序回归通过，扩展 stress-v2 因近似误匹配及超时失败；专用模型仍在评估。
+
+2026-10-30：静态 WebP 的有界解码与 EXIF 已接入，验证范围及其余格式边界见 [WebP 说明](AI-WEBP.md)。不改变 G04 进行中状态。
