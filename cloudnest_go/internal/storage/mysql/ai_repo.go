@@ -60,7 +60,8 @@ func (r *AIRepo) Search(ctx context.Context, uid int64, q contract.AISearchQuery
 		Table("file f").
 		Select("f.id, f.filename, f.file_type, f.size, f.parent_id, f.user_id, f.create_time, f.update_time, am.tags, am.description, am.ocr_text").
 		Joins("LEFT JOIN file_permission fp ON fp.file_id = f.id AND fp.user_id = ?", uid).
-		Joins("LEFT JOIN ai_metadata am ON am.file_id = f.id").
+		Joins("LEFT JOIN storage s ON s.id = f.storage_id").
+		Joins("LEFT JOIN ai_metadata am ON am.file_id = f.id AND am.source_hash=s.file_hash").
 		Where("f.is_deleted = 0 AND f.is_folder = 0").
 		Where("f.user_id = ? OR fp.permission IN ?", uid, []string{"read", "write"})
 

@@ -1,0 +1,29 @@
+{
+  "checked_utc": "2026-10-25T08:05:10Z",
+  "ollama_version": "0.31.1",
+  "model": "qwen3-embedding:0.6b",
+  "digest": "ac6da0dfba84a81fdbfbaf330198c33cd77c4cdfc53e8bc50eb581914a15621d",
+  "model_bytes": 639150858,
+  "capabilities": [
+    "tools",
+    "thinking",
+    "embedding"
+  ],
+  "dimensions": 1024,
+  "vectors": 3,
+  "finite": true,
+  "norms": [
+    0.9999997891489797,
+    1.0000003788161056,
+    0.9999996697419158
+  ],
+  "inputs": [
+    "数据库迁移需要先备份和验证数据一致性。",
+    "MySQL 升级与数据迁移的执行计划。",
+    "海边日落的风景照片。"
+  ],
+  "database_pair_cosine": 0.6493785808536043,
+  "database_photo_cosine": 0.1426202322840698,
+  "elapsed_seconds": 2.0975585830019554,
+  "scope": "local model capability smoke test, not CloudNest indexing/search acceptance"
+}

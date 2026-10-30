@@ -37,6 +37,12 @@ type AISearchRow struct {
 
 // AIRepository 定义 AI 模块存储访问能力。
 type AIRepository interface {
+	PublishOCR(ctx context.Context, uid int64, source model.File, sourceHash string, tags, description, text string) (model.AiMetadata, error)
+	ListIndex(ctx context.Context, uid, after int64, limit int) ([]AIIndexStatus, error)
+	IndexStatus(ctx context.Context, uid, id int64) (AIIndexStatus, error)
+	RebuildIndex(ctx context.Context, uid int64, items []AIRebuildItem, ip string) ([]AIRebuildItem, error)
+	ScanHybrid(ctx context.Context, uid int64, filter AIHybridFilter, visit func(AIHybridRow) error) error
+	ValidateHybrid(ctx context.Context, uid int64, rows []AIHybridRow) (map[int64]bool, error)
 	ApplySettingWithAudit(ctx context.Context, uid int64, key string, value string, description string, clientIP string) error
 	Search(ctx context.Context, uid int64, q AISearchQuery) ([]AISearchRow, int64, error)
 	GetActiveFileByID(ctx context.Context, fileID int64) (model.File, error)
@@ -46,4 +52,43 @@ type AIRepository interface {
 	CreateAIMetadata(ctx context.Context, row model.AiMetadata) (model.AiMetadata, error)
 	UpdateAIMetadata(ctx context.Context, row model.AiMetadata, tags string, desc string, ocrText string) (model.AiMetadata, error)
 	CreateAITask(ctx context.Context, row model.AiTask) error
+}
+
+type AIHybridFilter struct {
+	CapturedAfter  *time.Time
+	CapturedBefore *time.Time
+	FileTypes      []string
+	UploadedAfter  *time.Time
+	UploadedBefore *time.Time
+}
+
+// Rows are streamed in file_id/ordinal order; only live authorized files and
+// chunks from the matching completed source generation may be exposed.
+type AIHybridRow struct {
+	ExtractionKind    string
+	VisionModel       string
+	VisionDigest      string
+	HasOCR            bool
+	CapturedAtLocal   *time.Time
+	CaptureOffset     string
+	VisualDescription string
+	VisualTags        string
+
+	ID             int64
+	Filename       string
+	FileType       string
+	Size           int64
+	ParentID       int64
+	UserID         int64
+	CreateTime     time.Time
+	UpdateTime     time.Time
+	SourceHash     string
+	Generation     int64
+	EmbeddingModel string
+	ModelDigest    string
+	Dimensions     int
+	Ordinal        int
+	StartRune      int
+	Content        string
+	Vector         []byte
 }

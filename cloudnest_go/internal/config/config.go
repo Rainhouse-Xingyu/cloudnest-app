@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -25,6 +26,12 @@ type Config struct {
 	JWTExpireHours         int
 	AIOllamaBaseURL        string
 	AIOllamaModel          string
+	AIEmbeddingModel       string
+	AIRerankModel          string
+	AISearchMinCosine      float64
+	AISearchMinLexical     float64
+	AIPDFBinDir            string
+	AIOCRModel             string
 	AIGuideDocPath         string
 	AITimeoutSec           int
 	TransferTempBytes      int64
@@ -45,24 +52,35 @@ func Load() Config {
 	return Config{
 		TransferMaintenanceDSN: os.Getenv("TRANSFER_MAINTENANCE_DSN"),
 		BindAddr:               getEnv("APP_BIND_ADDR", ""), TransferTempBytes: transferSeedLimit(),
-		AppPort:         getEnv("APP_PORT", "8080"),
-		DataDir:         getEnv("DATA_DIR", "data"),
-		MySQLDSN:        os.Getenv("MYSQL_DSN"),
-		RedisAddr:       getEnv("REDIS_ADDR", "127.0.0.1:6379"),
-		RedisPassword:   getEnv("REDIS_PASSWORD", ""),
-		RedisDB:         getEnvInt("REDIS_DB", 0),
-		JWTSecret:       os.Getenv("JWT_SECRET"),
-		JWTExpireHours:  jwtExpireHours,
-		AIOllamaBaseURL: getEnv("AI_OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
-		AIOllamaModel:   getEnv("AI_OLLAMA_MODEL", "qwen3-vl:4b"),
-		AIGuideDocPath:  getEnv("AI_GUIDE_DOC_PATH", "../../项目功能汇总.md"),
-		AITimeoutSec:    getEnvInt("AI_TIMEOUT_SEC", 120),
+		AppPort:            getEnv("APP_PORT", "8080"),
+		DataDir:            getEnv("DATA_DIR", "data"),
+		MySQLDSN:           os.Getenv("MYSQL_DSN"),
+		RedisAddr:          getEnv("REDIS_ADDR", "127.0.0.1:6379"),
+		RedisPassword:      getEnv("REDIS_PASSWORD", ""),
+		RedisDB:            getEnvInt("REDIS_DB", 0),
+		JWTSecret:          os.Getenv("JWT_SECRET"),
+		JWTExpireHours:     jwtExpireHours,
+		AIOllamaBaseURL:    getEnv("AI_OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
+		AIOllamaModel:      getEnv("AI_OLLAMA_MODEL", "qwen3-vl:4b"),
+		AIPDFBinDir:        os.Getenv("AI_PDF_BIN_DIR"),
+		AIOCRModel:         getEnv("AI_OCR_MODEL", "qwen3-vl:4b"),
+		AIEmbeddingModel:   getEnv("AI_EMBEDDING_MODEL", "qwen3-embedding:0.6b"),
+		AIRerankModel:      strings.TrimSpace(os.Getenv("AI_RERANK_MODEL")),
+		AISearchMinCosine:  searchThreshold("AI_SEARCH_MIN_COSINE", DefaultSearchMinCosine),
+		AISearchMinLexical: searchThreshold("AI_SEARCH_MIN_LEXICAL", DefaultSearchMinLexical),
+		AIGuideDocPath:     getEnv("AI_GUIDE_DOC_PATH", "../../项目功能汇总.md"),
+		AITimeoutSec:       getEnvInt("AI_TIMEOUT_SEC", 120),
 	}
 }
 
 // Validate fails before opening databases or creating application data. Never
 // include configuration values in errors: DSNs and signing keys are secrets.
 func (c Config) Validate() error {
+	for _, threshold := range []float64{c.AISearchMinCosine, c.AISearchMinLexical} {
+		if math.IsNaN(threshold) || math.IsInf(threshold, 0) || threshold < 0 || threshold > 1 {
+			return fmt.Errorf("AI search thresholds must be finite numbers greater than zero and at most one")
+		}
+	}
 	if c.TransferTempBytes < 0 || c.TransferTempBytes > 4<<40 {
 		return fmt.Errorf("TRANSFER_TEMP_LIMIT_BYTES must be a positive integer no larger than 4 TiB")
 	}
@@ -123,6 +141,33 @@ func getEnvInt(key string, defaultValue int) int {
 	n, err := strconv.Atoi(v)
 	if err != nil {
 		return defaultValue
+	}
+	return n
+}
+
+// Calibrated on the v1 synthetic development split, not universal probabilities.
+const DefaultSearchMinCosine = 0.40
+const DefaultSearchMinLexical = 0.25
+
+func (c Config) SearchThresholds() (cosine, lexical float64) {
+	cosine, lexical = c.AISearchMinCosine, c.AISearchMinLexical
+	if cosine == 0 {
+		cosine = DefaultSearchMinCosine
+	}
+	if lexical == 0 {
+		lexical = DefaultSearchMinLexical
+	}
+	return
+}
+
+func searchThreshold(key string, fallback float64) float64 {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return fallback
+	}
+	n, err := strconv.ParseFloat(raw, 64)
+	if err != nil || math.IsNaN(n) || math.IsInf(n, 0) || n <= 0 || n > 1 {
+		return -1
 	}
 	return n
 }

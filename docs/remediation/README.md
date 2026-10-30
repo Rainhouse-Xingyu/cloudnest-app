@@ -32,6 +32,8 @@
 - [缩略图持久缓存与回收](THUMBNAIL-CACHE.md)
 - [大文件恢复与性能验收](TRANSFER-PERFORMANCE.md)
 - [下载写入期限与连接释放](DOWNLOAD-WRITE-BOUNDS.md)
+- [G04 持久索引任务与实现边界](G04-AI-INDEXING.md)
+- [混合检索、精确向量索引与规模证据](AI-HYBRID-SEARCH.md)
 
 状态定义：待做、进行中、代码完成待审、验收完成、外部阻塞。代码存在、构建通过、单项测试通过均不等同于业务验收完成。每个后续 PR 必须更新问题、测试结果及本表，保留失败和未执行项。
 
@@ -64,3 +66,22 @@ G03 已完成独立 1 GiB 真实服务验收：16 × 64 MiB 上传在半程暂�
 G03 已补齐下载写入/刷新 30 秒期限、上下文取消唤醒和最终刷新错误传播；独立真实网络套件覆盖 HTTP/1.1、TLS HTTP/2、超时租约释放/同连接后续 Range 与健康低速长下载，见 [写入期限](DOWNLOAD-WRITE-BOUNDS.md)。完整回归另揭示 macOS 首次并发创建卷锁文件的 ENOENT，已改独占创建后打开现存 inode，保留失败记录和原断言；最终验证结果见 TESTING。
 
 本批最终普通 237 项 race 回归通过（329.401s），独立网络两项通过（106.183s），空文件并发完成重复 30 轮通过；完整失败诊断和验证边界已保留于 TESTING。
+
+G04 已提交独立 [草稿 PR #5](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/5)（base 为 PR #4 分支）：上传事务与持久索引任务原子提交，增加租约领取/重试/代次隔离/结果事务；移除吞错的上传后 goroutine。初始 4c9c6d6 检查点仅排队，其远端 CI 已全通过；后续已接入实际文本/切块/embedding 和原子向量保存、服务 worker 生命周期，后续又接入精确向量/关键词融合、权限与代次复核、原文片段及模型故障降级，10k 向量实测通过；状态/历史重建 API 与版本/复制/恢复/扩展名增量已接入；DOCX/XLSX/PPTX 有界解析与摘要接口复用已接入；PDF 文本/扫描页 OCR 与摘要复用已接入；JPEG/PNG/GIF 视觉/EXIF 日历已接入，其余图片格式/旧二进制 Office/完整评估仍待完成，详见 [G04 记录](G04-AI-INDEXING.md)。G03 最新 a34ba25 的 PR/push CI 均已通过，Linux 网络夹具修复不改变产品源码。
+
+- [AI 索引状态与历史重建 API](AI-INDEX-CONTROL.md)：游标、错误诊断、所有权、代次 CAS 与整批回滚。
+
+- [文件变更与增量索引](AI-INDEX-INCREMENTAL.md)：版本、复制、回收恢复、扩展名变更及事务失败回滚。
+
+- [Office 提取与资源边界](AI-OFFICE-EXTRACTION.md)：OPC 关系、结构化文本、三种真实文件、错误与准入限制。
+
+- [PDF 提取与扫描页 OCR](AI-PDF-EXTRACTION.md)：独立解析进程、平台资源限制、实际视觉转录与剩余边界。
+
+- [图片视觉索引与 EXIF 日历](AI-IMAGE-INDEXING.md)：真实像素、共享解码预算、结构化输出、来源字段和拍摄时间语义。
+
+- [手动 OCR 统一与源身份](AI-MANUAL-OCR.md)：有界 EXIF/GPS、实际像素、撤权/换版隔离和原子成功记录。
+
+- [六类检索效果评估](AI-RETRIEVAL-EVALUATION.md)：固定标签/开发集与保留集、真实模型排序和失败报告、候选门槛校准；更大独立语料与误匹配仍待完善。
+- [有界重排](AI-RERANK.md)：可选实际 token 评分、整批回退及推理后的权限/源复核；实际 v1 排序回归通过，扩展 stress-v2 因近似误匹配及超时失败；专用模型仍在评估。
+
+2026-10-30：静态 WebP 的有界解码与 EXIF 已接入，验证范围及其余格式边界见 [WebP 说明](AI-WEBP.md)。不改变 G04 进行中状态。

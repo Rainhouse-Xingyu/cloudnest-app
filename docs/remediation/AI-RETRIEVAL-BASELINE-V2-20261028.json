@@ -1,0 +1,4283 @@
+{
+  "version": 1,
+  "started": "2026-10-28T21:19:20.876169+08:00",
+  "finished": "2026-10-28T21:22:59.597726+08:00",
+  "completed": true,
+  "passed": false,
+  "commit": "afebb0674503a657d91fc0257be61d0513f2152f",
+  "working_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "harness_sha256": "17ff36106766c80c603294207decd50329b1c10b6ac198c40e5f78362b6c927a",
+  "manifest_sha256": "2cc46826ef494188d63fd1b6ac1e1a65c7ea62feaa24b23a05641f156a86d759",
+  "go_version": "go1.26.10",
+  "platform": "darwin/arm64",
+  "ollama_version": "0.31.1",
+  "embedding_model": "qwen3-embedding:0.6b",
+  "embedding_digest": "ac6da0dfba84a81fdbfbaf330198c33cd77c4cdfc53e8bc50eb581914a15621d",
+  "vision_model": "qwen3-vl:4b",
+  "vision_digest": "a1b29c246319cdcb1f3842f36d29f198f737c0cf516ba1bcba34b1b974e87980",
+  "quality_gates": {
+    "positive_macro_recall_at_5": 0.9,
+    "positive_mrr_at_10": 0.8,
+    "negative_empty_rate": 1
+  },
+  "documents": [
+    {
+      "id": "photo-last",
+      "source_sha256": "f7c86704ec0c33a08cffd8c4e4f33edf1b14f36dd3c7325020d60abc8cc7418a",
+      "uploaded": "2026-10-28T13:19:20.876169Z",
+      "capture_local": "2025-06-15 10:20:30",
+      "extraction_kind": "image",
+      "vision_digest": "a1b29c246319cdcb1f3842f36d29f198f737c0cf516ba1bcba34b1b974e87980",
+      "chunks": 1,
+      "latency_ms": 39264
+    },
+    {
+      "id": "photo-current",
+      "source_sha256": "4ce868240cf27a2e9eacd8c4a298815a02766d3ec3256f817a051b2489574f1b",
+      "uploaded": "2026-10-28T13:19:20.876169Z",
+      "capture_local": "2026-06-15 10:20:30",
+      "extraction_kind": "image",
+      "vision_digest": "a1b29c246319cdcb1f3842f36d29f198f737c0cf516ba1bcba34b1b974e87980",
+      "chunks": 1,
+      "latency_ms": 40367
+    },
+    {
+      "id": "photo-unknown",
+      "source_sha256": "46fb75e9a0db7d4dbe339bd25f10829280182f955b75b77190e4ba27f44d1dd2",
+      "uploaded": "2026-10-28T13:19:20.876169Z",
+      "extraction_kind": "image",
+      "vision_digest": "a1b29c246319cdcb1f3842f36d29f198f737c0cf516ba1bcba34b1b974e87980",
+      "chunks": 1,
+      "latency_ms": 36621
+    },
+    {
+      "id": "migration-office",
+      "source_sha256": "dd3a178b60cdae3ac676b72f716a43df72065abf0273151e3b0a454f44fafb3d",
+      "uploaded": "2026-10-28T13:19:20.876169Z",
+      "extraction_kind": "office",
+      "chunks": 1,
+      "latency_ms": 1063
+    },
+    {
+      "id": "migration-and-access",
+      "source_sha256": "d8ce99ae1820ae57bec8f87de10a7d86e4cd483b355ff2b006f52f01109833da",
+      "uploaded": "2026-10-28T13:19:20.876169Z",
+      "extraction_kind": "pdf",
+      "chunks": 1,
+      "latency_ms": 746
+    },
+    {
+      "id": "migration-plan",
+      "source_sha256": "7e3325308e1e79a1ec9dbc8d08e425270885d40541a5f2b2f18ec9de3c11cfff",
+      "uploaded": "2026-10-28T13:19:20.876169Z",
+      "extraction_kind": "text",
+      "chunks": 1,
+      "latency_ms": 474
+    },
+    {
+      "id": "migration-runbook",
+      "source_sha256": "1262a1ea62fe25bd96cf1d6fb4509e780156ec67d1715165a31b7c2d4d6e9126",
+      "uploaded": "2026-10-28T13:19:20.876169Z",
+      "extraction_kind": "text",
+      "chunks": 1,
+      "latency_ms": 424
+    },
+    {
+      "id": "permissions-slides",
+      "source_sha256": "252758ed6858a9525e7a8a4ad4793c023caa71a169344463fa0f8d9b839087e0",
+      "uploaded": "2026-10-28T13:19:20.876169Z",
+      "extraction_kind": "office",
+      "chunks": 1,
+      "latency_ms": 464
+    },
+    {
+      "id": "permissions-guide",
+      "source_sha256": "70721ca7f3ee153d84dabb277d4c0141115e9ae3f5d4117d26f1a13f8509ffe6",
+      "uploaded": "2026-10-28T13:19:20.876169Z",
+      "extraction_kind": "text",
+      "chunks": 1,
+      "latency_ms": 463
+    },
+    {
+      "id": "permissions-settings",
+      "source_sha256": "656344361f611f746f3082b7f07c6a92f6cebf32208726ac24cdc799322b531d",
+      "uploaded": "2026-10-28T13:19:20.876169Z",
+      "extraction_kind": "text",
+      "chunks": 1,
+      "latency_ms": 423
+    },
+    {
+      "id": "contract-service",
+      "source_sha256": "592aa0ed59a6459db4d93ed67766167499458f57be5a123c05ea4b7f2eecb7bd",
+      "uploaded": "2026-09-15T04:00:00Z",
+      "extraction_kind": "text",
+      "chunks": 1,
+      "latency_ms": 422
+    },
+    {
+      "id": "contract-purchase",
+      "source_sha256": "cca2ba646c660bb6035200bebdf419b4d5937293f41940ac36deff4513de99fa",
+      "uploaded": "2026-09-15T04:00:00Z",
+      "extraction_kind": "text",
+      "chunks": 1,
+      "latency_ms": 419
+    },
+    {
+      "id": "contract-current",
+      "source_sha256": "906d692a73217fadca95b45c2ea9b04ea547911722354b4966543ed21bc7022e",
+      "uploaded": "2026-10-28T13:19:20.876169Z",
+      "extraction_kind": "text",
+      "chunks": 1,
+      "latency_ms": 398
+    },
+    {
+      "id": "contract-older",
+      "source_sha256": "c617bed99ec83ec2b924e9997555bbc3860916c503a2d8a1a930ee3e56afb4ee",
+      "uploaded": "2026-08-15T04:00:00Z",
+      "extraction_kind": "text",
+      "chunks": 1,
+      "latency_ms": 488
+    },
+    {
+      "id": "invoice-sheet",
+      "source_sha256": "4e8a13ffc12fffca7a3e26d13da73a17632e457509f76d317fde4ae5cf696c1f",
+      "uploaded": "2026-10-28T13:19:20.876169Z",
+      "extraction_kind": "office",
+      "chunks": 1,
+      "latency_ms": 438
+    },
+    {
+      "id": "invoice-scan",
+      "source_sha256": "9ae7ed4485cbe02d5d0fab8976c6c3b75d090ace78b07a115c6e1667ddce0443",
+      "uploaded": "2026-10-28T13:19:20.876169Z",
+      "extraction_kind": "pdf",
+      "vision_digest": "a1b29c246319cdcb1f3842f36d29f198f737c0cf516ba1bcba34b1b974e87980",
+      "chunks": 1,
+      "latency_ms": 31092
+    },
+    {
+      "id": "invoice-photo",
+      "source_sha256": "651e5ea7e9b0de70197a8d697de442692d2aa1025e3369dce0131e17651c7d1f",
+      "uploaded": "2026-10-28T13:19:20.876169Z",
+      "extraction_kind": "image",
+      "vision_digest": "a1b29c246319cdcb1f3842f36d29f198f737c0cf516ba1bcba34b1b974e87980",
+      "chunks": 1,
+      "latency_ms": 54188
+    },
+    {
+      "id": "invoice-receipt",
+      "source_sha256": "a2dd081f9a5973aad5cbf26714dc299e228f38526a82840e9811a4e856f2d298",
+      "uploaded": "2026-09-15T04:00:00Z",
+      "extraction_kind": "text",
+      "chunks": 1,
+      "latency_ms": 463
+    },
+    {
+      "id": "config-production",
+      "source_sha256": "038e2ace0c1e26dcf9475273e8bbfb85aaa8ea60d4ed8a314ebdfb2a56d17b27",
+      "uploaded": "2026-10-28T13:19:20.876169Z",
+      "extraction_kind": "text",
+      "chunks": 1,
+      "latency_ms": 441
+    },
+    {
+      "id": "config-staging",
+      "source_sha256": "b92af2c39ac0cd89ff546fab4c4a34d9f2008451f01e86e0c5536d29acc99aec",
+      "uploaded": "2026-10-28T13:19:20.876169Z",
+      "extraction_kind": "text",
+      "chunks": 1,
+      "latency_ms": 436
+    },
+    {
+      "id": "ip-explanation",
+      "source_sha256": "ee156206fe1c6c501ea0dd54b89b013ee5eb3d02f2139e64164d7e72047e3405",
+      "uploaded": "2026-10-28T13:19:20.876169Z",
+      "extraction_kind": "text",
+      "chunks": 1,
+      "latency_ms": 443
+    },
+    {
+      "id": "laptop-review",
+      "source_sha256": "398804b2c9c554d1b13db4e6eed9202b47d9030e127250da698a1642bddd037c",
+      "uploaded": "2026-10-28T13:19:20.876169Z",
+      "extraction_kind": "text",
+      "chunks": 1,
+      "latency_ms": 407
+    },
+    {
+      "id": "travel-notes",
+      "source_sha256": "2b8b47f7b842577f221d68af77baf90002f0f155dab16f50399c2c6832246e58",
+      "uploaded": "2026-10-28T13:19:20.876169Z",
+      "extraction_kind": "text",
+      "chunks": 1,
+      "latency_ms": 410
+    },
+    {
+      "id": "meeting-notes",
+      "source_sha256": "918f90bd1605e47c833f74705be5ee623b0eccdfcf7cae23506ed86602cab6b4",
+      "uploaded": "2026-09-15T04:00:00Z",
+      "extraction_kind": "text",
+      "chunks": 1,
+      "latency_ms": 397
+    },
+    {
+      "id": "recipe",
+      "source_sha256": "8ac4481ee04bcd123c81da54d6130c1e9e487cf7271c1b9ddfe7b4b674e211da",
+      "uploaded": "2026-10-28T13:19:20.876169Z",
+      "extraction_kind": "text",
+      "chunks": 1,
+      "latency_ms": 386
+    },
+    {
+      "id": "exercise",
+      "source_sha256": "65f851a42f9a5360bb6d50f962ad9105c356a98ee91147c933013c5bb442728e",
+      "uploaded": "2026-10-28T13:19:20.876169Z",
+      "extraction_kind": "text",
+      "chunks": 1,
+      "latency_ms": 386
+    },
+    {
+      "id": "private-migration",
+      "source_sha256": "a0ed51317dbfe92a6d6792ac8fba4ca447a771c569b13db9f1c6017d94feb264",
+      "uploaded": "2026-10-28T13:19:20.876169Z",
+      "extraction_kind": "text",
+      "chunks": 1,
+      "latency_ms": 378
+    },
+    {
+      "id": "private-contract",
+      "source_sha256": "a0c2fa6359689e7bc3cdbd6b4f4c8bc8cc9041b392ff65fe0f07f460dcc06eb2",
+      "uploaded": "2026-09-15T04:00:00Z",
+      "extraction_kind": "text",
+      "chunks": 1,
+      "latency_ms": 398
+    },
+    {
+      "id": "private-invoice",
+      "source_sha256": "b7be7a209fdb9d6709aef1a07e8d363dadfbe882c259597d3b397a9d4b7ae0d0",
+      "uploaded": "2026-10-28T13:19:20.876169Z",
+      "extraction_kind": "text",
+      "chunks": 1,
+      "latency_ms": 388
+    },
+    {
+      "id": "shared-migration",
+      "source_sha256": "875bac0863ea4bd040b139c4b3b8ad384f7b272e998b9255f03aba67e494b89c",
+      "uploaded": "2026-10-28T13:19:20.876169Z",
+      "extraction_kind": "text",
+      "chunks": 1,
+      "latency_ms": 411
+    }
+  ],
+  "queries": [
+    {
+      "query": {
+        "id": "beach-1",
+        "family": "beach",
+        "split": "dev",
+        "question": "帮我找到去年拍摄的海边照片。",
+        "relevant": [
+          "photo-last"
+        ]
+      },
+      "response": {
+        "items": [
+          {
+            "id": 1,
+            "document": "photo-last",
+            "score": 0.01639344262295082,
+            "semantic_score": 0.44567368137256025,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\n一片阳光明媚的海滩，金色沙滩延伸至清澈的蓝色海水。海浪轻轻拍打着岸边，形成白色的泡沫。左侧有岩石峭壁，上面覆盖着少量植被。天空湛蓝，点缀着几朵白云。\n[Visual tags]\n海滩,沙滩,海洋,海浪,岩石,蓝天,白云"
+          }
+        ],
+        "pagination": {
+          "total": 1
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [
+            "capture_time_uses_exif_camera_local_calendar"
+          ],
+          "window_limited": false
+        }
+      },
+      "latency_ms": 149,
+      "metrics": {
+        "recall_at_1": 1,
+        "recall_at_3": 1,
+        "recall_at_5": 1,
+        "precision_at_5": 0.2,
+        "mrr_at_10": 1
+      }
+    },
+    {
+      "query": {
+        "id": "beach-2",
+        "family": "beach",
+        "split": "dev",
+        "question": "去年拍的沙滩海浪图片",
+        "relevant": [
+          "photo-last"
+        ]
+      },
+      "response": {
+        "items": [
+          {
+            "id": 1,
+            "document": "photo-last",
+            "score": 0.03278688524590164,
+            "semantic_score": 0.5310691603568866,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "[Visual description]\n一片阳光明媚的海滩，金色沙滩延伸至清澈的蓝色海水。海浪轻轻拍打着岸边，形成白色的泡沫。左侧有岩石峭壁，上面覆盖着少量植被。天空湛蓝，点缀着几朵白云。\n[Visual tags]\n海滩,沙滩,海洋,海浪,岩石,蓝天,白云"
+          }
+        ],
+        "pagination": {
+          "total": 1
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [
+            "capture_time_uses_exif_camera_local_calendar"
+          ],
+          "window_limited": false
+        }
+      },
+      "latency_ms": 389,
+      "metrics": {
+        "recall_at_1": 1,
+        "recall_at_3": 1,
+        "recall_at_5": 1,
+        "precision_at_5": 0.2,
+        "mrr_at_10": 1
+      }
+    },
+    {
+      "query": {
+        "id": "beach-3",
+        "family": "beach",
+        "split": "heldout",
+        "question": "查找上一年在海岸拍下的照片",
+        "relevant": [
+          "photo-last"
+        ]
+      },
+      "response": {
+        "items": [
+          {
+            "id": 2,
+            "document": "photo-current",
+            "score": 0.01639344262295082,
+            "semantic_score": 0.38002516362243793,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\n一片阳光明媚的海滩，金色沙滩延伸至清澈的蓝色海水。海浪轻轻拍打着岸边，形成白色的泡沫。左侧有岩石峭壁，上面覆盖着少量植被。天空湛蓝，点缀着几朵白云。\n[Visual tags]\n海滩,沙滩,海洋,海浪,岩石,蓝天,白云"
+          },
+          {
+            "id": 3,
+            "document": "photo-unknown",
+            "score": 0.016129032258064516,
+            "semantic_score": 0.38002516362243793,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\n一片阳光明媚的海滩，金色沙滩延伸至清澈的蓝色海水。海浪轻轻拍打着岸边，形成白色的泡沫。左侧有岩石峭壁，上面覆盖着少量植被。天空湛蓝，点缀着几朵白云。\n[Visual tags]\n海滩,沙滩,海洋,海浪,岩石,蓝天,白云"
+          },
+          {
+            "id": 1,
+            "document": "photo-last",
+            "score": 0.015873015873015872,
+            "semantic_score": 0.3799147773565117,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\n一片阳光明媚的海滩，金色沙滩延伸至清澈的蓝色海水。海浪轻轻拍打着岸边，形成白色的泡沫。左侧有岩石峭壁，上面覆盖着少量植被。天空湛蓝，点缀着几朵白云。\n[Visual tags]\n海滩,沙滩,海洋,海浪,岩石,蓝天,白云"
+          },
+          {
+            "id": 17,
+            "document": "invoice-photo",
+            "score": 0.015625,
+            "semantic_score": 0.30890508710663206,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\nA white background with black text displaying a test invoice from Cloudnest.\n[Visual tags]\ninvoice,test invoice,laptop computer,CNY,server IP,synthetic fixture\n[Visible text OCR]\nCLOUDNEST TEST INVOICE\n\nItem: Laptop Com"
+          }
+        ],
+        "pagination": {
+          "total": 4
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false
+        }
+      },
+      "latency_ms": 153,
+      "metrics": {
+        "recall_at_1": 0,
+        "recall_at_3": 1,
+        "recall_at_5": 1,
+        "precision_at_5": 0.2,
+        "mrr_at_10": 0.3333333333333333
+      }
+    },
+    {
+      "query": {
+        "id": "migration-1",
+        "family": "migration",
+        "split": "dev",
+        "question": "找出讨论数据库迁移方案的文档。",
+        "relevant": [
+          "migration-office",
+          "migration-and-access",
+          "migration-plan",
+          "migration-runbook",
+          "shared-migration"
+        ]
+      },
+      "response": {
+        "items": [
+          {
+            "id": 6,
+            "document": "migration-plan",
+            "score": 0.032266458495966696,
+            "semantic_score": 0.5935302481188063,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "节点。先做全量备份，再同步增量，核对记录数量和校验值。切换流量前演练回滚，保留旧实例只读快照。出现不一致时恢复备份。本文讨论数据搬迁步骤与一致性验证。"
+          },
+          {
+            "id": 30,
+            "document": "shared-migration",
+            "score": 0.032266458495966696,
+            "semantic_score": 0.6789873473945137,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "共享数据库搬迁检查单\n迁移 MySQL 数据之前备份、导出快照并核对行数，切换到新数据库后验证一致性；失败时恢复原数据库。"
+          },
+          {
+            "id": 4,
+            "document": "migration-office",
+            "score": 0.0315136476426799,
+            "semantic_score": 0.5784397858111823,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "数据库迁移方案\nMySQL 升级前先备份数据库，迁移后验证数据一致性。\n服务器 IP\n\t192.0.2.42\n\t\n回滚计划\n\t恢复备份，核对行数和校验值。\n\t\n\nCloudNest 合成测试文档"
+          },
+          {
+            "id": 24,
+            "document": "meeting-notes",
+            "score": 0.030536130536130537,
+            "semantic_score": 0.3774622959077415,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "项目周会记录\n讨论设备采购进度、服务续费和下次会议时间。合同仍在法务审核，本文不是签署的协议。"
+          },
+          {
+            "id": 15,
+            "document": "invoice-sheet",
+            "score": 0.02844551282051282,
+            "semantic_score": 0.2731780254114947,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "买发票]\nA1: 商品\tB1: 金额\tC1: 测试说明\t\nA2: 笔记本电脑\tB2: 5999\tC2: 合成票据，无个人数据\t\nA3: 合计\tB3: =SUM(B2:B2) [cached: ]\tC3: 服务器 IP 192.0.2.42"
+          },
+          {
+            "id": 7,
+            "document": "migration-runbook",
+            "score": 0.016129032258064516,
+            "semantic_score": 0.6264549971499044,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "Relocating the application database\nExport a consistent MySQL snapshot, apply the change log on the destination, compare row counts, and rehearse switching traffic back. Retain the previous cluster until validation completes. This is the pl"
+          },
+          {
+            "id": 5,
+            "document": "migration-and-access",
+            "score": 0.015625,
+            "semantic_score": 0.5860174860915764,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Page 1]\nDatabase migration plan\n\nCloudNest synthetic fixture - no personal data.\n\nMigrate MySQL data after a verified backup.\n\nValidate row counts and retain a rollback snapshot.\n\nThe staging server address is 192.0.2.42.\n\n[Page 2]\nSpring "
+          },
+          {
+            "id": 19,
+            "document": "config-production",
+            "score": 0.014925373134328358,
+            "semantic_score": 0.3634126551579935,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "server:\n  name: production-example\n  host: 192.0.2.42\n  port: 8443\ndatabase:\n  host: 198.51.100.17\n  port: 3306\n# Deployable service configuration. All IPs are documentation-only addresses."
+          },
+          {
+            "id": 8,
+            "document": "permissions-slides",
+            "score": 0.014705882352941176,
+            "semantic_score": 0.3568157360495039,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Slide 1]\nSpring Boot 权限管理：角色、资源授权与审计日志。\n\n[Notes]\n演讲备注：检查文件级访问权限，阻止跨用户读取。\n\n[Slide 2]\n安全回归测试与部署检查。"
+          },
+          {
+            "id": 12,
+            "document": "contract-purchase",
+            "score": 0.014492753623188406,
+            "semantic_score": 0.33767037485512463,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "设备采购合同\n买方采购笔记本电脑十台，卖方在验收后提供发票。约定交货日期、验收标准、保修和付款条件。双方签字确认采购约定。本文为采购合同，不是已付款的发票或收据。"
+          },
+          {
+            "id": 26,
+            "document": "exercise",
+            "score": 0.014285714285714285,
+            "semantic_score": 0.33108427995024586,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "训练计划\n每周进行三次跑步和两次力量训练，记录休息时间与饮水量。"
+          },
+          {
+            "id": 17,
+            "document": "invoice-photo",
+            "score": 0.014084507042253521,
+            "semantic_score": 0.3230327537641454,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\nA white background with black text displaying a test invoice from Cloudnest.\n[Visual tags]\ninvoice,test invoice,laptop computer,CNY,server IP,synthetic fixture\n[Visible text OCR]\nCLOUDNEST TEST INVOICE\n\nItem: Laptop Com"
+          },
+          {
+            "id": 16,
+            "document": "invoice-scan",
+            "score": 0.013888888888888888,
+            "semantic_score": 0.3131422891755984,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Page 1 OCR]\nCLOUDNEST TEST INVOICE\n\nItem: Laptop Computer\n\nTotal: CNY 5999.00\n\nServer IP: 192.0.2.42\n\nSynthetic fixture - no personal data\n\n"
+          },
+          {
+            "id": 11,
+            "document": "contract-service",
+            "score": 0.0136986301369863,
+            "semantic_score": 0.3106035798853018,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "技术服务合同\n甲方与乙方约定系统维护服务期限十二个月，服务费每季度支付。双方签字后生效。交付物为维护报告和问题处理记录。违约责任为延误交付按合同条款处理。本文件是已签订的服务协议，非会议纪要。"
+          },
+          {
+            "id": 14,
+            "document": "contract-older",
+            "score": 0.013513513513513514,
+            "semantic_score": 0.30504678665204,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "年度软件服务合同\n双方约定技术支持范围、金额、交付期限与签署日期。"
+          },
+          {
+            "id": 20,
+            "document": "config-staging",
+            "score": 0.013333333333333334,
+            "semantic_score": 0.30409848318754595,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "# Staging server network configuration\nSERVER_IP=203.0.113.27\nHTTP_PORT=8080\nUPSTREAM_HOST=192.0.2.81\n# Synthetic deployment settings, no credentials."
+          },
+          {
+            "id": 21,
+            "document": "ip-explanation",
+            "score": 0.013157894736842105,
+            "semantic_score": 0.28961416619650315,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "网络地址入门\nIP 地址用于标识网络接口，IPv4 采用点分十进制表示。选择生产服务器地址需要遵循网络规划。本文解释概念，没有可部署的服务配置。"
+          },
+          {
+            "id": 22,
+            "document": "laptop-review",
+            "score": 0.012987012987012988,
+            "semantic_score": 0.2892896412801749,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "笔记本电脑选购评测\n比较处理器性能、屏幕和电池续航。预算约六千元，尚未购买任何设备，也没有发票。推荐根据实际用途选择，不包含付款记录。"
+          },
+          {
+            "id": 23,
+            "document": "travel-notes",
+            "score": 0.012658227848101266,
+            "semantic_score": 0.2581353527337577,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "海边旅行文字游记\n去年散步经过沙滩和海浪，天气晴朗。本文是纯文字日记，没有照片，也没有 EXIF 拍摄记录。"
+          },
+          {
+            "id": 9,
+            "document": "permissions-guide",
+            "score": 0.0125,
+            "semantic_score": 0.2575546577655706,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "Spring Boot 权限管理指南\n使用 Spring Security 验证 JWT。RBAC 按角色授予 API 权限，同时在服务层检查资源所有者。文件共享只授予 read 或 write；不能用管理员身份绕过文件级授权。撤销权限后立即拒绝读取，审计拒绝事件。"
+          }
+        ],
+        "pagination": {
+          "total": 20
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false
+        }
+      },
+      "latency_ms": 156,
+      "metrics": {
+        "recall_at_1": 0.2,
+        "recall_at_3": 0.6,
+        "recall_at_5": 0.6,
+        "precision_at_5": 0.6,
+        "mrr_at_10": 1
+      }
+    },
+    {
+      "query": {
+        "id": "migration-2",
+        "family": "migration",
+        "split": "dev",
+        "question": "数据搬到新库前的备份、切换和回滚步骤",
+        "relevant": [
+          "migration-office",
+          "migration-and-access",
+          "migration-plan",
+          "migration-runbook",
+          "shared-migration"
+        ]
+      },
+      "response": {
+        "items": [
+          {
+            "id": 30,
+            "document": "shared-migration",
+            "score": 0.03252247488101534,
+            "semantic_score": 0.688180651688635,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "共享数据库搬迁检查单\n迁移 MySQL 数据之前备份、导出快照并核对行数，切换到新数据库后验证一致性；失败时恢复原数据库。"
+          },
+          {
+            "id": 6,
+            "document": "migration-plan",
+            "score": 0.032266458495966696,
+            "semantic_score": 0.6227623095599705,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "数据库迁移方案\n将旧 MySQL 集群的数据搬迁到新节点。先做全量备份，再同步增量，核对记录数量和校验值。切换流量前演练回滚，保留旧实例只读快照。出现不一致时恢复备份。本文讨论数据搬迁步骤与一致性验证。"
+          },
+          {
+            "id": 4,
+            "document": "migration-office",
+            "score": 0.03125763125763126,
+            "semantic_score": 0.5928459439440501,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "数据库迁移方案\nMySQL 升级前先备份数据库，迁移后验证数据一致性。\n服务器 IP\n\t192.0.2.42\n\t\n回滚计划\n\t恢复备份，核对行数和校验值。\n\t\n\nCloudNest 合成测试文档"
+          },
+          {
+            "id": 15,
+            "document": "invoice-sheet",
+            "score": 0.029138513513513514,
+            "semantic_score": 0.27562243181599777,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "买发票]\nA1: 商品\tB1: 金额\tC1: 测试说明\t\nA2: 笔记本电脑\tB2: 5999\tC2: 合成票据，无个人数据\t\nA3: 合计\tB3: =SUM(B2:B2) [cached: ]\tC3: 服务器 IP 192.0.2.42"
+          },
+          {
+            "id": 7,
+            "document": "migration-runbook",
+            "score": 0.016129032258064516,
+            "semantic_score": 0.6623942984114806,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "Relocating the application database\nExport a consistent MySQL snapshot, apply the change log on the destination, compare row counts, and rehearse switching traffic back. Retain the previous cluster until validation completes. This is the pl"
+          },
+          {
+            "id": 5,
+            "document": "migration-and-access",
+            "score": 0.015625,
+            "semantic_score": 0.6024069893643125,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Page 1]\nDatabase migration plan\n\nCloudNest synthetic fixture - no personal data.\n\nMigrate MySQL data after a verified backup.\n\nValidate row counts and retain a rollback snapshot.\n\nThe staging server address is 192.0.2.42.\n\n[Page 2]\nSpring "
+          },
+          {
+            "id": 8,
+            "document": "permissions-slides",
+            "score": 0.015151515151515152,
+            "semantic_score": 0.4205138727500271,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Slide 1]\nSpring Boot 权限管理：角色、资源授权与审计日志。\n\n[Notes]\n演讲备注：检查文件级访问权限，阻止跨用户读取。\n\n[Slide 2]\n安全回归测试与部署检查。"
+          },
+          {
+            "id": 24,
+            "document": "meeting-notes",
+            "score": 0.014925373134328358,
+            "semantic_score": 0.3519434710990583,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "项目周会记录\n讨论设备采购进度、服务续费和下次会议时间。合同仍在法务审核，本文不是签署的协议。"
+          },
+          {
+            "id": 16,
+            "document": "invoice-scan",
+            "score": 0.014705882352941176,
+            "semantic_score": 0.33852735382630417,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Page 1 OCR]\nCLOUDNEST TEST INVOICE\n\nItem: Laptop Computer\n\nTotal: CNY 5999.00\n\nServer IP: 192.0.2.42\n\nSynthetic fixture - no personal data\n\n"
+          },
+          {
+            "id": 17,
+            "document": "invoice-photo",
+            "score": 0.014492753623188406,
+            "semantic_score": 0.3369748109730173,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\nA white background with black text displaying a test invoice from Cloudnest.\n[Visual tags]\ninvoice,test invoice,laptop computer,CNY,server IP,synthetic fixture\n[Visible text OCR]\nCLOUDNEST TEST INVOICE\n\nItem: Laptop Com"
+          },
+          {
+            "id": 20,
+            "document": "config-staging",
+            "score": 0.014285714285714285,
+            "semantic_score": 0.33273518070070324,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "# Staging server network configuration\nSERVER_IP=203.0.113.27\nHTTP_PORT=8080\nUPSTREAM_HOST=192.0.2.81\n# Synthetic deployment settings, no credentials."
+          },
+          {
+            "id": 9,
+            "document": "permissions-guide",
+            "score": 0.014084507042253521,
+            "semantic_score": 0.3307098320862078,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "Spring Boot 权限管理指南\n使用 Spring Security 验证 JWT。RBAC 按角色授予 API 权限，同时在服务层检查资源所有者。文件共享只授予 read 或 write；不能用管理员身份绕过文件级授权。撤销权限后立即拒绝读取，审计拒绝事件。"
+          },
+          {
+            "id": 26,
+            "document": "exercise",
+            "score": 0.013888888888888888,
+            "semantic_score": 0.32812016349780865,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "训练计划\n每周进行三次跑步和两次力量训练，记录休息时间与饮水量。"
+          },
+          {
+            "id": 12,
+            "document": "contract-purchase",
+            "score": 0.0136986301369863,
+            "semantic_score": 0.31655679252558894,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "设备采购合同\n买方采购笔记本电脑十台，卖方在验收后提供发票。约定交货日期、验收标准、保修和付款条件。双方签字确认采购约定。本文为采购合同，不是已付款的发票或收据。"
+          },
+          {
+            "id": 18,
+            "document": "invoice-receipt",
+            "score": 0.013333333333333334,
+            "semantic_score": 0.27381532327962155,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "电脑购买发票（合成测试）\n商品：笔记本电脑，数量一台，含税金额人民币 6899 元。付款状态：已支付。用途：报销凭证。这里没有真实纳税人、账号或个人信息。"
+          },
+          {
+            "id": 14,
+            "document": "contract-older",
+            "score": 0.013157894736842105,
+            "semantic_score": 0.27298578494760917,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "年度软件服务合同\n双方约定技术支持范围、金额、交付期限与签署日期。"
+          },
+          {
+            "id": 22,
+            "document": "laptop-review",
+            "score": 0.012987012987012988,
+            "semantic_score": 0.27191910824614063,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "笔记本电脑选购评测\n比较处理器性能、屏幕和电池续航。预算约六千元，尚未购买任何设备，也没有发票。推荐根据实际用途选择，不包含付款记录。"
+          },
+          {
+            "id": 19,
+            "document": "config-production",
+            "score": 0.01282051282051282,
+            "semantic_score": 0.2703442118485015,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "server:\n  name: production-example\n  host: 192.0.2.42\n  port: 8443\ndatabase:\n  host: 198.51.100.17\n  port: 3306\n# Deployable service configuration. All IPs are documentation-only addresses."
+          },
+          {
+            "id": 10,
+            "document": "permissions-settings",
+            "score": 0.012658227848101266,
+            "semantic_score": 0.26111827301216056,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "spring:\n  security:\n    authorization:\n      roles: [viewer, editor]\n      resources: [document, folder]\n      default_policy: deny\n# Spring Boot role-based access policy; JWT authentication and resource authorization are separate."
+          },
+          {
+            "id": 11,
+            "document": "contract-service",
+            "score": 0.0125,
+            "semantic_score": 0.2545338379262346,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "技术服务合同\n甲方与乙方约定系统维护服务期限十二个月，服务费每季度支付。双方签字后生效。交付物为维护报告和问题处理记录。违约责任为延误交付按合同条款处理。本文件是已签订的服务协议，非会议纪要。"
+          },
+          {
+            "id": 13,
+            "document": "contract-current",
+            "score": 0.012345679012345678,
+            "semantic_score": 0.25140365061377784,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "房屋租赁合同\n出租方与承租方约定租金、押金、期限和维修责任，签署后生效。"
+          }
+        ],
+        "pagination": {
+          "total": 21
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false
+        }
+      },
+      "latency_ms": 165,
+      "metrics": {
+        "recall_at_1": 0.2,
+        "recall_at_3": 0.6,
+        "recall_at_5": 0.8,
+        "precision_at_5": 0.8,
+        "mrr_at_10": 1
+      }
+    },
+    {
+      "query": {
+        "id": "migration-3",
+        "family": "migration",
+        "split": "heldout",
+        "question": "关于 MySQL 数据搬迁与一致性核对的执行资料",
+        "relevant": [
+          "migration-office",
+          "migration-and-access",
+          "migration-plan",
+          "migration-runbook",
+          "shared-migration"
+        ]
+      },
+      "response": {
+        "items": [
+          {
+            "id": 6,
+            "document": "migration-plan",
+            "score": 0.03252247488101534,
+            "semantic_score": 0.7733951604397183,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "数据库迁移方案\n将旧 MySQL 集群的数据搬迁到新节点。先做全量备份，再同步增量，核对记录数量和校验值。切换流量前演练回滚，保留旧实例只读快照。出现不一致时恢复备份。本文讨论数据搬迁步骤与一致性验证。"
+          },
+          {
+            "id": 30,
+            "document": "shared-migration",
+            "score": 0.03252247488101534,
+            "semantic_score": 0.8249974492323819,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "共享数据库搬迁检查单\n迁移 MySQL 数据之前备份、导出快照并核对行数，切换到新数据库后验证一致性；失败时恢复原数据库。"
+          },
+          {
+            "id": 4,
+            "document": "migration-office",
+            "score": 0.031746031746031744,
+            "semantic_score": 0.6971154162935527,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "数据库迁移方案\nMySQL 升级前先备份数据库，迁移后验证数据一致性。\n服务器 IP\n\t192.0.2.42\n\t\n回滚计划\n\t恢复备份，核对行数和校验值。\n\t\n\nCloudNest 合成测试文档"
+          },
+          {
+            "id": 5,
+            "document": "migration-and-access",
+            "score": 0.031009615384615385,
+            "semantic_score": 0.6303723655423078,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "n\n\nCloudNest synthetic fixture - no personal data.\n\nMigrate MySQL data after a verified backup.\n\nValidate row counts and retain a rollback snapshot.\n\nThe staging server address is 192.0.2.42.\n\n[Page 2]\nSpring Boot permissions\n\nGrant access "
+          },
+          {
+            "id": 7,
+            "document": "migration-runbook",
+            "score": 0.031009615384615385,
+            "semantic_score": 0.6890391177346101,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "Relocating the application database\nExport a consistent MySQL snapshot, apply the change log on the destination, compare row counts, and rehearse switching traffic back. Retain the previous cluster until validation completes. This is the pl"
+          },
+          {
+            "id": 15,
+            "document": "invoice-sheet",
+            "score": 0.028484848484848488,
+            "semantic_score": 0.2878494187934926,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "买发票]\nA1: 商品\tB1: 金额\tC1: 测试说明\t\nA2: 笔记本电脑\tB2: 5999\tC2: 合成票据，无个人数据\t\nA3: 合计\tB3: =SUM(B2:B2) [cached: ]\tC3: 服务器 IP 192.0.2.42"
+          },
+          {
+            "id": 8,
+            "document": "permissions-slides",
+            "score": 0.015151515151515152,
+            "semantic_score": 0.3562974619332656,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Slide 1]\nSpring Boot 权限管理：角色、资源授权与审计日志。\n\n[Notes]\n演讲备注：检查文件级访问权限，阻止跨用户读取。\n\n[Slide 2]\n安全回归测试与部署检查。"
+          },
+          {
+            "id": 16,
+            "document": "invoice-scan",
+            "score": 0.014925373134328358,
+            "semantic_score": 0.3382986281176764,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Page 1 OCR]\nCLOUDNEST TEST INVOICE\n\nItem: Laptop Computer\n\nTotal: CNY 5999.00\n\nServer IP: 192.0.2.42\n\nSynthetic fixture - no personal data\n\n"
+          },
+          {
+            "id": 17,
+            "document": "invoice-photo",
+            "score": 0.014705882352941176,
+            "semantic_score": 0.33426251804397517,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\nA white background with black text displaying a test invoice from Cloudnest.\n[Visual tags]\ninvoice,test invoice,laptop computer,CNY,server IP,synthetic fixture\n[Visible text OCR]\nCLOUDNEST TEST INVOICE\n\nItem: Laptop Com"
+          },
+          {
+            "id": 26,
+            "document": "exercise",
+            "score": 0.014492753623188406,
+            "semantic_score": 0.3336598215583967,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "训练计划\n每周进行三次跑步和两次力量训练，记录休息时间与饮水量。"
+          },
+          {
+            "id": 19,
+            "document": "config-production",
+            "score": 0.014285714285714285,
+            "semantic_score": 0.32453356117394966,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "server:\n  name: production-example\n  host: 192.0.2.42\n  port: 8443\ndatabase:\n  host: 198.51.100.17\n  port: 3306\n# Deployable service configuration. All IPs are documentation-only addresses."
+          },
+          {
+            "id": 24,
+            "document": "meeting-notes",
+            "score": 0.014084507042253521,
+            "semantic_score": 0.32403998853993343,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "项目周会记录\n讨论设备采购进度、服务续费和下次会议时间。合同仍在法务审核，本文不是签署的协议。"
+          },
+          {
+            "id": 11,
+            "document": "contract-service",
+            "score": 0.013888888888888888,
+            "semantic_score": 0.30234848459618857,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "技术服务合同\n甲方与乙方约定系统维护服务期限十二个月，服务费每季度支付。双方签字后生效。交付物为维护报告和问题处理记录。违约责任为延误交付按合同条款处理。本文件是已签订的服务协议，非会议纪要。"
+          },
+          {
+            "id": 12,
+            "document": "contract-purchase",
+            "score": 0.0136986301369863,
+            "semantic_score": 0.29748319834677317,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "设备采购合同\n买方采购笔记本电脑十台，卖方在验收后提供发票。约定交货日期、验收标准、保修和付款条件。双方签字确认采购约定。本文为采购合同，不是已付款的发票或收据。"
+          },
+          {
+            "id": 20,
+            "document": "config-staging",
+            "score": 0.013513513513513514,
+            "semantic_score": 0.2918643103821178,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "# Staging server network configuration\nSERVER_IP=203.0.113.27\nHTTP_PORT=8080\nUPSTREAM_HOST=192.0.2.81\n# Synthetic deployment settings, no credentials."
+          },
+          {
+            "id": 23,
+            "document": "travel-notes",
+            "score": 0.013157894736842105,
+            "semantic_score": 0.26961180753195746,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "海边旅行文字游记\n去年散步经过沙滩和海浪，天气晴朗。本文是纯文字日记，没有照片，也没有 EXIF 拍摄记录。"
+          },
+          {
+            "id": 14,
+            "document": "contract-older",
+            "score": 0.012987012987012988,
+            "semantic_score": 0.26683677761135327,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "年度软件服务合同\n双方约定技术支持范围、金额、交付期限与签署日期。"
+          },
+          {
+            "id": 13,
+            "document": "contract-current",
+            "score": 0.01282051282051282,
+            "semantic_score": 0.265109446321876,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "房屋租赁合同\n出租方与承租方约定租金、押金、期限和维修责任，签署后生效。"
+          },
+          {
+            "id": 9,
+            "document": "permissions-guide",
+            "score": 0.012658227848101266,
+            "semantic_score": 0.26292616028724236,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "Spring Boot 权限管理指南\n使用 Spring Security 验证 JWT。RBAC 按角色授予 API 权限，同时在服务层检查资源所有者。文件共享只授予 read 或 write；不能用管理员身份绕过文件级授权。撤销权限后立即拒绝读取，审计拒绝事件。"
+          },
+          {
+            "id": 18,
+            "document": "invoice-receipt",
+            "score": 0.0125,
+            "semantic_score": 0.260658180615137,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "电脑购买发票（合成测试）\n商品：笔记本电脑，数量一台，含税金额人民币 6899 元。付款状态：已支付。用途：报销凭证。这里没有真实纳税人、账号或个人信息。"
+          },
+          {
+            "id": 21,
+            "document": "ip-explanation",
+            "score": 0.012345679012345678,
+            "semantic_score": 0.25928790755379927,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "网络地址入门\nIP 地址用于标识网络接口，IPv4 采用点分十进制表示。选择生产服务器地址需要遵循网络规划。本文解释概念，没有可部署的服务配置。"
+          }
+        ],
+        "pagination": {
+          "total": 21
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false
+        }
+      },
+      "latency_ms": 159,
+      "metrics": {
+        "recall_at_1": 0.2,
+        "recall_at_3": 0.6,
+        "recall_at_5": 1,
+        "precision_at_5": 1,
+        "mrr_at_10": 1
+      }
+    },
+    {
+      "query": {
+        "id": "permissions-1",
+        "family": "permissions",
+        "split": "dev",
+        "question": "寻找和 Spring Boot 权限管理相关的资料。",
+        "relevant": [
+          "permissions-slides",
+          "permissions-guide",
+          "permissions-settings",
+          "migration-and-access"
+        ]
+      },
+      "response": {
+        "items": [
+          {
+            "id": 8,
+            "document": "permissions-slides",
+            "score": 0.03278688524590164,
+            "semantic_score": 0.71347999154729,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "[Slide 1]\nSpring Boot 权限管理：角色、资源授权与审计日志。\n\n[Notes]\n演讲备注：检查文件级访问权限，阻止跨用户读取。\n\n[Slide 2]\n安全回归测试与部署检查。"
+          },
+          {
+            "id": 9,
+            "document": "permissions-guide",
+            "score": 0.03225806451612903,
+            "semantic_score": 0.6477743622847616,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "Spring Boot 权限管理指南\n使用 Spring Security 验证 JWT。RBAC 按角色授予 API 权限，同时在服务层检查资源所有者。文件共享只授予 read 或 write；不能用管理员身份绕过文件级授权。撤销权限后立即拒绝读取，审计拒绝事件。"
+          },
+          {
+            "id": 5,
+            "document": "migration-and-access",
+            "score": 0.03149801587301587,
+            "semantic_score": 0.5547051487647042,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "pshot.\n\nThe staging server address is 192.0.2.42.\n\n[Page 2]\nSpring Boot permissions\n\nGrant access through explicit read and write permissions.\n\nTest authorization before deploying the Spring Boot service.\n\n"
+          },
+          {
+            "id": 10,
+            "document": "permissions-settings",
+            "score": 0.03149801587301587,
+            "semantic_score": 0.6166302019101337,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "spring:\n  security:\n    authorization:\n      roles: [viewer, editor]\n      resources: [document, folder]\n      default_policy: deny\n# Spring Boot role-based access policy; JWT authentication and resource authorization are separate."
+          },
+          {
+            "id": 30,
+            "document": "shared-migration",
+            "score": 0.015384615384615385,
+            "semantic_score": 0.29210015801080813,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "共享数据库搬迁检查单\n迁移 MySQL 数据之前备份、导出快照并核对行数，切换到新数据库后验证一致性；失败时恢复原数据库。"
+          },
+          {
+            "id": 6,
+            "document": "migration-plan",
+            "score": 0.015151515151515152,
+            "semantic_score": 0.28630891304879624,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "数据库迁移方案\n将旧 MySQL 集群的数据搬迁到新节点。先做全量备份，再同步增量，核对记录数量和校验值。切换流量前演练回滚，保留旧实例只读快照。出现不一致时恢复备份。本文讨论数据搬迁步骤与一致性验证。"
+          },
+          {
+            "id": 4,
+            "document": "migration-office",
+            "score": 0.014925373134328358,
+            "semantic_score": 0.2830422047991518,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "数据库迁移方案\nMySQL 升级前先备份数据库，迁移后验证数据一致性。\n服务器 IP\n\t192.0.2.42\n\t\n回滚计划\n\t恢复备份，核对行数和校验值。\n\t\n\nCloudNest 合成测试文档"
+          },
+          {
+            "id": 26,
+            "document": "exercise",
+            "score": 0.014705882352941176,
+            "semantic_score": 0.2706045804643552,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "训练计划\n每周进行三次跑步和两次力量训练，记录休息时间与饮水量。"
+          },
+          {
+            "id": 20,
+            "document": "config-staging",
+            "score": 0.014492753623188406,
+            "semantic_score": 0.2600506327513183,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "# Staging server network configuration\nSERVER_IP=203.0.113.27\nHTTP_PORT=8080\nUPSTREAM_HOST=192.0.2.81\n# Synthetic deployment settings, no credentials."
+          },
+          {
+            "id": 24,
+            "document": "meeting-notes",
+            "score": 0.014285714285714285,
+            "semantic_score": 0.2581270816959957,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "项目周会记录\n讨论设备采购进度、服务续费和下次会议时间。合同仍在法务审核，本文不是签署的协议。"
+          },
+          {
+            "id": 13,
+            "document": "contract-current",
+            "score": 0.014084507042253521,
+            "semantic_score": 0.25543822323360393,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "房屋租赁合同\n出租方与承租方约定租金、押金、期限和维修责任，签署后生效。"
+          }
+        ],
+        "pagination": {
+          "total": 11
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false
+        }
+      },
+      "latency_ms": 150,
+      "metrics": {
+        "recall_at_1": 0.25,
+        "recall_at_3": 0.75,
+        "recall_at_5": 1,
+        "precision_at_5": 0.8,
+        "mrr_at_10": 1
+      }
+    },
+    {
+      "query": {
+        "id": "permissions-2",
+        "family": "permissions",
+        "split": "dev",
+        "question": "Java Web 应用如何用 Spring Security 做角色和资源授权",
+        "relevant": [
+          "permissions-slides",
+          "permissions-guide",
+          "permissions-settings",
+          "migration-and-access"
+        ]
+      },
+      "response": {
+        "items": [
+          {
+            "id": 9,
+            "document": "permissions-guide",
+            "score": 0.03252247488101534,
+            "semantic_score": 0.7076822317067994,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "Spring Boot 权限管理指南\n使用 Spring Security 验证 JWT。RBAC 按角色授予 API 权限，同时在服务层检查资源所有者。文件共享只授予 read 或 write；不能用管理员身份绕过文件级授权。撤销权限后立即拒绝读取，审计拒绝事件。"
+          },
+          {
+            "id": 8,
+            "document": "permissions-slides",
+            "score": 0.032266458495966696,
+            "semantic_score": 0.6490763767266612,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "[Slide 1]\nSpring Boot 权限管理：角色、资源授权与审计日志。\n\n[Notes]\n演讲备注：检查文件级访问权限，阻止跨用户读取。\n\n[Slide 2]\n安全回归测试与部署检查。"
+          },
+          {
+            "id": 10,
+            "document": "permissions-settings",
+            "score": 0.03200204813108039,
+            "semantic_score": 0.6662938277452427,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "spring:\n  security:\n    authorization:\n      roles: [viewer, editor]\n      resources: [document, folder]\n      default_policy: deny\n# Spring Boot role-based access policy; JWT authentication and resource authorization are separate."
+          },
+          {
+            "id": 5,
+            "document": "migration-and-access",
+            "score": 0.03125,
+            "semantic_score": 0.502651282947045,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "pshot.\n\nThe staging server address is 192.0.2.42.\n\n[Page 2]\nSpring Boot permissions\n\nGrant access through explicit read and write permissions.\n\nTest authorization before deploying the Spring Boot service.\n\n"
+          },
+          {
+            "id": 20,
+            "document": "config-staging",
+            "score": 0.015384615384615385,
+            "semantic_score": 0.35983142651573397,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "# Staging server network configuration\nSERVER_IP=203.0.113.27\nHTTP_PORT=8080\nUPSTREAM_HOST=192.0.2.81\n# Synthetic deployment settings, no credentials."
+          },
+          {
+            "id": 4,
+            "document": "migration-office",
+            "score": 0.015151515151515152,
+            "semantic_score": 0.31722938056931704,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "数据库迁移方案\nMySQL 升级前先备份数据库，迁移后验证数据一致性。\n服务器 IP\n\t192.0.2.42\n\t\n回滚计划\n\t恢复备份，核对行数和校验值。\n\t\n\nCloudNest 合成测试文档"
+          },
+          {
+            "id": 24,
+            "document": "meeting-notes",
+            "score": 0.014925373134328358,
+            "semantic_score": 0.311954354513012,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "项目周会记录\n讨论设备采购进度、服务续费和下次会议时间。合同仍在法务审核，本文不是签署的协议。"
+          },
+          {
+            "id": 21,
+            "document": "ip-explanation",
+            "score": 0.014705882352941176,
+            "semantic_score": 0.3114835712398533,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "网络地址入门\nIP 地址用于标识网络接口，IPv4 采用点分十进制表示。选择生产服务器地址需要遵循网络规划。本文解释概念，没有可部署的服务配置。"
+          },
+          {
+            "id": 19,
+            "document": "config-production",
+            "score": 0.014492753623188406,
+            "semantic_score": 0.30306856280580224,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "server:\n  name: production-example\n  host: 192.0.2.42\n  port: 8443\ndatabase:\n  host: 198.51.100.17\n  port: 3306\n# Deployable service configuration. All IPs are documentation-only addresses."
+          },
+          {
+            "id": 7,
+            "document": "migration-runbook",
+            "score": 0.014285714285714285,
+            "semantic_score": 0.2917671270324698,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "Relocating the application database\nExport a consistent MySQL snapshot, apply the change log on the destination, compare row counts, and rehearse switching traffic back. Retain the previous cluster until validation completes. This is the pl"
+          },
+          {
+            "id": 6,
+            "document": "migration-plan",
+            "score": 0.014084507042253521,
+            "semantic_score": 0.2876715498761374,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "数据库迁移方案\n将旧 MySQL 集群的数据搬迁到新节点。先做全量备份，再同步增量，核对记录数量和校验值。切换流量前演练回滚，保留旧实例只读快照。出现不一致时恢复备份。本文讨论数据搬迁步骤与一致性验证。"
+          },
+          {
+            "id": 17,
+            "document": "invoice-photo",
+            "score": 0.013888888888888888,
+            "semantic_score": 0.26916887849069315,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\nA white background with black text displaying a test invoice from Cloudnest.\n[Visual tags]\ninvoice,test invoice,laptop computer,CNY,server IP,synthetic fixture\n[Visible text OCR]\nCLOUDNEST TEST INVOICE\n\nItem: Laptop Com"
+          },
+          {
+            "id": 16,
+            "document": "invoice-scan",
+            "score": 0.0136986301369863,
+            "semantic_score": 0.2629987348367113,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Page 1 OCR]\nCLOUDNEST TEST INVOICE\n\nItem: Laptop Computer\n\nTotal: CNY 5999.00\n\nServer IP: 192.0.2.42\n\nSynthetic fixture - no personal data\n\n"
+          },
+          {
+            "id": 13,
+            "document": "contract-current",
+            "score": 0.013513513513513514,
+            "semantic_score": 0.25605398755560826,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "房屋租赁合同\n出租方与承租方约定租金、押金、期限和维修责任，签署后生效。"
+          },
+          {
+            "id": 30,
+            "document": "shared-migration",
+            "score": 0.013333333333333334,
+            "semantic_score": 0.25596566975201646,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "共享数据库搬迁检查单\n迁移 MySQL 数据之前备份、导出快照并核对行数，切换到新数据库后验证一致性；失败时恢复原数据库。"
+          },
+          {
+            "id": 14,
+            "document": "contract-older",
+            "score": 0.013157894736842105,
+            "semantic_score": 0.2539073430154034,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "年度软件服务合同\n双方约定技术支持范围、金额、交付期限与签署日期。"
+          },
+          {
+            "id": 26,
+            "document": "exercise",
+            "score": 0.012987012987012988,
+            "semantic_score": 0.2501430695696164,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "训练计划\n每周进行三次跑步和两次力量训练，记录休息时间与饮水量。"
+          }
+        ],
+        "pagination": {
+          "total": 17
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false
+        }
+      },
+      "latency_ms": 160,
+      "metrics": {
+        "recall_at_1": 0.25,
+        "recall_at_3": 0.75,
+        "recall_at_5": 1,
+        "precision_at_5": 0.8,
+        "mrr_at_10": 1
+      }
+    },
+    {
+      "query": {
+        "id": "permissions-3",
+        "family": "permissions",
+        "split": "heldout",
+        "question": "Spring Boot 项目中防止用户越权访问文件的说明",
+        "relevant": [
+          "permissions-slides",
+          "permissions-guide",
+          "permissions-settings",
+          "migration-and-access"
+        ]
+      },
+      "response": {
+        "items": [
+          {
+            "id": 8,
+            "document": "permissions-slides",
+            "score": 0.03252247488101534,
+            "semantic_score": 0.693027611299468,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "[Slide 1]\nSpring Boot 权限管理：角色、资源授权与审计日志。\n\n[Notes]\n演讲备注：检查文件级访问权限，阻止跨用户读取。\n\n[Slide 2]\n安全回归测试与部署检查。"
+          },
+          {
+            "id": 9,
+            "document": "permissions-guide",
+            "score": 0.03252247488101534,
+            "semantic_score": 0.7040212690156874,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "Spring Boot 权限管理指南\n使用 Spring Security 验证 JWT。RBAC 按角色授予 API 权限，同时在服务层检查资源所有者。文件共享只授予 read 或 write；不能用管理员身份绕过文件级授权。撤销权限后立即拒绝读取，审计拒绝事件。"
+          },
+          {
+            "id": 5,
+            "document": "migration-and-access",
+            "score": 0.03149801587301587,
+            "semantic_score": 0.5898944842534393,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "pshot.\n\nThe staging server address is 192.0.2.42.\n\n[Page 2]\nSpring Boot permissions\n\nGrant access through explicit read and write permissions.\n\nTest authorization before deploying the Spring Boot service.\n\n"
+          },
+          {
+            "id": 10,
+            "document": "permissions-settings",
+            "score": 0.03149801587301587,
+            "semantic_score": 0.6430918517869978,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "spring:\n  security:\n    authorization:\n      roles: [viewer, editor]\n      resources: [document, folder]\n      default_policy: deny\n# Spring Boot role-based access policy; JWT authentication and resource authorization are separate."
+          },
+          {
+            "id": 24,
+            "document": "meeting-notes",
+            "score": 0.029631255487269532,
+            "semantic_score": 0.3291415495771858,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "项目周会记录\n讨论设备采购进度、服务续费和下次会议时间。合同仍在法务审核，本文不是签署的协议。"
+          },
+          {
+            "id": 11,
+            "document": "contract-service",
+            "score": 0.028371628371628373,
+            "semantic_score": 0.2680089786168818,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "服务期限十二个月，服务费每季度支付。双方签字后生效。交付物为维护报告和问题处理记录。违约责任为延误交付按合同条款处理。本文件是已签订的服务协议，非会议纪要。"
+          },
+          {
+            "id": 20,
+            "document": "config-staging",
+            "score": 0.015384615384615385,
+            "semantic_score": 0.37847403605782676,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "# Staging server network configuration\nSERVER_IP=203.0.113.27\nHTTP_PORT=8080\nUPSTREAM_HOST=192.0.2.81\n# Synthetic deployment settings, no credentials."
+          },
+          {
+            "id": 4,
+            "document": "migration-office",
+            "score": 0.015151515151515152,
+            "semantic_score": 0.36498420495271555,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "数据库迁移方案\nMySQL 升级前先备份数据库，迁移后验证数据一致性。\n服务器 IP\n\t192.0.2.42\n\t\n回滚计划\n\t恢复备份，核对行数和校验值。\n\t\n\nCloudNest 合成测试文档"
+          },
+          {
+            "id": 15,
+            "document": "invoice-sheet",
+            "score": 0.015151515151515152,
+            "semantic_score": null,
+            "match_sources": [
+              "keyword"
+            ],
+            "snippet": "[Sheet: 电脑购买发票]\nA1: 商品\tB1: 金额\tC1: 测试说明\t\nA2: 笔记本电脑\tB2: 5999\tC2: 合成票据，无个人数据\t\nA3: 合计\tB3: =SUM(B2:B2) [cached: ]\tC3: 服务器 IP 192.0.2.42"
+          },
+          {
+            "id": 30,
+            "document": "shared-migration",
+            "score": 0.014925373134328358,
+            "semantic_score": 0.3366041298845293,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "共享数据库搬迁检查单\n迁移 MySQL 数据之前备份、导出快照并核对行数，切换到新数据库后验证一致性；失败时恢复原数据库。"
+          },
+          {
+            "id": 6,
+            "document": "migration-plan",
+            "score": 0.014492753623188406,
+            "semantic_score": 0.30806185225280575,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "数据库迁移方案\n将旧 MySQL 集群的数据搬迁到新节点。先做全量备份，再同步增量，核对记录数量和校验值。切换流量前演练回滚，保留旧实例只读快照。出现不一致时恢复备份。本文讨论数据搬迁步骤与一致性验证。"
+          },
+          {
+            "id": 7,
+            "document": "migration-runbook",
+            "score": 0.014285714285714285,
+            "semantic_score": 0.30715655045840007,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "Relocating the application database\nExport a consistent MySQL snapshot, apply the change log on the destination, compare row counts, and rehearse switching traffic back. Retain the previous cluster until validation completes. This is the pl"
+          },
+          {
+            "id": 12,
+            "document": "contract-purchase",
+            "score": 0.014084507042253521,
+            "semantic_score": 0.2898934075759003,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "设备采购合同\n买方采购笔记本电脑十台，卖方在验收后提供发票。约定交货日期、验收标准、保修和付款条件。双方签字确认采购约定。本文为采购合同，不是已付款的发票或收据。"
+          },
+          {
+            "id": 17,
+            "document": "invoice-photo",
+            "score": 0.013888888888888888,
+            "semantic_score": 0.28432556786924185,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\nA white background with black text displaying a test invoice from Cloudnest.\n[Visual tags]\ninvoice,test invoice,laptop computer,CNY,server IP,synthetic fixture\n[Visible text OCR]\nCLOUDNEST TEST INVOICE\n\nItem: Laptop Com"
+          },
+          {
+            "id": 19,
+            "document": "config-production",
+            "score": 0.0136986301369863,
+            "semantic_score": 0.28400042761366256,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "server:\n  name: production-example\n  host: 192.0.2.42\n  port: 8443\ndatabase:\n  host: 198.51.100.17\n  port: 3306\n# Deployable service configuration. All IPs are documentation-only addresses."
+          },
+          {
+            "id": 13,
+            "document": "contract-current",
+            "score": 0.013513513513513514,
+            "semantic_score": 0.2815739827186247,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "房屋租赁合同\n出租方与承租方约定租金、押金、期限和维修责任，签署后生效。"
+          },
+          {
+            "id": 14,
+            "document": "contract-older",
+            "score": 0.013333333333333334,
+            "semantic_score": 0.2753073280511304,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "年度软件服务合同\n双方约定技术支持范围、金额、交付期限与签署日期。"
+          },
+          {
+            "id": 16,
+            "document": "invoice-scan",
+            "score": 0.013157894736842105,
+            "semantic_score": 0.2749715171869361,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Page 1 OCR]\nCLOUDNEST TEST INVOICE\n\nItem: Laptop Computer\n\nTotal: CNY 5999.00\n\nServer IP: 192.0.2.42\n\nSynthetic fixture - no personal data\n\n"
+          },
+          {
+            "id": 26,
+            "document": "exercise",
+            "score": 0.01282051282051282,
+            "semantic_score": 0.2663131231045405,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "训练计划\n每周进行三次跑步和两次力量训练，记录休息时间与饮水量。"
+          },
+          {
+            "id": 23,
+            "document": "travel-notes",
+            "score": 0.012658227848101266,
+            "semantic_score": 0.26449833180690546,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "海边旅行文字游记\n去年散步经过沙滩和海浪，天气晴朗。本文是纯文字日记，没有照片，也没有 EXIF 拍摄记录。"
+          },
+          {
+            "id": 21,
+            "document": "ip-explanation",
+            "score": 0.0125,
+            "semantic_score": 0.2603411845909549,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "网络地址入门\nIP 地址用于标识网络接口，IPv4 采用点分十进制表示。选择生产服务器地址需要遵循网络规划。本文解释概念，没有可部署的服务配置。"
+          },
+          {
+            "id": 18,
+            "document": "invoice-receipt",
+            "score": 0.012345679012345678,
+            "semantic_score": 0.25784004575266317,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "电脑购买发票（合成测试）\n商品：笔记本电脑，数量一台，含税金额人民币 6899 元。付款状态：已支付。用途：报销凭证。这里没有真实纳税人、账号或个人信息。"
+          }
+        ],
+        "pagination": {
+          "total": 22
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false
+        }
+      },
+      "latency_ms": 182,
+      "metrics": {
+        "recall_at_1": 0.25,
+        "recall_at_3": 0.75,
+        "recall_at_5": 1,
+        "precision_at_5": 0.8,
+        "mrr_at_10": 1
+      }
+    },
+    {
+      "query": {
+        "id": "contracts-1",
+        "family": "contracts",
+        "split": "dev",
+        "question": "上个月上传的合同有哪些？",
+        "relevant": [
+          "contract-service",
+          "contract-purchase"
+        ]
+      },
+      "response": {
+        "items": [
+          {
+            "id": 11,
+            "document": "contract-service",
+            "score": 0.03252247488101534,
+            "semantic_score": 0.5045229363869539,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "技术服务合同\n甲方与乙方约定系统维护服务期限十二个月，服务费每季度支付。双方签字后生效。交付物为维护报告和问题处理记录。违约责任为延误交付按合同条款处理。本文件是已签订的服务协议，非会议纪要。"
+          },
+          {
+            "id": 24,
+            "document": "meeting-notes",
+            "score": 0.032266458495966696,
+            "semantic_score": 0.5605326950525894,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "项目周会记录\n讨论设备采购进度、服务续费和下次会议时间。合同仍在法务审核，本文不是签署的协议。"
+          },
+          {
+            "id": 12,
+            "document": "contract-purchase",
+            "score": 0.03200204813108039,
+            "semantic_score": 0.4936215783048291,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "设备采购合同\n买方采购笔记本电脑十台，卖方在验收后提供发票。约定交货日期、验收标准、保修和付款条件。双方签字确认采购约定。本文为采购合同，不是已付款的发票或收据。"
+          },
+          {
+            "id": 18,
+            "document": "invoice-receipt",
+            "score": 0.015625,
+            "semantic_score": 0.3245369725924705,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "电脑购买发票（合成测试）\n商品：笔记本电脑，数量一台，含税金额人民币 6899 元。付款状态：已支付。用途：报销凭证。这里没有真实纳税人、账号或个人信息。"
+          }
+        ],
+        "pagination": {
+          "total": 4
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false
+        }
+      },
+      "latency_ms": 149,
+      "metrics": {
+        "recall_at_1": 0.5,
+        "recall_at_3": 1,
+        "recall_at_5": 1,
+        "precision_at_5": 0.4,
+        "mrr_at_10": 1
+      }
+    },
+    {
+      "query": {
+        "id": "contracts-2",
+        "family": "contracts",
+        "split": "dev",
+        "question": "上个月上传的正式协议",
+        "relevant": [
+          "contract-service",
+          "contract-purchase"
+        ]
+      },
+      "response": {
+        "items": [
+          {
+            "id": 11,
+            "document": "contract-service",
+            "score": 0.03252247488101534,
+            "semantic_score": 0.5303627557376506,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "服务费每季度支付。双方签字后生效。交付物为维护报告和问题处理记录。违约责任为延误交付按合同条款处理。本文件是已签订的服务协议，非会议纪要。"
+          },
+          {
+            "id": 24,
+            "document": "meeting-notes",
+            "score": 0.03252247488101534,
+            "semantic_score": 0.5451954459905854,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "项目周会记录\n讨论设备采购进度、服务续费和下次会议时间。合同仍在法务审核，本文不是签署的协议。"
+          },
+          {
+            "id": 12,
+            "document": "contract-purchase",
+            "score": 0.015873015873015872,
+            "semantic_score": 0.49611178005085127,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "设备采购合同\n买方采购笔记本电脑十台，卖方在验收后提供发票。约定交货日期、验收标准、保修和付款条件。双方签字确认采购约定。本文为采购合同，不是已付款的发票或收据。"
+          },
+          {
+            "id": 18,
+            "document": "invoice-receipt",
+            "score": 0.015625,
+            "semantic_score": 0.3306086297175366,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "电脑购买发票（合成测试）\n商品：笔记本电脑，数量一台，含税金额人民币 6899 元。付款状态：已支付。用途：报销凭证。这里没有真实纳税人、账号或个人信息。"
+          }
+        ],
+        "pagination": {
+          "total": 4
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false
+        }
+      },
+      "latency_ms": 132,
+      "metrics": {
+        "recall_at_1": 0.5,
+        "recall_at_3": 1,
+        "recall_at_5": 1,
+        "precision_at_5": 0.4,
+        "mrr_at_10": 1
+      }
+    },
+    {
+      "query": {
+        "id": "contracts-3",
+        "family": "contracts",
+        "split": "heldout",
+        "question": "查找上个月上传的签署合同文件",
+        "relevant": [
+          "contract-service",
+          "contract-purchase"
+        ]
+      },
+      "response": {
+        "items": [
+          {
+            "id": 11,
+            "document": "contract-service",
+            "score": 0.03252247488101534,
+            "semantic_score": 0.5263611531229697,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "技术服务合同\n甲方与乙方约定系统维护服务期限十二个月，服务费每季度支付。双方签字后生效。交付物为维护报告和问题处理记录。违约责任为延误交付按合同条款处理。本文件是已签订的服务协议，非会议纪要。"
+          },
+          {
+            "id": 24,
+            "document": "meeting-notes",
+            "score": 0.03252247488101534,
+            "semantic_score": 0.5523959255601439,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "项目周会记录\n讨论设备采购进度、服务续费和下次会议时间。合同仍在法务审核，本文不是签署的协议。"
+          },
+          {
+            "id": 12,
+            "document": "contract-purchase",
+            "score": 0.031746031746031744,
+            "semantic_score": 0.5145001584775596,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "设备采购合同\n买方采购笔记本电脑十台，卖方在验收后提供发票。约定交货日期、验收标准、保修和付款条件。双方签字确认采购约定。本文为采购合同，不是已付款的发票或收据。"
+          },
+          {
+            "id": 18,
+            "document": "invoice-receipt",
+            "score": 0.015625,
+            "semantic_score": 0.3548858682501092,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "电脑购买发票（合成测试）\n商品：笔记本电脑，数量一台，含税金额人民币 6899 元。付款状态：已支付。用途：报销凭证。这里没有真实纳税人、账号或个人信息。"
+          }
+        ],
+        "pagination": {
+          "total": 4
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false
+        }
+      },
+      "latency_ms": 141,
+      "metrics": {
+        "recall_at_1": 0.5,
+        "recall_at_3": 1,
+        "recall_at_5": 1,
+        "precision_at_5": 0.4,
+        "mrr_at_10": 1
+      }
+    },
+    {
+      "query": {
+        "id": "config-1",
+        "family": "config",
+        "split": "dev",
+        "question": "找到包含服务器 IP 地址的配置文件。",
+        "relevant": [
+          "config-production",
+          "config-staging"
+        ]
+      },
+      "response": {
+        "items": [
+          {
+            "id": 21,
+            "document": "ip-explanation",
+            "score": 0.03278688524590164,
+            "semantic_score": 0.6159908027500122,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "网络地址入门\nIP 地址用于标识网络接口，IPv4 采用点分十进制表示。选择生产服务器地址需要遵循网络规划。本文解释概念，没有可部署的服务配置。"
+          },
+          {
+            "id": 4,
+            "document": "migration-office",
+            "score": 0.03128054740957967,
+            "semantic_score": 0.45539380093021964,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "数据库迁移方案\nMySQL 升级前先备份数据库，迁移后验证数据一致性。\n服务器 IP\n\t192.0.2.42\n\t\n回滚计划\n\t恢复备份，核对行数和校验值。\n\t\n\nCloudNest 合成测试文档"
+          },
+          {
+            "id": 15,
+            "document": "invoice-sheet",
+            "score": 0.030798389007344232,
+            "semantic_score": 0.4461015837545203,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": " 5999\tC2: 合成票据，无个人数据\t\nA3: 合计\tB3: =SUM(B2:B2) [cached: ]\tC3: 服务器 IP 192.0.2.42"
+          },
+          {
+            "id": 16,
+            "document": "invoice-scan",
+            "score": 0.03021353930031804,
+            "semantic_score": 0.5405614388571335,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": " INVOICE\n\nItem: Laptop Computer\n\nTotal: CNY 5999.00\n\nServer IP: 192.0.2.42\n\nSynthetic fixture - no personal data\n\n"
+          },
+          {
+            "id": 17,
+            "document": "invoice-photo",
+            "score": 0.02976190476190476,
+            "semantic_score": 0.518687319573803,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "[Visual description]\nA white background with black text displaying a test invoice from Cloudnest.\n[Visual tags]\ninvoice,test invoice,laptop computer,CNY,server IP,synthetic fixture\n[Visible text OCR]\nCLOUDNEST TEST INVOICE\n\nItem: Laptop Com"
+          },
+          {
+            "id": 9,
+            "document": "permissions-guide",
+            "score": 0.0293236301369863,
+            "semantic_score": 0.2820413493495046,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": " Boot 权限管理指南\n使用 Spring Security 验证 JWT。RBAC 按角色授予 API 权限，同时在服务层检查资源所有者。文件共享只授予 read 或 write；不能用管理员身份绕过文件级授权。撤销权限后立即拒绝读取，审计拒绝事件。"
+          },
+          {
+            "id": 19,
+            "document": "config-production",
+            "score": 0.0293236301369863,
+            "semantic_score": 0.5140488233768996,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "100.17\n  port: 3306\n# Deployable service configuration. All IPs are documentation-only addresses."
+          },
+          {
+            "id": 20,
+            "document": "config-staging",
+            "score": 0.0288981288981289,
+            "semantic_score": 0.48388672070714656,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "# Staging server network configuration\nSERVER_IP=203.0.113.27\nHTTP_PORT=8080\nUPSTREAM_HOST=192.0.2.81\n# Synthetic deployment settings, no credentials."
+          },
+          {
+            "id": 8,
+            "document": "permissions-slides",
+            "score": 0.028381642512077296,
+            "semantic_score": 0.2898377384642683,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "[Slide 1]\nSpring Boot 权限管理：角色、资源授权与审计日志。\n\n[Notes]\n演讲备注：检查文件级访问权限，阻止跨用户读取。\n\n[Slide 2]\n安全回归测试与部署检查。"
+          },
+          {
+            "id": 14,
+            "document": "contract-older",
+            "score": 0.028370221327967807,
+            "semantic_score": 0.3068340168160007,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "年度软件服务合同\n双方约定技术支持范围、金额、交付期限与签署日期。"
+          },
+          {
+            "id": 24,
+            "document": "meeting-notes",
+            "score": 0.02667140825035562,
+            "semantic_score": 0.2788917117117005,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "项目周会记录\n讨论设备采购进度、服务续费和下次会议时间。合同仍在法务审核，本文不是签署的协议。"
+          },
+          {
+            "id": 22,
+            "document": "laptop-review",
+            "score": 0.02666666666666667,
+            "semantic_score": 0.2748718750057625,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "笔记本电脑选购评测\n比较处理器性能、屏幕和电池续航。预算约六千元，尚未购买任何设备，也没有发票。推荐根据实际用途选择，不包含付款记录。"
+          },
+          {
+            "id": 11,
+            "document": "contract-service",
+            "score": 0.015384615384615385,
+            "semantic_score": null,
+            "match_sources": [
+              "keyword"
+            ],
+            "snippet": "技术服务合同\n甲方与乙方约定系统维护服务期限十二个月，服务费每季度支付。双方签字后生效。交付物为维护报告和问题处理记录。违约责任为延误交付按合同条款处理。本文件是已签订的服务协议，非会议纪要。"
+          },
+          {
+            "id": 1,
+            "document": "photo-last",
+            "score": 0.015151515151515152,
+            "semantic_score": null,
+            "match_sources": [
+              "keyword"
+            ],
+            "snippet": "[Visual description]\n一片阳光明媚的海滩，金色沙滩延伸至清澈的蓝色海水。海浪轻轻拍打着岸边，形成白色的泡沫。左侧有岩石峭壁，上面覆盖着少量植被。天空湛蓝，点缀着几朵白云。\n[Visual tags]\n海滩,沙滩,海洋,海浪,岩石,蓝天,白云"
+          },
+          {
+            "id": 2,
+            "document": "photo-current",
+            "score": 0.014925373134328358,
+            "semantic_score": null,
+            "match_sources": [
+              "keyword"
+            ],
+            "snippet": "[Visual description]\n一片阳光明媚的海滩，金色沙滩延伸至清澈的蓝色海水。海浪轻轻拍打着岸边，形成白色的泡沫。左侧有岩石峭壁，上面覆盖着少量植被。天空湛蓝，点缀着几朵白云。\n[Visual tags]\n海滩,沙滩,海洋,海浪,岩石,蓝天,白云"
+          },
+          {
+            "id": 3,
+            "document": "photo-unknown",
+            "score": 0.014705882352941176,
+            "semantic_score": null,
+            "match_sources": [
+              "keyword"
+            ],
+            "snippet": "[Visual description]\n一片阳光明媚的海滩，金色沙滩延伸至清澈的蓝色海水。海浪轻轻拍打着岸边，形成白色的泡沫。左侧有岩石峭壁，上面覆盖着少量植被。天空湛蓝，点缀着几朵白云。\n[Visual tags]\n海滩,沙滩,海洋,海浪,岩石,蓝天,白云"
+          },
+          {
+            "id": 18,
+            "document": "invoice-receipt",
+            "score": 0.014705882352941176,
+            "semantic_score": 0.3499327420493778,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "电脑购买发票（合成测试）\n商品：笔记本电脑，数量一台，含税金额人民币 6899 元。付款状态：已支付。用途：报销凭证。这里没有真实纳税人、账号或个人信息。"
+          },
+          {
+            "id": 5,
+            "document": "migration-and-access",
+            "score": 0.014492753623188406,
+            "semantic_score": 0.3411570560511525,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Page 1]\nDatabase migration plan\n\nCloudNest synthetic fixture - no personal data.\n\nMigrate MySQL data after a verified backup.\n\nValidate row counts and retain a rollback snapshot.\n\nThe staging server address is 192.0.2.42.\n\n[Page 2]\nSpring "
+          },
+          {
+            "id": 12,
+            "document": "contract-purchase",
+            "score": 0.014285714285714285,
+            "semantic_score": 0.3398210270427208,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "设备采购合同\n买方采购笔记本电脑十台，卖方在验收后提供发票。约定交货日期、验收标准、保修和付款条件。双方签字确认采购约定。本文为采购合同，不是已付款的发票或收据。"
+          },
+          {
+            "id": 6,
+            "document": "migration-plan",
+            "score": 0.013157894736842105,
+            "semantic_score": 0.2665493699617238,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "数据库迁移方案\n将旧 MySQL 集群的数据搬迁到新节点。先做全量备份，再同步增量，核对记录数量和校验值。切换流量前演练回滚，保留旧实例只读快照。出现不一致时恢复备份。本文讨论数据搬迁步骤与一致性验证。"
+          },
+          {
+            "id": 7,
+            "document": "migration-runbook",
+            "score": 0.012987012987012988,
+            "semantic_score": 0.2620724995505701,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "Relocating the application database\nExport a consistent MySQL snapshot, apply the change log on the destination, compare row counts, and rehearse switching traffic back. Retain the previous cluster until validation completes. This is the pl"
+          },
+          {
+            "id": 30,
+            "document": "shared-migration",
+            "score": 0.01282051282051282,
+            "semantic_score": 0.25593742027343885,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "共享数据库搬迁检查单\n迁移 MySQL 数据之前备份、导出快照并核对行数，切换到新数据库后验证一致性；失败时恢复原数据库。"
+          }
+        ],
+        "pagination": {
+          "total": 22
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false
+        }
+      },
+      "latency_ms": 159,
+      "metrics": {
+        "recall_at_1": 0,
+        "recall_at_3": 0,
+        "recall_at_5": 0,
+        "precision_at_5": 0,
+        "mrr_at_10": 0.14285714285714285
+      }
+    },
+    {
+      "query": {
+        "id": "config-2",
+        "family": "config",
+        "split": "dev",
+        "question": "服务器部署时填写网络主机地址的设置文件",
+        "relevant": [
+          "config-production",
+          "config-staging"
+        ]
+      },
+      "response": {
+        "items": [
+          {
+            "id": 21,
+            "document": "ip-explanation",
+            "score": 0.03278688524590164,
+            "semantic_score": 0.5990512859692844,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "网络地址入门\nIP 地址用于标识网络接口，IPv4 采用点分十进制表示。选择生产服务器地址需要遵循网络规划。本文解释概念，没有可部署的服务配置。"
+          },
+          {
+            "id": 4,
+            "document": "migration-office",
+            "score": 0.0315136476426799,
+            "semantic_score": 0.4604577330167573,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "数据库迁移方案\nMySQL 升级前先备份数据库，迁移后验证数据一致性。\n服务器 IP\n\t192.0.2.42\n\t\n回滚计划\n\t恢复备份，核对行数和校验值。\n\t\n\nCloudNest 合成测试文档"
+          },
+          {
+            "id": 15,
+            "document": "invoice-sheet",
+            "score": 0.03007688828584351,
+            "semantic_score": 0.41051478885658016,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": " 5999\tC2: 合成票据，无个人数据\t\nA3: 合计\tB3: =SUM(B2:B2) [cached: ]\tC3: 服务器 IP 192.0.2.42"
+          },
+          {
+            "id": 8,
+            "document": "permissions-slides",
+            "score": 0.029030910609857977,
+            "semantic_score": 0.27107137960427197,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "授权与审计日志。\n\n[Notes]\n演讲备注：检查文件级访问权限，阻止跨用户读取。\n\n[Slide 2]\n安全回归测试与部署检查。"
+          },
+          {
+            "id": 14,
+            "document": "contract-older",
+            "score": 0.02900988017658188,
+            "semantic_score": 0.3108345284548494,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "年度软件服务合同\n双方约定技术支持范围、金额、交付期限与签署日期。"
+          },
+          {
+            "id": 9,
+            "document": "permissions-guide",
+            "score": 0.028612012987012988,
+            "semantic_score": 0.26737949556903956,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": " Boot 权限管理指南\n使用 Spring Security 验证 JWT。RBAC 按角色授予 API 权限，同时在服务层检查资源所有者。文件共享只授予 read 或 write；不能用管理员身份绕过文件级授权。撤销权限后立即拒绝读取，审计拒绝事件。"
+          },
+          {
+            "id": 24,
+            "document": "meeting-notes",
+            "score": 0.02821939586645469,
+            "semantic_score": 0.295958170877287,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "项目周会记录\n讨论设备采购进度、服务续费和下次会议时间。合同仍在法务审核，本文不是签署的协议。"
+          },
+          {
+            "id": 19,
+            "document": "config-production",
+            "score": 0.016129032258064516,
+            "semantic_score": 0.5506225238110182,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "server:\n  name: production-example\n  host: 192.0.2.42\n  port: 8443\ndatabase:\n  host: 198.51.100.17\n  port: 3306\n# Deployable service configuration. All IPs are documentation-only addresses."
+          },
+          {
+            "id": 20,
+            "document": "config-staging",
+            "score": 0.015873015873015872,
+            "semantic_score": 0.5492307620244066,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "# Staging server network configuration\nSERVER_IP=203.0.113.27\nHTTP_PORT=8080\nUPSTREAM_HOST=192.0.2.81\n# Synthetic deployment settings, no credentials."
+          },
+          {
+            "id": 16,
+            "document": "invoice-scan",
+            "score": 0.015625,
+            "semantic_score": 0.4638350458844648,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Page 1 OCR]\nCLOUDNEST TEST INVOICE\n\nItem: Laptop Computer\n\nTotal: CNY 5999.00\n\nServer IP: 192.0.2.42\n\nSynthetic fixture - no personal data\n\n"
+          },
+          {
+            "id": 11,
+            "document": "contract-service",
+            "score": 0.015384615384615385,
+            "semantic_score": null,
+            "match_sources": [
+              "keyword"
+            ],
+            "snippet": "技术服务合同\n甲方与乙方约定系统维护服务期限十二个月，服务费每季度支付。双方签字后生效。交付物为维护报告和问题处理记录。违约责任为延误交付按合同条款处理。本文件是已签订的服务协议，非会议纪要。"
+          },
+          {
+            "id": 17,
+            "document": "invoice-photo",
+            "score": 0.015151515151515152,
+            "semantic_score": 0.4401157056340266,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\nA white background with black text displaying a test invoice from Cloudnest.\n[Visual tags]\ninvoice,test invoice,laptop computer,CNY,server IP,synthetic fixture\n[Visible text OCR]\nCLOUDNEST TEST INVOICE\n\nItem: Laptop Com"
+          },
+          {
+            "id": 5,
+            "document": "migration-and-access",
+            "score": 0.014705882352941176,
+            "semantic_score": 0.36804131693964576,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Page 1]\nDatabase migration plan\n\nCloudNest synthetic fixture - no personal data.\n\nMigrate MySQL data after a verified backup.\n\nValidate row counts and retain a rollback snapshot.\n\nThe staging server address is 192.0.2.42.\n\n[Page 2]\nSpring "
+          },
+          {
+            "id": 18,
+            "document": "invoice-receipt",
+            "score": 0.014492753623188406,
+            "semantic_score": 0.3509393103606449,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "电脑购买发票（合成测试）\n商品：笔记本电脑，数量一台，含税金额人民币 6899 元。付款状态：已支付。用途：报销凭证。这里没有真实纳税人、账号或个人信息。"
+          },
+          {
+            "id": 6,
+            "document": "migration-plan",
+            "score": 0.014285714285714285,
+            "semantic_score": 0.3218380631411384,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "数据库迁移方案\n将旧 MySQL 集群的数据搬迁到新节点。先做全量备份，再同步增量，核对记录数量和校验值。切换流量前演练回滚，保留旧实例只读快照。出现不一致时恢复备份。本文讨论数据搬迁步骤与一致性验证。"
+          },
+          {
+            "id": 30,
+            "document": "shared-migration",
+            "score": 0.013888888888888888,
+            "semantic_score": 0.31083246166084993,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "共享数据库搬迁检查单\n迁移 MySQL 数据之前备份、导出快照并核对行数，切换到新数据库后验证一致性；失败时恢复原数据库。"
+          },
+          {
+            "id": 7,
+            "document": "migration-runbook",
+            "score": 0.0136986301369863,
+            "semantic_score": 0.298219054823947,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "Relocating the application database\nExport a consistent MySQL snapshot, apply the change log on the destination, compare row counts, and rehearse switching traffic back. Retain the previous cluster until validation completes. This is the pl"
+          },
+          {
+            "id": 12,
+            "document": "contract-purchase",
+            "score": 0.013333333333333334,
+            "semantic_score": 0.2923580505037245,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "设备采购合同\n买方采购笔记本电脑十台，卖方在验收后提供发票。约定交货日期、验收标准、保修和付款条件。双方签字确认采购约定。本文为采购合同，不是已付款的发票或收据。"
+          },
+          {
+            "id": 13,
+            "document": "contract-current",
+            "score": 0.01282051282051282,
+            "semantic_score": 0.2607713788141177,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "房屋租赁合同\n出租方与承租方约定租金、押金、期限和维修责任，签署后生效。"
+          }
+        ],
+        "pagination": {
+          "total": 19
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false
+        }
+      },
+      "latency_ms": 155,
+      "metrics": {
+        "recall_at_1": 0,
+        "recall_at_3": 0,
+        "recall_at_5": 0,
+        "precision_at_5": 0,
+        "mrr_at_10": 0.125
+      }
+    },
+    {
+      "query": {
+        "id": "config-3",
+        "family": "config",
+        "split": "heldout",
+        "question": "配置里写有 server host 或 SERVER_IP 的文件",
+        "relevant": [
+          "config-production",
+          "config-staging"
+        ]
+      },
+      "response": {
+        "items": [
+          {
+            "id": 20,
+            "document": "config-staging",
+            "score": 0.03278688524590164,
+            "semantic_score": 0.5892111890892741,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "# Staging server network configuration\nSERVER_IP=203.0.113.27\nHTTP_PORT=8080\nUPSTREAM_HOST=192.0.2.81\n# Synthetic deployment settings, no credentials."
+          },
+          {
+            "id": 19,
+            "document": "config-production",
+            "score": 0.03225806451612903,
+            "semantic_score": 0.5819894620026783,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "server:\n  name: production-example\n  host: 192.0.2.42\n  port: 8443\ndatabase:\n  host: 198.51.100.17\n  port: 3306\n# Deployable service configuration. All IPs are documentation-only addresses."
+          },
+          {
+            "id": 16,
+            "document": "invoice-scan",
+            "score": 0.030776515151515152,
+            "semantic_score": 0.5378590639826044,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "ST TEST INVOICE\n\nItem: Laptop Computer\n\nTotal: CNY 5999.00\n\nServer IP: 192.0.2.42\n\nSynthetic fixture - no personal data\n\n"
+          },
+          {
+            "id": 5,
+            "document": "migration-and-access",
+            "score": 0.03057889822595705,
+            "semantic_score": 0.4170727819083357,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "ate row counts and retain a rollback snapshot.\n\nThe staging server address is 192.0.2.42.\n\n[Page 2]\nSpring Boot permissions\n\nGrant access through explicit read and write permissions.\n\nTest authorization before deploying the Spring Boot serv"
+          },
+          {
+            "id": 21,
+            "document": "ip-explanation",
+            "score": 0.03036576949620428,
+            "semantic_score": 0.5779483228519038,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": " 地址用于标识网络接口，IPv4 采用点分十进制表示。选择生产服务器地址需要遵循网络规划。本文解释概念，没有可部署的服务配置。"
+          },
+          {
+            "id": 17,
+            "document": "invoice-photo",
+            "score": 0.03007688828584351,
+            "semantic_score": 0.4995928684091469,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "est.\n[Visual tags]\ninvoice,test invoice,laptop computer,CNY,server IP,synthetic fixture\n[Visible text OCR]\nCLOUDNEST TEST INVOICE\n\nItem: Laptop Computer\nTotal: CNY 5999.00\nServer IP: 192.0.2.42\nSynthetic fixture - no personal data"
+          },
+          {
+            "id": 9,
+            "document": "permissions-guide",
+            "score": 0.029910714285714284,
+            "semantic_score": 0.35921273206640986,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "ecurity 验证 JWT。RBAC 按角色授予 API 权限，同时在服务层检查资源所有者。文件共享只授予 read 或 write；不能用管理员身份绕过文件级授权。撤销权限后立即拒绝读取，审计拒绝事件。"
+          },
+          {
+            "id": 12,
+            "document": "contract-purchase",
+            "score": 0.029273504273504274,
+            "semantic_score": 0.3422506631991979,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "台，卖方在验收后提供发票。约定交货日期、验收标准、保修和付款条件。双方签字确认采购约定。本文为采购合同，不是已付款的发票或收据。"
+          },
+          {
+            "id": 18,
+            "document": "invoice-receipt",
+            "score": 0.028404512489927477,
+            "semantic_score": 0.34160963578369147,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "）\n商品：笔记本电脑，数量一台，含税金额人民币 6899 元。付款状态：已支付。用途：报销凭证。这里没有真实纳税人、账号或个人信息。"
+          },
+          {
+            "id": 4,
+            "document": "migration-office",
+            "score": 0.015384615384615385,
+            "semantic_score": 0.5058526220344595,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "数据库迁移方案\nMySQL 升级前先备份数据库，迁移后验证数据一致性。\n服务器 IP\n\t192.0.2.42\n\t\n回滚计划\n\t恢复备份，核对行数和校验值。\n\t\n\nCloudNest 合成测试文档"
+          },
+          {
+            "id": 15,
+            "document": "invoice-sheet",
+            "score": 0.014925373134328358,
+            "semantic_score": 0.43269478295592156,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Sheet: 电脑购买发票]\nA1: 商品\tB1: 金额\tC1: 测试说明\t\nA2: 笔记本电脑\tB2: 5999\tC2: 合成票据，无个人数据\t\nA3: 合计\tB3: =SUM(B2:B2) [cached: ]\tC3: 服务器 IP 192.0.2.42"
+          },
+          {
+            "id": 14,
+            "document": "contract-older",
+            "score": 0.014492753623188406,
+            "semantic_score": 0.36799415191494417,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "年度软件服务合同\n双方约定技术支持范围、金额、交付期限与签署日期。"
+          },
+          {
+            "id": 6,
+            "document": "migration-plan",
+            "score": 0.014084507042253521,
+            "semantic_score": 0.34782150129773187,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "数据库迁移方案\n将旧 MySQL 集群的数据搬迁到新节点。先做全量备份，再同步增量，核对记录数量和校验值。切换流量前演练回滚，保留旧实例只读快照。出现不一致时恢复备份。本文讨论数据搬迁步骤与一致性验证。"
+          },
+          {
+            "id": 24,
+            "document": "meeting-notes",
+            "score": 0.013513513513513514,
+            "semantic_score": 0.3346641384370149,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "项目周会记录\n讨论设备采购进度、服务续费和下次会议时间。合同仍在法务审核，本文不是签署的协议。"
+          },
+          {
+            "id": 8,
+            "document": "permissions-slides",
+            "score": 0.013333333333333334,
+            "semantic_score": 0.3339285646969772,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Slide 1]\nSpring Boot 权限管理：角色、资源授权与审计日志。\n\n[Notes]\n演讲备注：检查文件级访问权限，阻止跨用户读取。\n\n[Slide 2]\n安全回归测试与部署检查。"
+          },
+          {
+            "id": 30,
+            "document": "shared-migration",
+            "score": 0.013157894736842105,
+            "semantic_score": 0.3203167209863486,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "共享数据库搬迁检查单\n迁移 MySQL 数据之前备份、导出快照并核对行数，切换到新数据库后验证一致性；失败时恢复原数据库。"
+          },
+          {
+            "id": 7,
+            "document": "migration-runbook",
+            "score": 0.012987012987012988,
+            "semantic_score": 0.31887176709482784,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "Relocating the application database\nExport a consistent MySQL snapshot, apply the change log on the destination, compare row counts, and rehearse switching traffic back. Retain the previous cluster until validation completes. This is the pl"
+          },
+          {
+            "id": 11,
+            "document": "contract-service",
+            "score": 0.01282051282051282,
+            "semantic_score": 0.3153942730122793,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "技术服务合同\n甲方与乙方约定系统维护服务期限十二个月，服务费每季度支付。双方签字后生效。交付物为维护报告和问题处理记录。违约责任为延误交付按合同条款处理。本文件是已签订的服务协议，非会议纪要。"
+          },
+          {
+            "id": 13,
+            "document": "contract-current",
+            "score": 0.012658227848101266,
+            "semantic_score": 0.2937879313493218,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "房屋租赁合同\n出租方与承租方约定租金、押金、期限和维修责任，签署后生效。"
+          },
+          {
+            "id": 10,
+            "document": "permissions-settings",
+            "score": 0.0125,
+            "semantic_score": 0.27430335344659285,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "spring:\n  security:\n    authorization:\n      roles: [viewer, editor]\n      resources: [document, folder]\n      default_policy: deny\n# Spring Boot role-based access policy; JWT authentication and resource authorization are separate."
+          },
+          {
+            "id": 23,
+            "document": "travel-notes",
+            "score": 0.012345679012345678,
+            "semantic_score": 0.26344362395732046,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "海边旅行文字游记\n去年散步经过沙滩和海浪，天气晴朗。本文是纯文字日记，没有照片，也没有 EXIF 拍摄记录。"
+          },
+          {
+            "id": 26,
+            "document": "exercise",
+            "score": 0.012195121951219513,
+            "semantic_score": 0.2534443693696743,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "训练计划\n每周进行三次跑步和两次力量训练，记录休息时间与饮水量。"
+          }
+        ],
+        "pagination": {
+          "total": 22
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false
+        }
+      },
+      "latency_ms": 159,
+      "metrics": {
+        "recall_at_1": 0.5,
+        "recall_at_3": 1,
+        "recall_at_5": 1,
+        "precision_at_5": 0.4,
+        "mrr_at_10": 1
+      }
+    },
+    {
+      "query": {
+        "id": "invoice-1",
+        "family": "invoice",
+        "split": "dev",
+        "question": "帮我查找之前上传的电脑购买发票。",
+        "relevant": [
+          "invoice-sheet",
+          "invoice-scan",
+          "invoice-photo",
+          "invoice-receipt"
+        ]
+      },
+      "response": {
+        "items": [
+          {
+            "id": 15,
+            "document": "invoice-sheet",
+            "score": 0.03252247488101534,
+            "semantic_score": 0.711309194488866,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "[Sheet: 电脑购买发票]\nA1: 商品\tB1: 金额\tC1: 测试说明\t\nA2: 笔记本电脑\tB2: 5999\tC2: 合成票据，无个人数据\t\nA3: 合计\tB3: =SUM(B2:B2) [cached: ]\tC3: 服务器 IP 192.0.2.42"
+          },
+          {
+            "id": 18,
+            "document": "invoice-receipt",
+            "score": 0.03252247488101534,
+            "semantic_score": 0.7120837545749823,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "电脑购买发票（合成测试）\n商品：笔记本电脑，数量一台，含税金额人民币 6899 元。付款状态：已支付。用途：报销凭证。这里没有真实纳税人、账号或个人信息。"
+          },
+          {
+            "id": 12,
+            "document": "contract-purchase",
+            "score": 0.03149801587301587,
+            "semantic_score": 0.6207348126919245,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "设备采购合同\n买方采购笔记本电脑十台，卖方在验收后提供发票。约定交货日期、验收标准、保修和付款条件。双方签字确认采购约定。本文为采购合同，不是已付款的发票或收据。"
+          },
+          {
+            "id": 22,
+            "document": "laptop-review",
+            "score": 0.031024531024531024,
+            "semantic_score": 0.5383836042413459,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "笔记本电脑选购评测\n比较处理器性能、屏幕和电池续航。预算约六千元，尚未购买任何设备，也没有发票。推荐根据实际用途选择，不包含付款记录。"
+          },
+          {
+            "id": 17,
+            "document": "invoice-photo",
+            "score": 0.015625,
+            "semantic_score": 0.5858202485287161,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\nA white background with black text displaying a test invoice from Cloudnest.\n[Visual tags]\ninvoice,test invoice,laptop computer,CNY,server IP,synthetic fixture\n[Visible text OCR]\nCLOUDNEST TEST INVOICE\n\nItem: Laptop Com"
+          },
+          {
+            "id": 16,
+            "document": "invoice-scan",
+            "score": 0.015384615384615385,
+            "semantic_score": 0.5436029849303314,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Page 1 OCR]\nCLOUDNEST TEST INVOICE\n\nItem: Laptop Computer\n\nTotal: CNY 5999.00\n\nServer IP: 192.0.2.42\n\nSynthetic fixture - no personal data\n\n"
+          },
+          {
+            "id": 24,
+            "document": "meeting-notes",
+            "score": 0.014925373134328358,
+            "semantic_score": 0.38332380671801597,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "项目周会记录\n讨论设备采购进度、服务续费和下次会议时间。合同仍在法务审核，本文不是签署的协议。"
+          },
+          {
+            "id": 30,
+            "document": "shared-migration",
+            "score": 0.014705882352941176,
+            "semantic_score": 0.32820337063623506,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "共享数据库搬迁检查单\n迁移 MySQL 数据之前备份、导出快照并核对行数，切换到新数据库后验证一致性；失败时恢复原数据库。"
+          },
+          {
+            "id": 14,
+            "document": "contract-older",
+            "score": 0.014492753623188406,
+            "semantic_score": 0.3274008805792442,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "年度软件服务合同\n双方约定技术支持范围、金额、交付期限与签署日期。"
+          },
+          {
+            "id": 21,
+            "document": "ip-explanation",
+            "score": 0.014285714285714285,
+            "semantic_score": 0.3252612335815083,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "网络地址入门\nIP 地址用于标识网络接口，IPv4 采用点分十进制表示。选择生产服务器地址需要遵循网络规划。本文解释概念，没有可部署的服务配置。"
+          },
+          {
+            "id": 4,
+            "document": "migration-office",
+            "score": 0.014084507042253521,
+            "semantic_score": 0.32430166783669456,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "数据库迁移方案\nMySQL 升级前先备份数据库，迁移后验证数据一致性。\n服务器 IP\n\t192.0.2.42\n\t\n回滚计划\n\t恢复备份，核对行数和校验值。\n\t\n\nCloudNest 合成测试文档"
+          },
+          {
+            "id": 11,
+            "document": "contract-service",
+            "score": 0.013888888888888888,
+            "semantic_score": 0.29217471988894544,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "技术服务合同\n甲方与乙方约定系统维护服务期限十二个月，服务费每季度支付。双方签字后生效。交付物为维护报告和问题处理记录。违约责任为延误交付按合同条款处理。本文件是已签订的服务协议，非会议纪要。"
+          },
+          {
+            "id": 23,
+            "document": "travel-notes",
+            "score": 0.0136986301369863,
+            "semantic_score": 0.2842150460593743,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "海边旅行文字游记\n去年散步经过沙滩和海浪，天气晴朗。本文是纯文字日记，没有照片，也没有 EXIF 拍摄记录。"
+          },
+          {
+            "id": 8,
+            "document": "permissions-slides",
+            "score": 0.013513513513513514,
+            "semantic_score": 0.2823034251762916,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Slide 1]\nSpring Boot 权限管理：角色、资源授权与审计日志。\n\n[Notes]\n演讲备注：检查文件级访问权限，阻止跨用户读取。\n\n[Slide 2]\n安全回归测试与部署检查。"
+          },
+          {
+            "id": 13,
+            "document": "contract-current",
+            "score": 0.013333333333333334,
+            "semantic_score": 0.26478271089220207,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "房屋租赁合同\n出租方与承租方约定租金、押金、期限和维修责任，签署后生效。"
+          }
+        ],
+        "pagination": {
+          "total": 15
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false
+        }
+      },
+      "latency_ms": 155,
+      "metrics": {
+        "recall_at_1": 0.25,
+        "recall_at_3": 0.5,
+        "recall_at_5": 0.75,
+        "precision_at_5": 0.6,
+        "mrr_at_10": 1
+      }
+    },
+    {
+      "query": {
+        "id": "invoice-2",
+        "family": "invoice",
+        "split": "dev",
+        "question": "购买笔记本电脑后用于报销的凭证",
+        "relevant": [
+          "invoice-sheet",
+          "invoice-scan",
+          "invoice-photo",
+          "invoice-receipt"
+        ]
+      },
+      "response": {
+        "items": [
+          {
+            "id": 18,
+            "document": "invoice-receipt",
+            "score": 0.03278688524590164,
+            "semantic_score": 0.6849268313977831,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "电脑购买发票（合成测试）\n商品：笔记本电脑，数量一台，含税金额人民币 6899 元。付款状态：已支付。用途：报销凭证。这里没有真实纳税人、账号或个人信息。"
+          },
+          {
+            "id": 15,
+            "document": "invoice-sheet",
+            "score": 0.03225806451612903,
+            "semantic_score": 0.6122604728798559,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "[Sheet: 电脑购买发票]\nA1: 商品\tB1: 金额\tC1: 测试说明\t\nA2: 笔记本电脑\tB2: 5999\tC2: 合成票据，无个人数据\t\nA3: 合计\tB3: =SUM(B2:B2) [cached: ]\tC3: 服务器 IP 192.0.2.42"
+          },
+          {
+            "id": 12,
+            "document": "contract-purchase",
+            "score": 0.03149801587301587,
+            "semantic_score": 0.611752541385065,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "设备采购合同\n买方采购笔记本电脑十台，卖方在验收后提供发票。约定交货日期、验收标准、保修和付款条件。双方签字确认采购约定。本文为采购合同，不是已付款的发票或收据。"
+          },
+          {
+            "id": 22,
+            "document": "laptop-review",
+            "score": 0.03149801587301587,
+            "semantic_score": 0.5262332280665981,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "笔记本电脑选购评测\n比较处理器性能、屏幕和电池续航。预算约六千元，尚未购买任何设备，也没有发票。推荐根据实际用途选择，不包含付款记录。"
+          },
+          {
+            "id": 21,
+            "document": "ip-explanation",
+            "score": 0.02946912242686891,
+            "semantic_score": 0.2855332646578658,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "网络地址入门\nIP 地址用于标识网络接口，IPv4 采用点分十进制表示。选择生产服务器地址需要遵循网络规划。本文解释概念，没有可部署的服务配置。"
+          },
+          {
+            "id": 17,
+            "document": "invoice-photo",
+            "score": 0.015384615384615385,
+            "semantic_score": 0.4612852749655035,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\nA white background with black text displaying a test invoice from Cloudnest.\n[Visual tags]\ninvoice,test invoice,laptop computer,CNY,server IP,synthetic fixture\n[Visible text OCR]\nCLOUDNEST TEST INVOICE\n\nItem: Laptop Com"
+          },
+          {
+            "id": 16,
+            "document": "invoice-scan",
+            "score": 0.015151515151515152,
+            "semantic_score": 0.44458636008735597,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Page 1 OCR]\nCLOUDNEST TEST INVOICE\n\nItem: Laptop Computer\n\nTotal: CNY 5999.00\n\nServer IP: 192.0.2.42\n\nSynthetic fixture - no personal data\n\n"
+          },
+          {
+            "id": 24,
+            "document": "meeting-notes",
+            "score": 0.014925373134328358,
+            "semantic_score": 0.3569358336466947,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "项目周会记录\n讨论设备采购进度、服务续费和下次会议时间。合同仍在法务审核，本文不是签署的协议。"
+          },
+          {
+            "id": 13,
+            "document": "contract-current",
+            "score": 0.014705882352941176,
+            "semantic_score": 0.31607877126730827,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "房屋租赁合同\n出租方与承租方约定租金、押金、期限和维修责任，签署后生效。"
+          },
+          {
+            "id": 14,
+            "document": "contract-older",
+            "score": 0.014492753623188406,
+            "semantic_score": 0.29798514873328874,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "年度软件服务合同\n双方约定技术支持范围、金额、交付期限与签署日期。"
+          },
+          {
+            "id": 8,
+            "document": "permissions-slides",
+            "score": 0.014285714285714285,
+            "semantic_score": 0.2873399831862067,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Slide 1]\nSpring Boot 权限管理：角色、资源授权与审计日志。\n\n[Notes]\n演讲备注：检查文件级访问权限，阻止跨用户读取。\n\n[Slide 2]\n安全回归测试与部署检查。"
+          },
+          {
+            "id": 30,
+            "document": "shared-migration",
+            "score": 0.013888888888888888,
+            "semantic_score": 0.27982591715012634,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "共享数据库搬迁检查单\n迁移 MySQL 数据之前备份、导出快照并核对行数，切换到新数据库后验证一致性；失败时恢复原数据库。"
+          },
+          {
+            "id": 11,
+            "document": "contract-service",
+            "score": 0.0136986301369863,
+            "semantic_score": 0.2755177125128273,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "技术服务合同\n甲方与乙方约定系统维护服务期限十二个月，服务费每季度支付。双方签字后生效。交付物为维护报告和问题处理记录。违约责任为延误交付按合同条款处理。本文件是已签订的服务协议，非会议纪要。"
+          },
+          {
+            "id": 26,
+            "document": "exercise",
+            "score": 0.013513513513513514,
+            "semantic_score": 0.26139629805745973,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "训练计划\n每周进行三次跑步和两次力量训练，记录休息时间与饮水量。"
+          },
+          {
+            "id": 4,
+            "document": "migration-office",
+            "score": 0.013333333333333334,
+            "semantic_score": 0.2537169228349087,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "数据库迁移方案\nMySQL 升级前先备份数据库，迁移后验证数据一致性。\n服务器 IP\n\t192.0.2.42\n\t\n回滚计划\n\t恢复备份，核对行数和校验值。\n\t\n\nCloudNest 合成测试文档"
+          }
+        ],
+        "pagination": {
+          "total": 15
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false
+        }
+      },
+      "latency_ms": 153,
+      "metrics": {
+        "recall_at_1": 0.25,
+        "recall_at_3": 0.5,
+        "recall_at_5": 0.5,
+        "precision_at_5": 0.4,
+        "mrr_at_10": 1
+      }
+    },
+    {
+      "query": {
+        "id": "invoice-3",
+        "family": "invoice",
+        "split": "heldout",
+        "question": "找电脑已付款的发票或收据",
+        "relevant": [
+          "invoice-sheet",
+          "invoice-scan",
+          "invoice-photo",
+          "invoice-receipt"
+        ]
+      },
+      "response": {
+        "items": [
+          {
+            "id": 12,
+            "document": "contract-purchase",
+            "score": 0.03278688524590164,
+            "semantic_score": 0.6700356509933112,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "设备采购合同\n买方采购笔记本电脑十台，卖方在验收后提供发票。约定交货日期、验收标准、保修和付款条件。双方签字确认采购约定。本文为采购合同，不是已付款的发票或收据。"
+          },
+          {
+            "id": 18,
+            "document": "invoice-receipt",
+            "score": 0.03225806451612903,
+            "semantic_score": 0.6543047919748837,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "电脑购买发票（合成测试）\n商品：笔记本电脑，数量一台，含税金额人民币 6899 元。付款状态：已支付。用途：报销凭证。这里没有真实纳税人、账号或个人信息。"
+          },
+          {
+            "id": 15,
+            "document": "invoice-sheet",
+            "score": 0.03149801587301587,
+            "semantic_score": 0.6453896372792866,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "[Sheet: 电脑购买发票]\nA1: 商品\tB1: 金额\tC1: 测试说明\t\nA2: 笔记本电脑\tB2: 5999\tC2: 合成票据，无个人数据\t\nA3: 合计\tB3: =SUM(B2:B2) [cached: ]\tC3: 服务器 IP 192.0.2.42"
+          },
+          {
+            "id": 22,
+            "document": "laptop-review",
+            "score": 0.03125763125763126,
+            "semantic_score": 0.501856432176663,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "笔记本电脑选购评测\n比较处理器性能、屏幕和电池续航。预算约六千元，尚未购买任何设备，也没有发票。推荐根据实际用途选择，不包含付款记录。"
+          },
+          {
+            "id": 17,
+            "document": "invoice-photo",
+            "score": 0.015625,
+            "semantic_score": 0.5347966887286254,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\nA white background with black text displaying a test invoice from Cloudnest.\n[Visual tags]\ninvoice,test invoice,laptop computer,CNY,server IP,synthetic fixture\n[Visible text OCR]\nCLOUDNEST TEST INVOICE\n\nItem: Laptop Com"
+          },
+          {
+            "id": 16,
+            "document": "invoice-scan",
+            "score": 0.015151515151515152,
+            "semantic_score": 0.4898288021104761,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Page 1 OCR]\nCLOUDNEST TEST INVOICE\n\nItem: Laptop Computer\n\nTotal: CNY 5999.00\n\nServer IP: 192.0.2.42\n\nSynthetic fixture - no personal data\n\n"
+          },
+          {
+            "id": 24,
+            "document": "meeting-notes",
+            "score": 0.014925373134328358,
+            "semantic_score": 0.40570363690568817,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "项目周会记录\n讨论设备采购进度、服务续费和下次会议时间。合同仍在法务审核，本文不是签署的协议。"
+          },
+          {
+            "id": 14,
+            "document": "contract-older",
+            "score": 0.014705882352941176,
+            "semantic_score": 0.3520689750939887,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "年度软件服务合同\n双方约定技术支持范围、金额、交付期限与签署日期。"
+          },
+          {
+            "id": 30,
+            "document": "shared-migration",
+            "score": 0.014492753623188406,
+            "semantic_score": 0.337826905338301,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "共享数据库搬迁检查单\n迁移 MySQL 数据之前备份、导出快照并核对行数，切换到新数据库后验证一致性；失败时恢复原数据库。"
+          },
+          {
+            "id": 11,
+            "document": "contract-service",
+            "score": 0.014285714285714285,
+            "semantic_score": 0.31688177322943717,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "技术服务合同\n甲方与乙方约定系统维护服务期限十二个月，服务费每季度支付。双方签字后生效。交付物为维护报告和问题处理记录。违约责任为延误交付按合同条款处理。本文件是已签订的服务协议，非会议纪要。"
+          },
+          {
+            "id": 4,
+            "document": "migration-office",
+            "score": 0.014084507042253521,
+            "semantic_score": 0.31474601879890374,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "数据库迁移方案\nMySQL 升级前先备份数据库，迁移后验证数据一致性。\n服务器 IP\n\t192.0.2.42\n\t\n回滚计划\n\t恢复备份，核对行数和校验值。\n\t\n\nCloudNest 合成测试文档"
+          },
+          {
+            "id": 21,
+            "document": "ip-explanation",
+            "score": 0.013888888888888888,
+            "semantic_score": 0.3142399504060059,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "网络地址入门\nIP 地址用于标识网络接口，IPv4 采用点分十进制表示。选择生产服务器地址需要遵循网络规划。本文解释概念，没有可部署的服务配置。"
+          },
+          {
+            "id": 13,
+            "document": "contract-current",
+            "score": 0.0136986301369863,
+            "semantic_score": 0.3069398742256011,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "房屋租赁合同\n出租方与承租方约定租金、押金、期限和维修责任，签署后生效。"
+          },
+          {
+            "id": 23,
+            "document": "travel-notes",
+            "score": 0.013513513513513514,
+            "semantic_score": 0.28755253756180077,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "海边旅行文字游记\n去年散步经过沙滩和海浪，天气晴朗。本文是纯文字日记，没有照片，也没有 EXIF 拍摄记录。"
+          },
+          {
+            "id": 6,
+            "document": "migration-plan",
+            "score": 0.013333333333333334,
+            "semantic_score": 0.27628197608958566,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "数据库迁移方案\n将旧 MySQL 集群的数据搬迁到新节点。先做全量备份，再同步增量，核对记录数量和校验值。切换流量前演练回滚，保留旧实例只读快照。出现不一致时恢复备份。本文讨论数据搬迁步骤与一致性验证。"
+          },
+          {
+            "id": 8,
+            "document": "permissions-slides",
+            "score": 0.013157894736842105,
+            "semantic_score": 0.2735336405051833,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Slide 1]\nSpring Boot 权限管理：角色、资源授权与审计日志。\n\n[Notes]\n演讲备注：检查文件级访问权限，阻止跨用户读取。\n\n[Slide 2]\n安全回归测试与部署检查。"
+          },
+          {
+            "id": 9,
+            "document": "permissions-guide",
+            "score": 0.012987012987012988,
+            "semantic_score": 0.2530489475982095,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "Spring Boot 权限管理指南\n使用 Spring Security 验证 JWT。RBAC 按角色授予 API 权限，同时在服务层检查资源所有者。文件共享只授予 read 或 write；不能用管理员身份绕过文件级授权。撤销权限后立即拒绝读取，审计拒绝事件。"
+          }
+        ],
+        "pagination": {
+          "total": 17
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false
+        }
+      },
+      "latency_ms": 165,
+      "metrics": {
+        "recall_at_1": 0,
+        "recall_at_3": 0.5,
+        "recall_at_5": 0.75,
+        "precision_at_5": 0.6,
+        "mrr_at_10": 0.5
+      }
+    },
+    {
+      "query": {
+        "id": "negative-1",
+        "family": "negative",
+        "split": "dev",
+        "question": "寻找水稻基因测序实验报告",
+        "relevant": []
+      },
+      "response": {
+        "items": [
+          {
+            "id": 11,
+            "document": "contract-service",
+            "score": 0.01639344262295082,
+            "semantic_score": null,
+            "match_sources": [
+              "keyword"
+            ],
+            "snippet": "技术服务合同\n甲方与乙方约定系统维护服务期限十二个月，服务费每季度支付。双方签字后生效。交付物为维护报告和问题处理记录。违约责任为延误交付按合同条款处理。本文件是已签订的服务协议，非会议纪要。"
+          },
+          {
+            "id": 17,
+            "document": "invoice-photo",
+            "score": 0.01639344262295082,
+            "semantic_score": 0.34960601332619745,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\nA white background with black text displaying a test invoice from Cloudnest.\n[Visual tags]\ninvoice,test invoice,laptop computer,CNY,server IP,synthetic fixture\n[Visible text OCR]\nCLOUDNEST TEST INVOICE\n\nItem: Laptop Com"
+          },
+          {
+            "id": 30,
+            "document": "shared-migration",
+            "score": 0.016129032258064516,
+            "semantic_score": 0.3481685264710501,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "共享数据库搬迁检查单\n迁移 MySQL 数据之前备份、导出快照并核对行数，切换到新数据库后验证一致性；失败时恢复原数据库。"
+          },
+          {
+            "id": 4,
+            "document": "migration-office",
+            "score": 0.015873015873015872,
+            "semantic_score": 0.34727043532128654,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "数据库迁移方案\nMySQL 升级前先备份数据库，迁移后验证数据一致性。\n服务器 IP\n\t192.0.2.42\n\t\n回滚计划\n\t恢复备份，核对行数和校验值。\n\t\n\nCloudNest 合成测试文档"
+          },
+          {
+            "id": 26,
+            "document": "exercise",
+            "score": 0.015625,
+            "semantic_score": 0.3288614996012766,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "训练计划\n每周进行三次跑步和两次力量训练，记录休息时间与饮水量。"
+          },
+          {
+            "id": 16,
+            "document": "invoice-scan",
+            "score": 0.015384615384615385,
+            "semantic_score": 0.32612371475366253,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Page 1 OCR]\nCLOUDNEST TEST INVOICE\n\nItem: Laptop Computer\n\nTotal: CNY 5999.00\n\nServer IP: 192.0.2.42\n\nSynthetic fixture - no personal data\n\n"
+          },
+          {
+            "id": 18,
+            "document": "invoice-receipt",
+            "score": 0.015151515151515152,
+            "semantic_score": 0.3220614716833009,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "电脑购买发票（合成测试）\n商品：笔记本电脑，数量一台，含税金额人民币 6899 元。付款状态：已支付。用途：报销凭证。这里没有真实纳税人、账号或个人信息。"
+          },
+          {
+            "id": 6,
+            "document": "migration-plan",
+            "score": 0.014925373134328358,
+            "semantic_score": 0.3124696983793282,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "数据库迁移方案\n将旧 MySQL 集群的数据搬迁到新节点。先做全量备份，再同步增量，核对记录数量和校验值。切换流量前演练回滚，保留旧实例只读快照。出现不一致时恢复备份。本文讨论数据搬迁步骤与一致性验证。"
+          },
+          {
+            "id": 15,
+            "document": "invoice-sheet",
+            "score": 0.014705882352941176,
+            "semantic_score": 0.3108593546271948,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Sheet: 电脑购买发票]\nA1: 商品\tB1: 金额\tC1: 测试说明\t\nA2: 笔记本电脑\tB2: 5999\tC2: 合成票据，无个人数据\t\nA3: 合计\tB3: =SUM(B2:B2) [cached: ]\tC3: 服务器 IP 192.0.2.42"
+          },
+          {
+            "id": 8,
+            "document": "permissions-slides",
+            "score": 0.014492753623188406,
+            "semantic_score": 0.2999340507232708,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Slide 1]\nSpring Boot 权限管理：角色、资源授权与审计日志。\n\n[Notes]\n演讲备注：检查文件级访问权限，阻止跨用户读取。\n\n[Slide 2]\n安全回归测试与部署检查。"
+          },
+          {
+            "id": 23,
+            "document": "travel-notes",
+            "score": 0.014285714285714285,
+            "semantic_score": 0.29910033064663,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "海边旅行文字游记\n去年散步经过沙滩和海浪，天气晴朗。本文是纯文字日记，没有照片，也没有 EXIF 拍摄记录。"
+          },
+          {
+            "id": 5,
+            "document": "migration-and-access",
+            "score": 0.014084507042253521,
+            "semantic_score": 0.2825520957572733,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Page 1]\nDatabase migration plan\n\nCloudNest synthetic fixture - no personal data.\n\nMigrate MySQL data after a verified backup.\n\nValidate row counts and retain a rollback snapshot.\n\nThe staging server address is 192.0.2.42.\n\n[Page 2]\nSpring "
+          },
+          {
+            "id": 12,
+            "document": "contract-purchase",
+            "score": 0.013888888888888888,
+            "semantic_score": 0.2742424210905374,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "设备采购合同\n买方采购笔记本电脑十台，卖方在验收后提供发票。约定交货日期、验收标准、保修和付款条件。双方签字确认采购约定。本文为采购合同，不是已付款的发票或收据。"
+          },
+          {
+            "id": 7,
+            "document": "migration-runbook",
+            "score": 0.0136986301369863,
+            "semantic_score": 0.2581026697404811,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "Relocating the application database\nExport a consistent MySQL snapshot, apply the change log on the destination, compare row counts, and rehearse switching traffic back. Retain the previous cluster until validation completes. This is the pl"
+          },
+          {
+            "id": 24,
+            "document": "meeting-notes",
+            "score": 0.013513513513513514,
+            "semantic_score": 0.2571833984526521,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "项目周会记录\n讨论设备采购进度、服务续费和下次会议时间。合同仍在法务审核，本文不是签署的协议。"
+          },
+          {
+            "id": 13,
+            "document": "contract-current",
+            "score": 0.013333333333333334,
+            "semantic_score": 0.25342467723174983,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "房屋租赁合同\n出租方与承租方约定租金、押金、期限和维修责任，签署后生效。"
+          },
+          {
+            "id": 14,
+            "document": "contract-older",
+            "score": 0.013157894736842105,
+            "semantic_score": 0.251794137960121,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "年度软件服务合同\n双方约定技术支持范围、金额、交付期限与签署日期。"
+          }
+        ],
+        "pagination": {
+          "total": 17
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false
+        }
+      },
+      "latency_ms": 153
+    },
+    {
+      "query": {
+        "id": "negative-2",
+        "family": "negative",
+        "split": "dev",
+        "question": "火星探测器轨道计算手册",
+        "relevant": []
+      },
+      "response": {
+        "items": [
+          {
+            "id": 16,
+            "document": "invoice-scan",
+            "score": 0.01639344262295082,
+            "semantic_score": 0.34250117956917014,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Page 1 OCR]\nCLOUDNEST TEST INVOICE\n\nItem: Laptop Computer\n\nTotal: CNY 5999.00\n\nServer IP: 192.0.2.42\n\nSynthetic fixture - no personal data\n\n"
+          },
+          {
+            "id": 17,
+            "document": "invoice-photo",
+            "score": 0.016129032258064516,
+            "semantic_score": 0.3405673921518308,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\nA white background with black text displaying a test invoice from Cloudnest.\n[Visual tags]\ninvoice,test invoice,laptop computer,CNY,server IP,synthetic fixture\n[Visible text OCR]\nCLOUDNEST TEST INVOICE\n\nItem: Laptop Com"
+          },
+          {
+            "id": 12,
+            "document": "contract-purchase",
+            "score": 0.015873015873015872,
+            "semantic_score": 0.33654340034111885,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "设备采购合同\n买方采购笔记本电脑十台，卖方在验收后提供发票。约定交货日期、验收标准、保修和付款条件。双方签字确认采购约定。本文为采购合同，不是已付款的发票或收据。"
+          },
+          {
+            "id": 15,
+            "document": "invoice-sheet",
+            "score": 0.015625,
+            "semantic_score": 0.3300385321814012,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Sheet: 电脑购买发票]\nA1: 商品\tB1: 金额\tC1: 测试说明\t\nA2: 笔记本电脑\tB2: 5999\tC2: 合成票据，无个人数据\t\nA3: 合计\tB3: =SUM(B2:B2) [cached: ]\tC3: 服务器 IP 192.0.2.42"
+          },
+          {
+            "id": 4,
+            "document": "migration-office",
+            "score": 0.015384615384615385,
+            "semantic_score": 0.32780824291637495,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "数据库迁移方案\nMySQL 升级前先备份数据库，迁移后验证数据一致性。\n服务器 IP\n\t192.0.2.42\n\t\n回滚计划\n\t恢复备份，核对行数和校验值。\n\t\n\nCloudNest 合成测试文档"
+          },
+          {
+            "id": 18,
+            "document": "invoice-receipt",
+            "score": 0.015151515151515152,
+            "semantic_score": 0.3255897331574725,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "电脑购买发票（合成测试）\n商品：笔记本电脑，数量一台，含税金额人民币 6899 元。付款状态：已支付。用途：报销凭证。这里没有真实纳税人、账号或个人信息。"
+          },
+          {
+            "id": 23,
+            "document": "travel-notes",
+            "score": 0.014925373134328358,
+            "semantic_score": 0.3076662076970647,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "海边旅行文字游记\n去年散步经过沙滩和海浪，天气晴朗。本文是纯文字日记，没有照片，也没有 EXIF 拍摄记录。"
+          },
+          {
+            "id": 26,
+            "document": "exercise",
+            "score": 0.014705882352941176,
+            "semantic_score": 0.29017980140199745,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "训练计划\n每周进行三次跑步和两次力量训练，记录休息时间与饮水量。"
+          },
+          {
+            "id": 8,
+            "document": "permissions-slides",
+            "score": 0.014492753623188406,
+            "semantic_score": 0.28942577815802767,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Slide 1]\nSpring Boot 权限管理：角色、资源授权与审计日志。\n\n[Notes]\n演讲备注：检查文件级访问权限，阻止跨用户读取。\n\n[Slide 2]\n安全回归测试与部署检查。"
+          },
+          {
+            "id": 30,
+            "document": "shared-migration",
+            "score": 0.014285714285714285,
+            "semantic_score": 0.28469423475630246,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "共享数据库搬迁检查单\n迁移 MySQL 数据之前备份、导出快照并核对行数，切换到新数据库后验证一致性；失败时恢复原数据库。"
+          },
+          {
+            "id": 24,
+            "document": "meeting-notes",
+            "score": 0.014084507042253521,
+            "semantic_score": 0.2765603215059175,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "项目周会记录\n讨论设备采购进度、服务续费和下次会议时间。合同仍在法务审核，本文不是签署的协议。"
+          },
+          {
+            "id": 5,
+            "document": "migration-and-access",
+            "score": 0.013888888888888888,
+            "semantic_score": 0.2764476212612475,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Page 1]\nDatabase migration plan\n\nCloudNest synthetic fixture - no personal data.\n\nMigrate MySQL data after a verified backup.\n\nValidate row counts and retain a rollback snapshot.\n\nThe staging server address is 192.0.2.42.\n\n[Page 2]\nSpring "
+          },
+          {
+            "id": 22,
+            "document": "laptop-review",
+            "score": 0.0136986301369863,
+            "semantic_score": 0.27511549811126934,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "笔记本电脑选购评测\n比较处理器性能、屏幕和电池续航。预算约六千元，尚未购买任何设备，也没有发票。推荐根据实际用途选择，不包含付款记录。"
+          },
+          {
+            "id": 7,
+            "document": "migration-runbook",
+            "score": 0.013513513513513514,
+            "semantic_score": 0.2729105036680109,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "Relocating the application database\nExport a consistent MySQL snapshot, apply the change log on the destination, compare row counts, and rehearse switching traffic back. Retain the previous cluster until validation completes. This is the pl"
+          },
+          {
+            "id": 6,
+            "document": "migration-plan",
+            "score": 0.013333333333333334,
+            "semantic_score": 0.2674746938172386,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "数据库迁移方案\n将旧 MySQL 集群的数据搬迁到新节点。先做全量备份，再同步增量，核对记录数量和校验值。切换流量前演练回滚，保留旧实例只读快照。出现不一致时恢复备份。本文讨论数据搬迁步骤与一致性验证。"
+          },
+          {
+            "id": 11,
+            "document": "contract-service",
+            "score": 0.013157894736842105,
+            "semantic_score": 0.2622880181665129,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "技术服务合同\n甲方与乙方约定系统维护服务期限十二个月，服务费每季度支付。双方签字后生效。交付物为维护报告和问题处理记录。违约责任为延误交付按合同条款处理。本文件是已签订的服务协议，非会议纪要。"
+          },
+          {
+            "id": 21,
+            "document": "ip-explanation",
+            "score": 0.012987012987012988,
+            "semantic_score": 0.2545060052086801,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "网络地址入门\nIP 地址用于标识网络接口，IPv4 采用点分十进制表示。选择生产服务器地址需要遵循网络规划。本文解释概念，没有可部署的服务配置。"
+          }
+        ],
+        "pagination": {
+          "total": 17
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false
+        }
+      },
+      "latency_ms": 149
+    },
+    {
+      "query": {
+        "id": "negative-3",
+        "family": "negative",
+        "split": "dev",
+        "question": "梵高油画修复过程记录",
+        "relevant": []
+      },
+      "response": {
+        "items": [
+          {
+            "id": 23,
+            "document": "travel-notes",
+            "score": 0.032018442622950824,
+            "semantic_score": 0.26598881432088717,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "海边旅行文字游记\n去年散步经过沙滩和海浪，天气晴朗。本文是纯文字日记，没有照片，也没有 EXIF 拍摄记录。"
+          },
+          {
+            "id": 26,
+            "document": "exercise",
+            "score": 0.03128054740957967,
+            "semantic_score": 0.26567260972783713,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "训练计划\n每周进行三次跑步和两次力量训练，记录休息时间与饮水量。"
+          },
+          {
+            "id": 24,
+            "document": "meeting-notes",
+            "score": 0.03125763125763126,
+            "semantic_score": 0.26456987823358374,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "项目周会记录\n讨论设备采购进度、服务续费和下次会议时间。合同仍在法务审核，本文不是签署的协议。"
+          },
+          {
+            "id": 6,
+            "document": "migration-plan",
+            "score": 0.01639344262295082,
+            "semantic_score": null,
+            "match_sources": [
+              "keyword"
+            ],
+            "snippet": "数据库迁移方案\n将旧 MySQL 集群的数据搬迁到新节点。先做全量备份，再同步增量，核对记录数量和校验值。切换流量前演练回滚，保留旧实例只读快照。出现不一致时恢复备份。本文讨论数据搬迁步骤与一致性验证。"
+          },
+          {
+            "id": 11,
+            "document": "contract-service",
+            "score": 0.016129032258064516,
+            "semantic_score": null,
+            "match_sources": [
+              "keyword"
+            ],
+            "snippet": "技术服务合同\n甲方与乙方约定系统维护服务期限十二个月，服务费每季度支付。双方签字后生效。交付物为维护报告和问题处理记录。违约责任为延误交付按合同条款处理。本文件是已签订的服务协议，非会议纪要。"
+          },
+          {
+            "id": 22,
+            "document": "laptop-review",
+            "score": 0.015873015873015872,
+            "semantic_score": null,
+            "match_sources": [
+              "keyword"
+            ],
+            "snippet": "脑选购评测\n比较处理器性能、屏幕和电池续航。预算约六千元，尚未购买任何设备，也没有发票。推荐根据实际用途选择，不包含付款记录。"
+          },
+          {
+            "id": 17,
+            "document": "invoice-photo",
+            "score": 0.015625,
+            "semantic_score": 0.25159077135584706,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\nA white background with black text displaying a test invoice from Cloudnest.\n[Visual tags]\ninvoice,test invoice,laptop computer,CNY,server IP,synthetic fixture\n[Visible text OCR]\nCLOUDNEST TEST INVOICE\n\nItem: Laptop Com"
+          }
+        ],
+        "pagination": {
+          "total": 7
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false
+        }
+      },
+      "latency_ms": 148
+    },
+    {
+      "query": {
+        "id": "negative-4",
+        "family": "negative",
+        "split": "heldout",
+        "question": "儿童钢琴考级成绩单",
+        "relevant": []
+      },
+      "response": {
+        "items": [
+          {
+            "id": 18,
+            "document": "invoice-receipt",
+            "score": 0.01639344262295082,
+            "semantic_score": 0.32481940596912406,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "电脑购买发票（合成测试）\n商品：笔记本电脑，数量一台，含税金额人民币 6899 元。付款状态：已支付。用途：报销凭证。这里没有真实纳税人、账号或个人信息。"
+          },
+          {
+            "id": 15,
+            "document": "invoice-sheet",
+            "score": 0.016129032258064516,
+            "semantic_score": 0.30659776783906706,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Sheet: 电脑购买发票]\nA1: 商品\tB1: 金额\tC1: 测试说明\t\nA2: 笔记本电脑\tB2: 5999\tC2: 合成票据，无个人数据\t\nA3: 合计\tB3: =SUM(B2:B2) [cached: ]\tC3: 服务器 IP 192.0.2.42"
+          },
+          {
+            "id": 12,
+            "document": "contract-purchase",
+            "score": 0.015873015873015872,
+            "semantic_score": 0.30160821084379924,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "设备采购合同\n买方采购笔记本电脑十台，卖方在验收后提供发票。约定交货日期、验收标准、保修和付款条件。双方签字确认采购约定。本文为采购合同，不是已付款的发票或收据。"
+          },
+          {
+            "id": 16,
+            "document": "invoice-scan",
+            "score": 0.015625,
+            "semantic_score": 0.29642741130246214,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Page 1 OCR]\nCLOUDNEST TEST INVOICE\n\nItem: Laptop Computer\n\nTotal: CNY 5999.00\n\nServer IP: 192.0.2.42\n\nSynthetic fixture - no personal data\n\n"
+          },
+          {
+            "id": 17,
+            "document": "invoice-photo",
+            "score": 0.015384615384615385,
+            "semantic_score": 0.2964112151892991,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\nA white background with black text displaying a test invoice from Cloudnest.\n[Visual tags]\ninvoice,test invoice,laptop computer,CNY,server IP,synthetic fixture\n[Visible text OCR]\nCLOUDNEST TEST INVOICE\n\nItem: Laptop Com"
+          },
+          {
+            "id": 22,
+            "document": "laptop-review",
+            "score": 0.015151515151515152,
+            "semantic_score": 0.2606746096625996,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "笔记本电脑选购评测\n比较处理器性能、屏幕和电池续航。预算约六千元，尚未购买任何设备，也没有发票。推荐根据实际用途选择，不包含付款记录。"
+          },
+          {
+            "id": 4,
+            "document": "migration-office",
+            "score": 0.014925373134328358,
+            "semantic_score": 0.25742515482639816,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "数据库迁移方案\nMySQL 升级前先备份数据库，迁移后验证数据一致性。\n服务器 IP\n\t192.0.2.42\n\t\n回滚计划\n\t恢复备份，核对行数和校验值。\n\t\n\nCloudNest 合成测试文档"
+          }
+        ],
+        "pagination": {
+          "total": 7
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false
+        }
+      },
+      "latency_ms": 146
+    },
+    {
+      "query": {
+        "id": "negative-5",
+        "family": "negative",
+        "split": "heldout",
+        "question": "深海火山岩石化学检测报告",
+        "relevant": []
+      },
+      "response": {
+        "items": [
+          {
+            "id": 2,
+            "document": "photo-current",
+            "score": 0.031754032258064516,
+            "semantic_score": 0.2994738411626368,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": " description]\n一片阳光明媚的海滩，金色沙滩延伸至清澈的蓝色海水。海浪轻轻拍打着岸边，形成白色的泡沫。左侧有岩石峭壁，上面覆盖着少量植被。天空湛蓝，点缀着几朵白云。\n[Visual tags]\n海滩,沙滩,海洋,海浪,岩石,蓝天,白云"
+          },
+          {
+            "id": 1,
+            "document": "photo-last",
+            "score": 0.031544957774465976,
+            "semantic_score": 0.2994313054656409,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": " description]\n一片阳光明媚的海滩，金色沙滩延伸至清澈的蓝色海水。海浪轻轻拍打着岸边，形成白色的泡沫。左侧有岩石峭壁，上面覆盖着少量植被。天空湛蓝，点缀着几朵白云。\n[Visual tags]\n海滩,沙滩,海洋,海浪,岩石,蓝天,白云"
+          },
+          {
+            "id": 3,
+            "document": "photo-unknown",
+            "score": 0.03125763125763126,
+            "semantic_score": 0.2994738411626368,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": " description]\n一片阳光明媚的海滩，金色沙滩延伸至清澈的蓝色海水。海浪轻轻拍打着岸边，形成白色的泡沫。左侧有岩石峭壁，上面覆盖着少量植被。天空湛蓝，点缀着几朵白云。\n[Visual tags]\n海滩,沙滩,海洋,海浪,岩石,蓝天,白云"
+          },
+          {
+            "id": 17,
+            "document": "invoice-photo",
+            "score": 0.01639344262295082,
+            "semantic_score": 0.3806742454879266,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\nA white background with black text displaying a test invoice from Cloudnest.\n[Visual tags]\ninvoice,test invoice,laptop computer,CNY,server IP,synthetic fixture\n[Visible text OCR]\nCLOUDNEST TEST INVOICE\n\nItem: Laptop Com"
+          },
+          {
+            "id": 16,
+            "document": "invoice-scan",
+            "score": 0.016129032258064516,
+            "semantic_score": 0.3650783862873105,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Page 1 OCR]\nCLOUDNEST TEST INVOICE\n\nItem: Laptop Computer\n\nTotal: CNY 5999.00\n\nServer IP: 192.0.2.42\n\nSynthetic fixture - no personal data\n\n"
+          },
+          {
+            "id": 23,
+            "document": "travel-notes",
+            "score": 0.015873015873015872,
+            "semantic_score": 0.34213236649962764,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "海边旅行文字游记\n去年散步经过沙滩和海浪，天气晴朗。本文是纯文字日记，没有照片，也没有 EXIF 拍摄记录。"
+          },
+          {
+            "id": 11,
+            "document": "contract-service",
+            "score": 0.015625,
+            "semantic_score": null,
+            "match_sources": [
+              "keyword"
+            ],
+            "snippet": "技术服务合同\n甲方与乙方约定系统维护服务期限十二个月，服务费每季度支付。双方签字后生效。交付物为维护报告和问题处理记录。违约责任为延误交付按合同条款处理。本文件是已签订的服务协议，非会议纪要。"
+          },
+          {
+            "id": 4,
+            "document": "migration-office",
+            "score": 0.014925373134328358,
+            "semantic_score": 0.2971285635572209,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "数据库迁移方案\nMySQL 升级前先备份数据库，迁移后验证数据一致性。\n服务器 IP\n\t192.0.2.42\n\t\n回滚计划\n\t恢复备份，核对行数和校验值。\n\t\n\nCloudNest 合成测试文档"
+          },
+          {
+            "id": 15,
+            "document": "invoice-sheet",
+            "score": 0.014705882352941176,
+            "semantic_score": 0.28874073950606804,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Sheet: 电脑购买发票]\nA1: 商品\tB1: 金额\tC1: 测试说明\t\nA2: 笔记本电脑\tB2: 5999\tC2: 合成票据，无个人数据\t\nA3: 合计\tB3: =SUM(B2:B2) [cached: ]\tC3: 服务器 IP 192.0.2.42"
+          },
+          {
+            "id": 8,
+            "document": "permissions-slides",
+            "score": 0.014492753623188406,
+            "semantic_score": 0.2844280319683575,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Slide 1]\nSpring Boot 权限管理：角色、资源授权与审计日志。\n\n[Notes]\n演讲备注：检查文件级访问权限，阻止跨用户读取。\n\n[Slide 2]\n安全回归测试与部署检查。"
+          },
+          {
+            "id": 18,
+            "document": "invoice-receipt",
+            "score": 0.014285714285714285,
+            "semantic_score": 0.28272644209148107,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "电脑购买发票（合成测试）\n商品：笔记本电脑，数量一台，含税金额人民币 6899 元。付款状态：已支付。用途：报销凭证。这里没有真实纳税人、账号或个人信息。"
+          },
+          {
+            "id": 30,
+            "document": "shared-migration",
+            "score": 0.014084507042253521,
+            "semantic_score": 0.2690149228346445,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "共享数据库搬迁检查单\n迁移 MySQL 数据之前备份、导出快照并核对行数，切换到新数据库后验证一致性；失败时恢复原数据库。"
+          },
+          {
+            "id": 12,
+            "document": "contract-purchase",
+            "score": 0.013888888888888888,
+            "semantic_score": 0.25702142742793593,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "设备采购合同\n买方采购笔记本电脑十台，卖方在验收后提供发票。约定交货日期、验收标准、保修和付款条件。双方签字确认采购约定。本文为采购合同，不是已付款的发票或收据。"
+          }
+        ],
+        "pagination": {
+          "total": 13
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false
+        }
+      },
+      "latency_ms": 150
+    },
+    {
+      "query": {
+        "id": "negative-6",
+        "family": "negative",
+        "split": "heldout",
+        "question": "航空发动机涡轮叶片制造图纸",
+        "relevant": []
+      },
+      "response": {
+        "items": [
+          {
+            "id": 18,
+            "document": "invoice-receipt",
+            "score": 0.01639344262295082,
+            "semantic_score": 0.29746112975646444,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "电脑购买发票（合成测试）\n商品：笔记本电脑，数量一台，含税金额人民币 6899 元。付款状态：已支付。用途：报销凭证。这里没有真实纳税人、账号或个人信息。"
+          },
+          {
+            "id": 17,
+            "document": "invoice-photo",
+            "score": 0.016129032258064516,
+            "semantic_score": 0.29692585293148516,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\nA white background with black text displaying a test invoice from Cloudnest.\n[Visual tags]\ninvoice,test invoice,laptop computer,CNY,server IP,synthetic fixture\n[Visible text OCR]\nCLOUDNEST TEST INVOICE\n\nItem: Laptop Com"
+          },
+          {
+            "id": 12,
+            "document": "contract-purchase",
+            "score": 0.015873015873015872,
+            "semantic_score": 0.2910417023553315,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "设备采购合同\n买方采购笔记本电脑十台，卖方在验收后提供发票。约定交货日期、验收标准、保修和付款条件。双方签字确认采购约定。本文为采购合同，不是已付款的发票或收据。"
+          },
+          {
+            "id": 15,
+            "document": "invoice-sheet",
+            "score": 0.015625,
+            "semantic_score": 0.27610992461013895,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Sheet: 电脑购买发票]\nA1: 商品\tB1: 金额\tC1: 测试说明\t\nA2: 笔记本电脑\tB2: 5999\tC2: 合成票据，无个人数据\t\nA3: 合计\tB3: =SUM(B2:B2) [cached: ]\tC3: 服务器 IP 192.0.2.42"
+          }
+        ],
+        "pagination": {
+          "total": 4
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false
+        }
+      },
+      "latency_ms": 147
+    }
+  ],
+  "summaries": {
+    "all": {
+      "positive_count": 18,
+      "negative_count": 6,
+      "negative_empty_count": 0,
+      "negative_empty_rate": 0,
+      "positive_macro": {
+        "recall_at_1": 0.32499999999999996,
+        "recall_at_3": 0.6972222222222223,
+        "recall_at_5": 0.8,
+        "precision_at_5": 0.47777777777777775,
+        "mrr_at_10": 0.8389550264550265
+      }
+    },
+    "dev": {
+      "positive_count": 12,
+      "negative_count": 3,
+      "negative_empty_count": 0,
+      "negative_empty_rate": 0,
+      "positive_macro": {
+        "recall_at_1": 0.3666666666666667,
+        "recall_at_3": 0.6416666666666667,
+        "recall_at_5": 0.7208333333333333,
+        "precision_at_5": 0.4333333333333334,
+        "mrr_at_10": 0.8556547619047619
+      }
+    },
+    "family/beach": {
+      "positive_count": 3,
+      "negative_count": 0,
+      "negative_empty_count": 0,
+      "negative_empty_rate": 0,
+      "positive_macro": {
+        "recall_at_1": 0.6666666666666666,
+        "recall_at_3": 1,
+        "recall_at_5": 1,
+        "precision_at_5": 0.20000000000000004,
+        "mrr_at_10": 0.7777777777777778
+      }
+    },
+    "family/config": {
+      "positive_count": 3,
+      "negative_count": 0,
+      "negative_empty_count": 0,
+      "negative_empty_rate": 0,
+      "positive_macro": {
+        "recall_at_1": 0.16666666666666666,
+        "recall_at_3": 0.3333333333333333,
+        "recall_at_5": 0.3333333333333333,
+        "precision_at_5": 0.13333333333333333,
+        "mrr_at_10": 0.4226190476190476
+      }
+    },
+    "family/contracts": {
+      "positive_count": 3,
+      "negative_count": 0,
+      "negative_empty_count": 0,
+      "negative_empty_rate": 0,
+      "positive_macro": {
+        "recall_at_1": 0.5,
+        "recall_at_3": 1,
+        "recall_at_5": 1,
+        "precision_at_5": 0.4000000000000001,
+        "mrr_at_10": 1
+      }
+    },
+    "family/invoice": {
+      "positive_count": 3,
+      "negative_count": 0,
+      "negative_empty_count": 0,
+      "negative_empty_rate": 0,
+      "positive_macro": {
+        "recall_at_1": 0.16666666666666666,
+        "recall_at_3": 0.5,
+        "recall_at_5": 0.6666666666666666,
+        "precision_at_5": 0.5333333333333333,
+        "mrr_at_10": 0.8333333333333334
+      }
+    },
+    "family/migration": {
+      "positive_count": 3,
+      "negative_count": 0,
+      "negative_empty_count": 0,
+      "negative_empty_rate": 0,
+      "positive_macro": {
+        "recall_at_1": 0.20000000000000004,
+        "recall_at_3": 0.6,
+        "recall_at_5": 0.7999999999999999,
+        "precision_at_5": 0.7999999999999999,
+        "mrr_at_10": 1
+      }
+    },
+    "family/negative": {
+      "positive_count": 0,
+      "negative_count": 6,
+      "negative_empty_count": 0,
+      "negative_empty_rate": 0,
+      "positive_macro": {
+        "recall_at_1": 0,
+        "recall_at_3": 0,
+        "recall_at_5": 0,
+        "precision_at_5": 0,
+        "mrr_at_10": 0
+      }
+    },
+    "family/permissions": {
+      "positive_count": 3,
+      "negative_count": 0,
+      "negative_empty_count": 0,
+      "negative_empty_rate": 0,
+      "positive_macro": {
+        "recall_at_1": 0.25,
+        "recall_at_3": 0.75,
+        "recall_at_5": 1,
+        "precision_at_5": 0.8000000000000002,
+        "mrr_at_10": 1
+      }
+    },
+    "heldout": {
+      "positive_count": 6,
+      "negative_count": 3,
+      "negative_empty_count": 0,
+      "negative_empty_rate": 0,
+      "positive_macro": {
+        "recall_at_1": 0.24166666666666667,
+        "recall_at_3": 0.8083333333333332,
+        "recall_at_5": 0.9583333333333334,
+        "precision_at_5": 0.5666666666666665,
+        "mrr_at_10": 0.8055555555555555
+      }
+    }
+  },
+  "boundaries": {
+    "all_queries_authorized": true,
+    "model_outage_keyword_fallback": true,
+    "recycle": true,
+    "revocation": true
+  },
+  "limitations": [
+    "Synthetic development corpus, not production generalization or an SLA.",
+    "Three beach files share pixels and differ only in synthetic EXIF; scanned invoice and invoice image reuse pixels.",
+    "Labels and splits fixed before execution; heldout queries visible to implementer, not a blind external test.",
+    "Relative dates anchored to Asia/Shanghai at run start; model outputs can vary across runs."
+  ]
+}

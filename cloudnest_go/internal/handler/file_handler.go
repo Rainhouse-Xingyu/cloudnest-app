@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
@@ -34,18 +33,11 @@ import (
 
 // FileHandler handles file system related APIs.
 type FileHandler struct {
-	Transfers  *transfer.Manager
-	Blobs      *blob.Manager
-	RDB        *redis.Client
-	Cfg        config.Config
-	HTTPClient *http.Client
-	AISvc      *service.AIService
-	Svc        *service.FileService
-}
-
-type autoAnalyzeLLMResult struct {
-	Tags        []string `json:"tags"`
-	Description string   `json:"description"`
+	Transfers *transfer.Manager
+	Blobs     *blob.Manager
+	RDB       *redis.Client
+	Cfg       config.Config
+	Svc       *service.FileService
 }
 
 type CreateFolderRequest struct {
@@ -378,8 +370,7 @@ func (h *FileHandler) CompleteUpload(c *gin.Context) {
 	}
 
 	h.cleanupChunkManifest(c.Request.Context(), uid, snapshot.Chunks, c.ClientIP())
-	// 上传成功后触发 AI 异步分析：自动生成 tags/description/ocr_text 并写入 ai_metadata。
-	h.triggerAsyncAutoAnalyze(createdFile, uid, c.ClientIP())
+	// The durable AI index job was committed with the file and upload receipt.
 	// 上传完成后尝试自动与同目录同名文件配对绑定 Live Photo（无阻塞失败）。
 	_ = h.tryAutoBindLivePhotoForFile(c.Request.Context(), uid, createdFile, c.ClientIP())
 
@@ -392,160 +383,6 @@ func (h *FileHandler) recordUploadCleanupFailure(ctx context.Context, uid int64,
 	if err := h.Svc.RecordOperation(ctx, uid, fileID, action, "failed", "temporary upload cleanup pending", clientIP); err != nil {
 		log.Printf("upload cleanup pending action=%s user_id=%d audit_unavailable=true", action, uid)
 	}
-}
-
-// triggerAsyncAutoAnalyze 在后台执行文件自动分析，不阻塞上传接口响应。
-func (h *FileHandler) triggerAsyncAutoAnalyze(file model.File, userID int64, clientIP string) {
-	go func(f model.File, uid int64, ip string) {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-		defer cancel()
-		ctx, scope := h.Blobs.Begin(ctx)
-		defer func() {
-			if err := scope.Close(); err != nil {
-				log.Print("background storage read lease cleanup pending")
-			}
-		}()
-
-		ai := &AIHandler{Cfg: h.Cfg, HTTPClient: h.HTTPClient, Svc: h.AISvc}
-		_ = ai.createAITask(ctx, uid, f.ID, "auto_analyze", "processing", "queued")
-
-		tags, desc, ocrText, err := h.buildAutoAnalyzeResult(ctx, ai, f)
-		if err != nil {
-			_ = ai.createAITask(ctx, uid, f.ID, "auto_analyze", "failed", err.Error())
-			_ = h.Svc.RecordOperation(ctx, uid, &f.ID, "ai_auto_analyze", "failed", truncateForLog(err.Error(), 500), ip)
-			return
-		}
-
-		if _, err := ai.upsertAIMetadata(ctx, f.ID, tags, desc, ocrText); err != nil {
-			_ = ai.createAITask(ctx, uid, f.ID, "auto_analyze", "failed", err.Error())
-			_ = h.Svc.RecordOperation(ctx, uid, &f.ID, "ai_auto_analyze", "failed", truncateForLog(err.Error(), 500), ip)
-			return
-		}
-
-		result := fmt.Sprintf("tags=%s | desc_len=%d | ocr_len=%d", tags, len(desc), len(ocrText))
-		_ = ai.createAITask(ctx, uid, f.ID, "auto_analyze", "success", truncateForLog(result, 500))
-		_ = h.Svc.RecordOperation(ctx, uid, &f.ID, "ai_auto_analyze", "success", truncateForLog(result, 500), ip)
-	}(file, userID, clientIP)
-}
-
-// buildAutoAnalyzeResult 生成 ai_metadata 三个核心字段：tags/description/ocr_text。
-func (h *FileHandler) buildAutoAnalyzeResult(ctx context.Context, ai *AIHandler, f model.File) (string, string, string, error) {
-	if f.StorageID == nil {
-		return "", "", "", fmt.Errorf("storage id missing")
-	}
-
-	storage, err := h.Svc.GetStorageByID(ctx, *f.StorageID)
-	if err != nil {
-		return "", "", "", err
-	}
-
-	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(f.Filename), "."))
-	baseTags := []string{"auto", ext}
-	desc := "上传后自动分析完成"
-	ocrText := ""
-
-	if isImageExt(ext) || isLivePhotoImageExt(ext) {
-		baseTags = append(baseTags, "图片", "照片")
-		exifMeta := extractEXIFInfo(storage.FilePath)
-		if exifTag := strings.TrimSpace(formatEXIFLocationTag(exifMeta)); exifTag != "" {
-			baseTags = append(baseTags, exifTag)
-		}
-
-		raw, readErr := os.ReadFile(storage.FilePath)
-		if readErr == nil && len(raw) > 0 {
-			prompt := "请执行OCR识别，完整提取图片中的可见文字，尽量保留原始顺序与换行。"
-			if text, err := ai.callOllamaGenerate(ctx, prompt, []string{base64.StdEncoding.EncodeToString(raw)}); err == nil {
-				ocrText = strings.TrimSpace(text)
-			}
-		}
-
-		llmTags, llmDesc := h.autoGenerateTagsAndDescription(ctx, ai, f.Filename, ext, ocrText, exifMeta.CapturedAt, formatEXIFLocationTag(exifMeta))
-		baseTags = append(baseTags, llmTags...)
-		if llmDesc != "" {
-			desc = llmDesc
-		} else {
-			if exifMeta.CapturedAt != "" {
-				desc = desc + "；拍摄时间：" + exifMeta.CapturedAt
-			}
-			if strings.TrimSpace(ocrText) != "" {
-				desc = desc + "；已提取图片文字"
-			}
-		}
-	} else {
-		body, truncated, err := extractDocumentText(storage.FilePath, ext, aiReadMaxBytes)
-		if err == nil {
-			ocrText = strings.TrimSpace(body)
-			baseTags = append(baseTags, "文档", "文件")
-			llmTags, llmDesc := h.autoGenerateTagsAndDescription(ctx, ai, f.Filename, ext, ocrText, "", "")
-			baseTags = append(baseTags, llmTags...)
-			if llmDesc != "" {
-				desc = llmDesc
-			} else {
-				desc = "上传后自动分析完成：已提取文档主要内容"
-			}
-			if truncated {
-				desc += "（内容已截断）"
-			}
-		} else {
-			baseTags = append(baseTags, "文件")
-			desc = "上传后自动分析完成：当前类型暂不支持全文提取"
-		}
-	}
-
-	ocrText = strings.TrimSpace(ocrText)
-	if len(ocrText) > 100000 {
-		ocrText = ocrText[:100000]
-	}
-
-	return mergeTags(strings.Join(baseTags, ",")), strings.TrimSpace(desc), ocrText, nil
-}
-
-// autoGenerateTagsAndDescription 调用 LLM 自动生成标签与描述。
-func (h *FileHandler) autoGenerateTagsAndDescription(ctx context.Context, ai *AIHandler, filename string, ext string, text string, capturedAt string, exifLocation string) ([]string, string) {
-	if ai == nil {
-		return nil, ""
-	}
-
-	snippet := strings.TrimSpace(text)
-	if len(snippet) > 3000 {
-		snippet = snippet[:3000]
-	}
-
-	prompt := "你是 CloudNest 文件标注助手。请根据文件信息输出 JSON：" +
-		"{\"tags\":[\"标签1\",\"标签2\"],\"description\":\"一句话描述\"}。" +
-		"要求：tags 3-8 个，优先地点/场景/主题/实体词（如海边、风景、石家庄、天津、英国），去掉空泛词；description 用中文简洁描述文件核心内容。" +
-		"只输出 JSON，不要任何额外文字。" +
-		"\n文件名=" + filename +
-		"\n扩展名=" + ext +
-		"\n拍摄时间=" + capturedAt +
-		"\nEXIF位置=" + exifLocation +
-		"\n识别文本=" + snippet
-
-	raw, err := ai.callOllamaGenerate(ctx, prompt, nil)
-	if err != nil {
-		return nil, ""
-	}
-
-	obj := extractJSONObject(raw)
-	if obj == "" {
-		return nil, ""
-	}
-
-	var out autoAnalyzeLLMResult
-	if err := json.Unmarshal([]byte(obj), &out); err != nil {
-		return nil, ""
-	}
-
-	cleanTags := make([]string, 0, len(out.Tags))
-	for _, t := range out.Tags {
-		t = strings.TrimSpace(t)
-		if t == "" {
-			continue
-		}
-		cleanTags = append(cleanTags, t)
-	}
-
-	return cleanTags, strings.TrimSpace(out.Description)
 }
 
 func truncateForLog(s string, max int) string {

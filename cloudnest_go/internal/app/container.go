@@ -122,7 +122,7 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 
 		AuthHandler:          &handler.AuthHandler{Svc: authService},
 		AdminHandler:         &handler.AdminHandler{Svc: adminService},
-		FileHandler:          &handler.FileHandler{Transfers: transfer.NewManager(db, cfg), Blobs: blobs, RDB: rdb, Cfg: cfg, AISvc: aiService, Svc: fileService},
+		FileHandler:          &handler.FileHandler{Transfers: transfer.NewManager(db, cfg), Blobs: blobs, RDB: rdb, Cfg: cfg, Svc: fileService},
 		SettingsHandler:      &handler.SettingsHandler{Svc: settingsService},
 		StorageHandler:       &handler.StorageHandler{Svc: storageService},
 		CollaborationHandler: &handler.CollaborationHandler{Svc: collaborationService},
@@ -244,6 +244,9 @@ func (c *Container) NewRouter() *gin.Engine {
 	api.GET("/live-photos/:id", c.LivePhotoHandler.Detail)
 	api.GET("/live-photos", c.LivePhotoHandler.List)
 	api.GET("/files/:id/live-photo", c.LivePhotoHandler.GetByFileID)
+	api.GET("/ai/index", c.AIHandler.ListIndex)
+	api.GET("/ai/index/:id", c.AIHandler.IndexStatus)
+	api.POST("/ai/index/rebuild", c.AIHandler.RebuildIndex)
 	api.POST("/ai/ocr", c.AIHandler.OCR)
 	api.GET("/ai/search", c.AIHandler.Search)
 	api.POST("/ai/search/nl", c.AIHandler.NLSearch)
