@@ -272,4 +272,6 @@ HTTP 协议夹具只用于错误/并发边界测试，不替代模型识别验�
 
 新增有损/无损/透明静态图片解码、RIFF/EXIF 资源和结构边界，复用现有缩略图/AI 源与共享预算。完整 `make check test` 通过；实际隔离模型/缩略图三项集成 **PASS 89.260s**，其中真实模型索引和语义搜索 **79.96s**；漏洞扫描未发现可调用漏洞（3 个未调用模块公告）。日志与范围见 AI-WEBP。没有重新执行完整 v1/stress-v2 质量评估，也没有因格式测试通过更改质量状态。
 
-本轮 AI 搜索专项 **27 个顶层测试 PASS（49.003s）**，含新增有效 WebP 遇模型故障时 retry、损坏 WebP 失败时无部分结果两个子用例；日志 `/tmp/cloudnest-webp-ai-search.log`。
+本轮 AI 搜索专项 **28 个顶层测试 PASS（49.003s）**，含新增有效 WebP 遇模型故障时 retry、损坏 WebP 失败时无部分结果两个子用例；日志 `/tmp/cloudnest-webp-ai-search.log`。
+
+以本轮日志 `=== RUN` 且不含子路径逐项计数为 28；此前本轮口头沿用 27 不准确，现已纠正。组合 integration/aisearch/aimodel/aieval 标签及实际分页契约测试通过（0.507s）；首次使用错误 test pattern 只完成编译，随后以精确 TestAIEvaluationResponsePagination 重跑，不把空匹配当作执行。

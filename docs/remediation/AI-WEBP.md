@@ -20,4 +20,4 @@ EXIF 既接受 TIFF 数据，也接受常见 Exif\0\0 前缀，复用既有 TIFF
 - 隔离 MySQL/Redis、`integration,aisearch,aimodel` 三项专项通过，包 **89.260 秒**；真实 WebP 视觉/索引/语义搜索子项 **79.96 秒**。真实像素提取 Laptop、5999、192.0.2.42，独立向量、模型 digest 与文件权限检查通过；其余两项是缩略图有界 JPEG/跨用户拒绝及损坏格式状态回归。日志 `/tmp/cloudnest-webp-integration.log`。使用 qwen3-vl:4b digest `a1b29c246319cdcb1f3842f36d29f198f737c0cf516ba1bcba34b1b974e87980`。这是编码链路冒烟，不是全语料质量评估。
 - govulncheck v1.9.0 通过：调用路径/导入包 0 个漏洞，另有 3 个依赖模块漏洞未被应用调用；不声称依赖模块完全没有公告。日志 `/tmp/cloudnest-webp-vuln.log`。
 
-- AI 搜索专项 27 个顶层测试 PASS（49.003s），含新增 WebP 故障/无部分索引的两个子用例。日志 `/tmp/cloudnest-webp-ai-search.log`。
+- AI 搜索专项 28 个顶层测试 PASS（49.003s），含新增 WebP 故障/无部分索引的两个子用例。日志 `/tmp/cloudnest-webp-ai-search.log`。
