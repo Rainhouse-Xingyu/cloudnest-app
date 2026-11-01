@@ -164,7 +164,7 @@ func (s *AIService) OCR(ctx context.Context, uid int64, req AIOCRInput) (AIOCRRe
 		}
 		return AIOCRResult{}, contract.ErrStorageIntegrity
 	}
-	prepared, err := imageprep.Prepare(ctx, in)
+	prepared, err := imageprep.PrepareConfigured(ctx, in, s.cfg.ImageHEIFHelper)
 	closeErr := in.Close()
 	if err != nil {
 		return AIOCRResult{}, err

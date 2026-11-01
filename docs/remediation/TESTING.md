@@ -275,3 +275,9 @@ HTTP 协议夹具只用于错误/并发边界测试，不替代模型识别验�
 本轮 AI 搜索专项 **28 个顶层测试 PASS（49.003s）**，含新增有效 WebP 遇模型故障时 retry、损坏 WebP 失败时无部分结果两个子用例；日志 `/tmp/cloudnest-webp-ai-search.log`。
 
 以本轮日志 `=== RUN` 且不含子路径逐项计数为 28；此前本轮口头沿用 27 不准确，现已纠正。组合 integration/aisearch/aimodel/aieval 标签及实际分页契约测试通过（0.507s）；首次使用错误 test pattern 只完成编译，随后以精确 TestAIEvaluationResponsePagination 重跑，不把空匹配当作执行。
+
+## 2026-10-30 HEIC 原生解码
+
+完整 make check test 通过；原生 C 编译与最终 imageprep/handler/config race 通过，实际单图/EXIF/大图缩放已执行。首轮 API 集成 FAIL 70.273s，暴露测试 OCR 模型配置和缩略图扩展名遗漏；修复后隔离真实模型/依赖故障/损坏输入三项 **PASS 122.227s**，实际模型索引/搜索/手动 OCR/缩略图子项 **113.62s**。AI 专项 **29 项 PASS 53.477s**，完整标签与实际分页契约 PASS 0.895s。脚本 scripts/test-heif-model.sh 独立使用六分钟限额，不增加原 make ai-model 的运行集合。完整日志、助手后续严格化及平台局限见 AI-HEIF。
+
+已确认 c5fe0d1 的 PR/push CI 40981958021/40981953591 均成功；后续 HEIF 提交以自身 CI 为准。GitHub 直连两次 EOF 后使用用户既定 127.0.0.1:1082 代理成功查询，未改系统代理。

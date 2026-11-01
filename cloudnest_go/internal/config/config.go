@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -31,6 +32,7 @@ type Config struct {
 	AISearchMinCosine      float64
 	AISearchMinLexical     float64
 	AIPDFBinDir            string
+	ImageHEIFHelper        string
 	AIOCRModel             string
 	AIGuideDocPath         string
 	AITimeoutSec           int
@@ -63,6 +65,7 @@ func Load() Config {
 		AIOllamaBaseURL:    getEnv("AI_OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
 		AIOllamaModel:      getEnv("AI_OLLAMA_MODEL", "qwen3-vl:4b"),
 		AIPDFBinDir:        os.Getenv("AI_PDF_BIN_DIR"),
+		ImageHEIFHelper:    strings.TrimSpace(os.Getenv("IMAGE_HEIF_HELPER")),
 		AIOCRModel:         getEnv("AI_OCR_MODEL", "qwen3-vl:4b"),
 		AIEmbeddingModel:   getEnv("AI_EMBEDDING_MODEL", "qwen3-embedding:0.6b"),
 		AIRerankModel:      strings.TrimSpace(os.Getenv("AI_RERANK_MODEL")),
@@ -76,6 +79,9 @@ func Load() Config {
 // Validate fails before opening databases or creating application data. Never
 // include configuration values in errors: DSNs and signing keys are secrets.
 func (c Config) Validate() error {
+	if c.ImageHEIFHelper != "" && !filepath.IsAbs(c.ImageHEIFHelper) {
+		return fmt.Errorf("IMAGE_HEIF_HELPER must be an absolute path")
+	}
 	for _, threshold := range []float64{c.AISearchMinCosine, c.AISearchMinLexical} {
 		if math.IsNaN(threshold) || math.IsInf(threshold, 0) || threshold < 0 || threshold > 1 {
 			return fmt.Errorf("AI search thresholds must be finite numbers greater than zero and at most one")

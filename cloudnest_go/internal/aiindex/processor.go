@@ -18,11 +18,14 @@ import (
 )
 
 type Processor struct {
-	db     *gorm.DB
-	embed  *Ollama
-	pdf    pdfextract.Reader
-	vision *Ollama
+	db         *gorm.DB
+	embed      *Ollama
+	pdf        pdfextract.Reader
+	vision     *Ollama
+	heifHelper string
 }
+
+func (p *Processor) WithHEIF(helper string) *Processor { p.heifHelper = helper; return p }
 
 func NewProcessor(db *gorm.DB, embed *Ollama) *Processor { return &Processor{db: db, embed: embed} }
 
@@ -81,7 +84,7 @@ func (p *Processor) Process(ctx context.Context, j model.AIIndexJob) (func(*gorm
 	if SupportsImage(ext) {
 		kind = "image"
 		var prepared imageprep.Prepared
-		prepared, err = imageprep.Prepare(ctx, in)
+		prepared, err = imageprep.PrepareConfigured(ctx, in, p.heifHelper)
 		if err == nil {
 			if p.vision == nil {
 				err = ErrModelUnavailable
@@ -140,7 +143,7 @@ func (p *Processor) Process(ctx context.Context, j model.AIIndexJob) (func(*gorm
 		if errors.Is(err, context.DeadlineExceeded) {
 			return nil, failure("extraction_limit", false)
 		}
-		if errors.Is(err, pdfextract.ErrUnavailable) {
+		if errors.Is(err, pdfextract.ErrUnavailable) || errors.Is(err, imageprep.ErrDecoderUnavailable) {
 			return nil, failure("extraction_unavailable", true)
 		}
 		if errors.Is(err, ErrModelUnavailable) || errors.Is(err, ErrVisionResponse) || errors.Is(err, ErrEmbedding) || errors.Is(err, pdfextract.ErrOCRRequired) {

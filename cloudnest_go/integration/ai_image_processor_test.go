@@ -20,7 +20,7 @@ func TestAIImageFailuresNeverPublishPartialResults(t *testing.T) {
 		{"valid.webp", "model_unavailable", "retry", true},
 		{"broken.png", "extraction_failed", "failed", false},
 		{"broken.webp", "extraction_failed", "failed", false},
-		{"legacy.heic", "unsupported_type", "failed", false},
+		{"broken.heic", "extraction_failed", "failed", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f, _ := indexFixture(t)

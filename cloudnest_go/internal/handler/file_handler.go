@@ -1374,7 +1374,7 @@ func isVideoExt(ext string) bool {
 
 func isImageExt(ext string) bool {
 	images := map[string]bool{
-		"jpg": true, "jpeg": true, "png": true, "gif": true, "webp": true,
+		"jpg": true, "jpeg": true, "png": true, "gif": true, "webp": true, "heic": true, "heif": true,
 	}
 	return images[ext]
 }

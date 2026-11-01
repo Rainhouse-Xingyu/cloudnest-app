@@ -573,6 +573,10 @@ func (h *AIHandler) writeAIErr(c *gin.Context, err error) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "AI operation timed out"})
 		return
 	}
+	if errors.Is(err, imageprep.ErrDecoderUnavailable) {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "image decoder unavailable"})
+		return
+	}
 	if errors.Is(err, pdfextract.ErrUnavailable) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "PDF extraction unavailable"})
 		return

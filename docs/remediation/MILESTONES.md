@@ -41,3 +41,5 @@ G04 先验证现有 Ollama 的 embedding 与视觉模型能力，再以部署复
 G05 STCP/XTCP 在 TCP/HTTP/HTTPS 闭环完成后评估；File Provider 在基础 macOS 应用稳定后评估。两者不提前标记完成。
 
 2026-10-30：静态 WebP 的有界解码与 EXIF 已接入，验证范围及其余格式边界见 [WebP 说明](AI-WEBP.md)。不改变 G04 进行中状态。
+
+2026-10-30：新增可选单主图 HEIC/HEIF 原生解码及实际索引/OCR/缩略图，macOS 真实链路通过；Linux 原生与复杂容器仍待验收，见 [HEIF 记录](AI-HEIF.md)。G04 继续进行中。

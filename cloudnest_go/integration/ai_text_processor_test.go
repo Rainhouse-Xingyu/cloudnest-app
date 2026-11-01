@@ -25,7 +25,7 @@ func textWorker(t *testing.T, f *fixture, base string) *indexqueue.Worker {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return indexqueue.NewWorker(f.db, blob.NewManager(f.db), aiindex.NewProcessor(f.db, provider).WithPDF(f.cfg.AIPDFBinDir, vision).Process)
+	return indexqueue.NewWorker(f.db, blob.NewManager(f.db), aiindex.NewProcessor(f.db, provider).WithPDF(f.cfg.AIPDFBinDir, vision).WithHEIF(f.cfg.ImageHEIFHelper).Process)
 }
 
 func TestAITextUnavailableModelRetriesWithoutPublishingResults(t *testing.T) {

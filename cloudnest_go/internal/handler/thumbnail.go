@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"image/color"
 	"image/draw"
 	"image/jpeg"
+	"image/png"
 	"net/http"
 	"os"
 	"time"
@@ -51,7 +53,7 @@ func writeThumbnailError(c *gin.Context, err error) {
 		c.JSON(http.StatusUnsupportedMediaType, gin.H{"error": errThumbnailFormat.Error()})
 	case errors.Is(err, errThumbnailInvalid):
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": errThumbnailInvalid.Error()})
-	case errors.Is(err, errThumbnailBusy), errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
+	case errors.Is(err, imageprep.ErrDecoderUnavailable), errors.Is(err, errThumbnailBusy), errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
 		c.Header("Retry-After", "1")
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": errThumbnailBusy.Error()})
 	default:
@@ -63,9 +65,15 @@ func writeThumbnailError(c *gin.Context, err error) {
 func (h *FileHandler) buildOrGetThumbnail(parent context.Context, source *os.File, uid, fileID int64, digest string, size int) (*transfer.ThumbnailReader, error) {
 	ctx, cancel := context.WithTimeout(parent, thumbnailBuildTimeout)
 	defer cancel()
-	cfg, format, err := thumbnailConfig(ctx, source)
-	if err != nil {
-		return nil, err
+	native := imageprep.IsHEIF(source)
+	var cfg image.Config
+	var format string
+	var err error
+	if !native {
+		cfg, format, err = thumbnailConfig(ctx, source)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if h.Transfers == nil {
 		return nil, contract.ErrTransferUnavailable
@@ -105,6 +113,18 @@ func (h *FileHandler) buildOrGetThumbnail(parent context.Context, source *os.Fil
 			log.Print("thumbnail cleanup retained for transfer reconciliation")
 		}
 	}()
+	var nativePNG []byte
+	if native {
+		prepared, err := imageprep.PrepareHEIF(ctx, source, h.Cfg.ImageHEIFHelper)
+		if err != nil {
+			return nil, err
+		}
+		nativePNG = prepared.PNG
+		cfg, err = png.DecodeConfig(bytes.NewReader(nativePNG))
+		if err != nil {
+			return nil, errThumbnailInvalid
+		}
+	}
 	weight, err := thumbnailWeight(cfg.Width, cfg.Height)
 	if err != nil {
 		return nil, err
@@ -114,7 +134,12 @@ func (h *FileHandler) buildOrGetThumbnail(parent context.Context, source *os.Fil
 		return nil, err
 	}
 	defer release()
-	img, err := decodeThumbnail(ctx, source, cfg, format)
+	var img image.Image
+	if native {
+		img, err = png.Decode(bytes.NewReader(nativePNG))
+	} else {
+		img, err = decodeThumbnail(ctx, source, cfg, format)
+	}
 	if err != nil {
 		return nil, err
 	}

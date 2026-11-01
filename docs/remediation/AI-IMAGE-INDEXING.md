@@ -37,3 +37,5 @@ JPEG APP1 和 PNG eXIf 解析有界，最多检查 4096 个标记/块，PNG EXIF
 手动 OCR 统一及 GPS/相机有界解析已接入，见 [手动 OCR](AI-MANUAL-OCR.md)。仍需：HEIC/HEIF/WebP、复杂图片/中文和手写评估、模型资源并发压力和完整六类查询评估。G04 和整体 G00–G11 目标均未完成。
 
 静态 WebP 的容器、EXIF、透明像素和新增验证见 [WebP 说明](AI-WEBP.md)。动画 WebP 仍拒绝。
+
+单主图 HEIC/HEIF 通过 IMAGE_HEIF_HELPER 可选接入，部署、真实验证及原生资源边界见 [HEIF 记录](AI-HEIF.md)。未配置不会伪造索引成功。

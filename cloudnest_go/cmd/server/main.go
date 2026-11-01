@@ -207,7 +207,7 @@ func main() {
 	if err != nil {
 		log.Fatal("invalid OCR configuration")
 	}
-	indexWorker := indexqueue.NewWorker(db, container.Blobs, aiindex.NewProcessor(db, embedding).WithPDF(cfg.AIPDFBinDir, vision).Process)
+	indexWorker := indexqueue.NewWorker(db, container.Blobs, aiindex.NewProcessor(db, embedding).WithPDF(cfg.AIPDFBinDir, vision).WithHEIF(cfg.ImageHEIFHelper).Process)
 	worker := container.FileHandler.Transfers
 	if cfg.TransferMaintenanceDSN != "" {
 		workerCfg := cfg

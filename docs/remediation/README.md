@@ -85,3 +85,5 @@ G04 已提交独立 [草稿 PR #5](https://github.com/Rainhouse-Xingyu/cloudnest
 - [有界重排](AI-RERANK.md)：可选实际 token 评分、整批回退及推理后的权限/源复核；实际 v1 排序回归通过，扩展 stress-v2 因近似误匹配及超时失败；专用模型仍在评估。
 
 2026-10-30：静态 WebP 的有界解码与 EXIF 已接入，验证范围及其余格式边界见 [WebP 说明](AI-WEBP.md)。不改变 G04 进行中状态。
+
+2026-10-30：新增可选单主图 HEIC/HEIF 原生解码及实际索引/OCR/缩略图，macOS 真实链路通过；Linux 原生与复杂容器仍待验收，见 [HEIF 记录](AI-HEIF.md)。G04 继续进行中。

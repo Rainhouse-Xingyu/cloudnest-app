@@ -43,6 +43,23 @@ func TestLoadDoesNotInventCredentials(t *testing.T) {
 	}
 }
 
+func TestHEIFHelperRequiresExplicitAbsoluteConfiguration(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-only-random-key-at-least-thirty-two-bytes")
+	t.Setenv("MYSQL_DSN", "app:test-fixture@tcp(127.0.0.1:3306)/test")
+	t.Setenv("IMAGE_HEIF_HELPER", "")
+	if c := Load(); c.ImageHEIFHelper != "" || c.Validate() != nil {
+		t.Fatal("optional decoder must default off")
+	}
+	t.Setenv("IMAGE_HEIF_HELPER", "tools/cloudnest-heif")
+	if Load().Validate() == nil {
+		t.Fatal("relative native decoder accepted")
+	}
+	t.Setenv("IMAGE_HEIF_HELPER", "/opt/cloudnest/bin/cloudnest-heif")
+	if err := Load().Validate(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestMalformedJWTExpiryFailsValidation(t *testing.T) {
 	t.Setenv("MYSQL_DSN", "app:test-fixture@tcp(127.0.0.1:3306)/test")
 	t.Setenv("JWT_SECRET", "test-only-random-key-at-least-thirty-two-bytes")
