@@ -33,8 +33,8 @@ CLOUDNEST_TEST_HEIF_HELPER=/absolute/cloudnest-heif go -C cloudnest_go test -rac
 CLOUDNEST_TEST_HEIF_HELPER=/absolute/cloudnest-heif scripts/test-heif-model.sh
 ```
 
-The latter uses real local Ollama and fresh disposable MySQL/Redis. It checks upload/index/semantic retrieval/manual OCR/thumbnail, plus missing-decoder failures. It is separate from the ordinary real-model suite and keeps that suite's six-minute limit unchanged. CI compiles its `heifmodel` tag; CI without native libheif/Ollama does not prove actual native decoding.
+The latter uses real local Ollama and fresh disposable MySQL/Redis. It checks upload/index/semantic retrieval/manual OCR/thumbnail, plus missing-decoder failures. It is separate from the ordinary real-model suite and keeps that suite's six-minute limit unchanged. The backend CI compiles its `heifmodel` tag. The separate `heif-native` job builds both libraries and runs the native decoder on Linux using `scripts/test-heif-linux.sh`.
 
-Local native evidence currently covers macOS arm64/libheif 1.23.2/libde265 1.1.1, synthetic single-image HEIC, actual EXIF preservation and 2000×1000 → 1600×800 scaling. Linux native runtime, HDR/color fidelity, iPhone auxiliary/depth variants, malformed native corpus stress and multi-image handling still require broader acceptance. Do not infer these from Go protocol tests.
+Native decoder tests passed on macOS arm64 and Alpine Linux arm64 with libheif 1.23.2 and libde265 1.1.1. They cover single-image HEIC, EXIF preservation and 2000×1000 → 1600×800 scaling. The end-to-end Ollama/API run covered macOS arm64. HDR/color fidelity, iPhone depth variants, malformed native corpus stress and multi-image handling still require broader acceptance.
 
 API basis: [libheif v1.23.2](https://github.com/strukturag/libheif/tree/v1.23.2/libheif/api/libheif). This helper is original project code; libheif is dynamically linked under its upstream licensing terms.

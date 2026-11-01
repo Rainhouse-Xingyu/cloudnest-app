@@ -43,3 +43,5 @@ G05 STCP/XTCP 在 TCP/HTTP/HTTPS 闭环完成后评估；File Provider 在基础
 2026-10-30：静态 WebP 的有界解码与 EXIF 已接入，验证范围及其余格式边界见 [WebP 说明](AI-WEBP.md)。不改变 G04 进行中状态。
 
 2026-10-30：新增可选单主图 HEIC/HEIF 原生解码及实际索引/OCR/缩略图，macOS 真实链路通过；Linux 原生与复杂容器仍待验收，见 [HEIF 记录](AI-HEIF.md)。G04 继续进行中。
+
+2026-11-01 单主图 HEIF 的原生解码、EXIF 和缩放已在 Linux arm64 实测通过。G04 仍需处理具体条件近似误报、独立语料及其余格式。
