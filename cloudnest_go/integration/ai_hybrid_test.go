@@ -17,6 +17,11 @@ import (
 )
 
 type hybridReply struct {
+	NLPlan struct {
+		Query struct {
+			IPCondition map[string]string `json:"ip_condition"`
+		} `json:"query"`
+	} `json:"nl_plan"`
 	Items []struct {
 		ID         int64    `json:"id"`
 		Snippet    string   `json:"snippet"`

@@ -28,6 +28,7 @@ type hybridHit struct {
 	keyword  bool
 	vector   bool
 	rerank   *float64
+	ipMatch  ipMatch
 }
 
 func (s *AIService) hybridSearch(parent context.Context, uid int64, question string, page, limit int) (AINLSearchResult, error) {
@@ -113,8 +114,11 @@ func (s *AIService) hybridSearch(parent context.Context, uid int64, question str
 	var bestLex, bestSemantic hybridHit
 	var currentID int64
 	matched := 0
+	ipClause := explicitConfigIP(question)
+	result.Query.IPCondition = ipClause.descriptor()
+	var ipEvidence configIPEvidence
 	flush := func() {
-		if currentID == 0 {
+		if currentID == 0 || !ipEvidence.accepts(ipClause) {
 			return
 		}
 		if bestLex.lexical > 0 || bestSemantic.semantic >= minCosine {
@@ -134,6 +138,11 @@ func (s *AIService) hybridSearch(parent context.Context, uid int64, question str
 			currentID = row.ID
 			bestLex = hybridHit{}
 			bestSemantic = hybridHit{semantic: -1}
+			ipEvidence = configIPEvidence{}
+		}
+		literal, allowed := ipEvidence.observe(ipClause, row)
+		if !allowed {
+			return nil
 		}
 		// A single generic bigram in a long query must not gain a full RRF vote.
 		nameCoverage, bodyCoverage := lexicalScore(row.Filename, terms), lexicalScore(row.Content, terms)
@@ -144,16 +153,19 @@ func (s *AIService) hybridSearch(parent context.Context, uid int64, question str
 		if bodyCoverage >= minLexical {
 			lex += bodyCoverage
 		}
+		if literal.found {
+			lex = max(lex, 1)
+		}
 		sem := -1.0
 		if len(query) > 0 && row.ModelDigest == digest && row.EmbeddingModel == model && row.Dimensions == len(query) {
 			sem = vectorDot(query, row.Vector)
 		}
 		row.Vector = nil // never retain entire vector sets in request memory
 		if lex > bestLex.lexical {
-			bestLex = hybridHit{row: row, lexical: lex}
+			bestLex = hybridHit{row: row, lexical: lex, ipMatch: literal}
 		}
 		if sem > bestSemantic.semantic {
-			bestSemantic = hybridHit{row: row, semantic: sem}
+			bestSemantic = hybridHit{row: row, semantic: sem, ipMatch: literal}
 		}
 		return nil
 	})
@@ -181,6 +193,7 @@ func (s *AIService) hybridSearch(parent context.Context, uid int64, question str
 		existing.score += 1 / float64(61+rank)
 		if !existing.keyword || lexicalScore(existing.row.Content, terms) == 0 {
 			existing.row = h.row
+			existing.ipMatch = h.ipMatch
 		}
 	}
 	identities := make([]contract.AIHybridRow, 0, len(fused))
@@ -246,7 +259,14 @@ func (s *AIService) hybridSearch(parent context.Context, uid int64, question str
 		if h.rerank != nil {
 			sources = append(sources, "rerank")
 		}
-		snippet, offset := hybridSnippet(h.row.Content, terms)
+		var snippet string
+		var offset int
+		if h.ipMatch.found {
+			sources = append(sources, "ip_address")
+			snippet, offset = snippetAt([]rune(h.row.Content), max(0, h.ipMatch.atRune-60))
+		} else {
+			snippet, offset = hybridSnippet(h.row.Content, terms)
+		}
 		item := map[string]interface{}{"id": h.row.ID, "filename": h.row.Filename, "file_type": h.row.FileType, "size": h.row.Size, "parent_id": h.row.ParentID, "user_id": h.row.UserID, "create_time": h.row.CreateTime, "update_time": h.row.UpdateTime,
 			"tags": h.row.VisualTags, "description": h.row.VisualDescription, "ocr_snippet": snippet, "has_ocr_index": h.row.HasOCR,
 			"extraction_kind": h.row.ExtractionKind, "vision_model": h.row.VisionModel, "vision_digest": h.row.VisionDigest, "has_text_index": h.row.Generation > 0,
@@ -433,11 +453,14 @@ func hybridSnippet(text string, terms []string) (string, int) {
 			break
 		}
 	}
-	end := min(start+240, len(runes))
+	return snippetAt(runes, start)
+}
+
+func snippetAt(runes []rune, start int) (string, int) {
 	if start > len(runes) {
 		start = 0
-		end = min(240, len(runes))
 	}
+	end := min(start+240, len(runes))
 	return string(runes[start:end]), start
 }
 

@@ -87,6 +87,7 @@ type AIHybridRow struct {
 	EmbeddingModel string
 	ModelDigest    string
 	Dimensions     int
+	ChunkCount     int
 	Ordinal        int
 	StartRune      int
 	Content        string
