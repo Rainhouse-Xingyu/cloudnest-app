@@ -12,7 +12,7 @@
 - 原生测试真实解码合成发票、读取合成 EXIF 日期 2025-06-15 10:20:30/+08:00，以及 2000×1000 → 1600×800 缩放；Go 协议测试覆盖截断/多余数据/尺寸/alpha/多主图拒绝、子进程退出/诊断上限/取消和预算释放。最终补充“无 HEVC 解码器、多主图提前拒绝”后，重新编译助手并运行 imageprep/handler/config race，分别 6.593/2.690/1.404 秒通过，日志 /tmp/cloudnest-heif-final-unit.log。
 - 第一轮实际隔离集成 FAIL 70.273s：索引与搜索通过，但手动 OCR 的夹具未指定实际 OCR 模型，缩略图扩展名白名单未包含 HEIC；已修复。此前口头猜测 MIME 不准确，实际原因以代码白名单为准。日志 /tmp/cloudnest-heif-integration.log。
 - 第二轮 **PASS 122.227s**，真实模型链路子项 **113.62s**：实际上传 HEIC → 原生像素 → qwen3-vl:4b OCR → 独立 embedding → 索引发布 → 语义搜索、跨用户隔离、手动 OCR 和实际 JPEG 缩略图均通过；同时验证缺少助手 503/重试及损坏输入不发布部分索引。日志 /tmp/cloudnest-heif-integration-v2.log。这次完整链路使用补充提前拒绝前的助手，后续最终助手实际解码/EXIF/缩放已按上条单独复核。
-- 完整 make check test 通过（/tmp/cloudnest-heif-final-check.log）；AI 专项 **29 个顶层测试 PASS 53.477s**（/tmp/cloudnest-heif-ai-search.log）；integration/aimodel/aieval/heifmodel 组合标签与实际分页契约通过 0.895s。CI 编译 heifmodel，但不冒称运行原生/Ollama。
+- 完整 make check test 通过（/tmp/cloudnest-heif-final-check.log）；AI 专项 **29 个顶层测试中 28 项通过、1 项跳过（53.477s）**（/tmp/cloudnest-heif-ai-search.log）；integration/aimodel/aieval/heifmodel 组合标签与实际分页契约通过 0.895s。CI 编译 heifmodel，但不冒称运行原生/Ollama。
 - 上一提交 c5fe0d17c80dd46c4bb3f9dca7eaf5a6d96f683a 的 PR 40981958021 / push 40981953591 CI 均 SUCCESS，不用于替代本次提交 CI。
 
 ## 夹具来源

@@ -272,16 +272,18 @@ HTTP 协议夹具只用于错误/并发边界测试，不替代模型识别验�
 
 新增有损/无损/透明静态图片解码、RIFF/EXIF 资源和结构边界，复用现有缩略图/AI 源与共享预算。完整 `make check test` 通过；实际隔离模型/缩略图三项集成 **PASS 89.260s**，其中真实模型索引和语义搜索 **79.96s**；漏洞扫描未发现可调用漏洞（3 个未调用模块公告）。日志与范围见 AI-WEBP。没有重新执行完整 v1/stress-v2 质量评估，也没有因格式测试通过更改质量状态。
 
-本轮 AI 搜索专项 **28 个顶层测试 PASS（49.003s）**，含新增有效 WebP 遇模型故障时 retry、损坏 WebP 失败时无部分结果两个子用例；日志 `/tmp/cloudnest-webp-ai-search.log`。
+本轮 AI 搜索专项 **28 个顶层测试中 27 项通过、1 项跳过（49.003s）**，含新增有效 WebP 遇模型故障时 retry、损坏 WebP 失败时无部分结果两个子用例；日志 `/tmp/cloudnest-webp-ai-search.log`。
 
 以本轮日志 `=== RUN` 且不含子路径逐项计数为 28；此前本轮口头沿用 27 不准确，现已纠正。组合 integration/aisearch/aimodel/aieval 标签及实际分页契约测试通过（0.507s）；首次使用错误 test pattern 只完成编译，随后以精确 TestAIEvaluationResponsePagination 重跑，不把空匹配当作执行。
 
 ## 2026-10-30 HEIC 原生解码
 
-完整 make check test 通过；原生 C 编译与最终 imageprep/handler/config race 通过，实际单图/EXIF/大图缩放已执行。首轮 API 集成 FAIL 70.273s，暴露测试 OCR 模型配置和缩略图扩展名遗漏；修复后隔离真实模型/依赖故障/损坏输入三项 **PASS 122.227s**，实际模型索引/搜索/手动 OCR/缩略图子项 **113.62s**。AI 专项 **29 项 PASS 53.477s**，完整标签与实际分页契约 PASS 0.895s。脚本 scripts/test-heif-model.sh 独立使用六分钟限额，不增加原 make ai-model 的运行集合。完整日志、助手后续严格化及平台局限见 AI-HEIF。
+完整 make check test 通过；原生 C 编译与最终 imageprep/handler/config race 通过，实际单图/EXIF/大图缩放已执行。首轮 API 集成 FAIL 70.273s，暴露测试 OCR 模型配置和缩略图扩展名遗漏；修复后隔离真实模型/依赖故障/损坏输入三项 **PASS 122.227s**，实际模型索引/搜索/手动 OCR/缩略图子项 **113.62s**。AI 专项 **29 项中 28 项通过、1 项跳过（53.477s）**，完整标签与实际分页契约 PASS 0.895s。脚本 scripts/test-heif-model.sh 独立使用六分钟限额，不增加原 make ai-model 的运行集合。完整日志、助手后续严格化及平台局限见 AI-HEIF。
 
 已确认 c5fe0d1 的 PR/push CI 40981958021/40981953591 均成功；后续 HEIF 提交以自身 CI 为准。GitHub 直连两次 EOF 后使用用户既定 127.0.0.1:1082 代理成功查询，未改系统代理。
 
 2026-11-01 在 Alpine Linux arm64 容器内实际构建并执行 HEIF 助手，三个原生样本通过（`TestHEIFNativeOptIn` 0.10s）。入口、归档摘要校验、首次工具参数失败与修复见 [HEIF 记录](AI-HEIF.md)。Linux API/Ollama 全链路另行验收。
 
-2026-11-02，配置正文 IP 条件新增真实 SQL/公开 API 回归，验证精确地址、域名和地址前缀干扰、未发布索引、跨用户和撤权，专项包 4.107s。完整 AI 专项 30 个顶层测试通过（51.530s）。构建、vet 与 race 单元通过。固定 48 文件/24 查询的全链路压力评估 **FAIL 358.482s**，六个负例有两个为空，配置族结果改善，见 [评估记录](AI-RETRIEVAL-EVALUATION.md)。报告保留原始排序与失败状态。
+2026-11-02，配置正文 IP 条件新增真实 SQL/公开 API 回归，验证精确地址、域名和地址前缀干扰、未发布索引、跨用户和撤权，专项包 4.107s。AI 专项首次运行 30 个顶层测试，29 项通过、1 项跳过（51.530s）。构建、vet 与 race 单元通过。固定 48 文件/24 查询的全链路压力评估 **FAIL 358.482s**，六个负例有两个为空，配置族结果改善，见 [评估记录](AI-RETRIEVAL-EVALUATION.md)。报告保留原始排序与失败状态。
+
+2026-11-02 复核本地日志时发现，上述三次统计将启动数当作通过数。缺少 CLOUDNEST_TEST_POPPLER_BIN 时，一个 PDF 顶层测试和另一个测试中的四个 PDF 子用例会跳过。已显式配置 Poppler 并重新执行当前 AI 专项，30 个顶层测试全部通过，无跳过，包耗时 60.391s（`/tmp/cloudnest-ip-poppler-aisearch.log`）。提交 4328e8e 的 PR 41368659078 和 push 41368654870 两次 CI 均通过。
