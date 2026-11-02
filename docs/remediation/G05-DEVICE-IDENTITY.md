@@ -29,3 +29,9 @@
 G05 后续包括 frps 凭据加密和历史配置显式迁移、设备端安全存储、持久化命令租约与幂等回执、官方 frpc 启停及真实 TCP/HTTP/HTTPS 隧道。账号恢复时批量撤销设备的操作也待接入。
 
 文件传输的清理程序会核对数据库内全部触发器。它接受本阶段定义的四个撤销触发器，逐项验证其动作仅清空设备凭据字段。出现其他触发器、同名定义漂移或目录权限不足时，清理仍然拒绝回收文件。
+
+## 官方 FRP 映射实测
+
+使用官方 v0.71.1 Darwin arm64 发布归档，SHA-256 为 `d15d0324b99e14619c9aa46e37f6db588c06a09be4bc6f7948890b6b61077842`。测试在回环地址分配端口，用现有服务的配置生成器产生三条映射。frps/frpc 的 verify 均通过。启动真实进程后，TCP、HTTP 虚拟主机和 HTTPS SNI 三条路径均读到目标服务的对应响应，HTTPS 客户端校验目标证书。测试自身 0.32s，race 包 1.909s。日志 `/tmp/cloudnest-g05-frp-native.log`。[官方发布页](https://github.com/fatedier/frp/releases/tag/v0.71.1)
+
+复现时设置 `CLOUDNEST_TEST_FRP_BIN_DIR` 为存放该版本两个官方程序的绝对目录，执行 `go -C cloudnest_go test -race -count=1 -tags=frpnative ./internal/service -run '^TestFRPNativeGenerated'`。测试负责启动和回收进程。Agent 下发及恢复仍需单独进行端到端验收。
