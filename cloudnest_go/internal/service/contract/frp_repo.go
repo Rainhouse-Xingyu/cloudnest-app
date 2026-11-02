@@ -31,8 +31,16 @@ type FrpDeviceDetailMeta struct {
 	LatestConfigTime *time.Time
 }
 
+type AgentHeartbeatState struct {
+	Active        bool
+	LastSeenAt    *time.Time
+	ClientVersion string
+}
+
 // FrpRepository 定义 FRP 模块存储访问能力。
 type FrpRepository interface {
+	GetAgentHeartbeat(context.Context, int64, bool, int64) (*AgentHeartbeatState, error)
+	WithLegacyDevice(context.Context, int64, bool, int64, func(context.Context) error) error
 	CreateDevice(ctx context.Context, device model.Device) (model.Device, error)
 	ListDevices(ctx context.Context, uid int64, isAdmin bool, statusFilter *int8) ([]model.Device, error)
 	GetDeviceByID(ctx context.Context, deviceID int64) (model.Device, error)

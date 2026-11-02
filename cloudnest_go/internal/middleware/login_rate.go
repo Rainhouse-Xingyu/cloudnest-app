@@ -35,29 +35,43 @@ return {1, redis.call('PTTL', KEYS[1])}
 // header. A reverse proxy's clients consequently share a budget; deployments
 // requiring per-client limits must enforce those at their trusted ingress.
 func LoginRateLimit(rdb *redis.Client) gin.HandlerFunc {
+	return peerLimit(rdb, "auth:login-rate", loginAttemptLimit, "login")
+}
+
+func AgentEnrollmentRateLimit(rdb *redis.Client) gin.HandlerFunc {
+	return peerLimit(rdb, "agent:enroll-rate", 30, "registration")
+}
+
+func AgentCredentialRateLimit(rdb *redis.Client) gin.HandlerFunc {
+	return peerLimit(rdb, "agent:credential-rate", 240, "device authentication")
+}
+
+func peerLimit(rdb *redis.Client, namespace string, limit int, operation string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		key, ok := loginPeerKey(c.Request.RemoteAddr)
+		key, ok := peerKey(c.Request.RemoteAddr, namespace)
 		if !ok || rdb == nil {
-			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "login protection unavailable"})
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": operation + " protection unavailable"})
 			return
 		}
-		result, err := loginAttemptScript.Run(c.Request.Context(), rdb, []string{key}, loginAttemptLimit, loginAttemptWindow.Milliseconds()).Int64Slice()
+		result, err := loginAttemptScript.Run(c.Request.Context(), rdb, []string{key}, limit, loginAttemptWindow.Milliseconds()).Int64Slice()
 		if err != nil || len(result) != 2 || result[1] < 0 {
 			// Redis errors must not silently remove brute-force protection.
-			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "login protection unavailable"})
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": operation + " protection unavailable"})
 			return
 		}
 		if result[0] == 0 {
 			retrySeconds := max(int64(1), (result[1]+999)/1000)
 			c.Header("Retry-After", strconv.FormatInt(retrySeconds, 10))
-			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too many login attempts; retry later"})
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too many " + operation + " attempts; retry later"})
 			return
 		}
 		c.Next()
 	}
 }
 
-func loginPeerKey(remoteAddr string) (string, bool) {
+func loginPeerKey(remoteAddr string) (string, bool) { return peerKey(remoteAddr, "auth:login-rate") }
+
+func peerKey(remoteAddr, namespace string) (string, bool) {
 	host, _, err := net.SplitHostPort(remoteAddr)
 	if err != nil {
 		return "", false
@@ -68,5 +82,5 @@ func loginPeerKey(remoteAddr string) (string, bool) {
 	}
 	// IPv4-mapped IPv6 and IPv6 textual variants must share the same budget.
 	peer := ip.Unmap().WithZone("").String()
-	return fmt.Sprintf("auth:login-rate:%x", sha256.Sum256([]byte(peer))), true
+	return fmt.Sprintf("%s:%x", namespace, sha256.Sum256([]byte(peer))), true
 }

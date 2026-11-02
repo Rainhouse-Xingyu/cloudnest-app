@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -183,6 +184,9 @@ func main() {
 	if err := store.CheckFileSchema(db); err != nil {
 		log.Fatal(err)
 	}
+	if err := store.CheckAgentSchema(db); err != nil {
+		log.Fatal(err)
+	}
 	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
 		log.Fatalf("准备数据目录失败: %v", err)
 	}
@@ -234,7 +238,13 @@ func main() {
 			_ = server.Close()
 		}
 	}()
-	serveErr := server.ListenAndServe()
+	var serveErr error
+	if cfg.TLSCertFile != "" {
+		server.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		serveErr = server.ListenAndServeTLS(cfg.TLSCertFile, cfg.TLSKeyFile)
+	} else {
+		serveErr = server.ListenAndServe()
+	}
 	stop()
 	<-workerDone
 	<-shutdownDone

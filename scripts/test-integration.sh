@@ -37,6 +37,9 @@ fi
 # and trigger settings apply solely to this newly created disposable container.
 docker exec -e MYSQL_PWD=cloudnest-disposable-test "$mysql_id" mysql -u root \
   -e "GRANT PROCESS ON *.* TO 'cloudnest_test'@'%'; CREATE USER 'cloudnest_gc_limited'@'%' IDENTIFIED BY 'cloudnest-disposable-test'; GRANT SELECT ON cloudnest_test.* TO 'cloudnest_gc_limited'@'%';" >/dev/null
+# Exercise the agent startup verifier without granting TRIGGER or DDL rights.
+docker exec -e MYSQL_PWD=cloudnest-disposable-test "$mysql_id" mysql -u root \
+  -e "CREATE USER 'cloudnest_agent_runtime'@'%' IDENTIFIED BY 'cloudnest-disposable-test'; GRANT SELECT,INSERT,UPDATE,DELETE,EXECUTE ON cloudnest_test.* TO 'cloudnest_agent_runtime'@'%';" >/dev/null
 mysql_addr=$(docker port "$mysql_id" 3306/tcp)
 redis_addr=$(docker port "$redis_id" 6379/tcp)
 export CLOUDNEST_TEST_DISPOSABLE=1

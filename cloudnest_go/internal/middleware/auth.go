@@ -203,6 +203,8 @@ var defaultUserRoutes = map[string]struct{}{
 	"GET /api/settings/rate-window":                {},
 	"PUT /api/settings/rate-window":                {},
 	"GET /api/storage/overview":                    {},
+	"POST /api/frp/devices/:id/enrollment":         {},
+	"POST /api/frp/devices/:id/credential/revoke":  {},
 	"POST /api/frp/devices":                        {},
 	"GET /api/frp/devices":                         {},
 	"GET /api/frp/devices/:id":                     {},

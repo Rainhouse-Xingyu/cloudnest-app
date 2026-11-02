@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"cloudenest_go/internal/agentauth"
 	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
 
@@ -27,7 +28,7 @@ const (
 
 var (
 	// ErrFrpForbidden 表示当前用户无权限访问目标资源。
-	ErrFrpForbidden = errors.New("frp permission denied")
+	ErrFrpForbidden = contract.ErrForbidden
 	// ErrFrpNoMapping 表示设备没有可用映射。
 	ErrFrpNoMapping = errors.New("frp mapping not found")
 	// ErrFrpBadConfig 表示配置参数不合法。
@@ -389,9 +390,11 @@ func (s *FrpService) ReloadDevice(ctx context.Context, uid int64, isAdmin bool, 
 
 // ReportDeviceStatus 更新设备在线状态与最近心跳。
 func (s *FrpService) ReportDeviceStatus(ctx context.Context, uid int64, isAdmin bool, deviceID int64, req ReportDeviceStatusInput) error {
-	if _, err := s.findDeviceWithPermission(ctx, uid, isAdmin, deviceID); err != nil {
-		return err
-	}
+	return s.repo.WithLegacyDevice(ctx, uid, isAdmin, deviceID, func(op context.Context) error {
+		return s.writeLegacyStatus(op, deviceID, req)
+	})
+}
+func (s *FrpService) writeLegacyStatus(ctx context.Context, deviceID int64, req ReportDeviceStatusInput) error {
 
 	heartbeatAt := time.Now()
 	if strings.TrimSpace(req.LastHeartbeat) != "" {
@@ -423,17 +426,30 @@ func (s *FrpService) ReportDeviceStatus(ctx context.Context, uid int64, isAdmin 
 		values["current_config_id"] = *req.CurrentConfigID
 	}
 
-	if err := s.rdb.HSet(ctx, statusKey, values).Err(); err != nil {
-		return err
-	}
-	_ = s.rdb.Expire(ctx, statusKey, 7*24*time.Hour).Err()
-	return nil
+	_, err := s.rdb.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+		pipe.HSet(ctx, statusKey, values)
+		pipe.Expire(ctx, statusKey, 7*24*time.Hour)
+		return nil
+	})
+	return err
 }
 
 // GetDeviceStatus 查询设备最近状态。
 func (s *FrpService) GetDeviceStatus(ctx context.Context, uid int64, isAdmin bool, deviceID int64) (DeviceStatusResult, error) {
-	if _, err := s.findDeviceWithPermission(ctx, uid, isAdmin, deviceID); err != nil {
+	heartbeat, err := s.repo.GetAgentHeartbeat(ctx, uid, isAdmin, deviceID)
+	if err != nil {
 		return DeviceStatusResult{}, err
+	}
+	if heartbeat != nil {
+		state := DeviceStatusResult{ClientVersion: heartbeat.ClientVersion}
+		if heartbeat.Active && heartbeat.LastSeenAt != nil {
+			received := heartbeat.LastSeenAt.UTC().Format(time.RFC3339Nano)
+			age := time.Since(*heartbeat.LastSeenAt)
+			state.LastHeartbeat = &received
+			state.UpdatedAt = received
+			state.Online = age >= 0 && age < agentauth.HeartbeatTTL
+		}
+		return state, nil
 	}
 
 	statusKey := frpStatusKeyPrefix + strconv.FormatInt(deviceID, 10)
@@ -458,9 +474,18 @@ func (s *FrpService) GetDeviceStatus(ctx context.Context, uid int64, isAdmin boo
 
 // PullNextCommand 拉取设备下一条待执行命令。
 func (s *FrpService) PullNextCommand(ctx context.Context, uid int64, isAdmin bool, deviceID int64) (*PullCommandResult, error) {
-	if _, err := s.findDeviceWithPermission(ctx, uid, isAdmin, deviceID); err != nil {
+	var result *PullCommandResult
+	err := s.repo.WithLegacyDevice(ctx, uid, isAdmin, deviceID, func(op context.Context) error {
+		var err error
+		result, err = s.pullLegacyCommand(op, deviceID)
+		return err
+	})
+	if err != nil {
 		return nil, err
 	}
+	return result, nil
+}
+func (s *FrpService) pullLegacyCommand(ctx context.Context, deviceID int64) (*PullCommandResult, error) {
 
 	queueKey := frpCommandQueuePrefix + strconv.FormatInt(deviceID, 10)
 	rawToken, err := s.rdb.LPop(ctx, queueKey).Result()
@@ -489,12 +514,18 @@ func (s *FrpService) PullNextCommand(ctx context.Context, uid int64, isAdmin boo
 		return nil, ErrFrpCommandDataNotFound
 	}
 
+	if cmdData["device_id"] != strconv.FormatInt(deviceID, 10) {
+		return nil, ErrFrpInvalidQueuedCommand
+	}
+
 	now := time.Now().Format(time.RFC3339)
-	_ = s.rdb.HSet(ctx, dataKey, map[string]interface{}{
+	if err := s.rdb.HSet(ctx, dataKey, map[string]interface{}{
 		"status":       "delivered",
 		"delivered_at": now,
 		"updated_at":   now,
-	}).Err()
+	}).Err(); err != nil {
+		return nil, err
+	}
 
 	return &PullCommandResult{
 		CommandID:   commandID,
@@ -523,15 +554,24 @@ func (s *FrpService) ReportCommandResult(ctx context.Context, uid int64, isAdmin
 		return 0, "", ErrFrpInvalidCommandData
 	}
 
-	if _, err := s.findDeviceWithPermission(ctx, uid, isAdmin, deviceID); err != nil {
+	var status string
+	err = s.repo.WithLegacyDevice(ctx, uid, isAdmin, deviceID, func(op context.Context) error {
+		var inner error
+		status, inner = s.writeLegacyCommandResult(op, dataKey, req)
+		return inner
+	})
+	if err != nil {
 		return 0, "", err
 	}
+	return deviceID, status, nil
+}
+func (s *FrpService) writeLegacyCommandResult(ctx context.Context, dataKey string, req CommandResultInput) (string, error) {
 
 	executedAt := time.Now()
 	if strings.TrimSpace(req.ExecutedAt) != "" {
 		parsed, pErr := time.Parse(time.RFC3339, strings.TrimSpace(req.ExecutedAt))
 		if pErr != nil {
-			return 0, "", ErrFrpInvalidExecutedAt
+			return "", ErrFrpInvalidExecutedAt
 		}
 		executedAt = parsed
 	}
@@ -560,10 +600,10 @@ func (s *FrpService) ReportCommandResult(ctx context.Context, uid int64, isAdmin
 		"executed_at":    executedAt.Format(time.RFC3339),
 		"updated_at":     time.Now().Format(time.RFC3339),
 	}).Err(); err != nil {
-		return 0, "", err
+		return "", err
 	}
 
-	return deviceID, status, nil
+	return status, nil
 }
 
 // ListDeviceCommands 查询设备命令历史。

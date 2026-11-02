@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"cloudenest_go/internal/agentauth"
 	"cloudenest_go/internal/blob"
 	"cloudenest_go/internal/config"
 	"cloudenest_go/internal/handler"
@@ -135,7 +136,7 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 // NewRouter 统一构建路由与中间件。
 func (c *Container) NewRouter() *gin.Engine {
 	r := gin.New()
-	r.Use(gin.Logger(), middleware.RecoverHTTP())
+	r.Use(gin.LoggerWithConfig(gin.LoggerConfig{SkipQueryString: true}), middleware.RecoverHTTP())
 	r.Use(middleware.ProtectBlobReads(c.Blobs))
 	// Forwarding headers are untrusted until an explicit ingress policy exists.
 	_ = r.SetTrustedProxies(nil)
@@ -144,6 +145,9 @@ func (c *Container) NewRouter() *gin.Engine {
 	r.GET("/api/public/shares/:code", c.FileHandler.PublicShareInfo)
 	r.GET("/api/public/shares/:code/download", c.FileHandler.PublicShareDownload)
 
+	agent := handler.AgentHandler{Identity: agentauth.New(c.DB)}
+	r.POST("/api/agent/enroll", handler.AgentTransport, middleware.AgentEnrollmentRateLimit(c.RDB), agent.Exchange)
+	r.POST("/api/agent/heartbeat", handler.AgentTransport, middleware.AgentCredentialRateLimit(c.RDB), agent.Heartbeat)
 	api := r.Group("/api")
 	api.Use(middleware.Authenticate(c.RDB, c.Cfg.JWTSecret, func(ctx context.Context, userID int64) ([]string, error) {
 		return c.AuthzService.ResolveUserPermissions(ctx, userID)
@@ -166,6 +170,8 @@ func (c *Container) NewRouter() *gin.Engine {
 	api.POST("/auth/logout-all", c.AuthHandler.LogoutAll)
 	api.GET("/auth/me", c.AuthHandler.Me)
 
+	api.POST("/frp/devices/:id/enrollment", handler.AgentTransport, middleware.AgentEnrollmentRateLimit(c.RDB), agent.Issue)
+	api.POST("/frp/devices/:id/credential/revoke", handler.AgentTransport, middleware.AgentEnrollmentRateLimit(c.RDB), agent.Revoke)
 	api.GET("/resource/health", func(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, gin.H{"message": "protected resource ok"})
 	})

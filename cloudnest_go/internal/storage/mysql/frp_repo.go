@@ -11,6 +11,7 @@ import (
 	"cloudenest_go/model"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 const (
@@ -301,4 +302,54 @@ func isDuplicateKeyErr(err error) bool {
 	}
 	text := strings.ToLower(err.Error())
 	return strings.Contains(text, "duplicate") || strings.Contains(text, "1062")
+}
+
+func (r *FrpRepo) GetAgentHeartbeat(ctx context.Context, uid int64, admin bool, id int64) (*contract.AgentHeartbeatState, error) {
+	var snapshot struct {
+		OwnerID       int64
+		BindingID     *int64
+		Active        bool
+		LastSeenAt    *time.Time
+		ClientVersion string
+	}
+	result := r.db.WithContext(ctx).Table("device d").Joins("LEFT JOIN agent_binding b ON b.device_id=d.id").
+		Select("d.user_id AS owner_id,b.device_id AS binding_id,(b.credential_id IS NOT NULL AND b.owner_id=d.user_id AND d.status=1) AS active,b.last_seen_at,COALESCE(b.client_version,'') AS client_version").
+		Where("d.id=?", id).Scan(&snapshot)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+	if !admin && snapshot.OwnerID != uid {
+		return nil, contract.ErrForbidden
+	}
+	if snapshot.BindingID == nil {
+		return nil, nil
+	}
+	return &contract.AgentHeartbeatState{Active: snapshot.Active, LastSeenAt: snapshot.LastSeenAt, ClientVersion: snapshot.ClientVersion}, nil
+}
+
+// Serialize legacy Redis-side execution with the first enrollment transaction.
+// Even after revocation the binding row persists, preventing a downgrade to JWT.
+func (r *FrpRepo) WithLegacyDevice(ctx context.Context, uid int64, admin bool, id int64, run func(context.Context) error) error {
+	op, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	return r.db.WithContext(op).Transaction(func(tx *gorm.DB) error {
+		var d model.Device
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&d, "id=?", id).Error; err != nil {
+			return err
+		}
+		if !admin && d.UserID != uid {
+			return contract.ErrForbidden
+		}
+		var count int64
+		if err := tx.Model(&model.AgentBinding{}).Where("device_id=?", id).Count(&count).Error; err != nil {
+			return err
+		}
+		if count != 0 {
+			return contract.ErrForbidden
+		}
+		return run(op)
+	})
 }
