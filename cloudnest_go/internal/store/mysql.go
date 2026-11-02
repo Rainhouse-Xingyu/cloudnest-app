@@ -65,6 +65,9 @@ func Migrate(db *gorm.DB) error {
 		&model.FrpConfig{},
 		&model.AiMetadata{},
 		&model.AiTask{},
+		&model.AIIndexJob{},
+		&model.AIIndexDocument{},
+		&model.AIIndexChunk{},
 	); err != nil {
 		return fmt.Errorf("migrate schema failed: %w", err)
 	}
@@ -161,5 +164,8 @@ func CheckFileSchema(db *gorm.DB) error {
 	if err := CheckUploadChunkSchema(db); err != nil {
 		return err
 	}
-	return CheckTransferSchema(db)
+	if err := CheckTransferSchema(db); err != nil {
+		return err
+	}
+	return CheckAIIndexSchema(db)
 }

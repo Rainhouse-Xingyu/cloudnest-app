@@ -41,7 +41,7 @@ func assertReceiptReply(t *testing.T, f *fixture, id string, original *httptest.
 func receiptSideEffects(t *testing.T, f *fixture, fileID int64) []int64 {
 	t.Helper()
 	var values []int64
-	for _, table := range []any{&model.File{}, &model.FileVersion{}, &model.AiTask{}} {
+	for _, table := range []any{&model.File{}, &model.FileVersion{}, &model.AIIndexJob{}, &model.AiTask{}} {
 		var n int64
 		q := f.db.Model(table)
 		switch table.(type) {
@@ -138,7 +138,7 @@ func TestUploadReceiptRecoversActualTCPResponseLoss(t *testing.T) {
 	if task.Status != 1 || task.ResultFileID == nil || task.ResultJSON == nil {
 		t.Fatal("lost response did not commit a receipt")
 	}
-	f.waitAnalysis(t, *task.ResultFileID)
+	f.assertIndexQueued(t, *task.ResultFileID)
 	var file model.File
 	if err := json.Unmarshal([]byte(*task.ResultJSON), &file); err != nil {
 		t.Fatal(err)

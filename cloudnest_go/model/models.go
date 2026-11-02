@@ -301,6 +301,7 @@ func (FrpConfig) TableName() string {
 
 // AiMetadata AI元数据
 type AiMetadata struct {
+	SourceHash  string    `gorm:"type:char(64);not null;default:''" json:"-"`
 	ID          int64     `gorm:"primaryKey;autoIncrement" json:"id"`
 	FileID      int64     `gorm:"not null" json:"file_id"`
 	Tags        string    `gorm:"type:varchar(255)" json:"tags"`

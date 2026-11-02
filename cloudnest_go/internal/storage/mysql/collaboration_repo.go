@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"cloudenest_go/internal/indexqueue"
 	"cloudenest_go/internal/quota"
 	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
@@ -253,6 +254,9 @@ func appendFileVersion(tx *gorm.DB, file model.File, storage model.Storage, uid 
 		return row, err
 	}
 	if err := quota.Refresh(tx, file.UserID, true); err != nil {
+		return row, err
+	}
+	if err := indexqueue.Enqueue(tx, file.ID, true); err != nil {
 		return row, err
 	}
 	err := tx.Create(&model.OperationLog{UserID: &uid, FileID: &file.ID, Action: action, Status: "success", Detail: fmt.Sprintf("version=%d base=%d", row.Version, base), ClientIP: clientIP}).Error

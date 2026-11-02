@@ -1,0 +1,466 @@
+{
+  "version": 1,
+  "description": "Synthetic development benchmark; labels fixed before execution. Shared photo pixels vary only in explicit EXIF. No model outputs or vectors.",
+  "documents": [
+    {
+      "id": "photo-last",
+      "extension": "png",
+      "owner": "alice",
+      "uploaded": "current",
+      "fixture": "images/beach-synthetic.png",
+      "capture": "previous_year"
+    },
+    {
+      "id": "photo-current",
+      "extension": "png",
+      "owner": "alice",
+      "uploaded": "current",
+      "fixture": "images/beach-synthetic.png",
+      "capture": "current_year"
+    },
+    {
+      "id": "photo-unknown",
+      "extension": "png",
+      "owner": "alice",
+      "uploaded": "current",
+      "fixture": "images/beach-synthetic.png"
+    },
+    {
+      "id": "migration-office",
+      "extension": "docx",
+      "owner": "alice",
+      "uploaded": "current",
+      "fixture": "office/migration.docx"
+    },
+    {
+      "id": "migration-and-access",
+      "extension": "pdf",
+      "owner": "alice",
+      "uploaded": "current",
+      "fixture": "pdf/migration.pdf"
+    },
+    {
+      "id": "migration-plan",
+      "extension": "md",
+      "owner": "alice",
+      "uploaded": "current",
+      "text": "数据库迁移方案\n将旧 MySQL 集群的数据搬迁到新节点。先做全量备份，再同步增量，核对记录数量和校验值。切换流量前演练回滚，保留旧实例只读快照。出现不一致时恢复备份。本文讨论数据搬迁步骤与一致性验证。"
+    },
+    {
+      "id": "migration-runbook",
+      "extension": "txt",
+      "owner": "alice",
+      "uploaded": "current",
+      "text": "Relocating the application database\nExport a consistent MySQL snapshot, apply the change log on the destination, compare row counts, and rehearse switching traffic back. Retain the previous cluster until validation completes. This is the planned cutover and recovery procedure."
+    },
+    {
+      "id": "permissions-slides",
+      "extension": "pptx",
+      "owner": "alice",
+      "uploaded": "current",
+      "fixture": "office/permissions.pptx"
+    },
+    {
+      "id": "permissions-guide",
+      "extension": "md",
+      "owner": "alice",
+      "uploaded": "current",
+      "text": "Spring Boot 权限管理指南\n使用 Spring Security 验证 JWT。RBAC 按角色授予 API 权限，同时在服务层检查资源所有者。文件共享只授予 read 或 write；不能用管理员身份绕过文件级授权。撤销权限后立即拒绝读取，审计拒绝事件。"
+    },
+    {
+      "id": "permissions-settings",
+      "extension": "yaml",
+      "owner": "alice",
+      "uploaded": "current",
+      "text": "spring:\n  security:\n    authorization:\n      roles: [viewer, editor]\n      resources: [document, folder]\n      default_policy: deny\n# Spring Boot role-based access policy; JWT authentication and resource authorization are separate."
+    },
+    {
+      "id": "contract-service",
+      "extension": "md",
+      "owner": "alice",
+      "uploaded": "previous_month",
+      "text": "技术服务合同\n甲方与乙方约定系统维护服务期限十二个月，服务费每季度支付。双方签字后生效。交付物为维护报告和问题处理记录。违约责任为延误交付按合同条款处理。本文件是已签订的服务协议，非会议纪要。"
+    },
+    {
+      "id": "contract-purchase",
+      "extension": "txt",
+      "owner": "alice",
+      "uploaded": "previous_month",
+      "text": "设备采购合同\n买方采购笔记本电脑十台，卖方在验收后提供发票。约定交货日期、验收标准、保修和付款条件。双方签字确认采购约定。本文为采购合同，不是已付款的发票或收据。"
+    },
+    {
+      "id": "contract-current",
+      "extension": "md",
+      "owner": "alice",
+      "uploaded": "current",
+      "text": "房屋租赁合同\n出租方与承租方约定租金、押金、期限和维修责任，签署后生效。"
+    },
+    {
+      "id": "contract-older",
+      "extension": "md",
+      "owner": "alice",
+      "uploaded": "two_months_ago",
+      "text": "年度软件服务合同\n双方约定技术支持范围、金额、交付期限与签署日期。"
+    },
+    {
+      "id": "invoice-sheet",
+      "extension": "xlsx",
+      "owner": "alice",
+      "uploaded": "current",
+      "fixture": "office/invoice.xlsx"
+    },
+    {
+      "id": "invoice-scan",
+      "extension": "pdf",
+      "owner": "alice",
+      "uploaded": "current",
+      "fixture": "pdf/scanned-invoice.pdf"
+    },
+    {
+      "id": "invoice-photo",
+      "extension": "png",
+      "owner": "alice",
+      "uploaded": "current",
+      "fixture": "images/invoice-synthetic.png"
+    },
+    {
+      "id": "invoice-receipt",
+      "extension": "md",
+      "owner": "alice",
+      "uploaded": "previous_month",
+      "text": "电脑购买发票（合成测试）\n商品：笔记本电脑，数量一台，含税金额人民币 6899 元。付款状态：已支付。用途：报销凭证。这里没有真实纳税人、账号或个人信息。"
+    },
+    {
+      "id": "config-production",
+      "extension": "yaml",
+      "owner": "alice",
+      "uploaded": "current",
+      "text": "server:\n  name: production-example\n  host: 192.0.2.42\n  port: 8443\ndatabase:\n  host: 198.51.100.17\n  port: 3306\n# Deployable service configuration. All IPs are documentation-only addresses."
+    },
+    {
+      "id": "config-staging",
+      "extension": "conf",
+      "owner": "alice",
+      "uploaded": "current",
+      "text": "# Staging server network configuration\nSERVER_IP=203.0.113.27\nHTTP_PORT=8080\nUPSTREAM_HOST=192.0.2.81\n# Synthetic deployment settings, no credentials."
+    },
+    {
+      "id": "ip-explanation",
+      "extension": "md",
+      "owner": "alice",
+      "uploaded": "current",
+      "text": "网络地址入门\nIP 地址用于标识网络接口，IPv4 采用点分十进制表示。选择生产服务器地址需要遵循网络规划。本文解释概念，没有可部署的服务配置。"
+    },
+    {
+      "id": "laptop-review",
+      "extension": "md",
+      "owner": "alice",
+      "uploaded": "current",
+      "text": "笔记本电脑选购评测\n比较处理器性能、屏幕和电池续航。预算约六千元，尚未购买任何设备，也没有发票。推荐根据实际用途选择，不包含付款记录。"
+    },
+    {
+      "id": "travel-notes",
+      "extension": "md",
+      "owner": "alice",
+      "uploaded": "current",
+      "text": "海边旅行文字游记\n去年散步经过沙滩和海浪，天气晴朗。本文是纯文字日记，没有照片，也没有 EXIF 拍摄记录。"
+    },
+    {
+      "id": "meeting-notes",
+      "extension": "md",
+      "owner": "alice",
+      "uploaded": "previous_month",
+      "text": "项目周会记录\n讨论设备采购进度、服务续费和下次会议时间。合同仍在法务审核，本文不是签署的协议。"
+    },
+    {
+      "id": "recipe",
+      "extension": "md",
+      "owner": "alice",
+      "uploaded": "current",
+      "text": "番茄鸡蛋面做法\n将番茄切块炒软，加入开水和面条，最后放入鸡蛋并调味。"
+    },
+    {
+      "id": "exercise",
+      "extension": "md",
+      "owner": "alice",
+      "uploaded": "current",
+      "text": "训练计划\n每周进行三次跑步和两次力量训练，记录休息时间与饮水量。"
+    },
+    {
+      "id": "private-migration",
+      "extension": "md",
+      "owner": "bob",
+      "uploaded": "current",
+      "text": "数据库迁移方案 PRIVATE_ONLY_ALPHA\n这是另一位用户的私有数据搬迁、备份和回滚执行文档。"
+    },
+    {
+      "id": "private-contract",
+      "extension": "md",
+      "owner": "bob",
+      "uploaded": "previous_month",
+      "text": "技术服务合同 PRIVATE_ONLY_BETA\n这是另一位用户上个月上传的正式合同。"
+    },
+    {
+      "id": "private-invoice",
+      "extension": "md",
+      "owner": "bob",
+      "uploaded": "current",
+      "text": "电脑购买发票 PRIVATE_ONLY_GAMMA\n笔记本电脑一台，已支付人民币 5999 元。"
+    },
+    {
+      "id": "shared-migration",
+      "extension": "md",
+      "owner": "bob",
+      "uploaded": "current",
+      "text": "共享数据库搬迁检查单\n迁移 MySQL 数据之前备份、导出快照并核对行数，切换到新数据库后验证一致性；失败时恢复原数据库。",
+      "share_read": true
+    }
+  ],
+  "queries": [
+    {
+      "id": "beach-1",
+      "family": "beach",
+      "split": "dev",
+      "question": "帮我找到去年拍摄的海边照片。",
+      "relevant": [
+        "photo-last"
+      ]
+    },
+    {
+      "id": "beach-2",
+      "family": "beach",
+      "split": "dev",
+      "question": "去年拍的沙滩海浪图片",
+      "relevant": [
+        "photo-last"
+      ]
+    },
+    {
+      "id": "beach-3",
+      "family": "beach",
+      "split": "heldout",
+      "question": "查找上一年在海岸拍下的照片",
+      "relevant": [
+        "photo-last"
+      ]
+    },
+    {
+      "id": "migration-1",
+      "family": "migration",
+      "split": "dev",
+      "question": "找出讨论数据库迁移方案的文档。",
+      "relevant": [
+        "migration-office",
+        "migration-and-access",
+        "migration-plan",
+        "migration-runbook",
+        "shared-migration"
+      ]
+    },
+    {
+      "id": "migration-2",
+      "family": "migration",
+      "split": "dev",
+      "question": "数据搬到新库前的备份、切换和回滚步骤",
+      "relevant": [
+        "migration-office",
+        "migration-and-access",
+        "migration-plan",
+        "migration-runbook",
+        "shared-migration"
+      ]
+    },
+    {
+      "id": "migration-3",
+      "family": "migration",
+      "split": "heldout",
+      "question": "关于 MySQL 数据搬迁与一致性核对的执行资料",
+      "relevant": [
+        "migration-office",
+        "migration-and-access",
+        "migration-plan",
+        "migration-runbook",
+        "shared-migration"
+      ]
+    },
+    {
+      "id": "permissions-1",
+      "family": "permissions",
+      "split": "dev",
+      "question": "寻找和 Spring Boot 权限管理相关的资料。",
+      "relevant": [
+        "permissions-slides",
+        "permissions-guide",
+        "permissions-settings",
+        "migration-and-access"
+      ]
+    },
+    {
+      "id": "permissions-2",
+      "family": "permissions",
+      "split": "dev",
+      "question": "Java Web 应用如何用 Spring Security 做角色和资源授权",
+      "relevant": [
+        "permissions-slides",
+        "permissions-guide",
+        "permissions-settings",
+        "migration-and-access"
+      ]
+    },
+    {
+      "id": "permissions-3",
+      "family": "permissions",
+      "split": "heldout",
+      "question": "Spring Boot 项目中防止用户越权访问文件的说明",
+      "relevant": [
+        "permissions-slides",
+        "permissions-guide",
+        "permissions-settings",
+        "migration-and-access"
+      ]
+    },
+    {
+      "id": "contracts-1",
+      "family": "contracts",
+      "split": "dev",
+      "question": "上个月上传的合同有哪些？",
+      "relevant": [
+        "contract-service",
+        "contract-purchase"
+      ]
+    },
+    {
+      "id": "contracts-2",
+      "family": "contracts",
+      "split": "dev",
+      "question": "上个月上传的正式协议",
+      "relevant": [
+        "contract-service",
+        "contract-purchase"
+      ]
+    },
+    {
+      "id": "contracts-3",
+      "family": "contracts",
+      "split": "heldout",
+      "question": "查找上个月上传的签署合同文件",
+      "relevant": [
+        "contract-service",
+        "contract-purchase"
+      ]
+    },
+    {
+      "id": "config-1",
+      "family": "config",
+      "split": "dev",
+      "question": "找到包含服务器 IP 地址的配置文件。",
+      "relevant": [
+        "config-production",
+        "config-staging"
+      ]
+    },
+    {
+      "id": "config-2",
+      "family": "config",
+      "split": "dev",
+      "question": "服务器部署时填写网络主机地址的设置文件",
+      "relevant": [
+        "config-production",
+        "config-staging"
+      ]
+    },
+    {
+      "id": "config-3",
+      "family": "config",
+      "split": "heldout",
+      "question": "配置里写有 server host 或 SERVER_IP 的文件",
+      "relevant": [
+        "config-production",
+        "config-staging"
+      ]
+    },
+    {
+      "id": "invoice-1",
+      "family": "invoice",
+      "split": "dev",
+      "question": "帮我查找之前上传的电脑购买发票。",
+      "relevant": [
+        "invoice-sheet",
+        "invoice-scan",
+        "invoice-photo",
+        "invoice-receipt"
+      ]
+    },
+    {
+      "id": "invoice-2",
+      "family": "invoice",
+      "split": "dev",
+      "question": "购买笔记本电脑后用于报销的凭证",
+      "relevant": [
+        "invoice-sheet",
+        "invoice-scan",
+        "invoice-photo",
+        "invoice-receipt"
+      ]
+    },
+    {
+      "id": "invoice-3",
+      "family": "invoice",
+      "split": "heldout",
+      "question": "找电脑已付款的发票或收据",
+      "relevant": [
+        "invoice-sheet",
+        "invoice-scan",
+        "invoice-photo",
+        "invoice-receipt"
+      ]
+    },
+    {
+      "id": "negative-1",
+      "family": "negative",
+      "split": "dev",
+      "question": "寻找水稻基因测序实验报告",
+      "relevant": []
+    },
+    {
+      "id": "negative-2",
+      "family": "negative",
+      "split": "dev",
+      "question": "火星探测器轨道计算手册",
+      "relevant": []
+    },
+    {
+      "id": "negative-3",
+      "family": "negative",
+      "split": "dev",
+      "question": "梵高油画修复过程记录",
+      "relevant": []
+    },
+    {
+      "id": "negative-4",
+      "family": "negative",
+      "split": "heldout",
+      "question": "儿童钢琴考级成绩单",
+      "relevant": []
+    },
+    {
+      "id": "negative-5",
+      "family": "negative",
+      "split": "heldout",
+      "question": "深海火山岩石化学检测报告",
+      "relevant": []
+    },
+    {
+      "id": "negative-6",
+      "family": "negative",
+      "split": "heldout",
+      "question": "航空发动机涡轮叶片制造图纸",
+      "relevant": []
+    }
+  ],
+  "quality_gates": {
+    "positive_macro_recall_at_5": 0.9,
+    "positive_mrr_at_10": 0.8,
+    "negative_empty_rate": 1.0
+  }
+}
