@@ -80,12 +80,28 @@ func CheckTransferCleanupContract(db *gorm.DB) error {
 	if _, err := checkSchemaVisibility(db); err != nil {
 		return err
 	}
-	var count int64
-	if err := db.Raw("SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_schema=DATABASE()").Scan(&count).Error; err != nil {
+	// Read all definitions in one catalog snapshot. Only the reviewed agent
+	// triggers, which exclusively clear credential columns, may coexist with
+	// deletion of transfer artifacts. An identifier alone is insufficient.
+	var rows []triggerDefinition
+	if err := db.Raw(agentTriggerProjection + " WHERE trigger_schema=DATABASE()").Scan(&rows).Error; err != nil {
 		return err
 	}
-	if count != 0 {
-		return errors.New("transfer cleanup refuses schemas with triggers; stop writers and review metadata consumers")
+	known := agentTriggers()
+	if len(rows) != len(known) {
+		return errors.New("transfer cleanup refuses unknown or missing triggers")
+	}
+	for _, row := range rows {
+		verified := false
+		for _, spec := range known {
+			if row.TriggerName == spec.name && row.matches(spec) {
+				verified = true
+				break
+			}
+		}
+		if !verified {
+			return errors.New("transfer cleanup refuses unreviewed trigger definitions")
+		}
 	}
 	return nil
 }

@@ -294,6 +294,9 @@ func TestAgentRuntimeChecksActualTriggersWithDMLPrivileges(t *testing.T) {
 	if err = store.CheckAgentSchema(runtime); err == nil {
 		t.Fatal("same trigger name with incorrect behavior accepted")
 	}
+	if err = store.CheckTransferCleanupContract(f.db); err == nil {
+		t.Fatal("transfer cleanup accepted altered agent trigger")
+	}
 	if err = store.Migrate(f.db); err == nil {
 		t.Fatal("unexpected trigger overwritten")
 	}

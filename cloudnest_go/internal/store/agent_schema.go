@@ -21,8 +21,15 @@ func agentTriggers() []agentTrigger {
 
 const agentTriggerProjection = "SELECT trigger_name,event_object_table AS table_name,event_manipulation AS event_name,action_timing AS timing,action_statement AS body FROM information_schema.triggers"
 
+type triggerDefinition struct{ TriggerName, TableName, EventName, Timing, Body string }
+
+func (row triggerDefinition) matches(s agentTrigger) bool {
+	compact := func(v string) string { return strings.Join(strings.Fields(v), " ") }
+	return row.TableName == s.table && row.EventName == s.event && row.Timing == "AFTER" && compact(row.Body) == compact(s.body)
+}
+
 func inspectTrigger(db *gorm.DB, s agentTrigger, migration bool) (bool, error) {
-	var rows []struct{ TableName, EventName, Timing, Body string }
+	var rows []triggerDefinition
 	query := "CALL cn_agent_trigger_check_v1(?)"
 	if migration {
 		query = agentTriggerProjection + " WHERE trigger_schema=DATABASE() AND trigger_name=?"
@@ -31,10 +38,7 @@ func inspectTrigger(db *gorm.DB, s agentTrigger, migration bool) (bool, error) {
 	if err != nil || len(rows) == 0 {
 		return false, err
 	}
-	normalize := func(v string) string {
-		return strings.Join(strings.Fields(strings.ToLower(strings.ReplaceAll(v, "`", ""))), " ")
-	}
-	if len(rows) != 1 || rows[0].TableName != s.table || rows[0].EventName != s.event || rows[0].Timing != "AFTER" || normalize(rows[0].Body) != normalize(s.body) {
+	if len(rows) != 1 || !rows[0].matches(s) {
 		return false, fmt.Errorf("unexpected definition for agent trigger %s", s.name)
 	}
 	return true, nil
