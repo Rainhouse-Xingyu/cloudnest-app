@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/netip"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"cloudenest_go/internal/agentauth"
 	"cloudenest_go/internal/service/contract"
@@ -297,6 +300,12 @@ func (s *FrpService) DeleteMapping(ctx context.Context, uid int64, isAdmin bool,
 
 // PreviewConfig 预览某设备的 frpc.yaml 内容（不入库）。
 func (s *FrpService) PreviewConfig(ctx context.Context, uid int64, isAdmin bool, req SaveConfigInput) (string, int64, error) {
+	if !validFRPScalar(req.Token, 1024) {
+		return "", 0, ErrFrpBadConfig
+	}
+	if req.Token != "" {
+		req.Token = "[redacted]"
+	}
 	return s.buildConfigTextForDevice(ctx, uid, isAdmin, req.DeviceID, req.ServerAddr, req.ServerPort, req.Token)
 }
 
@@ -697,10 +706,10 @@ func (s *FrpService) buildConfigTextForDevice(ctx context.Context, userID int64,
 	if serverAddr == "" {
 		return "", 0, ErrFrpNeedServer
 	}
-	if serverPort <= 0 {
+	if serverPort == 0 {
 		serverPort = 7000
 	}
-	if serverPort > 65535 {
+	if serverPort < 1 || serverPort > 65535 {
 		return "", 0, ErrFrpBadConfig
 	}
 
@@ -712,28 +721,34 @@ func (s *FrpService) buildConfigTextForDevice(ctx context.Context, userID int64,
 		return "", 0, ErrFrpNoMapping
 	}
 
-	text := generateFRPCYaml(serverAddr, serverPort, token, mappings)
-	return text, deviceID, nil
+	text, err := generateFRPCYaml(serverAddr, serverPort, token, mappings)
+	return text, deviceID, err
 }
 
 // generateFRPCYaml 生成基础 frpc.yaml 文本，支持 tcp/http/https 三类代理。
-func generateFRPCYaml(serverAddr string, serverPort int, token string, mappings []model.FrpMapping) string {
+func generateFRPCYaml(serverAddr string, serverPort int, token string, mappings []model.FrpMapping) (string, error) {
+	if !validFRPHost(serverAddr) || serverPort < 1 || serverPort > 65535 || !validFRPScalar(token, 1024) || len(mappings) == 0 || len(mappings) > 512 {
+		return "", ErrFrpBadConfig
+	}
 	b := strings.Builder{}
 	b.WriteString("serverAddr: ")
-	b.WriteString(serverAddr)
+	b.WriteString(strconv.Quote(serverAddr))
 	b.WriteString("\n")
 	b.WriteString("serverPort: ")
 	b.WriteString(fmt.Sprintf("%d", serverPort))
 	b.WriteString("\n")
-	if strings.TrimSpace(token) != "" {
+	if token != "" {
 		b.WriteString("auth:\n")
 		b.WriteString("  token: ")
-		b.WriteString(token)
+		b.WriteString(strconv.Quote(token))
 		b.WriteString("\n")
 	}
 	b.WriteString("proxies:\n")
 
 	for _, m := range mappings {
+		if m.LocalPort < 1 || m.LocalPort > 65535 || (m.Domain == "" && (m.RemotePort < 1 || m.RemotePort > 65535)) {
+			return "", ErrFrpBadConfig
+		}
 		proxyName := fmt.Sprintf("device_%d_map_%d", m.DeviceID, m.ID)
 		typeName := "tcp"
 		if m.Domain != "" {
@@ -762,12 +777,44 @@ func generateFRPCYaml(serverAddr string, serverPort int, token string, mappings 
 			domain := strings.TrimPrefix(strings.TrimPrefix(m.Domain, "https://"), "http://")
 			b.WriteString("    customDomains:\n")
 			b.WriteString("      - ")
-			b.WriteString(domain)
+			if !validFRPHost(strings.TrimPrefix(domain, "*.")) {
+				return "", ErrFrpBadConfig
+			}
+			b.WriteString(strconv.Quote(domain))
 			b.WriteString("\n")
 		}
 	}
 
-	return b.String()
+	if b.Len() > 32<<10 {
+		return "", ErrFrpBadConfig
+	}
+	return b.String(), nil
+}
+
+// FRP evaluates templates before parsing configuration. Quoting alone cannot
+// stop template expansion, so reject template delimiters in operator input.
+func validFRPScalar(s string, limit int) bool {
+	return len(s) <= limit && utf8.ValidString(s) && !strings.Contains(s, "{{") && !strings.Contains(s, "}}") && strings.IndexFunc(s, unicode.IsControl) < 0
+}
+
+func validFRPHost(host string) bool {
+	if host == "" || !validFRPScalar(host, 253) {
+		return false
+	}
+	if a, err := netip.ParseAddr(host); err == nil {
+		return a.Zone() == ""
+	}
+	for _, label := range strings.Split(strings.TrimSuffix(host, "."), ".") {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, r := range label {
+			if !(r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-') {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // resolveConfigID 解析要下发的配置 ID；如果请求未指定则选择设备最新配置。

@@ -291,7 +291,7 @@ func (FrpMapping) TableName() string {
 type FrpConfig struct {
 	ID         int64     `gorm:"primaryKey;autoIncrement" json:"id"`
 	DeviceID   *int64    `gorm:"type:bigint" json:"device_id"`
-	ConfigText string    `gorm:"type:text" json:"config_text"`
+	ConfigText string    `gorm:"type:text" json:"-"`
 	CreateTime time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP" json:"create_time"`
 }
 

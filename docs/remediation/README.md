@@ -10,7 +10,7 @@
 - [测试执行方法](TESTING.md)
 - [G01 安全整改与升级边界](G01-SECURITY.md)
 - [现有客户端 API 权限兼容性](CLIENT-API-COMPATIBILITY.md)
-- [设备身份边界设计（G05 待实现）](DEVICE-IDENTITY-DESIGN.md)
+- [设备身份边界设计](DEVICE-IDENTITY-DESIGN.md)
 - [受控账号恢复与会话撤销](ACCOUNT-RECOVERY.md)
 - [G02 文件一致性与递归安全](G02-FILE-CONSISTENCY.md)
 - [只读文件名称约束预检](FILE-NAME-AUDIT.md)
@@ -66,3 +66,5 @@ G03 已补齐下载写入/刷新 30 秒期限、上下文取消唤醒和最终�
 本批最终普通 237 项 race 回归通过（329.401s），独立网络两项通过（106.183s），空文件并发完成重复 30 轮通过；完整失败诊断和验证边界已保留于 TESTING。
 
 - [G05 设备注册、轮换、撤销和心跳](G05-DEVICE-IDENTITY.md)
+
+G05 的设备身份、配置输入与响应边界在 [PR #6](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/6) 继续推进，基于 G03。官方 FRP 三种映射已在本机真实转发；Agent 管理、配置加密和持久命令尚未完成。G04 实现在独立 [PR #5](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/5)，固定压力集仍未通过质量门槛。

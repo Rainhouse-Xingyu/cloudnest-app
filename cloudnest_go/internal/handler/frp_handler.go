@@ -9,6 +9,7 @@ import (
 
 	"cloudenest_go/internal/middleware"
 	"cloudenest_go/internal/service"
+	"cloudenest_go/model"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -391,8 +392,7 @@ func (h *FrpHandler) PreviewConfig(c *gin.Context) {
 	uid := c.GetInt64(middleware.ContextUserIDKey)
 
 	var req PreviewConfigRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+	if !agentBody(c, &req) {
 		return
 	}
 
@@ -408,8 +408,9 @@ func (h *FrpHandler) PreviewConfig(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"device_id":   deviceID,
-		"config_text": text,
+		"device_id":            deviceID,
+		"config_text":          text,
+		"config_text_redacted": true,
 	})
 }
 
@@ -418,8 +419,7 @@ func (h *FrpHandler) SaveConfig(c *gin.Context) {
 	uid := c.GetInt64(middleware.ContextUserIDKey)
 
 	var req SaveConfigRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+	if !agentBody(c, &req) {
 		return
 	}
 
@@ -440,7 +440,7 @@ func (h *FrpHandler) SaveConfig(c *gin.Context) {
 	}
 
 	_ = h.Svc.LogOperation(c.Request.Context(), uid, "frp_config_save", fmt.Sprintf("config_id=%d device_id=%d", cfg.ID, *cfg.DeviceID), c.ClientIP())
-	c.JSON(http.StatusOK, gin.H{"item": cfg})
+	c.JSON(http.StatusOK, gin.H{"item": publicFRPConfig(cfg)})
 }
 
 // ListDeviceConfigs 查询设备配置历史（按时间倒序）。
@@ -466,7 +466,11 @@ func (h *FrpHandler) ListDeviceConfigs(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"items": rows})
+	items := make([]gin.H, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, publicFRPConfig(row))
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items})
 }
 
 // RollbackConfig 将历史配置复制为最新版本，实现回滚。
@@ -501,9 +505,9 @@ func (h *FrpHandler) RollbackConfig(c *gin.Context) {
 		return
 	}
 
-	// 保持原返回和日志结构不变。
+	// 保留版本元数据和审计记录，响应隐藏配置正文。
 	_ = h.Svc.LogOperation(c.Request.Context(), uid, "frp_config_rollback", fmt.Sprintf("from_config_id=%d to_config_id=%d device_id=%d", oldCfg.ID, newCfg.ID, *oldCfg.DeviceID), c.ClientIP())
-	c.JSON(http.StatusOK, gin.H{"item": newCfg})
+	c.JSON(http.StatusOK, gin.H{"item": publicFRPConfig(newCfg)})
 }
 
 // DeployConfig 下发配置接口（服务端预留：写入命令队列，等待客户端执行）。
@@ -860,4 +864,8 @@ func (h *FrpHandler) writeConfigError(c *gin.Context, err error) {
 		return
 	}
 	c.JSON(http.StatusInternalServerError, gin.H{"error": "build config failed"})
+}
+
+func publicFRPConfig(cfg model.FrpConfig) gin.H {
+	return gin.H{"id": cfg.ID, "device_id": cfg.DeviceID, "create_time": cfg.CreateTime, "config_text": "", "config_text_redacted": true}
 }

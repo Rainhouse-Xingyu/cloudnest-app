@@ -44,7 +44,7 @@ func TestFRPNativeGeneratedConfigConnectsTCPHTTPAndHTTPS(t *testing.T) {
 	if _, err := rand.Read(random[:]); err != nil {
 		t.Fatal(err)
 	}
-	token := hex.EncodeToString(random[:])
+	token := hex.EncodeToString(random[:]) + " #: test"
 	target := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprintf(w, "cloudnest-reached:%s", r.URL.Path) })
 	plain := httptest.NewServer(target)
 	defer plain.Close()
@@ -77,7 +77,10 @@ func TestFRPNativeGeneratedConfigConnectsTCPHTTPAndHTTPS(t *testing.T) {
 		{ID: 2, DeviceID: 1, LocalPort: plain.Listener.Addr().(*net.TCPAddr).Port, Domain: "http://example.com"},
 		{ID: 3, DeviceID: 1, LocalPort: secure.Listener.Addr().(*net.TCPAddr).Port, Domain: "https://example.com"},
 	}
-	clientConfig := generateFRPCYaml("127.0.0.1", control, token, maps)
+	clientConfig, err := generateFRPCYaml("127.0.0.1", control, token, maps)
+	if err != nil {
+		t.Fatal(err)
+	}
 	serverPath, clientPath := filepath.Join(work, "frps.json"), filepath.Join(work, "frpc.yaml")
 	if err = os.WriteFile(serverPath, serverJSON, 0600); err != nil {
 		t.Fatal(err)
