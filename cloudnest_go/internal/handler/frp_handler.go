@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"cloudenest_go/internal/frpconfig"
 	"cloudenest_go/internal/middleware"
 	"cloudenest_go/internal/service"
 	"cloudenest_go/model"
@@ -397,6 +398,7 @@ func (h *FrpHandler) PreviewConfig(c *gin.Context) {
 	}
 
 	text, deviceID, err := h.Svc.PreviewConfig(c.Request.Context(), uid, h.isAdmin(c), service.SaveConfigInput{
+		ClientIP:   c.ClientIP(),
 		DeviceID:   req.DeviceID,
 		ServerAddr: req.ServerAddr,
 		ServerPort: req.ServerPort,
@@ -424,6 +426,7 @@ func (h *FrpHandler) SaveConfig(c *gin.Context) {
 	}
 
 	cfg, err := h.Svc.SaveConfig(c.Request.Context(), uid, h.isAdmin(c), service.SaveConfigInput{
+		ClientIP:   c.ClientIP(),
 		DeviceID:   req.DeviceID,
 		ServerAddr: req.ServerAddr,
 		ServerPort: req.ServerPort,
@@ -439,7 +442,6 @@ func (h *FrpHandler) SaveConfig(c *gin.Context) {
 		return
 	}
 
-	_ = h.Svc.LogOperation(c.Request.Context(), uid, "frp_config_save", fmt.Sprintf("config_id=%d device_id=%d", cfg.ID, *cfg.DeviceID), c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{"item": publicFRPConfig(cfg)})
 }
 
@@ -482,8 +484,12 @@ func (h *FrpHandler) RollbackConfig(c *gin.Context) {
 		return
 	}
 
-	oldCfg, newCfg, err := h.Svc.RollbackConfig(c.Request.Context(), uid, h.isAdmin(c), configID)
+	oldCfg, newCfg, err := h.Svc.RollbackConfig(c.Request.Context(), uid, h.isAdmin(c), configID, c.ClientIP())
 	if err != nil {
+		if errors.Is(err, frpconfig.ErrUnavailable) || errors.Is(err, frpconfig.ErrInvalid) || errors.Is(err, frpconfig.ErrLegacy) {
+			h.writeConfigError(c, err)
+			return
+		}
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// 与原逻辑一致：优先返回配置不存在。
 			c.JSON(http.StatusNotFound, gin.H{"error": "config not found"})
@@ -506,7 +512,6 @@ func (h *FrpHandler) RollbackConfig(c *gin.Context) {
 	}
 
 	// 保留版本元数据和审计记录，响应隐藏配置正文。
-	_ = h.Svc.LogOperation(c.Request.Context(), uid, "frp_config_rollback", fmt.Sprintf("from_config_id=%d to_config_id=%d device_id=%d", oldCfg.ID, newCfg.ID, *oldCfg.DeviceID), c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{"item": publicFRPConfig(newCfg)})
 }
 
@@ -841,6 +846,10 @@ func parseLimitWithDefault(raw string, defaultVal int, maxVal int) (int, error) 
 // writeConfigError 统一处理配置相关错误码。
 func (h *FrpHandler) writeConfigError(c *gin.Context, err error) {
 	if err == nil {
+		return
+	}
+	if errors.Is(err, frpconfig.ErrUnavailable) || errors.Is(err, frpconfig.ErrInvalid) || errors.Is(err, frpconfig.ErrLegacy) {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "FRP configuration unavailable"})
 		return
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {

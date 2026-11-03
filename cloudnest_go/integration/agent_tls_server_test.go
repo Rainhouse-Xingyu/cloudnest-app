@@ -71,7 +71,7 @@ func startAgentTLSServer(t *testing.T, f *fixture) (string, *http.Client) {
 	ctx, stop := context.WithCancel(context.Background())
 	cmd := exec.CommandContext(ctx, bin)
 	cmd.Dir = dir
-	cmd.Env = []string{"APP_BIND_ADDR=127.0.0.1", "APP_PORT=" + port, "DATA_DIR=" + f.cfg.DataDir, "MYSQL_DSN=" + f.cfg.MySQLDSN, "REDIS_ADDR=" + f.cfg.RedisAddr, "JWT_SECRET=" + f.cfg.JWTSecret, "CLOUDNEST_TLS_CERT_FILE=" + certFile, "CLOUDNEST_TLS_KEY_FILE=" + keyFile, "GIN_MODE=release"}
+	cmd.Env = []string{"CLOUDNEST_FRP_KEY_FILE=" + f.cfg.FRPKeyFile, "APP_BIND_ADDR=127.0.0.1", "APP_PORT=" + port, "DATA_DIR=" + f.cfg.DataDir, "MYSQL_DSN=" + f.cfg.MySQLDSN, "REDIS_ADDR=" + f.cfg.RedisAddr, "JWT_SECRET=" + f.cfg.JWTSecret, "CLOUDNEST_TLS_CERT_FILE=" + certFile, "CLOUDNEST_TLS_KEY_FILE=" + keyFile, "GIN_MODE=release"}
 	if err = cmd.Start(); err != nil {
 		stop()
 		t.Fatal(err)

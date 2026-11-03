@@ -16,7 +16,13 @@ import (
 
 func TestFRPConfigTLSRedactionAndInjection(t *testing.T) {
 	f := newFixture(t)
+	f.cfg.FRPKeyFile, f.cfg.FRPKeys = frpTestKeys(t, "one", map[string][]byte{"one": bytes.Repeat([]byte{1}, 32)})
 	id := agentDevice(t, f)
+	t.Cleanup(func() {
+		if err := f.db.Where("device_id = ?", id).Delete(&model.FrpConfig{}).Error; err != nil {
+			t.Error(err)
+		}
+	})
 	f.json(t, "POST", "/api/frp/mappings", f.alice, map[string]any{"device_id": id, "local_port": 8080, "remote_port": 9000}, 200)
 	base, client := startAgentTLSServer(t, f)
 	secret := "synthetic-frps-secret #: punctuation"
@@ -60,6 +66,7 @@ func TestFRPConfigTLSRedactionAndInjection(t *testing.T) {
 		}
 		return b
 	}
+	f.json(t, "POST", "https://fixture.invalid/api/frp/configs/save", f.alice, payload, 503)
 	preview := call("POST", "/api/frp/configs/preview", f.alice, marshal(payload), 200)
 	if !bytes.Contains(preview, []byte("[redacted]")) {
 		t.Fatal("preview did not mark secret redaction")
@@ -87,8 +94,9 @@ func TestFRPConfigTLSRedactionAndInjection(t *testing.T) {
 	if err := f.db.First(&original, configID).Error; err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(original.ConfigText, secret) {
-		t.Fatal("stored config lost credential")
+	plain, err := f.cfg.FRPKeys.Open(id, original.ID, original.ConfigText)
+	if err != nil || !strings.Contains(plain, secret) || strings.Contains(original.ConfigText, secret) {
+		t.Fatal("configuration not encrypted correctly", err)
 	}
 	serialized := marshal(original)
 	if bytes.Contains(serialized, []byte(secret)) || bytes.Contains(serialized, []byte("config_text")) {
@@ -99,9 +107,20 @@ func TestFRPConfigTLSRedactionAndInjection(t *testing.T) {
 	if err := f.db.First(&rollback, rollbackID).Error; err != nil {
 		t.Fatal(err)
 	}
-	if rollback.ConfigText != original.ConfigText {
-		t.Fatal("rollback changed stored configuration")
+	rolledPlain, err := f.cfg.FRPKeys.Open(id, rollback.ID, rollback.ConfigText)
+	if err != nil || rolledPlain != plain || rollback.ConfigText == original.ConfigText {
+		t.Fatal("rollback did not reencrypt under its own identity", err)
 	}
+	var audit []model.OperationLog
+	if err := f.db.Where("user_id=? AND action IN ?", f.aliceID, []string{"frp_config_save", "frp_config_rollback"}).Find(&audit).Error; err != nil || len(audit) != 2 {
+		t.Fatal("missing atomic config audit", err)
+	}
+	for _, entry := range audit {
+		if entry.ClientIP != "127.0.0.1" || strings.Contains(entry.Detail, secret) {
+			t.Fatal("audit lost peer IP or exposed secret")
+		}
+	}
+
 	history := call("GET", fmt.Sprintf("/api/frp/devices/%d/configs", id), f.alice, nil, 200)
 	var list struct{ Items []json.RawMessage }
 	if err := json.Unmarshal(history, &list); err != nil || len(list.Items) != 2 {
@@ -120,7 +139,7 @@ func TestFRPConfigTLSRedactionAndInjection(t *testing.T) {
 		call("POST", "/api/frp/configs/save", f.alice, []byte(raw), 400)
 	}
 	var count int64
-	if err := f.db.Model(&model.FrpConfig{}).Count(&count).Error; err != nil || count != 2 {
+	if err := f.db.Model(&model.FrpConfig{}).Where("device_id = ?", id).Count(&count).Error; err != nil || count != 2 {
 		t.Fatal("invalid requests changed config history", count, err)
 	}
 }

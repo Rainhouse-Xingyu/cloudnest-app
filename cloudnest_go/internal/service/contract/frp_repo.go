@@ -53,7 +53,8 @@ type FrpRepository interface {
 	UpdateMapping(ctx context.Context, req FrpUpdateMappingInput) (model.FrpMapping, error)
 	DeleteMapping(ctx context.Context, mappingID int64) error
 	ListActiveMappingsByDeviceID(ctx context.Context, deviceID int64) ([]model.FrpMapping, error)
-	CreateConfig(ctx context.Context, cfg model.FrpConfig) (model.FrpConfig, error)
+	CreateConfig(ctx context.Context, uid int64, isAdmin bool, cfg model.FrpConfig, clientIP ...string) (model.FrpConfig, error)
+	RollbackConfig(context.Context, int64, bool, int64, ...string) (model.FrpConfig, model.FrpConfig, error)
 	ListConfigsByDeviceID(ctx context.Context, deviceID int64) ([]model.FrpConfig, error)
 	GetConfigByID(ctx context.Context, configID int64) (model.FrpConfig, error)
 	ResolveConfigID(ctx context.Context, deviceID int64, requested *int64) (int64, error)

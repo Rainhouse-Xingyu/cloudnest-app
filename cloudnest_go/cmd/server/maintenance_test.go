@@ -7,7 +7,7 @@ import (
 
 func TestMaintenanceRejectsAmbiguousTargetsAndPasswordArguments(t *testing.T) {
 	for _, args := range [][]string{
-		{"reset-password"}, {"reset-password", "1"}, {"reset-password", "0", "alice"},
+		{"audit-frp-configs", "extra"}, {"encrypt-frp-configs", "extra"}, {"reset-password"}, {"reset-password", "1"}, {"reset-password", "0", "alice"},
 		{"reset-password", "-1", "alice"}, {"reset-password", "1", ""},
 		{"reset-password", "alice", "alice"}, {"reset-password", "1", "alice", "secret-must-not-be-argv"},
 		{"audit-transfers", "extra"}, {"reconcile-transfers", "extra"}, {"set-transfer-limit"}, {"set-transfer-limit", "0"}, {"set-transfer-limit", "-1"}, {"set-transfer-limit", "8GiB"}, {"set-transfer-limit", "32", "extra"},

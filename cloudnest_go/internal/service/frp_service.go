@@ -97,6 +97,7 @@ type DeviceDetailResult struct {
 
 // SaveConfigInput 表示保存配置输入。
 type SaveConfigInput struct {
+	ClientIP   string
 	DeviceID   int64
 	ServerAddr string
 	ServerPort int
@@ -316,7 +317,7 @@ func (s *FrpService) SaveConfig(ctx context.Context, uid int64, isAdmin bool, re
 		return model.FrpConfig{}, err
 	}
 
-	return s.repo.CreateConfig(ctx, model.FrpConfig{DeviceID: &deviceID, ConfigText: text})
+	return s.repo.CreateConfig(ctx, uid, isAdmin, model.FrpConfig{DeviceID: &deviceID, ConfigText: text}, req.ClientIP)
 }
 
 // ListDeviceConfigs 查询设备配置历史（按时间倒序）。
@@ -330,25 +331,8 @@ func (s *FrpService) ListDeviceConfigs(ctx context.Context, uid int64, isAdmin b
 }
 
 // RollbackConfig 将历史配置复制为最新版本，实现回滚。
-func (s *FrpService) RollbackConfig(ctx context.Context, uid int64, isAdmin bool, configID int64) (model.FrpConfig, model.FrpConfig, error) {
-	oldCfg, err := s.repo.GetConfigByID(ctx, configID)
-	if err != nil {
-		return model.FrpConfig{}, model.FrpConfig{}, err
-	}
-	if oldCfg.DeviceID == nil || *oldCfg.DeviceID <= 0 {
-		return model.FrpConfig{}, model.FrpConfig{}, fmt.Errorf("config has no device")
-	}
-
-	if _, err := s.findDeviceWithPermission(ctx, uid, isAdmin, *oldCfg.DeviceID); err != nil {
-		return model.FrpConfig{}, model.FrpConfig{}, err
-	}
-
-	newCfg, err := s.repo.CreateConfig(ctx, model.FrpConfig{DeviceID: oldCfg.DeviceID, ConfigText: oldCfg.ConfigText})
-	if err != nil {
-		return model.FrpConfig{}, model.FrpConfig{}, err
-	}
-
-	return oldCfg, newCfg, nil
+func (s *FrpService) RollbackConfig(ctx context.Context, uid int64, isAdmin bool, configID int64, clientIP ...string) (model.FrpConfig, model.FrpConfig, error) {
+	return s.repo.RollbackConfig(ctx, uid, isAdmin, configID, clientIP...)
 }
 
 // DeployConfig 写入配置下发命令，等待客户端执行。

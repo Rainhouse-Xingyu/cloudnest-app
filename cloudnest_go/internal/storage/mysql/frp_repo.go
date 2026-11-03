@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"cloudenest_go/internal/frpconfig"
 	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
 
@@ -22,11 +23,16 @@ const (
 
 // FrpRepo 是 FRP 模块仓储实现。
 type FrpRepo struct {
-	db *gorm.DB
+	keys *frpconfig.Keyring
+	db   *gorm.DB
 }
 
-func NewFrpRepo(db *gorm.DB) *FrpRepo {
-	return &FrpRepo{db: db}
+func NewFrpRepo(db *gorm.DB, keys ...*frpconfig.Keyring) *FrpRepo {
+	r := &FrpRepo{db: db}
+	if len(keys) > 0 {
+		r.keys = keys[0]
+	}
+	return r
 }
 
 func (r *FrpRepo) CreateDevice(ctx context.Context, device model.Device) (model.Device, error) {
@@ -208,13 +214,6 @@ func (r *FrpRepo) ListActiveMappingsByDeviceID(ctx context.Context, deviceID int
 		return nil, err
 	}
 	return rows, nil
-}
-
-func (r *FrpRepo) CreateConfig(ctx context.Context, cfg model.FrpConfig) (model.FrpConfig, error) {
-	if err := r.db.WithContext(ctx).Create(&cfg).Error; err != nil {
-		return model.FrpConfig{}, err
-	}
-	return cfg, nil
 }
 
 func (r *FrpRepo) ListConfigsByDeviceID(ctx context.Context, deviceID int64) ([]model.FrpConfig, error) {

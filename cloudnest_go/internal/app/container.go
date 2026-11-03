@@ -74,7 +74,7 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 	fileRepo := storageMysql.NewFileRepo(db)
 	collaborationRepo := storageMysql.NewCollaborationRepo(db)
 	livePhotoRepo := storageMysql.NewLivePhotoRepo(db)
-	frpRepo := storageMysql.NewFrpRepo(db)
+	frpRepo := storageMysql.NewFrpRepo(db, cfg.FRPKeys)
 	aiRepo := storageMysql.NewAIRepo(db)
 	txRunner := storageMysql.NewTxRunner(db)
 

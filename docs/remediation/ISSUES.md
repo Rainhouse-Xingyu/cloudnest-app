@@ -13,7 +13,7 @@
 | SEC-007 P1 | `internal/auth/jwt.go:ParseToken` 不强制 exp，也未检查 user_id/subject 一致性 | 用测试密钥签无 exp/零 ID/不匹配 subject token | G01 必须过期时间及合法身份声明 | 已修：必需 exp/身份校验，待审 |
 | SEC-008 P1 | `auth_service.go:Logout` 忽略 Redis 删除错误；角色/禁用状态来自历史 JWT | Redis 断开后注销；登录后撤销角色/禁用再访问 | G01 注销错误传播、会话撤销/用户状态检查 | 已修：注销错误传播、实时身份与权限，待审 |
 | SEC-009 P1 | `app/container.go` FRP 上报/拉命令同用户 JWT 入口 | 用用户身份调用设备命令 API；无独立设备认证模型 | G05 设备 enrollment、独立凭据哈希/轮换/撤销与权限范围 | 已登记设备接入独立认证与心跳，旧 JWT 执行入口已拒绝。未登记设备兼容路径和持久命令仍待整改，见 [G05 记录](G05-DEVICE-IDENTITY.md) |
-| SEC-010 P1 | `service/frp_service.go:generateFRPCYaml/SaveConfig` 明文 token 拼入配置并持久化 | 隔离环境读取配置记录/响应；不要记录真实 token | G05 加密敏感配置、脱敏响应、最小 Agent 权限 | G05 已收紧 TLS/有界输入、配置响应脱敏及 YAML/模板注入防护；数据库明文、历史迁移及设备专用配置领取仍待整改，SEC-010 保持开放 |
+| SEC-010 P1 | `service/frp_service.go:generateFRPCYaml/SaveConfig` 明文 token 拼入配置并持久化 | 隔离环境读取配置记录/响应；不要记录真实 token | G05 加密敏感配置、脱敏响应、最小 Agent 权限 | G05 已收紧 TLS/有界输入、配置响应脱敏及 YAML/模板注入防护；新增 AES-256-GCM 写入、事务审计及显式迁移/轮换 CLI；真实历史/备份治理与设备专用配置领取仍待完成，SEC-010 保持开放 |
 | SEC-011 P1 | iOS `Shared/Managers/SessionManager.swift` 用 UserDefaults 存 token | 检查保存/读取路径 | G07 新 macOS 用 Keychain；冻结旧 iOS 开发 | 已确认，待做 |
 | SEC-012 P1 | `cmd/server/main.go` 用 `gin.Run` 无显式 HTTP 超时；上传入口缺少请求体总限额 | 慢请求/超大 multipart；需受限资源测试 | G01/G03 显式服务器超时、请求/分片尺寸上限、登录速率限制 | G01 请求头/空闲超时及登录体积/限流已修；G03 已补齐有界流式 multipart、共享并发准入、实际 TCP 读取期限及服务读取超时；分片/合并临时卷预算已追加；ZIP/缓存预算与慢请求规模压测待做 |
 | SEC-013 P1 | G01 初版自定义权限覆盖默认路由，导致 GET auth/me、POST auth/logout 被拒绝 | 真实 API 用户仅授予 GET files，me 返回 403；注销同受影响 | 在完整身份认证后独立允许精确方法/自身会话路由，业务与管理员权限不扩大 | 修复前已复现；修复后集成测试通过 |

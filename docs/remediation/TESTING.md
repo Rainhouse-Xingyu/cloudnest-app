@@ -122,3 +122,13 @@ G00/G01 状态再次核对。PR #1 仍开放，原始漏洞基线检查失败。
 新增配置回归覆盖 YAML 标量原值保留、注入/模板/边界拒绝，以及实际编译 TLS 服务的预览、保存、历史和回滚响应脱敏。官方 FRP 0.71.1 用含空格、冒号和井号的凭据验证三条实际隧道仍通过，race 包 1.891s，日志 `/tmp/cloudnest-g05-frp-native-quoted.log`。构建、vet、全量 race 单元、模块校验及仓库检查通过。
 
 最终按测试清单将普通套件分为 `^Test[A-M]` 与 `^Test[N-Z]` 两批串行运行，各自使用新建 MySQL/Redis，并保留 race 和每批六分钟期限。两批分别 **92 项通过（140.961s）**、**151 项通过（263.567s）**，合计 **243 项**，无失败、跳过或数据竞争。通过用例集合与 `go test -tags=integration -list '^Test' ./integration` 清单逐项相等，无遗漏或重叠。命令为 `scripts/test-integration.sh -run '^Test[A-M]'` 和 `scripts/test-integration.sh -run '^Test[N-Z]'`，日志为 `/tmp/cloudnest-g05-config-batch-am.log`、`/tmp/cloudnest-g05-config-batch-nz.log`。这是分批完整覆盖的结果，单次默认六分钟命令在本机超时的记录保留；脚本默认超时和 CI 完整套件入口未改动。新增 TLS 配置用例自身耗时 3.89s。
+
+## 2026-11-03 G05 加密配置
+
+新增 AES-256-GCM 配置写入、绑定设备/版本的认证数据、私有密钥环加载、事务审计和显式审计/迁移 CLI。单元测试覆盖随机 nonce、逐字节篡改、跨设备/版本搬用、错误密钥、未知版本、明文拒绝、密钥文件权限/链接/体积及格式错误。实际编译的 TLS 服务验证新配置数据库中不再含凭据明文，回滚内容相同但密文和版本身份不同，管理响应仍脱敏，保存/回滚审计保留来源 IP。
+
+首次专项集成失败源于测试共用一次性数据库，先前配置记录仍被全库迁移扫描到。已仅回收各测试自己创建的配置并将业务计数限定到本设备，没有更改迁移的全库范围。原失败日志保留在 `/tmp/cloudnest-g05-encryption-api.log`。修正后的三项 FRP 专项通过，包耗时 10.339s，日志 `/tmp/cloudnest-g05-encryption-api-v2.log`。实际 CLI 覆盖只读审计、明文迁移、重复执行不改写、缺旧密钥失败、旧密钥重加密及退役后读取；仓储测试覆盖越权、密文搬用、审计失败回滚、损坏行停止及重新执行恢复。
+
+前一配置边界提交 `d6d4d46` 的 PR CI `41580652999` 和 push CI `41580647351` 均已通过，当前加密提交的 CI 单独核验。部署和剩余风险见 [配置加密](FRP-CONFIG-ENCRYPTION.md)，未操作生产配置或真实凭据。
+
+加密版本最终按完整清单分批通过 **94 + 151 = 245 项普通 race 集成**，两批包耗时分别 186.731s、250.538s，无遗漏、重叠、失败、跳过或数据竞争。仍使用原隔离脚本、每批六分钟期限，日志 `/tmp/cloudnest-g05-encryption-batch-am.log`、`/tmp/cloudnest-g05-encryption-batch-nz.log`；实际通过集合与当前 `go test -tags=integration -list '^Test'` 清单相等。构建、vet、全量 race 单元、darwin/linux × amd64/arm64 四目标构建及仓库检查通过。新增系统调用只用于读取私有密钥文件，未修改宿主密钥、生产数据或历史备份。

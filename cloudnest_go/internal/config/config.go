@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"cloudenest_go/internal/frpconfig"
 )
 
 /*
@@ -14,6 +16,8 @@ Config结构体定义了应用程序的配置项，包括AppPort、MySQLDSN、Re
 Load函数从环境变量加载配置项，并提供默认值。JWTTTL方法计算JWT的过期时间，getEnv和getEnvInt函数用于获取环境变量的值并提供默认值。
 */
 type Config struct {
+	FRPKeyFile             string
+	FRPKeys                *frpconfig.Keyring
 	TLSCertFile            string
 	TLSKeyFile             string
 	TransferMaintenanceDSN string
@@ -46,6 +50,7 @@ func Load() Config {
 		}
 	}
 	return Config{
+		FRPKeyFile:  os.Getenv("CLOUDNEST_FRP_KEY_FILE"),
 		TLSCertFile: strings.TrimSpace(os.Getenv("CLOUDNEST_TLS_CERT_FILE")), TLSKeyFile: strings.TrimSpace(os.Getenv("CLOUDNEST_TLS_KEY_FILE")),
 		TransferMaintenanceDSN: os.Getenv("TRANSFER_MAINTENANCE_DSN"),
 		BindAddr:               getEnv("APP_BIND_ADDR", ""), TransferTempBytes: transferSeedLimit(),

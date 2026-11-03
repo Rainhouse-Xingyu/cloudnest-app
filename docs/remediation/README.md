@@ -67,4 +67,6 @@ G03 已补齐下载写入/刷新 30 秒期限、上下文取消唤醒和最终�
 
 - [G05 设备注册、轮换、撤销和心跳](G05-DEVICE-IDENTITY.md)
 
-G05 的设备身份、配置输入与响应边界在 [PR #6](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/6) 继续推进，基于 G03。官方 FRP 三种映射已在本机真实转发；Agent 管理、配置加密和持久命令尚未完成。G04 实现在独立 [PR #5](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/5)，固定压力集仍未通过质量门槛。
+G05 的设备身份、配置输入与响应边界在 [PR #6](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/6) 继续推进，基于 G03。官方 FRP 三种映射已在本机真实转发；配置加密与显式历史迁移已接入；Agent 管理和持久命令尚未完成。G04 实现在独立 [PR #5](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/5)，固定压力集仍未通过质量门槛。
+
+- [FRP 配置加密、密钥轮换与历史迁移](FRP-CONFIG-ENCRYPTION.md)
