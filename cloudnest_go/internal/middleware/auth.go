@@ -224,6 +224,7 @@ var defaultUserRoutes = map[string]struct{}{
 	"GET /api/frp/devices/:id/status":              {},
 	"GET /api/frp/devices/:id/commands/next":       {},
 	"POST /api/frp/commands/:command_id/result":    {},
+	"POST /api/frp/devices/:id/commands":           {},
 	"GET /api/frp/devices/:id/commands":            {},
 	"POST /api/live-photos/bind":                   {},
 	"POST /api/live-photos/auto-bind":              {},

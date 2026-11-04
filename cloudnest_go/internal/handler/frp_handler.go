@@ -515,81 +515,6 @@ func (h *FrpHandler) RollbackConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"item": publicFRPConfig(newCfg)})
 }
 
-// DeployConfig 下发配置接口（服务端预留：写入命令队列，等待客户端执行）。
-func (h *FrpHandler) DeployConfig(c *gin.Context) {
-	uid := c.GetInt64(middleware.ContextUserIDKey)
-	deviceID, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil || deviceID <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid device id"})
-		return
-	}
-
-	var req DeployConfigRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
-		return
-	}
-
-	commandID, configID, err := h.Svc.DeployConfig(c.Request.Context(), uid, h.isAdmin(c), deviceID, req.ConfigID)
-	if err != nil {
-		if errors.Is(err, service.ErrFrpNoConfigForDevice) {
-			c.JSON(http.StatusConflict, gin.H{"error": "no config for device"})
-			return
-		}
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "config not found"})
-			return
-		}
-		if errors.Is(err, service.ErrFrpForbidden) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-			return
-		}
-		if strings.Contains(strings.ToLower(err.Error()), "device not found") {
-			c.JSON(http.StatusNotFound, gin.H{"error": "device not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "enqueue command failed"})
-		return
-	}
-	_ = h.Svc.LogOperation(c.Request.Context(), uid, "frp_config_deploy", fmt.Sprintf("device_id=%d config_id=%d command_id=%s", deviceID, configID, commandID), c.ClientIP())
-	c.JSON(http.StatusOK, gin.H{
-		"message":    "deploy command queued",
-		"command_id": commandID,
-		"device_id":  deviceID,
-		"config_id":  configID,
-	})
-}
-
-// ReloadDevice 下发重载命令接口（服务端预留：写入命令队列，等待客户端执行）。
-func (h *FrpHandler) ReloadDevice(c *gin.Context) {
-	uid := c.GetInt64(middleware.ContextUserIDKey)
-	deviceID, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil || deviceID <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid device id"})
-		return
-	}
-
-	commandID, err := h.Svc.ReloadDevice(c.Request.Context(), uid, h.isAdmin(c), deviceID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "device not found"})
-			return
-		}
-		if errors.Is(err, service.ErrFrpForbidden) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "enqueue command failed"})
-		return
-	}
-	_ = h.Svc.LogOperation(c.Request.Context(), uid, "frp_reload", fmt.Sprintf("device_id=%d command_id=%s", deviceID, commandID), c.ClientIP())
-	c.JSON(http.StatusOK, gin.H{
-		"message":    "reload command queued",
-		"command_id": commandID,
-		"device_id":  deviceID,
-	})
-}
-
 // ReportDeviceStatus 设备上报在线状态、心跳和失败原因。
 func (h *FrpHandler) ReportDeviceStatus(c *gin.Context) {
 	uid := c.GetInt64(middleware.ContextUserIDKey)
@@ -768,56 +693,6 @@ func (h *FrpHandler) ReportCommandResult(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "command result updated"})
 }
 
-// ListDeviceCommands 管理端查询设备命令历史与状态。
-func (h *FrpHandler) ListDeviceCommands(c *gin.Context) {
-	uid := c.GetInt64(middleware.ContextUserIDKey)
-	deviceID, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil || deviceID <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid device id"})
-		return
-	}
-
-	limit, err := parseLimitWithDefault(c.Query("limit"), 20, 100)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid limit"})
-		return
-	}
-
-	rows, err := h.Svc.ListDeviceCommands(c.Request.Context(), uid, h.isAdmin(c), deviceID, limit)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "device not found"})
-			return
-		}
-		if errors.Is(err, service.ErrFrpForbidden) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "redis error"})
-		return
-	}
-
-	items := make([]gin.H, 0, len(rows))
-	for _, row := range rows {
-		items = append(items, gin.H{
-			"command_id":     row["command_id"],
-			"action":         row["action"],
-			"status":         row["status"],
-			"device_id":      row["device_id"],
-			"config_id":      row["config_id"],
-			"created_at":     row["created_at"],
-			"delivered_at":   row["delivered_at"],
-			"executed_at":    row["executed_at"],
-			"result_message": row["result_message"],
-			"failure_reason": row["failure_reason"],
-			"updated_at":     row["updated_at"],
-		})
-	}
-
-	c.JSON(http.StatusOK, gin.H{"items": items})
-}
-
-// isAdmin 判断当前登录用户是否管理员。
 func (h *FrpHandler) isAdmin(c *gin.Context) bool {
 	isAdminAny, ok := c.Get(middleware.ContextIsAdminKey)
 	if !ok {

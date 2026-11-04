@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"cloudenest_go/internal/agentauth"
+	"cloudenest_go/internal/agentcommand"
 	"cloudenest_go/internal/blob"
 	"cloudenest_go/internal/config"
 	"cloudenest_go/internal/handler"
@@ -145,9 +146,14 @@ func (c *Container) NewRouter() *gin.Engine {
 	r.GET("/api/public/shares/:code", c.FileHandler.PublicShareInfo)
 	r.GET("/api/public/shares/:code/download", c.FileHandler.PublicShareDownload)
 
+	commands := handler.AgentCommandHandler{Commands: agentcommand.New(c.DB, c.Cfg.FRPKeys)}
 	agent := handler.AgentHandler{Identity: agentauth.New(c.DB)}
 	r.POST("/api/agent/enroll", handler.AgentTransport, middleware.AgentEnrollmentRateLimit(c.RDB), agent.Exchange)
 	r.POST("/api/agent/heartbeat", handler.AgentTransport, middleware.AgentCredentialRateLimit(c.RDB), agent.Heartbeat)
+	r.POST("/api/agent/commands/claim", handler.AgentTransport, middleware.AgentCredentialRateLimit(c.RDB), commands.Claim)
+	r.POST("/api/agent/commands/:id/renew", handler.AgentTransport, middleware.AgentCredentialRateLimit(c.RDB), commands.Renew)
+	r.POST("/api/agent/commands/:id/config", handler.AgentTransport, middleware.AgentCredentialRateLimit(c.RDB), commands.Configuration)
+	r.POST("/api/agent/commands/:id/result", handler.AgentTransport, middleware.AgentCredentialRateLimit(c.RDB), commands.Finish)
 	api := r.Group("/api")
 	api.Use(middleware.Authenticate(c.RDB, c.Cfg.JWTSecret, func(ctx context.Context, userID int64) ([]string, error) {
 		return c.AuthzService.ResolveUserPermissions(ctx, userID)
@@ -237,13 +243,14 @@ func (c *Container) NewRouter() *gin.Engine {
 	api.POST("/frp/configs/save", handler.AgentTransport, c.FrpHandler.SaveConfig)
 	api.GET("/frp/devices/:id/configs", c.FrpHandler.ListDeviceConfigs)
 	api.POST("/frp/configs/:id/rollback", c.FrpHandler.RollbackConfig)
-	api.POST("/frp/devices/:id/deploy-config", c.FrpHandler.DeployConfig)
-	api.POST("/frp/devices/:id/reload", c.FrpHandler.ReloadDevice)
+	api.POST("/frp/devices/:id/commands", handler.AgentTransport, commands.Enqueue)
+	api.POST("/frp/devices/:id/deploy-config", handler.AgentTransport, commands.Deploy)
+	api.POST("/frp/devices/:id/reload", handler.AgentTransport, commands.Reload)
 	api.POST("/frp/devices/:id/status/report", c.FrpHandler.ReportDeviceStatus)
 	api.GET("/frp/devices/:id/status", c.FrpHandler.GetDeviceStatus)
 	api.GET("/frp/devices/:id/commands/next", c.FrpHandler.PullNextCommand)
 	api.POST("/frp/commands/:command_id/result", c.FrpHandler.ReportCommandResult)
-	api.GET("/frp/devices/:id/commands", c.FrpHandler.ListDeviceCommands)
+	api.GET("/frp/devices/:id/commands", handler.AgentTransport, commands.List)
 	api.POST("/live-photos/bind", c.LivePhotoHandler.Bind)
 	api.POST("/live-photos/auto-bind", c.LivePhotoHandler.AutoBind)
 	api.DELETE("/live-photos/:id", c.LivePhotoHandler.Unbind)

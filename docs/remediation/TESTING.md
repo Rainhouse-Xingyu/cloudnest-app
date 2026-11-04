@@ -132,3 +132,17 @@ G00/G01 状态再次核对。PR #1 仍开放，原始漏洞基线检查失败。
 前一配置边界提交 `d6d4d46` 的 PR CI `41580652999` 和 push CI `41580647351` 均已通过，当前加密提交的 CI 单独核验。部署和剩余风险见 [配置加密](FRP-CONFIG-ENCRYPTION.md)，未操作生产配置或真实凭据。
 
 加密版本最终按完整清单分批通过 **94 + 151 = 245 项普通 race 集成**，两批包耗时分别 186.731s、250.538s，无遗漏、重叠、失败、跳过或数据竞争。仍使用原隔离脚本、每批六分钟期限，日志 `/tmp/cloudnest-g05-encryption-batch-am.log`、`/tmp/cloudnest-g05-encryption-batch-nz.log`；实际通过集合与当前 `go test -tags=integration -list '^Test'` 清单相等。构建、vet、全量 race 单元、darwin/linux × amd64/arm64 四目标构建及仓库检查通过。新增系统调用只用于读取私有密钥文件，未修改宿主密钥、生产数据或历史备份。
+
+## 2026-11-04 G05 持久命令
+
+前一配置加密提交 `6779778` 的 PR `41582159454` 与 push `41582152998` CI 均通过。当前命令批次新增 agent_command 表、显式迁移/启动索引检查、管理端幂等入队、设备租约领取/续租、限定配置读取及幂等终态回执。
+
+首轮并发测试失败，日志 `/tmp/cloudnest-g05-command-api.log`。默认 REPEATABLE READ 的管理事务先读取所有权提示再等待设备行锁，后续普通查询仍使用旧快照，导致并发相同请求 ID 触发唯一约束错误。事务改为 READ COMMITTED 后，原测试通过；追加不同请求并发争用最后两个队列名额，验证最多 32 条活动命令。保留唯一索引和原断言，没有将重复键异常静默视为成功。
+
+四项专项在 `/tmp/cloudnest-g05-command-api-v3.log` 通过（9.341s），覆盖实际编译 TLS 服务、用户 JWT 拒绝、跨设备拒绝、配置内容变更检测、回执重试、领取/完成审计故障回滚、租约到期重领及旧回执拒绝、凭据代次隔离、命令期限和重试上限，以及索引丢失后启动失败。进一步将命令时间以数据库 UTC 微秒值和独立 DATETIME 编解码保存，避免 DSN loc=Local 影响租约；第五项用 UTC 与 Asia/Shanghai 两个实际连接双向入队、领取、续租和完成，最终五项专项通过（12.238s），日志 `/tmp/cloudnest-g05-command-api-v4.log`。
+
+服务管理器重建使用相同数据库记录恢复状态。上述结果不替代 Agent 本地执行记录、实际进程崩溃对账和断线重连验收，见 [命令协议](FRP-DURABLE-COMMANDS.md)。
+
+最终普通 race 集成按清单分批通过 **99 + 151 = 250 项**，包耗时 154.721s、244.380s，无遗漏、重叠、失败、跳过或数据竞争。每批保留原六分钟期限，日志 `/tmp/cloudnest-g05-command-batch-am.log`、`/tmp/cloudnest-g05-command-batch-nz.log`。构建、vet、全量 race 单元、darwin/linux × amd64/arm64 四目标构建与仓库检查通过。测试使用新建隔离 MySQL/Redis，本批未操作生产数据库。
+
+完整回归后进一步要求所有失败的配置响应也不包含测试凭据，针对性重跑实际 TLS 配置/回执用例通过，包耗时 6.393s，日志 `/tmp/cloudnest-g05-command-disclosure.log`。生产实现未因此更改。

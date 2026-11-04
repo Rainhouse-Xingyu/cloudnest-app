@@ -62,6 +62,7 @@ func Migrate(db *gorm.DB) error {
 		&model.LivePhoto{},
 		&model.Device{},
 		&model.AgentBinding{},
+		&model.AgentCommand{},
 		&model.FrpMapping{},
 		&model.FrpConfig{},
 		&model.AiMetadata{},

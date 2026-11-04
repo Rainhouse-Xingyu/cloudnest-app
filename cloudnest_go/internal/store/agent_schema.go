@@ -119,5 +119,28 @@ func CheckAgentSchema(db *gorm.DB) error {
 			return fmt.Errorf("agent trigger %s missing; run explicit migrate", s.name)
 		}
 	}
+	return checkAgentCommandSchema(db)
+}
+
+func checkAgentCommandSchema(db *gorm.DB) error {
+	var columns int
+	if err := db.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='agent_command' AND column_name IN ('id','device_id','credential_id','request_id','action','requested_config_id','config_id','config_sha256','status','attempts','claim_id','lease_id','lease_expires','expires_at','created_at','completed_at','result_code')").Scan(&columns).Error; err != nil {
+		return err
+	}
+	if columns != 17 {
+		return fmt.Errorf("agent command schema missing; run explicit migrate")
+	}
+	for _, spec := range []struct {
+		name, columns string
+		unique        int
+	}{{"PRIMARY", "id", 0}, {"uq_agent_request", "device_id,request_id", 0}, {"ix_agent_pending", "device_id,status,created_at", 1}} {
+		var count int
+		if err := db.Raw("SELECT COUNT(*) FROM (SELECT index_name FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='agent_command' AND index_name=? GROUP BY index_name HAVING MAX(non_unique)=? AND MAX(sub_part IS NOT NULL)=0 AND GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',')=?) AS verified", spec.name, spec.unique, spec.columns).Scan(&count).Error; err != nil {
+			return err
+		}
+		if count != 1 {
+			return fmt.Errorf("agent command index missing: %s", spec.name)
+		}
+	}
 	return nil
 }

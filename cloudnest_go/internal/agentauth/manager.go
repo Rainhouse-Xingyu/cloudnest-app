@@ -5,6 +5,7 @@ package agentauth
 import (
 	"context"
 	"crypto/subtle"
+	"database/sql"
 	"errors"
 	"fmt"
 	"time"
@@ -245,4 +246,54 @@ func (m *Manager) Beat(ctx context.Context, raw, version string) (Heartbeat, err
 		return Heartbeat{}, err
 	}
 	return result, nil
+}
+
+// WithCredential serializes a device operation with rotation, revocation and
+// owner/device lifecycle changes. Callbacks must use this transaction only.
+func (m *Manager) WithCredential(ctx context.Context, raw string, fn func(*gorm.DB, model.AgentBinding) error) error {
+	input, ok := parseToken(credentialPrefix, raw)
+	if !ok {
+		return ErrDenied
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	return m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		binding, err := lockBinding(tx, input.id, false)
+		if err != nil {
+			return err
+		}
+		if subtle.ConstantTimeCompare(binding.CredentialDigest, input.digest[:]) != 1 {
+			return ErrDenied
+		}
+		return fn(tx, binding)
+	}, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+}
+
+// WithManagedDevice uses the same owner -> device -> binding lock order as
+// device authentication. An empty binding permits read-only management history.
+// READ COMMITTED prevents the initial ownership hint from freezing a snapshot
+// before waiting for these locks, so queue counts and deduplication see commits.
+func (m *Manager) WithManagedDevice(ctx context.Context, actorID int64, admin bool, deviceID int64, fn func(*gorm.DB, model.AgentBinding) error) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	return m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var hint model.Device
+		if err := tx.First(&hint, deviceID).Error; err != nil {
+			return err
+		}
+		if !admin && hint.UserID != actorID {
+			return ErrOwner
+		}
+		if _, err := lockOwnerAndDevice(tx, hint.UserID, deviceID); err != nil {
+			return err
+		}
+		var binding model.AgentBinding
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&binding, "device_id=? AND owner_id=?", deviceID, hint.UserID).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			binding = model.AgentBinding{DeviceID: deviceID, OwnerID: hint.UserID}
+		} else if err != nil {
+			return err
+		}
+		return fn(tx, binding)
+	}, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 }

@@ -335,52 +335,6 @@ func (s *FrpService) RollbackConfig(ctx context.Context, uid int64, isAdmin bool
 	return s.repo.RollbackConfig(ctx, uid, isAdmin, configID, clientIP...)
 }
 
-// DeployConfig 写入配置下发命令，等待客户端执行。
-func (s *FrpService) DeployConfig(ctx context.Context, uid int64, isAdmin bool, deviceID int64, requestedConfigID *int64) (string, int64, error) {
-	if _, err := s.findDeviceWithPermission(ctx, uid, isAdmin, deviceID); err != nil {
-		return "", 0, err
-	}
-
-	configID, err := s.resolveConfigID(ctx, deviceID, requestedConfigID)
-	if err != nil {
-		return "", 0, err
-	}
-
-	commandID := fmt.Sprintf("deploy-%d-%d", deviceID, time.Now().UnixNano())
-	payload := map[string]interface{}{
-		"command_id": commandID,
-		"action":     "deploy_config",
-		"device_id":  deviceID,
-		"config_id":  configID,
-		"created_at": time.Now().Format(time.RFC3339),
-	}
-	if err := s.enqueueDeviceCommand(ctx, deviceID, payload); err != nil {
-		return "", 0, err
-	}
-
-	return commandID, configID, nil
-}
-
-// ReloadDevice 写入重载命令，等待客户端执行。
-func (s *FrpService) ReloadDevice(ctx context.Context, uid int64, isAdmin bool, deviceID int64) (string, error) {
-	if _, err := s.findDeviceWithPermission(ctx, uid, isAdmin, deviceID); err != nil {
-		return "", err
-	}
-
-	commandID := fmt.Sprintf("reload-%d-%d", deviceID, time.Now().UnixNano())
-	payload := map[string]interface{}{
-		"command_id": commandID,
-		"action":     "reload",
-		"device_id":  deviceID,
-		"created_at": time.Now().Format(time.RFC3339),
-	}
-	if err := s.enqueueDeviceCommand(ctx, deviceID, payload); err != nil {
-		return "", err
-	}
-
-	return commandID, nil
-}
-
 // ReportDeviceStatus 更新设备在线状态与最近心跳。
 func (s *FrpService) ReportDeviceStatus(ctx context.Context, uid int64, isAdmin bool, deviceID int64, req ReportDeviceStatusInput) error {
 	return s.repo.WithLegacyDevice(ctx, uid, isAdmin, deviceID, func(op context.Context) error {
@@ -597,43 +551,6 @@ func (s *FrpService) writeLegacyCommandResult(ctx context.Context, dataKey strin
 	}
 
 	return status, nil
-}
-
-// ListDeviceCommands 查询设备命令历史。
-func (s *FrpService) ListDeviceCommands(ctx context.Context, uid int64, isAdmin bool, deviceID int64, limit int) ([]map[string]string, error) {
-	if _, err := s.findDeviceWithPermission(ctx, uid, isAdmin, deviceID); err != nil {
-		return nil, err
-	}
-
-	historyKey := frpCommandHistoryPrefix + strconv.FormatInt(deviceID, 10)
-	ids, err := s.rdb.LRange(ctx, historyKey, 0, int64(limit-1)).Result()
-	if err != nil {
-		return nil, err
-	}
-
-	items := make([]map[string]string, 0, len(ids))
-	for _, commandID := range ids {
-		dataKey := frpCommandDataKeyPrefix + strings.TrimSpace(commandID)
-		row, hErr := s.rdb.HGetAll(ctx, dataKey).Result()
-		if hErr != nil || len(row) == 0 {
-			continue
-		}
-		items = append(items, map[string]string{
-			"command_id":     row["command_id"],
-			"action":         row["action"],
-			"status":         row["status"],
-			"device_id":      row["device_id"],
-			"config_id":      row["config_id"],
-			"created_at":     row["created_at"],
-			"delivered_at":   row["delivered_at"],
-			"executed_at":    row["executed_at"],
-			"result_message": row["result_message"],
-			"failure_reason": row["failure_reason"],
-			"updated_at":     row["updated_at"],
-		})
-	}
-
-	return items, nil
 }
 
 // LogOperation 写入 FRP 关键操作日志。
