@@ -26,7 +26,7 @@
 
 五个专项集成测试在一次性 MySQL/Redis 上通过，包耗时 9.574 秒。实际编译后的服务使用临时证书启动 HTTPS，完成所有者再认证、兑换、心跳、状态查询、轮换及撤销。用例还覆盖并发兑换、审计故障回滚、过期、跨设备输入、共享限流、所有者变更和删除，以及低权限运行账号对触发器缺失或漂移的检测。日志在 `/tmp/cloudnest-g05-final-agent.log`。
 
-frps 配置加密及历史显式迁移现已实现，见 [配置加密](FRP-CONFIG-ENCRYPTION.md)。持久化命令租约与幂等回执已接入，见 [命令协议](FRP-DURABLE-COMMANDS.md)。G05 后续包括设备端安全存储、执行记录，以及 Agent 管理的官方 frpc 启停和隧道恢复。账号恢复时批量撤销设备的操作也待接入。
+frps 配置加密及历史显式迁移现已实现，见 [配置加密](FRP-CONFIG-ENCRYPTION.md)。持久化命令租约与幂等回执已接入，见 [命令协议](FRP-DURABLE-COMMANDS.md)。2026-11-04 前台 Go Agent 已实现私有文件存储、持久执行记录及官方 frpc 管理，实际 CLI 三种隧道、正常重启与 frps 重连通过，见 [Agent 运行与边界](FRP-AGENT.md)。Keychain、自动接管和账号恢复时批量撤销设备仍待接入。
 
 文件传输的清理程序会核对数据库内全部触发器。它接受本阶段定义的四个撤销触发器，逐项验证其动作仅清空设备凭据字段。出现其他触发器、同名定义漂移或目录权限不足时，清理仍然拒绝回收文件。
 
@@ -34,7 +34,7 @@ frps 配置加密及历史显式迁移现已实现，见 [配置加密](FRP-CONF
 
 使用官方 v0.71.1 Darwin arm64 发布归档，SHA-256 为 `d15d0324b99e14619c9aa46e37f6db588c06a09be4bc6f7948890b6b61077842`。测试在回环地址分配端口，用现有服务的配置生成器产生三条映射。frps/frpc 的 verify 均通过。启动真实进程后，TCP、HTTP 虚拟主机和 HTTPS SNI 三条路径均读到目标服务的对应响应，HTTPS 客户端校验目标证书。测试自身 0.32s，race 包 1.909s。日志 `/tmp/cloudnest-g05-frp-native.log`。[官方发布页](https://github.com/fatedier/frp/releases/tag/v0.71.1)
 
-复现时设置 `CLOUDNEST_TEST_FRP_BIN_DIR` 为存放该版本两个官方程序的绝对目录，执行 `go -C cloudnest_go test -race -count=1 -tags=frpnative ./internal/service -run '^TestFRPNativeGenerated'`。测试负责启动和回收进程。Agent 下发及恢复仍需单独进行端到端验收。
+复现时设置 `CLOUDNEST_TEST_FRP_BIN_DIR` 为存放该版本两个官方程序的绝对目录，执行 `go -C cloudnest_go test -race -count=1 -tags=frpnative ./internal/service -run '^TestFRPNativeGenerated'`。此早期测试负责直接启动和回收进程；后续实际 Agent 端到端验证使用 `scripts/test-agent-native.sh`。
 
 ## 配置输入与输出边界
 
@@ -42,7 +42,7 @@ frps 配置加密及历史显式迁移现已实现，见 [配置加密](FRP-CONF
 
 生成器将字符串编码为 YAML 引号标量，按原值保留 token 的空格、冒号和井号，避免 YAML 类型转换或注入。FRP 在解析 YAML 之前处理模板，因此输入另行拒绝模板双花括号、控制字符、非法 UTF-8、过长 token、非法主机/域名和端口。配置最多 512 条映射，最终文本不得超过 32 KiB。服务端端口只有省略或零值时默认 7000，负值会被拒绝。
 
-新保存和回滚已接入版本化 AES-256-GCM 及事务审计。历史明文需要显式迁移，缺少密钥不会回退。SEC-010 保持开放，生产历史迁移、备份治理和限定设备身份的配置领取协议仍需完成。普通用户 API 不会通过新增接口得到明文配置。
+新保存和回滚已接入版本化 AES-256-GCM 及事务审计。历史明文需要显式迁移，缺少密钥不会回退。活动设备租约的配置领取已实现。SEC-010 保持开放，生产历史迁移、备份治理和 Agent Keychain/配置密钥仍需完成。普通用户 API 不会通过新增接口得到明文配置。
 
 2026-11-03 最终普通 race 集成按完整清单分两批通过 92 + 151 = 243 项，无跳过；其中新增配置 TLS 用例通过 3.89s。单次六分钟完整套件的本机超时和重跑方法保留在 [测试记录](TESTING.md)。
 

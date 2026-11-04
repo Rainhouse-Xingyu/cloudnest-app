@@ -1,4 +1,5 @@
 BINARY := cloudnest
+AGENT_BINARY := cloudnest-agent
 CMD := ./cmd/server
 DIST := ./dist
 
@@ -26,16 +27,21 @@ vuln:
 build:
 	mkdir -p $(DIST)
 	go build -o $(DIST)/$(BINARY) $(CMD)
+	go build -o $(DIST)/$(AGENT_BINARY) ./cmd/agent
 
 build-macos:
 	mkdir -p $(DIST)/macos-amd64 $(DIST)/macos-arm64
 	GOOS=darwin GOARCH=amd64 go build -o $(DIST)/macos-amd64/$(BINARY) $(CMD)
 	GOOS=darwin GOARCH=arm64 go build -o $(DIST)/macos-arm64/$(BINARY) $(CMD)
+	GOOS=darwin GOARCH=amd64 go build -o $(DIST)/macos-amd64/$(AGENT_BINARY) ./cmd/agent
+	GOOS=darwin GOARCH=arm64 go build -o $(DIST)/macos-arm64/$(AGENT_BINARY) ./cmd/agent
 
 build-linux:
 	mkdir -p $(DIST)/linux-amd64 $(DIST)/linux-arm64
 	GOOS=linux GOARCH=amd64 go build -o $(DIST)/linux-amd64/$(BINARY) $(CMD)
 	GOOS=linux GOARCH=arm64 go build -o $(DIST)/linux-arm64/$(BINARY) $(CMD)
+	GOOS=linux GOARCH=amd64 go build -o $(DIST)/linux-amd64/$(AGENT_BINARY) ./cmd/agent
+	GOOS=linux GOARCH=arm64 go build -o $(DIST)/linux-arm64/$(AGENT_BINARY) ./cmd/agent
 
 release:
 	./scripts/release.sh $(VERSION)

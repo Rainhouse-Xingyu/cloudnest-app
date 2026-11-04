@@ -66,8 +66,9 @@ G03 已补齐下载写入/刷新 30 秒期限、上下文取消唤醒和最终�
 本批最终普通 237 项 race 回归通过（329.401s），独立网络两项通过（106.183s），空文件并发完成重复 30 轮通过；完整失败诊断和验证边界已保留于 TESTING。
 
 - [G05 设备注册、轮换、撤销和心跳](G05-DEVICE-IDENTITY.md)
+- [G05 Go Agent 运行、约束与真实隧道验收](FRP-AGENT.md)
 
-G05 的设备身份、配置输入与响应边界在 [PR #6](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/6) 继续推进，基于 G03。官方 FRP 三种映射已在本机真实转发；配置加密与显式历史迁移已接入；持久命令与租约接口已接入，Agent 管理闭环仍待完成。G04 实现在独立 [PR #5](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/5)，固定压力集仍未通过质量门槛。
+G05 在 [PR #6](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/6) 继续推进，基于 G03。独立设备身份、配置加密/迁移、持久命令租约及前台 Go Agent 已接入。实际 Agent CLI 管理的 TCP/HTTP/HTTPS、正常重启和 frps 重连已在隔离环境通过；Keychain、崩溃自动接管和连接级状态仍待完成，见 [Agent 记录](FRP-AGENT.md)。G04 实现在独立 [PR #5](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/5)，固定压力集仍未通过质量门槛。
 
 - [FRP 配置加密、密钥轮换与历史迁移](FRP-CONFIG-ENCRYPTION.md)
 

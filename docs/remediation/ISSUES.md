@@ -12,8 +12,8 @@
 | SEC-006 P1 | `internal/middleware/auth.go:defaultAllowPath` 除两个排除项外放行全部 `/api/`，不区分方法 | 为新路径挂测试 handler，无权限用户也会获准 | G01 显式业务方法/路由模板清单，新增路由默认拒绝；资源级授权仍必需 | 已修：显式路由与即时权限读取，待审 |
 | SEC-007 P1 | `internal/auth/jwt.go:ParseToken` 不强制 exp，也未检查 user_id/subject 一致性 | 用测试密钥签无 exp/零 ID/不匹配 subject token | G01 必须过期时间及合法身份声明 | 已修：必需 exp/身份校验，待审 |
 | SEC-008 P1 | `auth_service.go:Logout` 忽略 Redis 删除错误；角色/禁用状态来自历史 JWT | Redis 断开后注销；登录后撤销角色/禁用再访问 | G01 注销错误传播、会话撤销/用户状态检查 | 已修：注销错误传播、实时身份与权限，待审 |
-| SEC-009 P1 | `app/container.go` FRP 上报/拉命令同用户 JWT 入口 | 用用户身份调用设备命令 API；无独立设备认证模型 | G05 设备 enrollment、独立凭据哈希/轮换/撤销与权限范围 | 已登记设备接入独立认证与心跳，旧 JWT 执行入口已拒绝。持久命令与租约接口已接入，未登记设备兼容路径及 Agent 执行闭环仍待整改，见 [G05 记录](G05-DEVICE-IDENTITY.md) |
-| SEC-010 P1 | `service/frp_service.go:generateFRPCYaml/SaveConfig` 明文 token 拼入配置并持久化 | 隔离环境读取配置记录/响应；不要记录真实 token | G05 加密敏感配置、脱敏响应、最小 Agent 权限 | G05 已收紧 TLS/有界输入、配置响应脱敏及 YAML/模板注入防护；新增 AES-256-GCM 写入、事务审计及显式迁移/轮换 CLI；设备专用配置领取已限定到活动租约；真实历史/备份治理与 Agent 端安全落盘仍待完成，SEC-010 保持开放 |
+| SEC-009 P1 | `app/container.go` FRP 上报/拉命令同用户 JWT 入口 | 用用户身份调用设备命令 API；无独立设备认证模型 | G05 设备 enrollment、独立凭据哈希/轮换/撤销与权限范围 | 已登记设备接入独立身份与持久命令，旧 JWT 执行入口已拒绝。实际 Go Agent 已验证三种隧道及重连；未登记设备兼容路径仍待迁移，见 [G05 记录](G05-DEVICE-IDENTITY.md) |
+| SEC-010 P1 | `service/frp_service.go:generateFRPCYaml/SaveConfig` 明文 token 拼入配置并持久化 | 隔离环境读取配置记录/响应；不要记录真实 token | G05 加密敏感配置、脱敏响应、最小 Agent 权限 | TLS/脱敏、AES-256-GCM、显式迁移/轮换、活动租约配置领取已实现。Agent 使用私有文件和严格配置白名单，未接入 Keychain/本地配置密钥；真实历史与备份治理仍待完成，SEC-010 保持开放 |
 | SEC-011 P1 | iOS `Shared/Managers/SessionManager.swift` 用 UserDefaults 存 token | 检查保存/读取路径 | G07 新 macOS 用 Keychain；冻结旧 iOS 开发 | 已确认，待做 |
 | SEC-012 P1 | `cmd/server/main.go` 用 `gin.Run` 无显式 HTTP 超时；上传入口缺少请求体总限额 | 慢请求/超大 multipart；需受限资源测试 | G01/G03 显式服务器超时、请求/分片尺寸上限、登录速率限制 | G01 请求头/空闲超时及登录体积/限流已修；G03 已补齐有界流式 multipart、共享并发准入、实际 TCP 读取期限及服务读取超时；分片/合并临时卷预算已追加；ZIP/缓存预算与慢请求规模压测待做 |
 | SEC-013 P1 | G01 初版自定义权限覆盖默认路由，导致 GET auth/me、POST auth/logout 被拒绝 | 真实 API 用户仅授予 GET files，me 返回 403；注销同受影响 | 在完整身份认证后独立允许精确方法/自身会话路由，业务与管理员权限不扩大 | 修复前已复现；修复后集成测试通过 |
@@ -47,9 +47,9 @@
 | AI-003 P1 | `buildAutoAnalyzeResult` 忽略 OCR/模型错误并写“分析完成”；照片标签描述请求仅文本 | 关闭 Ollama 上传图片；查看任务状态和描述 | G04 区分提取/OCR/视觉失败、真实视觉输入、可诊断降级 | 已确认，待修 |
 | AI-004 P1 | `os.ReadFile` 图片全量载入，PDF/OpenXML 提取有上限但无完整资源预算 | 大图/损坏 PDF/压缩炸弹，受限容器观察资源 | G04 文档解析隔离、页/像素/展开字节限额和取消 | 待安全实测 |
 | AI-005 P2 | `handler/ai_handler.go` 与 `service/ai_service.go` 重复提取/模型 helper | 函数清单对比；调用图核对 | G04 统一 provider/parser 接口，保留单一实现与测试 | 已确认，待重构 |
-| FRP-001 P1 | `PullNextCommand` LPop 后更新状态，没有租约回收任务 | 领取后 Agent 崩溃；队列命令丢失/卡 running | G05 持久命令/ACK/幂等/超时重发/终态约束 | 已确认，待做 |
-| FRP-002 P1 | 仓库没有设备 Agent/frpc 进程管理实现 | 检查 Go cmd 与 Swift 调用，不存在可启动 Agent | G05 官方 frpc、白名单 start/stop/reload/diagnose、自动恢复 | 缺功能；未测隧道 |
-| FRP-003 P1 | YAML 使用用户 serverAddr/token/domain 原文拼接 | 输入换行/冒号/特殊字符串，运行 frpc verify | G05 typed config 序列化+官方验证，拒绝注入 | 已确认，待修 |
+| FRP-001 P1 | `PullNextCommand` LPop 后更新状态，没有租约回收任务 | 领取后 Agent 崩溃；队列命令丢失/卡 running | G05 持久命令/ACK/幂等/超时重发/终态约束 | 新设备使用 MySQL 命令/租约，Agent 持久保存结果后 ACK，丢回执/新租约不重复执行已有结果；旧未登记设备路径及完整崩溃恢复仍待验收 |
+| FRP-002 P1 | 原仓库没有设备 Agent/frpc 进程管理实现 | 检查 Go cmd 与实际隧道访问 | G05 官方 frpc、白名单 start/stop/reload/diagnose、自动恢复 | 前台 Go Agent 已实现，实际 CLI 三种隧道、正常重启与 frps 重连通过；连接级状态、自动接管和服务安装待完成，见 [Agent 记录](FRP-AGENT.md) |
+| FRP-003 P1 | 原 YAML 使用用户 serverAddr/token/domain 原文拼接 | 输入换行/冒号/特殊字符串，运行 frpc verify | G05 typed config 序列化+官方验证，拒绝注入 | 生成器引号/模板防护、Agent 严格白名单及规范 JSON、官方 verify 均已实现；正常特殊 token 和危险配置实际链路已测，代码完成待审 |
 | FRP-004 P1 | 端口冲突先查后写，server 作用域/唯一性与心跳离线任务需核对 | 并发相同端口、设备失联、配置回滚 | G05 唯一索引/端口预留/周期判离线/版本关联 | 部分实现，未验收 |
 | COLLAB-001 P1 | Workspace 成员管理存在；通用文件 ACL 主要用 owner/file_permission，空间角色链路不完整 | 空间 viewer/editor 对文件 CRUD 矩阵；禁止越级授权 | G06 明确空间/文件权限继承和管理员边界 | 待完整矩阵验证 |
 | LIVE-001 P2 | LivePhoto 绑定/解绑/查询存在；并发去重及实际播放未测 | 相同 image/video 并发绑定、跨用户配对与 macOS 播放 | G06/G09 唯一约束/权限与原生预览 | 静态审查，未验收 |

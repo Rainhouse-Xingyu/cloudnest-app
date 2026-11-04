@@ -146,3 +146,19 @@ G00/G01 状态再次核对。PR #1 仍开放，原始漏洞基线检查失败。
 最终普通 race 集成按清单分批通过 **99 + 151 = 250 项**，包耗时 154.721s、244.380s，无遗漏、重叠、失败、跳过或数据竞争。每批保留原六分钟期限，日志 `/tmp/cloudnest-g05-command-batch-am.log`、`/tmp/cloudnest-g05-command-batch-nz.log`。构建、vet、全量 race 单元、darwin/linux × amd64/arm64 四目标构建与仓库检查通过。测试使用新建隔离 MySQL/Redis，本批未操作生产数据库。
 
 完整回归后进一步要求所有失败的配置响应也不包含测试凭据，针对性重跑实际 TLS 配置/回执用例通过，包耗时 6.393s，日志 `/tmp/cloudnest-g05-command-disclosure.log`。生产实现未因此更改。
+
+## 2026-11-04 G05 前台 Go Agent
+
+前一持久命令提交 `dba212c` 的 PR CI `41749572937`、push CI `41749567346` 均完成并通过。本批新增前台 Agent CLI、HTTPS 客户端、私有状态与继承锁、固定官方 frpc 校验、本机配置授权、执行记录及进程管理，不修改生产数据库或旧设备。
+
+首轮实际 CLI 集成失败，日志 `/tmp/cloudnest-g05-agent-native-integration.log`（70.190s）。Agent 心跳版本字符串使用 `/`，不符合既有服务端允许字符，故始终未领取命令。改用 `cloudnest-agent-0.1.0`，并将永久协议错误改为退出而非静默无限重试。第二轮真实 CLI、TLS 服务、隔离 MySQL/Redis 和官方 frpc/frps 完成三种隧道、reload、stop/start、正常 Agent 重启、frps 重连与恶意配置拒绝，日志 `/tmp/cloudnest-g05-agent-native-integration-v2.log`，测试 22.36s、包 24.215s。
+
+后续新增“未完成租约失效关闭意图”测试首次断言失败，`/tmp/cloudnest-g05-agent-final-native.log` 与 `/tmp/cloudnest-g05-agent-final-check.log` 保留失败。原因是测试把 JSON 再次解码到已有非零对象，已省略的 pending 字段保留旧值；磁盘记录和执行器状态正确。改为读取到新的零值对象，未改变协议或放宽断言。
+
+最终使用新下载并验证归档的 `scripts/test-agent-native.sh` 在 Darwin arm64 完整通过：**9 项 Agent 顶层 race 测试**（3.973s）和 **1 项实际 CLI/后端/隧道 race 集成**（测试 22.19s，包 24.147s），零跳过。日志 `/tmp/cloudnest-g05-agent-final-native-v2.log`。最终集成还为 frps 配置真实临时证书并要求 TLS，Agent 使用本机指定 CA 校验 FRP 控制连接；HTTPS 映射客户端独立验证上游证书。原生锁测试使用真实官方 frpc 验证父描述符关闭后拒绝第二 Agent，子进程退出后释放。
+
+最终 `make check test build-macos build-linux` 通过，含 vet、全部普通 race 单元、服务端与 Agent 的 darwin/linux × amd64/arm64 构建，日志 `/tmp/cloudnest-g05-agent-final-check-v2.log`。仓库检查和 diff 检查通过。本批本地未重复前一提交的 250 项普通数据库回归；Linux CI 保留完整原测试并新增 agent-native 作业，具体提交结果另行核验。四目标构建不代表四平台运行验收；本地真实隧道平台为 Darwin arm64。
+
+尚未验证或完成：系统级 SIGKILL/掉电自动接管、长时间离线/休眠、连接级状态/日志、Keychain、本地配置加密及真实公网部署。正常 `ok` 回执只表示本地进程操作，隧道可达性由上述端到端访问另行证明，不能把进程存活推广为所有映射健康。运行方法与边界见 [Agent 文档](FRP-AGENT.md)。
+
+提交前复核让 Agent 退出时传播子进程停止失败，并把响应上限测试改成有效但超限的 JSON。随后九项原生/race Agent 测试再次通过（3.502s，`/tmp/cloudnest-g05-agent-review-check.log`），实际 CLI 三隧道及恢复集成再次通过（测试 22.81s、包 24.988s，`/tmp/cloudnest-g05-agent-review-native.log`），专项 vet 通过。另核对 PR #1/#2 仍开放、#2 的 base 仍为 G00 分支：#1 原基线漏洞检查失败保留，#2 四项 CI 全通过；自定义权限会话例外、随机 JTI 及旧客户端契约测试仍在当前代码中，未重复实现。
