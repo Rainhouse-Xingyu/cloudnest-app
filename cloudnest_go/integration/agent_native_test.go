@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -245,6 +246,106 @@ func TestAgentNativeCLIThreeTunnelsRestartAndReconnect(t *testing.T) {
 	stopAgent()
 	startAgent()
 	probe()
+	// SIGKILL cannot run Agent cleanup. Its pipe writer closes in the kernel;
+	// the separate supervisor must stop/reap frpc and release the inherited lock.
+	if e = agent.Process.Kill(); e != nil {
+		t.Fatal(e)
+	}
+	if e = agent.Wait(); e == nil {
+		t.Fatal("expected force-killed Agent")
+	}
+	agent = nil
+	deadline := time.Now().Add(8 * time.Second)
+	for {
+		store, err := frpagent.OpenStore(statePath)
+		if err == nil {
+			store.Close()
+			break
+		}
+		if !errors.Is(err, frpagent.ErrLocked) || time.Now().After(deadline) {
+			t.Fatal("supervisor did not reap orphan after Agent SIGKILL", err)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	startAgent()
+	probe()
+	// A separate supervisor failure is intentionally not adopted by PID. Kill
+	// only this fixture's direct descendant, then verify Agent exits and frpc's
+	// inherited lock prevents another Agent until that exact child is stopped.
+	childOf := func(parent *os.Process) *os.Process {
+		t.Helper()
+		out, err := exec.Command("pgrep", "-P", strconv.Itoa(parent.Pid)).Output()
+		parts := strings.Fields(string(out))
+		if err != nil || len(parts) != 1 {
+			t.Fatal("fixture process must have exactly one managed child", err)
+		}
+		pid, err := strconv.Atoi(parts[0])
+		if err != nil || pid <= 0 {
+			t.Fatal("invalid fixture child PID")
+		}
+		child, err := os.FindProcess(pid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return child
+	}
+	supervisor := childOf(agent.Process)
+	managed := childOf(supervisor)
+	defer supervisor.Release()
+	defer managed.Release()
+	// Hold the specific process handle before killing its parent; never search
+	// or signal by executable name, which could affect an existing user frpc.
+	cleanupManaged := true
+	defer func() {
+		if cleanupManaged {
+			_ = managed.Kill()
+		}
+	}()
+	if e = supervisor.Kill(); e != nil {
+		t.Fatal(e)
+	}
+	lostSupervisorAgent := agent
+	agent = nil
+	exited := make(chan error, 1)
+	go func() { exited <- lostSupervisorAgent.Wait() }()
+	select {
+	case err := <-exited:
+		if err == nil {
+			t.Fatal("Agent silently accepted supervisor SIGKILL")
+		}
+	case <-time.After(8 * time.Second):
+		_ = lostSupervisorAgent.Process.Kill()
+		<-exited
+		t.Fatal("Agent did not stop after supervisor SIGKILL")
+	}
+	crashLog, err := os.ReadFile(logPath)
+	if err != nil || !bytes.Contains(crashLog, []byte(frpagent.ErrSupervisor.Error())) {
+		t.Fatal("supervisor loss did not produce explicit recovery error", err)
+	}
+	if st, err := frpagent.OpenStore(statePath); err != frpagent.ErrLocked {
+		if st != nil {
+			st.Close()
+		}
+		t.Fatal("lost supervisor allowed duplicate frpc", err)
+	}
+	if e = managed.Kill(); e != nil {
+		t.Fatal(e)
+	}
+	cleanupManaged = false
+	deadline = time.Now().Add(8 * time.Second)
+	for {
+		st, err := frpagent.OpenStore(statePath)
+		if err == nil {
+			st.Close()
+			break
+		}
+		if !errors.Is(err, frpagent.ErrLocked) || time.Now().After(deadline) {
+			t.Fatal("fixture frpc did not release lock", err)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	startAgent()
+	probe()
 	// Real frps disconnection and reconnect, with no new deploy command.
 	stopFRPS()
 	startFRPS()
@@ -268,5 +369,5 @@ func TestAgentNativeCLIThreeTunnelsRestartAndReconnect(t *testing.T) {
 	if bytes.Contains(b, []byte("DATA RACE")) {
 		t.Fatal("agent race detector report")
 	}
-	t.Log("actual CLI enrolled; TCP/HTTP/HTTPS reached upstream; reload/stop/start, graceful restart, frps reconnect and invalid config rejection passed")
+	t.Log("actual CLI enrolled; TCP/HTTP/HTTPS reached upstream; reload/stop/start, graceful restart, Agent SIGKILL recovery, supervisor SIGKILL exclusion, frps reconnect and invalid config rejection passed")
 }

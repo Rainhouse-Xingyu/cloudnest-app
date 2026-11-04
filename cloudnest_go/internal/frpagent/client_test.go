@@ -189,7 +189,7 @@ func TestRunnerExpiredUnfinishedIntentFailsClosed(t *testing.T) {
 
 func TestRunnerRestoreRevalidatesCanonicalConfig(t *testing.T) {
 	s := testStore(t)
-	r := &Runner{Store: s, Identity: Identity{Policy: testPolicy()}, process: NewProcess(s)}
+	r := &Runner{Store: s, Identity: Identity{Policy: testPolicy()}, process: newRawProcess(s)}
 	r.state.Source = []byte(validConfig)
 	r.state.Config = []byte(`{"includes":["/etc/*"]}`)
 	if e := r.restore(context.Background()); e != ErrStorage {

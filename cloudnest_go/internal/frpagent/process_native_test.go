@@ -4,8 +4,11 @@ package frpagent
 
 import (
 	"context"
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -18,14 +21,24 @@ func TestPinnedFRPCInheritsSingletonLock(t *testing.T) {
 	if e := InstallBinary(s, filepath.Join(dir, "frpc")); e != nil {
 		t.Fatal(e)
 	}
-	b, e := Normalize([]byte(validConfig), testPolicy())
+	// Own the control port even though this test intentionally provides no FRP
+	// handshake; never contact a user's existing listener on a fixed port.
+	listener, e := net.Listen("tcp4", "127.0.0.1:0")
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer listener.Close()
+	policy := testPolicy()
+	policy.ServerPort = listener.Addr().(*net.TCPAddr).Port
+	raw := strings.Replace(validConfig, "serverPort: 7000", "serverPort: "+strconv.Itoa(policy.ServerPort), 1)
+	b, e := Normalize([]byte(raw), policy)
 	if e != nil {
 		t.Fatal(e)
 	}
 	if e = s.Write("candidate.json", b, 0600); e != nil {
 		t.Fatal(e)
 	}
-	p := NewProcess(s)
+	p := newRawProcess(s)
 	defer p.Stop()
 	if e = p.Verify(context.Background()); e != nil {
 		t.Fatal(e)

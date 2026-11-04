@@ -19,6 +19,7 @@ const FRPVersion = "0.71.1"
 
 var ErrBinary = errors.New("frpc does not match the pinned official release")
 var ErrProcess = errors.New("managed frpc operation failed")
+var ErrSupervisor = errors.New("frpc supervisor lost; local process recovery required")
 
 // Hashes are for extracted frpc bytes, obtained only after verifying the
 // official release archive SHA-256 (documented in FRP-AGENT.md).
@@ -59,12 +60,16 @@ func InstallBinary(s *Store, path string) error {
 }
 
 type Process struct {
-	store *Store
-	cmd   *exec.Cmd
-	done  chan error
+	store      *Store
+	cmd        *exec.Cmd
+	done       chan error
+	supervised bool
+	poisoned   bool
+	life       *os.File
 }
 
-func NewProcess(s *Store) *Process { return &Process{store: s} }
+func newRawProcess(s *Store) *Process        { return &Process{store: s} }
+func newSupervisedProcess(s *Store) *Process { return &Process{store: s, supervised: true} }
 func (p *Process) command(ctx context.Context, args ...string) (*exec.Cmd, error) {
 	b, e := p.store.Read("frpc", 32<<20)
 	if e != nil || !verifyBinary(b) {
@@ -94,17 +99,23 @@ func (p *Process) Running() bool {
 		return false
 	}
 	select {
-	case <-p.done:
-		p.cmd = nil
-		p.done = nil
+	case err := <-p.done:
+		p.exited(err)
 		return false
 	default:
 		return true
 	}
 }
 func (p *Process) Start(ctx context.Context) error {
-	if p.Running() {
+	running := p.Running()
+	if p.poisoned {
+		return ErrSupervisor
+	}
+	if running {
 		return nil
+	}
+	if p.supervised {
+		return p.startSupervisor(ctx)
 	}
 	// Child lifetime is explicit, not tied to an individual command lease.
 	c, e := p.command(context.Background(), "-c", filepath.Join(p.store.Path, "active.json"))
@@ -132,7 +143,29 @@ func (p *Process) Start(ctx context.Context) error {
 }
 func (p *Process) Stop() error {
 	if !p.Running() {
+		if p.poisoned {
+			return ErrSupervisor
+		}
 		return nil
+	}
+	if p.supervised {
+		if p.life != nil {
+			p.life.Close()
+			p.life = nil
+		}
+		select {
+		case err := <-p.done:
+			p.exited(err)
+			if p.poisoned {
+				return ErrSupervisor
+			}
+			return nil
+		case <-time.After(5 * time.Second):
+			// Killing this supervisor could strand its child. Keep the lock
+			// held and report failure instead of launching another process.
+			p.poisoned = true
+			return ErrSupervisor
+		}
 	}
 	if e := p.cmd.Process.Signal(os.Interrupt); e != nil && !errors.Is(e, os.ErrProcessDone) {
 		return ErrProcess
@@ -148,4 +181,74 @@ func (p *Process) Stop() error {
 	p.cmd = nil
 	p.done = nil
 	return nil
+}
+
+func (p *Process) exited(err error) {
+	if p.supervised && err != nil {
+		var exit *exec.ExitError
+		if !errors.As(err, &exit) || (exit.ExitCode() != supervisorChildExited && exit.ExitCode() != supervisorSetupFailed) {
+			p.poisoned = true
+		}
+	}
+	if p.life != nil {
+		p.life.Close()
+		p.life = nil
+	}
+	p.cmd = nil
+	p.done = nil
+}
+
+func (p *Process) startSupervisor(ctx context.Context) error {
+	executable, err := os.Executable()
+	if err != nil {
+		return ErrProcess
+	}
+	lifeRead, lifeWrite, err := os.Pipe()
+	if err != nil {
+		return ErrProcess
+	}
+	defer lifeRead.Close()
+	readyRead, readyWrite, err := os.Pipe()
+	if err != nil {
+		lifeWrite.Close()
+		return ErrProcess
+	}
+	defer readyWrite.Close()
+	c := exec.Command(executable, "__supervise-frpc", p.store.Path)
+	c.Dir = p.store.Path
+	c.Env = []string{"LANG=C", "HOME=" + p.store.Path}
+	c.ExtraFiles = []*os.File{p.store.dir, p.store.lock, lifeRead, readyWrite}
+	if err = c.Start(); err != nil {
+		lifeWrite.Close()
+		readyRead.Close()
+		return ErrProcess
+	}
+	p.cmd = c
+	p.life = lifeWrite
+	p.done = make(chan error, 1)
+	done := p.done
+	go func() { done <- c.Wait() }()
+	// Parent copies must close now so EOF really means the supervisor exited.
+	lifeRead.Close()
+	readyWrite.Close()
+	ready := make(chan bool, 1)
+	go func() {
+		defer readyRead.Close()
+		var b [1]byte
+		_, err := io.ReadFull(readyRead, b[:])
+		ready <- err == nil && b[0] == 1
+	}()
+	select {
+	case ok := <-ready:
+		if ok && p.Running() {
+			return nil
+		}
+	case <-ctx.Done():
+	case <-time.After(10 * time.Second):
+	}
+	readyRead.Close()
+	if err := p.Stop(); err != nil {
+		return err
+	}
+	return ErrProcess
 }

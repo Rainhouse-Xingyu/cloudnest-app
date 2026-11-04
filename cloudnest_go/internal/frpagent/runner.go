@@ -83,7 +83,7 @@ type Runner struct {
 }
 
 func NewRunner(s *Store, c *Client, id Identity) (*Runner, error) {
-	r := &Runner{Store: s, Client: c, Identity: id, process: NewProcess(s)}
+	r := &Runner{Store: s, Client: c, Identity: id, process: newSupervisedProcess(s)}
 	e := readJSON(s, "state.json", &r.state)
 	if errors.Is(e, os.ErrNotExist) {
 		r.state = State{Version: 1, Completed: map[string]Outcome{}}
@@ -126,8 +126,8 @@ func (r *Runner) save() error {
 }
 
 // Run is serial: a receipt is persisted and retried before any next command.
-// At-least-once effects reconcile to desired running/config state. A killed
-// parent leaves a flock in frpc, intentionally refusing unsafe PID adoption.
+// At-least-once effects reconcile to desired running/config state. The separate
+// supervisor reaps frpc on Agent death; unknown supervisor loss fails closed.
 func (r *Runner) Run(ctx context.Context) (runErr error) {
 	defer func() {
 		if err := r.process.Stop(); err != nil {
@@ -149,6 +149,10 @@ func (r *Runner) Run(ctx context.Context) (runErr error) {
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
+		}
+		r.process.Running()
+		if r.process.poisoned {
+			return ErrSupervisor
 		}
 		if time.Since(heartbeat) >= 25*time.Second {
 			if e := r.Client.Heartbeat(ctx); e != nil {
@@ -183,7 +187,7 @@ func (r *Runner) Run(ctx context.Context) (runErr error) {
 	}
 }
 func permanent(e error) bool {
-	return errors.Is(e, HTTPError(400)) || errors.Is(e, HTTPError(401)) || errors.Is(e, HTTPError(403)) || errors.Is(e, HTTPError(426)) || errors.Is(e, ErrStorage) || errors.Is(e, ErrBinary) || errors.Is(e, ErrProtocol)
+	return errors.Is(e, HTTPError(400)) || errors.Is(e, HTTPError(401)) || errors.Is(e, HTTPError(403)) || errors.Is(e, HTTPError(426)) || errors.Is(e, ErrStorage) || errors.Is(e, ErrBinary) || errors.Is(e, ErrProtocol) || errors.Is(e, ErrSupervisor)
 }
 func wait(ctx context.Context, d time.Duration) bool {
 	t := time.NewTimer(d)
@@ -314,6 +318,9 @@ func (r *Runner) execute(ctx context.Context, d Delivery) (string, error) {
 			return "", e
 		}
 		if e = r.process.Stop(); e != nil {
+			if errors.Is(e, ErrSupervisor) {
+				return "", e
+			}
 			return "stop_failed", nil
 		}
 		if e = r.restore(ctx); e != nil {
@@ -331,6 +338,9 @@ func (r *Runner) execute(ctx context.Context, d Delivery) (string, error) {
 		}
 		if d.Command.Action == "reload" {
 			if e := r.process.Stop(); e != nil {
+				if errors.Is(e, ErrSupervisor) {
+					return "", e
+				}
 				return "reload_failed", nil
 			}
 		}
@@ -345,6 +355,9 @@ func (r *Runner) execute(ctx context.Context, d Delivery) (string, error) {
 			return "", e
 		}
 		if e := r.process.Stop(); e != nil {
+			if errors.Is(e, ErrSupervisor) {
+				return "", e
+			}
 			return "stop_failed", nil
 		}
 		return "ok", nil
@@ -358,7 +371,7 @@ func (r *Runner) execute(ctx context.Context, d Delivery) (string, error) {
 	}
 }
 func processOutcome(e error, code string) (string, error) {
-	if errors.Is(e, ErrStorage) || errors.Is(e, ErrBinary) {
+	if errors.Is(e, ErrStorage) || errors.Is(e, ErrBinary) || errors.Is(e, ErrSupervisor) {
 		return "", e
 	}
 	return code, nil

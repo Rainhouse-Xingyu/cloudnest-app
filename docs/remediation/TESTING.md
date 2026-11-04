@@ -162,3 +162,15 @@ G00/G01 状态再次核对。PR #1 仍开放，原始漏洞基线检查失败。
 尚未验证或完成：系统级 SIGKILL/掉电自动接管、长时间离线/休眠、连接级状态/日志、Keychain、本地配置加密及真实公网部署。正常 `ok` 回执只表示本地进程操作，隧道可达性由上述端到端访问另行证明，不能把进程存活推广为所有映射健康。运行方法与边界见 [Agent 文档](FRP-AGENT.md)。
 
 提交前复核让 Agent 退出时传播子进程停止失败，并把响应上限测试改成有效但超限的 JSON。随后九项原生/race Agent 测试再次通过（3.502s，`/tmp/cloudnest-g05-agent-review-check.log`），实际 CLI 三隧道及恢复集成再次通过（测试 22.81s、包 24.988s，`/tmp/cloudnest-g05-agent-review-native.log`），专项 vet 通过。另核对 PR #1/#2 仍开放、#2 的 base 仍为 G00 分支：#1 原基线漏洞检查失败保留，#2 四项 CI 全通过；自定义权限会话例外、随机 JTI 及旧客户端契约测试仍在当前代码中，未重复实现。
+
+## 2026-11-04 G05 Agent 异常退出监督
+
+前一 Agent 提交 `ce89b6bb7d0aab5e6be75671a14eb1a50edb4836` 的 PR `41781004742`、push `41780999783` CI 均全部通过，包括完整后端回归、漏洞扫描和新增 Linux amd64 原生 Agent/隧道测试。
+
+本批新增独立监督进程，通过继承的目录/锁和存活/就绪管道管理官方 frpc。Agent 被 SIGKILL 时，监督进程停止并回收 frpc；监督进程自身被 SIGKILL 时，Agent 明确退出，残留 frpc 的锁拒绝另一个 Agent。没有引入 PID 文件接管、按名称杀进程或远程自定义命令。
+
+真实 CLI 故障测试首版已验证 Agent SIGKILL 后回收并恢复隧道（包 29.681s，`/tmp/cloudnest-g05-supervisor-native.log`）。随后增加监督进程 SIGKILL：验证 Agent 八秒内明确报错退出、残留 frpc 仍持锁，测试只停止提前取得句柄的本夹具子进程，锁释放后再次恢复三种隧道。最终集成通过，测试 27.31s、包 29.217s，日志 `/tmp/cloudnest-g05-supervisor-native-final.log`；仍包含可信 FRP TLS、正常启停/reload、frps 重连和危险配置拒绝。测试没有触碰用户已有的 frpc 进程。
+
+最终 **11 项原生/race Agent 顶层测试**全部通过，包 2.941s，日志 `/tmp/cloudnest-g05-supervisor-native-components.log`，包括新增继承目录/锁不匹配拒绝和监督进程未知退出后拒绝启动。锁保留测试改为占用临时回环端口，不访问固定端口上的已有服务。`make check test build-macos build-linux` 全通过，日志 `/tmp/cloudnest-g05-supervisor-check-final.log`；本地运行平台仍为 Darwin arm64，新提交的 Linux 结果需由对应 CI 验证。
+
+边界：重新运行 Agent 的动作由测试执行，尚未安装系统服务来自动重启 Agent。监督进程自身丢失后的残留恢复、整个进程组同时被强制终止、掉电与休眠尚未全面验收。文件凭据/配置的 Keychain 与本地加密、连接级状态仍未完成，G05 继续进行。

@@ -18,6 +18,12 @@ import (
 )
 
 func main() {
+	if len(os.Args) == 3 && os.Args[1] == "__supervise-frpc" {
+		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		code := frpagent.SupervisorMain(ctx, os.Args[2])
+		cancel()
+		os.Exit(code)
+	}
 	if e := run(os.Args[1:]); e != nil && !errors.Is(e, context.Canceled) {
 		fmt.Fprintln(os.Stderr, e)
 		os.Exit(1)
