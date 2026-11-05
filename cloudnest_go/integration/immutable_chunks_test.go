@@ -572,14 +572,55 @@ func TestUploadBodyActualTCPDeadlineReleasesAdmission(t *testing.T) {
 func TestUploadBodyCancellationInterruptsRateWait(t *testing.T) {
 	f := newFixture(t)
 	id := immutableInit(t, f, 64<<10, 64<<10)
+	task := receiptTask(t, f, id)
 	payload := bytes.Repeat([]byte("x"), 64<<10)
 	body, ct := chunkBody(t, id, 0, payload, "")
-	router := fixtureRouter(deadlineChunkRouter(f, 100*time.Millisecond))
-	req := httptest.NewRequest("POST", "/chunk?upload_rate_kbps=64", body)
+	router := fixtureRouter(deadlineChunkRouter(f, 5*time.Second))
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(context.Canceled)
+	req := httptest.NewRequest("POST", "/chunk?upload_rate_kbps=16", body).WithContext(ctx)
 	req.Header.Set("Content-Type", ct)
-	start := time.Now()
 	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
+	done := make(chan struct{})
+	go func() { defer close(done); router.ServeHTTP(w, req) }()
+	defer func() { cancel(context.Canceled); <-done }()
+	// The former 100ms wall deadline sometimes expired during inode
+	// registration. An uncertain intent must be retained, so that exercised a
+	// different contract. Wait for committed ownership AND a partial write before
+	// canceling the slow body: the client must have received its Handle.
+	// The ordinary cleanup bound remains 400ms after cancellation.
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		var artifacts []model.TransferArtifact
+		if err := f.db.Where("task_id=? AND state='writing' AND inode<>0", task.ID).Find(&artifacts).Error; err != nil {
+			t.Fatal(err)
+		}
+		if len(artifacts) == 1 {
+			info, err := os.Stat(filepath.Join(f.cfg.DataDir, "storage", artifacts[0].RelativePath))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if info.Size() > 0 && info.Size() < int64(len(payload)) {
+				break
+			}
+		}
+		select {
+		case <-done:
+			t.Fatal("upload finished before cancellation checkpoint", w.Code)
+		default:
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("upload did not reach a partial registered write")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	start := time.Now()
+	cancel(context.DeadlineExceeded)
+	select {
+	case <-done:
+	case <-time.After(400 * time.Millisecond):
+		t.Fatal("rate wait ignored cancellation")
+	}
 	if w.Code != 408 || time.Since(start) > 400*time.Millisecond {
 		t.Fatal("rate wait ignored cancellation", w.Code, time.Since(start))
 	}
@@ -588,6 +629,42 @@ func TestUploadBodyCancellationInterruptsRateWait(t *testing.T) {
 		t.Fatal("canceled rate wait leaked candidate")
 	}
 }
+
+func TestUploadDeadlineDuringInodeRegistrationRetainsUnprovenFile(t *testing.T) {
+	f := newFixture(t)
+	id := immutableInit(t, f, 64<<10, 64<<10)
+	task := receiptTask(t, f, id)
+	const hook = "test:deadline_during_inode_registration"
+	reached := false
+	if err := f.db.Callback().Update().Before("gorm:update").Register(hook, func(tx *gorm.DB) {
+		if tx.Statement.Table == "transfer_artifact" {
+			if changes, ok := tx.Statement.Dest.(map[string]interface{}); ok && changes["state"] == "writing" {
+				reached = true
+				<-tx.Statement.Context.Done() // expire at the exact ownership transition
+			}
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	defer f.db.Callback().Update().Remove(hook)
+	body, ct := chunkBody(t, id, 0, bytes.Repeat([]byte("x"), 64<<10), "")
+	req := httptest.NewRequest("POST", "/chunk", body)
+	req.Header.Set("Content-Type", ct)
+	w := httptest.NewRecorder()
+	fixtureRouter(deadlineChunkRouter(f, 500*time.Millisecond)).ServeHTTP(w, req)
+	if !reached || w.Code != 408 {
+		t.Fatal("did not exercise registration deadline", w.Code)
+	}
+	var artifact model.TransferArtifact
+	if err := f.db.First(&artifact, "task_id=?", task.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if artifact.State != "intent" || artifact.Inode != 0 || chunkFiles(t, f) != 1 {
+		t.Fatal("unproven inode incorrectly committed or deleted", artifact.State, artifact.Inode)
+	}
+	waitUploadSlots(t, f, f.aliceID, 0)
+}
+
 func TestUploadBodyRedisScriptDenialFailsClosed(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()

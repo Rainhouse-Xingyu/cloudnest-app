@@ -210,3 +210,13 @@ Darwin arm64 首次真实 launchd 测试通过（35.27s，`/tmp/cloudnest-g05-la
 实际 Agent 隧道测试新增：停止已编译后端并确认连接失败，观察 Agent 的固定网络错误，确认既有三种隧道可达、数据库中新命令仍为 pending，再启动后端并等待命令成功回执。随后在真实隧道运行中撤销该测试设备凭据，要求 Agent 在十秒内报告失败退出、TCP 端口停止监听且状态锁释放。此项通过（35.59s）。与原 launchd 自动恢复测试（35.44s）一起通过，包 73.120s，运行日志 `/tmp/cloudnest-g05-backend-restart-e2e.log`。此次为短时中断，不是长期离线、睡眠或全机掉电测试；所有操作仅针对测试创建的进程与隔离数据库。
 
 `37d1e7c195e1500d76928584b16ff92fee5cc75c` 的 PR `41943203704`、push `41943196762` CI 均四作业全通过。后继 `8a4a7c4` 已核对 Linux 原生 token 管道/隧道、macOS Keychain 和漏洞作业通过，完整后端回归尚需等待该 SHA 的终态。
+
+### CI 上传取消检查点纠正
+
+`8a4a7c423a7036eeac49eba778eb6c0ff7f1aea4` 的 push `41963150571` 全部通过，但 PR `41963154776` 的普通集成在 `TestUploadBodyCancellationInterruptsRateWait` 失败（“canceled rate wait leaked candidate”），其余三个作业通过。失败日志保存为 `/tmp/cloudnest-g05-tokenpipe-ci-failed.log`；不把这次 PR CI 记为成功。
+
+旧测试的 100ms 期限从请求入口开始，可能在 inode 登记前触发，混淆了“已取得候选句柄的限速取消”与“身份尚不确定的登记失败”。后者必须保留文件和预算，既有 `TestTransferUnprovenIntentAndReplacedInodeAreBlocked` 明确要求如此。修改前者，先确认数据库已提交 writing/inode 且磁盘有部分数据，再取消限速等待，仍要求取消后 400ms 内返回 408、释放准入并删除候选。未放宽清理时限或删除未知文件。
+
+另新增真实数据库回调阻塞在 inode 更新之前，等请求期限到达：确定复现 408、intent/inode=0 和保留的文件，证明这是独立的安全边界。上述三个用例各重复八次，24 次全部通过，包 24.648s（`/tmp/cloudnest-g05-cancel-checkpoint-final.log`）；带完整标签的集成 vet 通过。服务端逻辑未更改。
+
+撤销测试进一步要求日志出现固定 HTTP 401 拒绝原因且 active.json 已清理，避免将任意异常退出误认为撤销成功。真实 CLI 全部场景再次通过（用例 35.16s、包 36.996s，`/tmp/cloudnest-g05-revoke-final.log`）。
