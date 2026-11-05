@@ -123,7 +123,11 @@ func TestAgentNativeCLIThreeTunnelsRestartAndReconnect(t *testing.T) {
 		t.Fatal(e)
 	}
 	statePath := filepath.Join(work, "agent-state")
-	enroll := exec.CommandContext(ctx, bin, "enroll", "--state", statePath, "--server", base, "--ca", caPath, "--frpc", filepath.Join(dir, "frpc"), "--frps-host", "127.0.0.1", "--frps-port", strconv.Itoa(control), "--frps-ca", frpsCertPath, "--local-ports", fmt.Sprintf("%d,%d", plainPort, securePort))
+	keyPath := filepath.Join(work, "agent-key")
+	if e = os.WriteFile(keyPath, bytes.Repeat([]byte{0x31}, 32), 0600); e != nil {
+		t.Fatal(e)
+	}
+	enroll := exec.CommandContext(ctx, bin, "enroll", "--state", statePath, "--key-file", keyPath, "--server", base, "--ca", caPath, "--frpc", filepath.Join(dir, "frpc"), "--frps-host", "127.0.0.1", "--frps-port", strconv.Itoa(control), "--frps-ca", frpsCertPath, "--local-ports", fmt.Sprintf("%d,%d", plainPort, securePort))
 	enroll.Stdin = strings.NewReader(enrollment.Enrollment + "\n")
 	if out, e := enroll.CombinedOutput(); e != nil {
 		t.Fatalf("agent enroll %v %s", e, out)
@@ -132,6 +136,10 @@ func TestAgentNativeCLIThreeTunnelsRestartAndReconnect(t *testing.T) {
 	}
 	s, e := frpagent.OpenStore(statePath)
 	if e != nil {
+		t.Fatal(e)
+	}
+	if e = frpagent.UnlockVault(s, frpagent.VaultOptions{}, false); e != nil {
+		s.Close()
 		t.Fatal(e)
 	}
 	identity, e := frpagent.LoadIdentity(s)
@@ -235,6 +243,11 @@ func TestAgentNativeCLIThreeTunnelsRestartAndReconnect(t *testing.T) {
 	command("reload", 0, "ok")
 	probe()
 	command("stop", 0, "ok")
+	for _, name := range []string{"active.json", "candidate.json"} {
+		if _, err := os.Stat(filepath.Join(statePath, name)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatal("plaintext runtime cache retained after stop", name, err)
+		}
+	}
 	conn, e := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(remote)), time.Second)
 	if e == nil {
 		conn.Close()
@@ -357,6 +370,30 @@ func TestAgentNativeCLIThreeTunnelsRestartAndReconnect(t *testing.T) {
 	command("deploy_config", bad.ID, "config_invalid")
 	probe()
 	stopAgent()
+	for _, name := range []string{"identity.json", "state.json"} {
+		sealed, err := os.ReadFile(filepath.Join(statePath, name))
+		if err != nil || !bytes.HasPrefix(sealed, []byte("CNAGENT1\x00")) {
+			t.Fatal("persistent state not encrypted", name, err)
+		}
+		if bytes.Contains(sealed, []byte(identity.Registration.Credential)) || bytes.Contains(sealed, []byte("native-fixture # secret")) {
+			t.Fatal("plaintext secret in persistent state")
+		}
+	}
+	for _, name := range []string{"active.json", "candidate.json"} {
+		if _, err := os.Stat(filepath.Join(statePath, name)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatal("runtime cache remained after shutdown", name, err)
+		}
+	}
+	if e = os.WriteFile(keyPath, bytes.Repeat([]byte{0x32}, 32), 0600); e != nil {
+		t.Fatal(e)
+	}
+	wrongKey := exec.CommandContext(ctx, bin, "run", "--state", statePath)
+	if out, err := wrongKey.CombinedOutput(); err == nil || !bytes.Contains(out, []byte(frpagent.ErrVault.Error())) {
+		t.Fatal("wrong key did not fail closed", err)
+	}
+	if e = os.WriteFile(keyPath, bytes.Repeat([]byte{0x31}, 32), 0600); e != nil {
+		t.Fatal(e)
+	}
 	b, e := os.ReadFile(logPath)
 	if e != nil {
 		t.Fatal(e)

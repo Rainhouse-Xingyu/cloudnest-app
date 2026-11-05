@@ -1,6 +1,7 @@
 package frpagent
 
 import (
+	"crypto/rand"
 	"errors"
 	"os"
 	"path/filepath"
@@ -14,6 +15,17 @@ func testStore(t *testing.T) *Store {
 		t.Fatal(e)
 	}
 	t.Cleanup(func() { s.Close() })
+	key := make([]byte, 32)
+	if _, e = rand.Read(key); e != nil {
+		t.Fatal(e)
+	}
+	keyPath := filepath.Join(t.TempDir(), "key")
+	if e = os.WriteFile(keyPath, key, 0600); e != nil {
+		t.Fatal(e)
+	}
+	if e = UnlockVault(s, VaultOptions{KeyFile: keyPath}, true); e != nil {
+		t.Fatal(e)
+	}
 	return s
 }
 func TestStorePrivateAtomicAndExclusive(t *testing.T) {

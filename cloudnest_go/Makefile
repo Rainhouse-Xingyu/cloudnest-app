@@ -33,8 +33,8 @@ build-macos:
 	mkdir -p $(DIST)/macos-amd64 $(DIST)/macos-arm64
 	GOOS=darwin GOARCH=amd64 go build -o $(DIST)/macos-amd64/$(BINARY) $(CMD)
 	GOOS=darwin GOARCH=arm64 go build -o $(DIST)/macos-arm64/$(BINARY) $(CMD)
-	GOOS=darwin GOARCH=amd64 go build -o $(DIST)/macos-amd64/$(AGENT_BINARY) ./cmd/agent
-	GOOS=darwin GOARCH=arm64 go build -o $(DIST)/macos-arm64/$(AGENT_BINARY) ./cmd/agent
+	CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -o $(DIST)/macos-amd64/$(AGENT_BINARY) ./cmd/agent
+	CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -o $(DIST)/macos-arm64/$(AGENT_BINARY) ./cmd/agent
 
 build-linux:
 	mkdir -p $(DIST)/linux-amd64 $(DIST)/linux-arm64

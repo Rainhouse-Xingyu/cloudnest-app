@@ -47,6 +47,8 @@ func SupervisorMain(ctx context.Context, path string) (exitCode int) {
 	defer func() {
 		if err := p.Stop(); err != nil {
 			exitCode = supervisorUnsafeExit
+		} else if err := s.RemoveRuntime("active.json"); err != nil {
+			exitCode = supervisorUnsafeExit
 		}
 	}()
 	if err = p.Start(ctx); err != nil {

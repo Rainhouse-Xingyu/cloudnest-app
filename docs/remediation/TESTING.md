@@ -174,3 +174,13 @@ G00/G01 状态再次核对。PR #1 仍开放，原始漏洞基线检查失败。
 最终 **11 项原生/race Agent 顶层测试**全部通过，包 2.941s，日志 `/tmp/cloudnest-g05-supervisor-native-components.log`，包括新增继承目录/锁不匹配拒绝和监督进程未知退出后拒绝启动。锁保留测试改为占用临时回环端口，不访问固定端口上的已有服务。`make check test build-macos build-linux` 全通过，日志 `/tmp/cloudnest-g05-supervisor-check-final.log`；本地运行平台仍为 Darwin arm64，新提交的 Linux 结果需由对应 CI 验证。
 
 边界：重新运行 Agent 的动作由测试执行，尚未安装系统服务来自动重启 Agent。监督进程自身丢失后的残留恢复、整个进程组同时被强制终止、掉电与休眠尚未全面验收。文件凭据/配置的 Keychain 与本地加密、连接级状态仍未完成，G05 继续进行。
+
+## 2026-11-04 G05 Agent 本机密钥与持久状态（11-05 核验）
+
+前一提交 `6c8d0b5aec43cc65fd8fe0589784714862d77294` 的 PR `41782677910`、push `41782669413` 三个作业均通过，包含 Linux amd64 原生异常退出测试。11-05 复核：PR #2 的 base 仍是 PR #1 的分支，#1 保留原基线漏洞失败，#2 四项检查均通过。
+
+Darwin arm64 使用测试专用临时文件钥匙串，通过真实 Security.framework 验证密钥创建、查找、锁定后拒绝读取、解锁后恢复及已编译 CLI 跨进程迁移（两项，包 5.166s，`/tmp/cloudnest-g05-keychain-cli.log`）。合并运行原生 FRP、Keychain 及 race 测试：17 项顶层用例通过，零跳过，包 10.486s（`/tmp/cloudnest-g05-vault-components-final-v2.log`）。另验证跨 vault/跨文件替换、密文损坏、旧状态迁移重试和禁用 cgo 时明确拒绝 Keychain：专项 race 2.773s、禁用 cgo 0.562s。
+
+真实 CLI/TLS、隔离 MySQL/Redis 和官方 frpc/frps 使用单独的外部密钥文件验证 TCP/HTTP/HTTPS、异常退出及恢复。增加磁盘密文、正常停止后运行配置消失以及使用错误密钥无法启动的断言；通过（用例 27.56s、包 29.865s，`/tmp/cloudnest-g05-vault-native-final.log`）。这项端到端测试没有使用登录钥匙串。`make -C cloudnest_go check test build-macos build-linux` 通过（`/tmp/cloudnest-g05-vault-check-final.log`）；本批未在本地重新运行完整普通数据库套件。
+
+运行中的 frpc 仍需可重复读取的私有配置；停止时删除不能擦除已有快照或备份。探索性 Darwin POSIX 共享内存探针不能按普通文件写入/定位（ENXIO），未用于实现，亦不算产品测试。SEC-010、正式签名后升级的钥匙串访问和生产历史迁移仍待验收。详见 [Agent 本机密钥与恢复](FRP-AGENT-VAULT.md)。

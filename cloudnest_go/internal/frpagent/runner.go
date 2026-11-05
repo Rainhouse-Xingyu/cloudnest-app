@@ -10,9 +10,9 @@ import (
 	"time"
 )
 
-// Identity and State are only stored as owner-only files. No secrets appear in
-// command-line arguments, receipt codes or logs. Keychain integration is a
-// separate macOS delivery requirement; file credentials must be disk-encrypted.
+// Identity and State are AEAD-sealed owner-only files. macOS keys live in the
+// selected Keychain; an explicit external private key file is also supported.
+// Runtime frpc files remain private plaintext until the child is reaped.
 type Identity struct {
 	Version      int          `json:"version"`
 	Endpoint     string       `json:"endpoint"`
@@ -40,10 +40,10 @@ func writeJSON(s *Store, name string, v any) error {
 	if e != nil {
 		return ErrStorage
 	}
-	return s.Write(name, b, 0600)
+	return s.WriteSecret(name, b)
 }
 func readJSON(s *Store, name string, v any) error {
-	b, e := s.Read(name, 4<<20)
+	b, e := s.ReadSecret(name)
 	if e != nil {
 		return e
 	}
@@ -301,7 +301,7 @@ func (r *Runner) execute(ctx context.Context, d Delivery) (string, error) {
 			return "", e
 		}
 		if e = r.process.Verify(ctx); e != nil {
-			if errors.Is(e, ErrBinary) {
+			if errors.Is(e, ErrBinary) || errors.Is(e, ErrStorage) {
 				return "", e
 			}
 			return "config_invalid", nil

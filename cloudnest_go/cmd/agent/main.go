@@ -30,8 +30,8 @@ func main() {
 	}
 }
 func run(args []string) error {
-	if len(args) == 0 || (args[0] != "enroll" && args[0] != "run") {
-		return errors.New("usage: cloudnest-agent enroll|run --state /absolute/private/directory (see docs/remediation/FRP-AGENT.md)")
+	if len(args) == 0 || (args[0] != "enroll" && args[0] != "run" && args[0] != "protect-state") {
+		return errors.New("usage: cloudnest-agent enroll|run|protect-state --state /absolute/private/directory (see docs/remediation/FRP-AGENT.md)")
 	}
 	f := flag.NewFlagSet("cloudnest-agent", flag.ContinueOnError)
 	state := f.String("state", "", "absolute private state directory")
@@ -43,6 +43,8 @@ func run(args []string) error {
 	frpsCA := f.String("frps-ca", "", "trusted FRP CA PEM; required for non-loopback server")
 	frpsName := f.String("frps-name", "", "FRP certificate server name")
 	ports := f.String("local-ports", "", "comma-separated allowed loopback upstream ports (enroll only)")
+	keyFile := f.String("key-file", "", "private 32-byte key file outside state directory; required on Linux")
+	keychain := f.String("keychain", "", "optional macOS keychain path; otherwise user's default keychain")
 	if e := f.Parse(args[1:]); e != nil {
 		return e
 	}
@@ -56,9 +58,29 @@ func run(args []string) error {
 	defer s.Close()
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
+	options := frpagent.VaultOptions{KeyFile: *keyFile, Keychain: *keychain}
+	if args[0] == "protect-state" {
+		bad := false
+		f.Visit(func(v *flag.Flag) {
+			if v.Name != "state" && v.Name != "key-file" && v.Name != "keychain" {
+				bad = true
+			}
+		})
+		if bad {
+			return errors.New("protect-state accepts only state and key storage flags")
+		}
+		if e = frpagent.ProtectState(s, options); e != nil {
+			return e
+		}
+		fmt.Fprintln(os.Stdout, "Agent persistent identity and journal protected; existing backups are unchanged.")
+		return nil
+	}
 	if args[0] == "enroll" {
-		if _, e = frpagent.LoadIdentity(s); !errors.Is(e, os.ErrNotExist) {
+		if _, e = s.Read("identity.json", (4<<20)+64); !errors.Is(e, os.ErrNotExist) {
 			return errors.New("enrollment requires a new empty state directory")
+		}
+		if e = frpagent.UnlockVault(s, options, true); e != nil {
+			return e
 		}
 		p := frpagent.Policy{ServerAddr: *frps, ServerPort: *frpsPort, ServerName: *frpsName}
 		for _, v := range strings.Split(*ports, ",") {
@@ -121,9 +143,17 @@ func run(args []string) error {
 	if badFlag {
 		return errors.New("run accepts only --state")
 	}
+	if e = frpagent.UnlockVault(s, frpagent.VaultOptions{}, false); e != nil {
+		return e
+	}
 	id, e := frpagent.LoadIdentity(s)
 	if e != nil {
 		return e
+	}
+	for _, name := range []string{"active.json", "candidate.json"} {
+		if e = s.RemoveRuntime(name); e != nil {
+			return e
+		}
 	}
 	client, e := frpagent.NewClient(id.Endpoint, id.Registration.Credential, id.ControlCA)
 	if e != nil {

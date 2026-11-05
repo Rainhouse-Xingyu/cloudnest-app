@@ -82,7 +82,12 @@ func (p *Process) command(ctx context.Context, args ...string) (*exec.Cmd, error
 	// stdout/stderr are discarded: frpc diagnostics may contain auth secrets.
 	return c, nil
 }
-func (p *Process) Verify(ctx context.Context) error {
+func (p *Process) Verify(ctx context.Context) (verifyErr error) {
+	defer func() {
+		if e := p.store.RemoveRuntime("candidate.json"); e != nil {
+			verifyErr = e
+		}
+	}()
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	c, e := p.command(ctx, "verify", "-c", filepath.Join(p.store.Path, "candidate.json"))

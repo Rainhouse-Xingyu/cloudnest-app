@@ -21,6 +21,7 @@ var ErrLocked = errors.New("agent or managed frpc already holds this state direc
 type Store struct {
 	dir, lock *os.File
 	Path      string
+	vault     *vault
 }
 
 func OpenStore(path string) (*Store, error) {
@@ -54,6 +55,7 @@ func OpenStore(path string) (*Store, error) {
 	return s, nil
 }
 func (s *Store) Close() error {
+	s.vault = nil
 	// Do not LOCK_UN: children share this open-file description and must retain
 	// the lock if the parent dies. The last close releases it.
 	if s.lock != nil {
@@ -64,6 +66,26 @@ func (s *Store) Close() error {
 		err := s.dir.Close()
 		s.dir = nil
 		return err
+	}
+	return nil
+}
+
+// RemoveRuntime only removes Agent-generated plaintext runtime caches, never
+// identity/history or operator key files. Active children retain the lock.
+func (s *Store) RemoveRuntime(name string) error {
+	if name != "active.json" && name != "candidate.json" {
+		return ErrStorage
+	}
+	f, e := s.open(name, unix.O_RDONLY, 0)
+	if errors.Is(e, os.ErrNotExist) {
+		return nil
+	}
+	if e != nil {
+		return e
+	}
+	f.Close()
+	if unix.Unlinkat(int(s.dir.Fd()), name, 0) != nil || s.dir.Sync() != nil {
+		return ErrStorage
 	}
 	return nil
 }

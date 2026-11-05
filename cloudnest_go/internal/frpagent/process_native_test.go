@@ -43,6 +43,9 @@ func TestPinnedFRPCInheritsSingletonLock(t *testing.T) {
 	if e = p.Verify(context.Background()); e != nil {
 		t.Fatal(e)
 	}
+	if _, e = os.Stat(filepath.Join(s.Path, "candidate.json")); !os.IsNotExist(e) {
+		t.Fatal("verification cache retained", e)
+	}
 	if e = s.Write("active.json", b, 0600); e != nil {
 		t.Fatal(e)
 	}
