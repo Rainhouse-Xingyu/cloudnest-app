@@ -1,6 +1,6 @@
 # G05 持久命令与配置领取
 
-新命令写入 MySQL `agent_command`，管理端和 Agent 均通过 HTTPS 访问。入队、领取和终态回执各自与审计在同一事务中提交。表中只保存动作、版本 ID、配置摘要和状态，不存配置正文或设备凭据。终态记录保留；每设备最多 32 条 pending/leased 命令。
+新命令写入 MySQL `agent_command`，管理端和 Agent 均通过 HTTPS 访问。入队、领取和终态回执各自与审计在同一事务中提交。表中只保存动作、版本 ID、配置摘要、状态和脱敏诊断快照，不存配置正文或设备凭据。终态记录保留；每设备最多 32 条 pending/leased 命令。
 
 ## 管理端协议
 
@@ -34,7 +34,7 @@ request_id 和 Idempotency-Key 都是 32 位小写十六进制随机 ID，客户
 
 旧租约、超期租约、其他设备或其他凭据代次不能读取配置、续租或提交结果。配置仅在 deploy_config 的活动租约内解密返回，并重新核对版本、设备与入队时的明文摘要；更换密钥但内容相同的重加密不影响领取。HTTPS、no-store 和有界正文同样适用。授权检查与凭据轮换/撤销串行，已经发送给设备的字节不能被撤回。
 
-结果只接受固定代码。success=true 时 code 必须是 ok；失败代码为 config_invalid、start_failed、stop_failed、reload_failed、diagnostic_failed、internal_error。拒绝自由文本，避免 frpc 日志或凭据进入命令记录。相同 lease_id 和相同终态回执可以重复提交，审计只产生一次；相反的结果返回 409。终态相同回执重试不要求租约仍在有效期，但设备凭据必须仍有效。
+结果只接受固定代码。success=true 时 code 必须是 ok；失败代码为 config_invalid、start_failed、stop_failed、reload_failed、diagnostic_failed、internal_error。拒绝自由文本，避免 frpc 日志或凭据进入命令记录。diagnose 可携带有界 diagnostic 快照，定义、列迁移与兼容次序见 [注册诊断](FRP-AGENT-DIAGNOSTICS.md)。相同 lease_id 和相同终态回执可以重复提交，审计只产生一次；相反的结果或不同诊断观察返回 409。终态相同回执重试不要求租约仍在有效期，但设备凭据必须仍有效。
 
 ## 并发、时间与失效
 

@@ -73,7 +73,7 @@ func (s *Store) Close() error {
 // RemoveRuntime only removes Agent-generated plaintext runtime caches, never
 // identity/history or operator key files. Active children retain the lock.
 func (s *Store) RemoveRuntime(name string) error {
-	if name != "active.json" && name != "candidate.json" {
+	if name != "active.json" && name != "candidate.json" && name != "diagnostics.pem" {
 		return ErrStorage
 	}
 	f, e := s.open(name, unix.O_RDONLY, 0)

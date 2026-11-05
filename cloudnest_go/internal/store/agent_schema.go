@@ -124,11 +124,18 @@ func CheckAgentSchema(db *gorm.DB) error {
 
 func checkAgentCommandSchema(db *gorm.DB) error {
 	var columns int
-	if err := db.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='agent_command' AND column_name IN ('id','device_id','credential_id','request_id','action','requested_config_id','config_id','config_sha256','status','attempts','claim_id','lease_id','lease_expires','expires_at','created_at','completed_at','result_code')").Scan(&columns).Error; err != nil {
+	if err := db.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='agent_command' AND column_name IN ('id','device_id','credential_id','request_id','action','requested_config_id','config_id','config_sha256','status','attempts','claim_id','lease_id','lease_expires','expires_at','created_at','completed_at','result_code','diagnostic_data')").Scan(&columns).Error; err != nil {
 		return err
 	}
-	if columns != 17 {
+	if columns != 18 {
 		return fmt.Errorf("agent command schema missing; run explicit migrate")
+	}
+	var diagnosticColumn int
+	if err := db.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='agent_command' AND column_name='diagnostic_data' AND data_type='varchar' AND character_maximum_length=512 AND is_nullable='NO' AND column_default=''").Scan(&diagnosticColumn).Error; err != nil {
+		return err
+	}
+	if diagnosticColumn != 1 {
+		return fmt.Errorf("agent diagnostic column invalid; run explicit migrate")
 	}
 	for _, spec := range []struct {
 		name, columns string

@@ -85,6 +85,7 @@ func TestRunnerDurableReceiptAcrossRestartAndNewLease(t *testing.T) {
 	s := testStore(t)
 	delivery := Delivery{Command: Command{ID: strings.Repeat("b", 32), DeviceID: 1, Action: "diagnose", Status: "leased", LeaseExpires: time.Now().Add(time.Minute)}, LeaseID: strings.Repeat("c", 32)}
 	renews, acks, claims := 0, 0, 0
+	var observed json.RawMessage
 	lost := true
 	conflict := false
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -103,6 +104,15 @@ func TestRunnerDurableReceiptAcrossRestartAndNewLease(t *testing.T) {
 			var body map[string]any
 			if json.NewDecoder(r.Body).Decode(&body) != nil || body["code"] != "diagnostic_failed" || body["success"] != false {
 				t.Error("invalid receipt")
+			}
+			report, err := json.Marshal(body["diagnostic"])
+			if err != nil || string(report) == "null" {
+				t.Error("diagnostic observation missing")
+			}
+			if observed == nil {
+				observed = report
+			} else if string(observed) != string(report) {
+				t.Error("retry replaced original diagnostic observation")
 			}
 			if lost {
 				lost = false

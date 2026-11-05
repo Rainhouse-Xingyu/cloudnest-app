@@ -145,6 +145,11 @@ func TestAgentCommandTLSConfigurationAndReceipt(t *testing.T) {
 		t.Fatal(err)
 	}
 	call(prefix+"/renew", key, body, 200, nil)
+	report := map[string]any{"state": "registered", "config_id": cfg.ID, "observed_at": time.Now().UTC(), "expected": 1, "registered": 1, "failed": 0, "pending": 0, "secret": "must-not-accept"}
+	call(prefix+"/result", key, map[string]any{"lease_id": delivery.LeaseID, "success": true, "code": "ok", "diagnostic": report}, 400, nil)
+	delete(report, "secret")
+	// A configuration deployment cannot masquerade as a diagnostic receipt.
+	call(prefix+"/result", key, map[string]any{"lease_id": delivery.LeaseID, "success": true, "code": "ok", "diagnostic": report}, 400, nil)
 	ack := map[string]any{"lease_id": delivery.LeaseID, "success": true, "code": "ok"}
 	call(prefix+"/result", key, ack, 204, nil)
 	call(prefix+"/result", key, ack, 204, nil)

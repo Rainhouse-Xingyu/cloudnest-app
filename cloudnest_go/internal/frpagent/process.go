@@ -60,12 +60,14 @@ func InstallBinary(s *Store, path string) error {
 }
 
 type Process struct {
-	store      *Store
-	cmd        *exec.Cmd
-	done       chan error
-	supervised bool
-	poisoned   bool
-	life       *os.File
+	store         *Store
+	cmd           *exec.Cmd
+	done          chan error
+	supervised    bool
+	poisoned      bool
+	life          *os.File
+	diagnosticKey *os.File // raw child only, inherited at fd 5
+	diagnostics   *localDiagnostics
 }
 
 func newRawProcess(s *Store) *Process        { return &Process{store: s} }
@@ -82,6 +84,9 @@ func (p *Process) command(ctx context.Context, tokenPipe *os.File, args ...strin
 	c.Dir = p.store.Path
 	c.Env = []string{"LANG=C", "HOME=" + p.store.Path} // no proxy, template or runtime env inheritance
 	c.ExtraFiles = []*os.File{p.store.lock, tokenPipe} // child fd 3: singleton; fd 4: token source
+	if p.diagnosticKey != nil {
+		c.ExtraFiles = append(c.ExtraFiles, p.diagnosticKey)
+	}
 	// stdout/stderr are discarded: frpc diagnostics may contain auth secrets.
 	return c, nil
 }
@@ -192,6 +197,10 @@ func (p *Process) Stop() error {
 }
 
 func (p *Process) exited(err error) {
+	if p.diagnostics != nil {
+		p.diagnostics.close()
+		p.diagnostics = nil
+	}
 	if p.supervised && err != nil {
 		var exit *exec.ExitError
 		if !errors.As(err, &exit) || (exit.ExitCode() != supervisorChildExited && exit.ExitCode() != supervisorSetupFailed) {
@@ -206,10 +215,23 @@ func (p *Process) exited(err error) {
 	p.done = nil
 }
 
-func (p *Process) startSupervisor(ctx context.Context, tokenPipe *os.File) error {
+func (p *Process) startSupervisor(ctx context.Context, tokenPipe *os.File) (startErr error) {
 	if tokenPipe == nil {
 		return ErrConfig
 	}
+	diag, key, err := prepareDiagnostics(p.store)
+	if err != nil {
+		return errors.Join(err, p.store.RemoveRuntime("active.json"), p.store.RemoveRuntime("diagnostics.pem"))
+	}
+	defer key.Close()
+	p.diagnostics = diag
+	defer func() {
+		if startErr != nil {
+			diag.close()
+			p.diagnostics = nil
+			startErr = errors.Join(startErr, p.store.RemoveRuntime("active.json"), p.store.RemoveRuntime("diagnostics.pem"))
+		}
+	}()
 	executable, err := os.Executable()
 	if err != nil {
 		return ErrProcess
@@ -228,7 +250,7 @@ func (p *Process) startSupervisor(ctx context.Context, tokenPipe *os.File) error
 	c := exec.Command(executable, "__supervise-frpc", p.store.Path)
 	c.Dir = p.store.Path
 	c.Env = []string{"LANG=C", "HOME=" + p.store.Path}
-	c.ExtraFiles = []*os.File{p.store.dir, p.store.lock, lifeRead, readyWrite, tokenPipe}
+	c.ExtraFiles = []*os.File{p.store.dir, p.store.lock, lifeRead, readyWrite, tokenPipe, key}
 	if err = c.Start(); err != nil {
 		lifeWrite.Close()
 		readyRead.Close()
@@ -252,7 +274,24 @@ func (p *Process) startSupervisor(ctx context.Context, tokenPipe *os.File) error
 	select {
 	case ok := <-ready:
 		if ok && p.Running() {
-			return nil
+			waitCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			for waitCtx.Err() == nil && p.Running() {
+				if _, err := diag.read(waitCtx); err == nil {
+					// The trusted API proves config + TLS key were consumed.
+					// No later CloudNest action reuses that runtime file.
+					if err := p.store.RemoveRuntime("active.json"); err != nil {
+						return errors.Join(err, p.Stop())
+					}
+					if err := p.store.RemoveRuntime("diagnostics.pem"); err != nil {
+						return errors.Join(err, p.Stop())
+					}
+					return nil
+				}
+				if !wait(waitCtx, 100*time.Millisecond) {
+					break
+				}
+			}
 		}
 	case <-ctx.Done():
 	case <-time.After(10 * time.Second):

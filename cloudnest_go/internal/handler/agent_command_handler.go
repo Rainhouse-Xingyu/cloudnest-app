@@ -7,6 +7,7 @@ import (
 
 	"cloudenest_go/internal/agentauth"
 	"cloudenest_go/internal/agentcommand"
+	"cloudenest_go/internal/agentstatus"
 	"cloudenest_go/internal/frpconfig"
 	"cloudenest_go/internal/middleware"
 	"github.com/gin-gonic/gin"
@@ -147,9 +148,10 @@ func (h *AgentCommandHandler) Configuration(c *gin.Context) {
 }
 func (h *AgentCommandHandler) Finish(c *gin.Context) {
 	var body struct {
-		LeaseID string `json:"lease_id"`
-		Success *bool  `json:"success"`
-		Code    string `json:"code"`
+		LeaseID    string              `json:"lease_id"`
+		Success    *bool               `json:"success"`
+		Code       string              `json:"code"`
+		Diagnostic *agentstatus.Report `json:"diagnostic"`
 	}
 	if !agentBody(c, &body) {
 		return
@@ -158,7 +160,7 @@ func (h *AgentCommandHandler) Finish(c *gin.Context) {
 		commandError(c, agentcommand.ErrInput)
 		return
 	}
-	err := h.Commands.Finish(c.Request.Context(), commandKey(c), c.Param("id"), body.LeaseID, *body.Success, body.Code)
+	err := h.Commands.FinishWithReport(c.Request.Context(), commandKey(c), c.Param("id"), body.LeaseID, *body.Success, body.Code, body.Diagnostic)
 	if err != nil {
 		commandError(c, err)
 		return

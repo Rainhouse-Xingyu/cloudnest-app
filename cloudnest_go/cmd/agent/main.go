@@ -153,7 +153,7 @@ func run(args []string) error {
 	if e != nil {
 		return e
 	}
-	for _, name := range []string{"active.json", "candidate.json"} {
+	for _, name := range []string{"active.json", "candidate.json", "diagnostics.pem"} {
 		if e = s.RemoveRuntime(name); e != nil {
 			return e
 		}

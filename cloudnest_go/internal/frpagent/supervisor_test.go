@@ -42,6 +42,9 @@ func TestSupervisorUnknownExitPreventsDuplicateProcess(t *testing.T) {
 	if _, e = reader.Read(b[:]); e != io.EOF {
 		t.Fatal("liveness writer leaked", e)
 	}
+	if status, err := r.process.Registration(context.Background()); err != ErrSupervisor || status.State != "unavailable" {
+		t.Fatal("lost supervisor reported stopped", status, err)
+	}
 	if e = r.process.Start(context.Background(), nil); e != ErrSupervisor {
 		t.Fatal("unsafe duplicate restart", e)
 	}

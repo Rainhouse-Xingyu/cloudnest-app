@@ -68,8 +68,8 @@ func testLaunchAgentRecovery(t *testing.T, ctx context.Context, bin, state, work
 	diagnose()
 	run("launchctl", "kill", "SIGKILL", target)
 	second := awaitPID(first)
-	diagnose()
 	probe()
+	diagnose()
 	t.Logf("launchd replaced Agent PID %s with %s; authenticated diagnose and three live tunnels recovered", first, second)
 }
 

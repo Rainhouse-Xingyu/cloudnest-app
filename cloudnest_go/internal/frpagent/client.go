@@ -135,7 +135,7 @@ func (c *Client) Heartbeat(ctx context.Context) error {
 	var out struct {
 		DeviceID int64 `json:"device_id"`
 	}
-	status, e := c.post(ctx, "/api/agent/heartbeat", map[string]string{"client_version": "cloudnest-agent-0.1.0"}, &out, 200)
+	status, e := c.post(ctx, "/api/agent/heartbeat", map[string]string{"client_version": "cloudnest-agent-0.2.0"}, &out, 200)
 	if e == nil && (status != 200 || out.DeviceID <= 0) {
 		return ErrProtocol
 	}
@@ -197,9 +197,16 @@ func (c *Client) Configuration(ctx context.Context, d Delivery) (Configuration, 
 	return out, e
 }
 func (c *Client) Finish(ctx context.Context, d Delivery, code string) error {
-	if !validID(d.Command.ID) || !validID(d.LeaseID) {
+	return c.FinishWithReport(ctx, d, code, nil)
+}
+func (c *Client) FinishWithReport(ctx context.Context, d Delivery, code string, report *RegistrationStatus) error {
+	if !validID(d.Command.ID) || !validID(d.LeaseID) || (report != nil && report.Validate() != nil) {
 		return ErrProtocol
 	}
-	_, e := c.post(ctx, "/api/agent/commands/"+d.Command.ID+"/result", map[string]any{"lease_id": d.LeaseID, "success": code == "ok", "code": code}, nil, 204)
-	return e
+	body := map[string]any{"lease_id": d.LeaseID, "success": code == "ok", "code": code}
+	if report != nil {
+		body["diagnostic"] = report
+	}
+	_, err := c.post(ctx, "/api/agent/commands/"+d.Command.ID+"/result", body, nil, 204)
+	return err
 }

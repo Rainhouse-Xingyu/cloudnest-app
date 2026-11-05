@@ -54,9 +54,9 @@ cloudnest-agent protect-state --state /absolute/private/cloudnest-agent \
 
 ## 运行配置边界
 
-官方 frpc 0.71.1 会重复读取配置路径，当前仍用 0600 的 `candidate.json` / `active.json` 给固定程序验证和启动。candidate 在验证结束后删除；active 在监督进程停止并回收 frpc 后删除。重新启动 Agent 或完成迁移时清理遗留的这两个缓存，清理函数不允许删除身份、执行历史或操作人员的密钥文件。
+官方 frpc 0.71.1 会重复读取配置路径，当前仍用 0600 的 `candidate.json` / `active.json` 给固定程序验证和启动。candidate 在验证结束后删除；active 在可信本机状态 API 确认配置已读取后立即删除，停止时再次清理。重新启动 Agent 或完成迁移时清理遗留的这两个缓存，清理函数不允许删除身份、执行历史或操作人员的密钥文件。
 
-运行文件只保存映射、连接和 TLS 参数；认证 token 被移除。Agent 重新验证规范化配置后，将最多 1024 字节的原始 token 写入匿名管道并关闭写端。验证进程直接继承读端；启动进程通过监督进程传给 frpc。唯一允许的 tokenSource 是本机生成的固定 `file.path=/dev/fd/4`，远端下发的文件加载器、exec 或自定义路径仍被拒绝。token 不出现在子进程参数、环境或运行配置中。
+运行文件保存映射、连接和 TLS 参数；FRP 认证 token 被移除。本机诊断的随机 Basic 凭据只在启动交接阶段短暂出现，可信状态读取后立即删除整个 active 文件，边界见 [注册诊断](FRP-AGENT-DIAGNOSTICS.md)。Agent 重新验证规范化配置后，将最多 1024 字节的原始 token 写入匿名管道并关闭写端。验证进程直接继承读端；启动进程通过监督进程传给 frpc。唯一允许的 tokenSource 是本机生成的固定 `file.path=/dev/fd/4`，远端下发的文件加载器、exec 或自定义路径仍被拒绝。token 不出现在子进程参数、环境或运行配置中。
 
 固定 0.71.1 的 [认证初始化](https://github.com/fatedier/frp/blob/v0.71.1/pkg/auth/auth.go) 解析一次 [文件 token 源](https://github.com/fatedier/frp/blob/v0.71.1/pkg/config/v1/value_source.go)，然后将值留在进程内用于重连。每次启动或验证使用新的管道；不要把管道用于整个配置路径，[配置加载](https://github.com/fatedier/frp/blob/v0.71.1/pkg/config/load.go) 会先探测旧格式再重新读取。已通过实际二进制认证、重连和重启测试，升级 FRP 时必须重新验证这个协议。
 

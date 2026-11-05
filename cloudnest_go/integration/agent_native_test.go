@@ -84,7 +84,7 @@ func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest) {
 		reserved = append(reserved, l)
 		return l.Addr().(*net.TCPAddr).Port
 	}
-	control, httpPort, httpsPort, remote := port(), port(), port(), port()
+	control, httpPort, httpsPort, remote, forbiddenRemote := port(), port(), port(), port(), port()
 	defer func() {
 		for _, l := range reserved {
 			l.Close()
@@ -188,6 +188,7 @@ func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest) {
 	t.Cleanup(func() { f.db.Where("device_id=?", device).Delete(&model.FrpConfig{}) })
 	m := agentcommand.New(f.db, f.cfg.FRPKeys)
 	sequence := 0
+	var lastDiagnostic *frpagent.RegistrationStatus
 	command := func(action string, configID int64, want string) {
 		t.Helper()
 		sequence++
@@ -203,6 +204,37 @@ func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest) {
 			if current.Status == "succeeded" || current.Status == "failed" {
 				if current.ResultCode != want {
 					t.Fatalf("%s: %s/%s want %s", action, current.Status, current.ResultCode, want)
+				}
+				if action == "diagnose" {
+					req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/api/frp/devices/%d/commands", base, device), nil)
+					if err != nil {
+						t.Fatal(err)
+					}
+					req.Header.Set("Authorization", "Bearer "+f.alice)
+					res, err := httpClient.Do(req)
+					if err != nil {
+						t.Fatal(err)
+					}
+					var history struct {
+						Items []model.AgentCommand `json:"items"`
+					}
+					err = json.NewDecoder(io.LimitReader(res.Body, 256<<10)).Decode(&history)
+					res.Body.Close()
+					if err != nil || res.StatusCode != 200 {
+						t.Fatal("diagnostic history unavailable", res.StatusCode, err)
+					}
+					lastDiagnostic = nil
+					for _, item := range history.Items {
+						if item.ID == row.ID {
+							lastDiagnostic = item.Diagnostic
+						}
+					}
+					if lastDiagnostic == nil || lastDiagnostic.Validate() != nil {
+						t.Fatal("diagnostic receipt missing from authenticated history")
+					}
+					if want == "ok" && (lastDiagnostic.State != "registered" || lastDiagnostic.Registered != 3) {
+						t.Fatal("healthy result missing three registrations", lastDiagnostic)
+					}
 				}
 				break
 			}
@@ -245,10 +277,26 @@ func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest) {
 		}
 	}
 	probe()
-	runtimeConfig, err := os.ReadFile(filepath.Join(statePath, "active.json"))
-	if err != nil || bytes.Contains(runtimeConfig, []byte("native-fixture # secret")) || !bytes.Contains(runtimeConfig, []byte("/dev/fd/4")) {
-		t.Fatal("running frpc config did not isolate its token", err)
+	for _, name := range []string{"active.json", "diagnostics.pem"} {
+		if _, err := os.Stat(filepath.Join(statePath, name)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatal("startup retained transient credentials", name, err)
+		}
 	}
+	command("diagnose", 0, "ok")
+	// The process stays alive when frps refuses one proxy. Diagnosis must
+	// use actual registration state, rather than the supervisor PID.
+	refusedText := strings.Replace(configText, fmt.Sprintf("remotePort: %d", remote), fmt.Sprintf("remotePort: %d", forbiddenRemote), 1)
+	refused, err := repo.CreateConfig(ctx, f.aliceID, false, model.FrpConfig{DeviceID: &device, ConfigText: refusedText})
+	if err != nil {
+		t.Fatal(err)
+	}
+	command("deploy_config", refused.ID, "ok")
+	command("diagnose", 0, "diagnostic_failed")
+	if lastDiagnostic.State != "degraded" || lastDiagnostic.Registered != 2 || lastDiagnostic.Failed != 1 || lastDiagnostic.ConfigID != refused.ID {
+		t.Fatal("refused mapping was not distinguished", lastDiagnostic)
+	}
+	command("deploy_config", cfg.ID, "ok")
+	probe()
 	command("diagnose", 0, "ok")
 	command("reload", 0, "ok")
 	probe()

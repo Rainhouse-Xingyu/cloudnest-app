@@ -21,8 +21,9 @@ type Identity struct {
 	ControlCA    []byte       `json:"control_ca,omitempty"`
 }
 type Outcome struct {
-	Code string    `json:"code"`
-	At   time.Time `json:"at"`
+	Code       string              `json:"code"`
+	Diagnostic *RegistrationStatus `json:"diagnostic,omitempty"`
+	At         time.Time           `json:"at"`
 }
 type State struct {
 	Version   int                `json:"version"`
@@ -79,7 +80,8 @@ type Runner struct {
 	state    State
 	process  *Process
 	// Report is optional and receives only locally defined, secret-free errors.
-	Report func(error)
+	Report         func(error)
+	lastDiagnostic *RegistrationStatus
 }
 
 func NewRunner(s *Store, c *Client, id Identity) (*Runner, error) {
@@ -101,6 +103,9 @@ func NewRunner(s *Store, c *Client, id Identity) (*Runner, error) {
 	}
 	for id, out := range r.state.Completed {
 		if !validID(id) || out.At.IsZero() {
+			return nil, ErrStorage
+		}
+		if out.Diagnostic != nil && (out.Diagnostic.Validate() != nil || (out.Code == "ok") != (out.Diagnostic.State == "registered")) {
 			return nil, ErrStorage
 		}
 		switch out.Code {
@@ -216,6 +221,9 @@ func (r *Runner) restore(ctx context.Context) error {
 	if e != nil || !bytes.Equal(normalized, r.state.Config) {
 		return ErrStorage
 	}
+	if r.process.Running() {
+		return r.process.Start(ctx, nil)
+	}
 	reader, e := r.Store.stageRuntime("active.json", normalized)
 	if e != nil {
 		return e
@@ -260,13 +268,13 @@ func (r *Runner) Step(ctx context.Context) error {
 		if e != nil {
 			return r.conflict(e)
 		}
-		out = Outcome{Code: code, At: time.Now().UTC()}
+		out = Outcome{Code: code, At: time.Now().UTC(), Diagnostic: r.lastDiagnostic}
 		r.state.Completed[d.Command.ID] = out
 		if e = r.save(); e != nil {
 			return e
 		}
 	}
-	if e := r.Client.Finish(ctx, d, out.Code); e != nil {
+	if e := r.Client.FinishWithReport(ctx, d, out.Code, out.Diagnostic); e != nil {
 		return r.conflict(e)
 	}
 	r.state.Pending = nil
@@ -295,6 +303,7 @@ func (r *Runner) conflict(e error) error {
 	return e
 }
 func (r *Runner) execute(ctx context.Context, d Delivery) (string, error) {
+	r.lastDiagnostic = nil
 	switch d.Command.Action {
 	case "deploy_config":
 		cfg, e := r.Client.Configuration(ctx, d)
@@ -379,7 +388,14 @@ func (r *Runner) execute(ctx context.Context, d Delivery) (string, error) {
 		}
 		return "ok", nil
 	case "diagnose":
-		if !r.process.Running() {
+		status, err := r.process.Registration(ctx)
+		if err != nil {
+			status = RegistrationStatus{State: "unavailable"}
+		}
+		status.ConfigID = r.state.ConfigID
+		status.ObservedAt = time.Now().UTC()
+		r.lastDiagnostic = &status
+		if err != nil || status.State != "registered" {
 			return "diagnostic_failed", nil
 		}
 		return "ok", nil

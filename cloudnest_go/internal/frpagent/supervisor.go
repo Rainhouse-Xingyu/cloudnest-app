@@ -15,7 +15,7 @@ const (
 	supervisorUnsafeExit  = 22
 )
 
-// SupervisorMain is the internal CLI entry point. All five descriptors must
+// SupervisorMain is the internal CLI entry point. All six descriptors must
 // be inherited from an already locked Agent. No PID file or remote-supplied
 // process identity is used. The liveness pipe has exactly one writer: Agent.
 func SupervisorMain(ctx context.Context, path string) (exitCode int) {
@@ -24,6 +24,8 @@ func SupervisorMain(ctx context.Context, path string) (exitCode int) {
 	life := os.NewFile(5, "agent-liveness")
 	ready := os.NewFile(6, "agent-readiness")
 	tokenPipe := os.NewFile(7, "frpc-token-source")
+	diagnosticKey := os.NewFile(8, "frpc-diagnostic-key")
+	defer diagnosticKey.Close()
 	defer tokenPipe.Close()
 	defer dir.Close()
 	defer lock.Close()
@@ -38,29 +40,40 @@ func SupervisorMain(ctx context.Context, path string) (exitCode int) {
 	if err != nil || mode&unix.O_ACCMODE != unix.O_RDONLY || unix.Fstat(int(tokenPipe.Fd()), &tokenStat) != nil || tokenStat.Mode&unix.S_IFMT != unix.S_IFIFO {
 		return supervisorSetupFailed
 	}
+	var keyStat unix.Stat_t
+	keyMode, err := unix.FcntlInt(diagnosticKey.Fd(), unix.F_GETFL, 0)
+	if err != nil || keyMode&unix.O_ACCMODE != unix.O_RDONLY || unix.Fstat(int(diagnosticKey.Fd()), &keyStat) != nil || keyStat.Mode&unix.S_IFMT != unix.S_IFIFO {
+		return supervisorSetupFailed
+	}
 	if unix.Fstat(int(life.Fd()), &lifeStat) != nil || lifeStat.Mode&unix.S_IFMT != unix.S_IFIFO || unix.Fstat(int(ready.Fd()), &readyStat) != nil || readyStat.Mode&unix.S_IFMT != unix.S_IFIFO {
 		return supervisorSetupFailed
 	}
 	// Inherited descriptors are open across this exec by design. Only raw frpc's
-	// explicit lock and token read end should survive the next exec.
-	for _, fd := range []int{3, 4, 5, 6, 7} {
+	// explicit lock, token and diagnostic TLS key read ends should survive the next exec.
+	for _, fd := range []int{3, 4, 5, 6, 7, 8} {
 		unix.CloseOnExec(fd)
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	go func() { var b [1]byte; _, _ = io.ReadFull(life, b[:]); cancel() }() // EOF, error or data all stop the child.
 	p := newRawProcess(s)
+	p.diagnosticKey = diagnosticKey
 	defer func() {
 		if err := p.Stop(); err != nil {
 			exitCode = supervisorUnsafeExit
-		} else if err := s.RemoveRuntime("active.json"); err != nil {
-			exitCode = supervisorUnsafeExit
+		} else {
+			for _, name := range []string{"active.json", "diagnostics.pem"} {
+				if err := s.RemoveRuntime(name); err != nil {
+					exitCode = supervisorUnsafeExit
+				}
+			}
 		}
 	}()
 	if err = p.Start(ctx, tokenPipe); err != nil {
 		return supervisorSetupFailed
 	}
 	tokenPipe.Close()
+	diagnosticKey.Close()
 	if _, err = ready.Write([]byte{1}); err != nil {
 		return supervisorSetupFailed
 	}

@@ -220,3 +220,17 @@ Darwin arm64 首次真实 launchd 测试通过（35.27s，`/tmp/cloudnest-g05-la
 另新增真实数据库回调阻塞在 inode 更新之前，等请求期限到达：确定复现 408、intent/inode=0 和保留的文件，证明这是独立的安全边界。上述三个用例各重复八次，24 次全部通过，包 24.648s（`/tmp/cloudnest-g05-cancel-checkpoint-final.log`）；带完整标签的集成 vet 通过。服务端逻辑未更改。
 
 撤销测试进一步要求日志出现固定 HTTP 401 拒绝原因且 active.json 已清理，避免将任意异常退出误认为撤销成功。真实 CLI 全部场景再次通过（用例 35.16s、包 36.996s，`/tmp/cloudnest-g05-revoke-final.log`）。
+
+## 2026-11-05 G05 官方注册状态与持久诊断快照
+
+前一提交 `88d411bfa2f78d7e3d452b37575b0d0a88ab280b` 的 PR `41964277371`、push `41964268639` 均四作业全通过，包含上传取消检查点修正、完整后端回归、Linux 原生与 macOS Keychain 测试。
+
+本批对照固定 0.71.1 源码接入实际代理状态 API。接口同时包含管理写能力，因此仅绑定回环地址，使用每次启动独立的 TLS 身份及随机 Basic 凭据；Agent 只调用状态 GET。TLS 私钥走匿名管道；Basic 凭据在 0600 启动配置中短暂存在，可信 API 读取后删除配置和公共证书。具体边界、升级次序与快照语义见 [注册诊断](FRP-AGENT-DIAGNOSTICS.md)，没有把“已注册”当作上游应用健康。
+
+本机原生/race/Keychain 测试最终 **23 项顶层通过、零跳过**：Agent 包 8.987s、报告协议包 1.531s（`/tmp/cloudnest-g05-diagnostics-review-components.log`）。实际官方 frpc 覆盖没有 FRP 控制连接时不能报告成功、Basic 认证拒绝、回环假冒 TLS 拒绝。协议测试验证固定状态/计数、自相矛盾或额外字段拒绝、规范化时间、回执重启/换租约后不替换原观察。
+
+隔离数据库与真实 CLI 的最终 **14 项集成均通过**，包 115.976s（`/tmp/cloudnest-g05-diagnostics-regression-final.log`）。其中实际 CLI 46.25s、launchd 48.55s，验证 frps 拒绝一个映射后管理端 HTTPS 历史显示 degraded/registered=2/failed=1，恢复后显示三条 registered；其余隧道、异常退出、后端重启、撤销、加密及运行缓存清理断言仍保留。另覆盖已有命令行的列迁移、缺列启动拒绝、跨设备配置、无效/非诊断动作快照、不可变回执、旧无快照回执、单次审计及身份/租约回归。
+
+复核后将 launchd 测试的新进程探测顺序明确为“先实际三隧道访问，再断言 registered 快照”，防止把正常的注册中状态误当作测试失败；单独再次通过（48.74s、包 50.731s，`/tmp/cloudnest-g05-diagnostics-launchd-review.log`）。进一步确认监督进程状态不明时只报告 unavailable，并保留启动失败与清理错误；专项 race 再次通过（Agent 2.827s、报告协议 2.168s，`/tmp/cloudnest-g05-diagnostics-final-review.log`）。
+
+`make -C cloudnest_go check test build-macos build-linux` 全通过（`/tmp/cloudnest-g05-diagnostics-review-check.log`），包含普通 race/vet 及四目标服务端/Agent 构建。新增数据库列只在隔离测试库上迁移；新提交的完整远端 CI 需按 SHA 独立核验。未宣称逐映射实时流、上游应用健康、长期离线/休眠或生产升级已验收。

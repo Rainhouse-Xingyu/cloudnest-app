@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"cloudenest_go/internal/agentauth"
+	"cloudenest_go/internal/agentstatus"
 	"cloudenest_go/internal/frpconfig"
 	"cloudenest_go/model"
 	"gorm.io/gorm"
@@ -320,7 +321,11 @@ func validResult(success bool, code string) bool {
 	return false
 }
 func (m *Manager) Finish(ctx context.Context, key, id, lease string, success bool, code string) error {
-	if !validResult(success, code) {
+	return m.FinishWithReport(ctx, key, id, lease, success, code, nil)
+}
+func (m *Manager) FinishWithReport(ctx context.Context, key, id, lease string, success bool, code string, report *agentstatus.Report) error {
+	data, err := agentstatus.Encode(report)
+	if err != nil || !validResult(success, code) || (report != nil && (success != (report.State == "registered") || (!success && code != "diagnostic_failed"))) {
 		return ErrInput
 	}
 	return m.auth.WithCredential(ctx, key, func(tx *gorm.DB, b model.AgentBinding) error {
@@ -332,8 +337,22 @@ func (m *Manager) Finish(ctx context.Context, key, id, lease string, success boo
 		if success {
 			state = "succeeded"
 		}
-		if row.Status == state && row.ResultCode == code {
+		if row.Status == state && row.ResultCode == code && row.DiagnosticData == data {
 			return nil
+		}
+		if report != nil {
+			if row.Action != "diagnose" {
+				return ErrInput
+			}
+			if report.ConfigID > 0 {
+				var count int64
+				if err := tx.Model(&model.FrpConfig{}).Where("id=? AND device_id=?", report.ConfigID, b.DeviceID).Count(&count).Error; err != nil {
+					return err
+				}
+				if count != 1 {
+					return ErrInput
+				}
+			}
 		}
 		now, err := nowDB(tx)
 		if err != nil {
@@ -342,7 +361,7 @@ func (m *Manager) Finish(ctx context.Context, key, id, lease string, success boo
 		if !active(row, now) {
 			return ErrConflict
 		}
-		if err := tx.Model(&row).Updates(map[string]any{"status": state, "result_code": code, "completed_at": utc(now)}).Error; err != nil {
+		if err := tx.Model(&row).Updates(map[string]any{"status": state, "result_code": code, "diagnostic_data": data, "completed_at": utc(now)}).Error; err != nil {
 			return err
 		}
 		return audit(tx, nil, row.ID, state, "")
@@ -364,6 +383,11 @@ func (m *Manager) List(ctx context.Context, actor int64, admin bool, device int6
 		}
 		for i := range rows {
 			r := &rows[i]
+			report, err := agentstatus.Decode(r.DiagnosticData)
+			if err != nil {
+				return ErrConflict
+			}
+			r.Diagnostic = report
 			if !live(r.Status) {
 				continue
 			}
