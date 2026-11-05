@@ -245,6 +245,10 @@ func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest) {
 		}
 	}
 	probe()
+	runtimeConfig, err := os.ReadFile(filepath.Join(statePath, "active.json"))
+	if err != nil || bytes.Contains(runtimeConfig, []byte("native-fixture # secret")) || !bytes.Contains(runtimeConfig, []byte("/dev/fd/4")) {
+		t.Fatal("running frpc config did not isolate its token", err)
+	}
 	command("diagnose", 0, "ok")
 	command("reload", 0, "ok")
 	probe()

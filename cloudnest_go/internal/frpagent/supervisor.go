@@ -15,7 +15,7 @@ const (
 	supervisorUnsafeExit  = 22
 )
 
-// SupervisorMain is the internal CLI entry point. All four descriptors must
+// SupervisorMain is the internal CLI entry point. All five descriptors must
 // be inherited from an already locked Agent. No PID file or remote-supplied
 // process identity is used. The liveness pipe has exactly one writer: Agent.
 func SupervisorMain(ctx context.Context, path string) (exitCode int) {
@@ -23,6 +23,8 @@ func SupervisorMain(ctx context.Context, path string) (exitCode int) {
 	lock := os.NewFile(4, "agent-lock")
 	life := os.NewFile(5, "agent-liveness")
 	ready := os.NewFile(6, "agent-readiness")
+	tokenPipe := os.NewFile(7, "frpc-token-source")
+	defer tokenPipe.Close()
 	defer dir.Close()
 	defer lock.Close()
 	defer life.Close()
@@ -31,13 +33,17 @@ func SupervisorMain(ctx context.Context, path string) (exitCode int) {
 	if err != nil {
 		return supervisorSetupFailed
 	}
-	var lifeStat, readyStat unix.Stat_t
+	var lifeStat, readyStat, tokenStat unix.Stat_t
+	mode, err := unix.FcntlInt(tokenPipe.Fd(), unix.F_GETFL, 0)
+	if err != nil || mode&unix.O_ACCMODE != unix.O_RDONLY || unix.Fstat(int(tokenPipe.Fd()), &tokenStat) != nil || tokenStat.Mode&unix.S_IFMT != unix.S_IFIFO {
+		return supervisorSetupFailed
+	}
 	if unix.Fstat(int(life.Fd()), &lifeStat) != nil || lifeStat.Mode&unix.S_IFMT != unix.S_IFIFO || unix.Fstat(int(ready.Fd()), &readyStat) != nil || readyStat.Mode&unix.S_IFMT != unix.S_IFIFO {
 		return supervisorSetupFailed
 	}
-	// Inherited descriptors are open across this exec by design. Only the
-	// explicit lock in raw frpc's ExtraFiles should survive the next exec.
-	for _, fd := range []int{3, 4, 5, 6} {
+	// Inherited descriptors are open across this exec by design. Only raw frpc's
+	// explicit lock and token read end should survive the next exec.
+	for _, fd := range []int{3, 4, 5, 6, 7} {
 		unix.CloseOnExec(fd)
 	}
 	ctx, cancel := context.WithCancel(ctx)
@@ -51,9 +57,10 @@ func SupervisorMain(ctx context.Context, path string) (exitCode int) {
 			exitCode = supervisorUnsafeExit
 		}
 	}()
-	if err = p.Start(ctx); err != nil {
+	if err = p.Start(ctx, tokenPipe); err != nil {
 		return supervisorSetupFailed
 	}
+	tokenPipe.Close()
 	if _, err = ready.Write([]byte{1}); err != nil {
 		return supervisorSetupFailed
 	}

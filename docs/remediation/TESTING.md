@@ -192,3 +192,13 @@ Darwin arm64 使用测试专用临时文件钥匙串，通过真实 Security.fra
 Darwin arm64 首次真实 launchd 测试通过（35.27s，`/tmp/cloudnest-g05-launchd-native.log`）；补充 bootout 后释放状态锁、清理 active.json 的断言，再与原 CLI 三隧道/双故障回归一起执行，均通过：28.47s + 35.24s，包 66.565s（`/tmp/cloudnest-g05-launchd-native-final.log`）。测试使用临时 plist、随机服务标签、已编译 Agent、隔离 MySQL/Redis、实际 TLS、官方 frpc/frps，先确认三个上游可达，再对该临时服务执行 SIGKILL。launchd 自动启动不同 PID 的 Agent，新认证命令完成且 TCP、HTTP、HTTPS 再次实际可用；没有人工重启 Agent，没有在用户启动目录安装产品服务。
 
 `make -C cloudnest_go check test build-macos build-linux` 通过，日志 `/tmp/cloudnest-g05-launchd-check.log`。本地服务集成必须有 macOS 图形登录域和 Docker，显式运行 `scripts/test-integration.sh -tags=integration,frpnative,launchdnative -run '^TestLaunchAgentNativeCrashRecovery$'` 并提供官方二进制目录。GitHub macOS 作业单独检查真实 Keychain 和系统 plist 解析，不等于运行过完整 launchd/数据库集成。未实测用户注销/重新登录、休眠、钥匙串锁定后的无人值守服务、签名更新或 Linux 服务管理。
+
+## 2026-11-05 G05 运行时 FRP token 不落盘
+
+固定版本官方源码确认认证初始化只解析一次文件 token 源，普通配置路径则会重复读取。先以独立真实 frpc/frps 验证继承匿名管道可完成认证，frps 重启后同一 frpc 仍能重连（`/tmp/cloudnest-g05-token-source-probe.log`）。随后接入实际 Agent 和监督进程，固定 fd 4 的源只由本机生成，不放开远端配置中的文件路径或执行能力。
+
+最终 20 项顶层 Agent 普通/原生/真实 Keychain race 用例通过，零跳过，包 6.027s（`/tmp/cloudnest-g05-tokenpipe-components-final.log`）。新增最大长度/Unicode/空 token 原样传递、缓存不含 token、拒绝首尾空白且不产生缓存，以及旧状态遇到无法原样传递的 token 时保持认证命令通道的回归。原先规范化加密状态格式未改，不静默改变历史凭据。
+
+实际 CLI 和 launchd 两项集成均通过（27.79s、35.01s，包 64.772s，`/tmp/cloudnest-g05-tokenpipe-e2e.log`），增加运行中配置只有固定 fd 路径、没有认证 token 的检查。保持三种隧道、reload、Agent/监督进程 SIGKILL、frps 重连和 launchd 自动拉起的真实验证。`make -C cloudnest_go check test build-macos build-linux` 全通过（`/tmp/cloudnest-g05-tokenpipe-check.log`）。
+
+先前 vault 提交 `58d0428` 的两次 CI 中，真实 macOS Keychain、Linux 原生隧道和漏洞扫描分别通过；完整 build-test 尚未结束，随后因较新提交排队而整次取消，不能记为全绿。新提交的完整 CI 需按实际 SHA 单独核验。历史明文备份/生产迁移、实际签名升级和所有连接的实时健康仍未验收。

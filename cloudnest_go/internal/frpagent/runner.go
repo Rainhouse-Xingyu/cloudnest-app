@@ -12,7 +12,7 @@ import (
 
 // Identity and State are AEAD-sealed owner-only files. macOS keys live in the
 // selected Keychain; an explicit external private key file is also supported.
-// Runtime frpc files remain private plaintext until the child is reaped.
+// Runtime frpc files contain private routing data; the token uses a pipe.
 type Identity struct {
 	Version      int          `json:"version"`
 	Endpoint     string       `json:"endpoint"`
@@ -169,7 +169,16 @@ func (r *Runner) Run(ctx context.Context) (runErr error) {
 			// On a clean restart only restore committed desired state when no
 			// unfinished command needs lease reconciliation first.
 			if r.state.Pending == nil && r.state.Running && !r.process.Running() {
-				if e := r.restore(ctx); e != nil {
+				if e := r.restore(ctx); errors.Is(e, ErrConfig) {
+					// An older saved token can have surrounding whitespace that
+					// frpc's file source cannot represent. Stay enrolled so a
+					// fresh authenticated deployment can replace that version.
+					r.state.Running = false
+					if err := r.save(); err != nil {
+						return err
+					}
+					report(e)
+				} else if e != nil {
 					return e
 				}
 			}
@@ -207,10 +216,12 @@ func (r *Runner) restore(ctx context.Context) error {
 	if e != nil || !bytes.Equal(normalized, r.state.Config) {
 		return ErrStorage
 	}
-	if e := r.Store.Write("active.json", r.state.Config, 0600); e != nil {
+	reader, e := r.Store.stageRuntime("active.json", normalized)
+	if e != nil {
 		return e
 	}
-	return r.process.Start(ctx)
+	defer reader.Close()
+	return r.process.Start(ctx, reader)
 }
 func (r *Runner) Step(ctx context.Context) error {
 	if r.state.Pending == nil {
@@ -297,10 +308,16 @@ func (r *Runner) execute(ctx context.Context, d Delivery) (string, error) {
 		if e != nil {
 			return "config_invalid", nil
 		}
-		if e = r.Store.Write("candidate.json", b, 0600); e != nil {
+		reader, e := r.Store.stageRuntime("candidate.json", b)
+		if errors.Is(e, ErrConfig) {
+			return "config_invalid", nil
+		}
+		if e != nil {
 			return "", e
 		}
-		if e = r.process.Verify(ctx); e != nil {
+		e = r.process.Verify(ctx, reader)
+		reader.Close()
+		if e != nil {
 			if errors.Is(e, ErrBinary) || errors.Is(e, ErrStorage) {
 				return "", e
 			}

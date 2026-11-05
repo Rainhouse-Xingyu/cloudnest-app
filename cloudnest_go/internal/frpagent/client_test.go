@@ -196,3 +196,47 @@ func TestRunnerRestoreRevalidatesCanonicalConfig(t *testing.T) {
 		t.Fatal("stored canonical config accepted without source validation", e)
 	}
 }
+
+func TestLegacyUnrepresentableTokenKeepsCommandChannel(t *testing.T) {
+	s := testStore(t)
+	source := []byte(strings.Replace(validConfig, "test # token", " test # token", 1))
+	config, err := Normalize(source, testPolicy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := State{Version: 1, Completed: map[string]Outcome{}, Source: source, Config: config, Running: true}
+	if err := writeJSON(s, "state.json", old); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		switch req.URL.Path {
+		case "/api/agent/heartbeat":
+			_, _ = w.Write([]byte(`{"device_id":1}`))
+		case "/api/agent/commands/claim":
+			w.WriteHeader(403) // proves it got as far as the command channel
+		default:
+			t.Errorf("unexpected endpoint %s", req.URL.Path)
+			w.WriteHeader(404)
+		}
+	}))
+	defer server.Close()
+	r, err := NewRunner(s, trustedClient(t, server), Identity{Registration: Registration{DeviceID: 1}, Policy: testPolicy()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reported := false
+	r.Report = func(e error) {
+		if errors.Is(e, ErrConfig) {
+			reported = true
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := r.Run(ctx); !errors.Is(err, HTTPError(403)) || !reported {
+		t.Fatal("old config prevented command polling", err)
+	}
+	var saved State
+	if err := readJSON(s, "state.json", &saved); err != nil || saved.Running || string(saved.Source) != string(source) {
+		t.Fatal("old config not safely stopped", err)
+	}
+}

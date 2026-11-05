@@ -70,7 +70,10 @@ type Process struct {
 
 func newRawProcess(s *Store) *Process        { return &Process{store: s} }
 func newSupervisedProcess(s *Store) *Process { return &Process{store: s, supervised: true} }
-func (p *Process) command(ctx context.Context, args ...string) (*exec.Cmd, error) {
+func (p *Process) command(ctx context.Context, tokenPipe *os.File, args ...string) (*exec.Cmd, error) {
+	if tokenPipe == nil {
+		return nil, ErrConfig
+	}
 	b, e := p.store.Read("frpc", 32<<20)
 	if e != nil || !verifyBinary(b) {
 		return nil, ErrBinary
@@ -78,11 +81,11 @@ func (p *Process) command(ctx context.Context, args ...string) (*exec.Cmd, error
 	c := exec.CommandContext(ctx, filepath.Join(p.store.Path, "frpc"), args...)
 	c.Dir = p.store.Path
 	c.Env = []string{"LANG=C", "HOME=" + p.store.Path} // no proxy, template or runtime env inheritance
-	c.ExtraFiles = []*os.File{p.store.lock}
+	c.ExtraFiles = []*os.File{p.store.lock, tokenPipe} // child fd 3: singleton; fd 4: token source
 	// stdout/stderr are discarded: frpc diagnostics may contain auth secrets.
 	return c, nil
 }
-func (p *Process) Verify(ctx context.Context) (verifyErr error) {
+func (p *Process) Verify(ctx context.Context, tokenPipe *os.File) (verifyErr error) {
 	defer func() {
 		if e := p.store.RemoveRuntime("candidate.json"); e != nil {
 			verifyErr = e
@@ -90,7 +93,7 @@ func (p *Process) Verify(ctx context.Context) (verifyErr error) {
 	}()
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	c, e := p.command(ctx, "verify", "-c", filepath.Join(p.store.Path, "candidate.json"))
+	c, e := p.command(ctx, tokenPipe, "verify", "-c", filepath.Join(p.store.Path, "candidate.json"))
 	if e != nil {
 		return e
 	}
@@ -111,7 +114,7 @@ func (p *Process) Running() bool {
 		return true
 	}
 }
-func (p *Process) Start(ctx context.Context) error {
+func (p *Process) Start(ctx context.Context, tokenPipe *os.File) error {
 	running := p.Running()
 	if p.poisoned {
 		return ErrSupervisor
@@ -120,10 +123,10 @@ func (p *Process) Start(ctx context.Context) error {
 		return nil
 	}
 	if p.supervised {
-		return p.startSupervisor(ctx)
+		return p.startSupervisor(ctx, tokenPipe)
 	}
 	// Child lifetime is explicit, not tied to an individual command lease.
-	c, e := p.command(context.Background(), "-c", filepath.Join(p.store.Path, "active.json"))
+	c, e := p.command(context.Background(), tokenPipe, "-c", filepath.Join(p.store.Path, "active.json"))
 	if e != nil {
 		return e
 	}
@@ -203,7 +206,10 @@ func (p *Process) exited(err error) {
 	p.done = nil
 }
 
-func (p *Process) startSupervisor(ctx context.Context) error {
+func (p *Process) startSupervisor(ctx context.Context, tokenPipe *os.File) error {
+	if tokenPipe == nil {
+		return ErrConfig
+	}
 	executable, err := os.Executable()
 	if err != nil {
 		return ErrProcess
@@ -222,7 +228,7 @@ func (p *Process) startSupervisor(ctx context.Context) error {
 	c := exec.Command(executable, "__supervise-frpc", p.store.Path)
 	c.Dir = p.store.Path
 	c.Env = []string{"LANG=C", "HOME=" + p.store.Path}
-	c.ExtraFiles = []*os.File{p.store.dir, p.store.lock, lifeRead, readyWrite}
+	c.ExtraFiles = []*os.File{p.store.dir, p.store.lock, lifeRead, readyWrite, tokenPipe}
 	if err = c.Start(); err != nil {
 		lifeWrite.Close()
 		readyRead.Close()

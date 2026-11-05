@@ -35,21 +35,25 @@ func TestPinnedFRPCInheritsSingletonLock(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if e = s.Write("candidate.json", b, 0600); e != nil {
+	verifyToken, e := s.stageRuntime("candidate.json", b)
+	if e != nil {
 		t.Fatal(e)
 	}
+	defer verifyToken.Close()
 	p := newRawProcess(s)
 	defer p.Stop()
-	if e = p.Verify(context.Background()); e != nil {
+	if e = p.Verify(context.Background(), verifyToken); e != nil {
 		t.Fatal(e)
 	}
 	if _, e = os.Stat(filepath.Join(s.Path, "candidate.json")); !os.IsNotExist(e) {
 		t.Fatal("verification cache retained", e)
 	}
-	if e = s.Write("active.json", b, 0600); e != nil {
+	startToken, e := s.stageRuntime("active.json", b)
+	if e != nil {
 		t.Fatal(e)
 	}
-	if e = p.Start(context.Background()); e != nil {
+	defer startToken.Close()
+	if e = p.Start(context.Background(), startToken); e != nil {
 		t.Fatal(e)
 	}
 	// Closing all parent's descriptors models the OS cleanup after SIGKILL;

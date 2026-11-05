@@ -42,12 +42,12 @@ func TestSupervisorUnknownExitPreventsDuplicateProcess(t *testing.T) {
 	if _, e = reader.Read(b[:]); e != io.EOF {
 		t.Fatal("liveness writer leaked", e)
 	}
-	if e = r.process.Start(context.Background()); e != ErrSupervisor {
+	if e = r.process.Start(context.Background(), nil); e != ErrSupervisor {
 		t.Fatal("unsafe duplicate restart", e)
 	}
 	r.process.cmd = &exec.Cmd{}
 	r.process.done = make(chan error)
-	if e = r.process.Start(context.Background()); e != ErrSupervisor {
+	if e = r.process.Start(context.Background(), nil); e != ErrSupervisor {
 		t.Fatal("uncertain running child treated as healthy", e)
 	}
 	r.process.cmd = nil

@@ -56,7 +56,13 @@ cloudnest-agent protect-state --state /absolute/private/cloudnest-agent \
 
 官方 frpc 0.71.1 会重复读取配置路径，当前仍用 0600 的 `candidate.json` / `active.json` 给固定程序验证和启动。candidate 在验证结束后删除；active 在监督进程停止并回收 frpc 后删除。重新启动 Agent 或完成迁移时清理遗留的这两个缓存，清理函数不允许删除身份、执行历史或操作人员的密钥文件。
 
-**运行中的 active 配置仍可能含明文 FRP token。** Agent/监督进程同时异常终止、掉电或运行中备份可能留下该文件及文件系统历史。状态卷仍需磁盘加密和严格备份权限；此批没有宣称所有本地秘密在所有时刻都只以密文存在。SEC-010 因运行缓存、历史备份和生产迁移继续保持开放。不要把一次性管道直接替代配置路径：[固定版本的官方加载实现](https://github.com/fatedier/frp/blob/v0.71.1/pkg/config/load.go) 会先探测旧格式再重新读取。
+运行文件只保存映射、连接和 TLS 参数；认证 token 被移除。Agent 重新验证规范化配置后，将最多 1024 字节的原始 token 写入匿名管道并关闭写端。验证进程直接继承读端；启动进程通过监督进程传给 frpc。唯一允许的 tokenSource 是本机生成的固定 `file.path=/dev/fd/4`，远端下发的文件加载器、exec 或自定义路径仍被拒绝。token 不出现在子进程参数、环境或运行配置中。
+
+固定 0.71.1 的 [认证初始化](https://github.com/fatedier/frp/blob/v0.71.1/pkg/auth/auth.go) 解析一次 [文件 token 源](https://github.com/fatedier/frp/blob/v0.71.1/pkg/config/v1/value_source.go)，然后将值留在进程内用于重连。每次启动或验证使用新的管道；不要把管道用于整个配置路径，[配置加载](https://github.com/fatedier/frp/blob/v0.71.1/pkg/config/load.go) 会先探测旧格式再重新读取。已通过实际二进制认证、重连和重启测试，升级 FRP 时必须重新验证这个协议。
+
+文件 token 源会裁剪首尾空白。Agent 对此类 token 返回 `config_invalid`，不静默修改凭据、不写明文回退。旧加密状态如含此类 token，启动后保存停止意图并报告固定错误，但继续认证和领取命令；需协调 frps 的认证配置并下发新的合法版本。内部空格、井号和 Unicode 均原样传递。服务端仍保留原配置与历史，不自动轮换生产 token。
+
+旧明文文件的磁盘历史、备份和快照不因更新而消失；运行中的进程内存、映射地址也不是加密存储。SEC-010 因历史备份、生产迁移与部署保护继续保持开放，设备仍需受保护磁盘和受限备份。
 
 ## 验证
 
