@@ -26,7 +26,7 @@
 
 五个专项集成测试在一次性 MySQL/Redis 上通过，包耗时 9.574 秒。实际编译后的服务使用临时证书启动 HTTPS，完成所有者再认证、兑换、心跳、状态查询、轮换及撤销。用例还覆盖并发兑换、审计故障回滚、过期、跨设备输入、共享限流、所有者变更和删除，以及低权限运行账号对触发器缺失或漂移的检测。日志在 `/tmp/cloudnest-g05-final-agent.log`。
 
-frps 配置加密及历史显式迁移现已实现，见 [配置加密](FRP-CONFIG-ENCRYPTION.md)。持久化命令租约与幂等回执已接入，见 [命令协议](FRP-DURABLE-COMMANDS.md)。2026-11-04 Go Agent 已实现加密状态、Keychain/外部密钥及官方 frpc 管理，实际 CLI 三种隧道、正常重启、frps 重连及 Agent SIGKILL 恢复通过，见 [Agent 运行与边界](FRP-AGENT.md)。运行缓存治理、系统服务、双故障恢复和账号恢复时批量撤销设备仍待接入。
+frps 配置加密及历史显式迁移现已实现，见 [配置加密](FRP-CONFIG-ENCRYPTION.md)。持久化命令租约与幂等回执已接入，见 [命令协议](FRP-DURABLE-COMMANDS.md)。2026-11-04 Go Agent 已实现加密状态、Keychain/外部密钥及官方 frpc 管理，实际 CLI 三种隧道、正常重启、frps 重连及 Agent SIGKILL 恢复通过，见 [Agent 运行与边界](FRP-AGENT.md)。macOS 登录用户可使用 LaunchAgent 自动拉起进程。运行缓存治理、Linux 服务、双故障恢复和账号恢复时批量撤销设备仍待接入。
 
 文件传输的清理程序会核对数据库内全部触发器。它接受本阶段定义的四个撤销触发器，逐项验证其动作仅清空设备凭据字段。出现其他触发器、同名定义漂移或目录权限不足时，清理仍然拒绝回收文件。
 

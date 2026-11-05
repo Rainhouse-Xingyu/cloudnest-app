@@ -1,6 +1,6 @@
 # G05 前台 Go Agent
 
-`cloudnest_go/cmd/agent` 已接入独立注册、HTTPS 心跳、持久命令、官方 frpc 启停及本地执行记录。Agent 只接受 deploy_config、start、stop、reload、diagnose。身份/执行记录已加密，macOS 默认用 Keychain 保管密钥。此版本仍是前台进程，G05 尚未整体验收；不包含系统服务安装器。
+`cloudnest_go/cmd/agent` 已接入独立注册、HTTPS 心跳、持久命令、官方 frpc 启停及本地执行记录。Agent 只接受 deploy_config、start、stop、reload、diagnose。身份/执行记录已加密，macOS 默认用 Keychain 保管密钥。可在终端运行，也可由当前 macOS 登录用户的 launchd 启动。G05 尚未整体验收。
 
 ## 运行与本机授权
 
@@ -42,9 +42,34 @@ deploy_config 保存目标配置并启动 frpc；start 启动已保存配置；s
 
 Agent 通过自身可执行文件的内部入口创建独立监督进程，传入已打开的私有目录、独占锁、存活管道和就绪管道。监督进程核对目录/锁 inode、所有者、权限与管道类型，再启动固定 frpc；下一级只继承锁，不继承存活/就绪管道。注册凭据不通过这些参数或管道传递。启动只有在监督进程确认 frpc 存活后才完成。
 
-存活管道唯一写端属于 Agent。正常停止或 Agent 被 SIGKILL 后，内核关闭写端，监督进程停止并等待其直接创建的 frpc；正常退出超时后，只对该子进程句柄执行强制终止。释放所有继承锁后，可重新运行 Agent，从已保存状态恢复。**Agent SIGKILL 后清理与重启已通过真实进程/隧道测试**。这不自动启动已经退出的 Agent；系统服务安装与自动重启策略仍待完成。
+存活管道唯一写端属于 Agent。正常停止或 Agent 被 SIGKILL 后，内核关闭写端，监督进程停止并等待其直接创建的 frpc；正常退出超时后，只对该子进程句柄执行强制终止。释放所有继承锁后，可重新运行 Agent，从已保存状态恢复。**Agent SIGKILL 后清理与重启已通过真实进程/隧道测试**。前台模式需手动重启 Agent；使用下面的用户 LaunchAgent 时，由 launchd 自动拉起。
 
 若监督进程自身被 SIGKILL，Agent 不能证明 frpc 已回收，会明确退出并拒绝继续启动。仍存活的 frpc 持有锁，新 Agent 同样被拒绝。真实测试已验证此双故障边界。只有监督进程明确回收了子进程的退出状态才允许自动重启；不从持久 PID 文件接管，不根据可能复用的 PID 发送管理信号。此类残留进程仍需操作人员核对并停止，不能删除 lock 文件绕过保护，也不能使用 killall。掉电、系统休眠和整组进程被强制终止的恢复尚未验收。
+
+## macOS 登录用户的后台服务
+
+先从固定的、仅受信任用户可修改的绝对路径运行已构建的 Agent，按上文注册，并确认前台 `run` 可以连接。停止前台实例后，在该用户的 macOS 图形登录会话中执行以下首次安装示例（替换二进制和状态路径）。不使用 sudo。生成命令只输出 plist，不启动服务；plist 只含固定标签、可执行文件、`run --state` 和 launchd 设置，不含凭据、token 或密钥。
+
+```bash
+(
+  set -eu
+  set -C # 首次安装拒绝覆盖已有 plist
+  umask 077
+  agent="/absolute/path/cloudnest-agent"
+  state="$HOME/Library/Application Support/CloudNest/agent"
+  jobs="$HOME/Library/LaunchAgents"
+  plist="$jobs/com.cloudnest.agent.plist"
+  mkdir -p "$jobs"
+  "$agent" launch-agent --state "$state" > "$plist"
+  /usr/bin/plutil -lint "$plist"
+  /bin/launchctl bootstrap "gui/$(id -u)" "$plist"
+)
+/bin/launchctl print "gui/$(id -u)/com.cloudnest.agent"
+```
+
+launchd 直接执行 Agent，无 shell 展开。KeepAlive 保持服务运行，异常退出后允许重试，快速失败的启动按 10 秒节流。钥匙串锁定、密钥丢失或状态损坏时，进程仍拒绝读取，不能靠重启绕过。服务仅在该用户登录时工作。临时停止：`launchctl bootout "gui/$(id -u)/com.cloudnest.agent"`；要恢复，重新执行 bootstrap。若需卸载，bootout 后移走这个 plist，保留状态、凭据和钥匙串。变更二进制或状态路径时，先 bootout，审阅并替换 plist 再重新加载。
+
+本机验收使用随机标签、临时 plist 和单独的测试身份，未写入真实登录启动目录。试验比较 SIGKILL 前后的 launchd 进程标识，通过新命令回执与三种隧道请求验证恢复。此次采用外部测试密钥，签名升级、用户实际钥匙串的非交互访问、跨登录/休眠恢复需分别验收。这里提供独立 CLI 的服务方式；未来 macOS App 内的后台项应通过 [Apple Service Management](https://developer.apple.com/documentation/servicemanagement/) 注册，并尊重系统用户审批。
 
 ## 固定官方制品
 
@@ -65,4 +90,4 @@ Agent 通过自身可执行文件的内部入口创建独立监督进程，传�
 
 普通测试还覆盖 TLS 信任/重定向/响应边界、回执网络丢失后从磁盘恢复、同命令新租约不再执行、未完成租约失效关闭意图、状态配置重新验证、文件访问边界和假冒二进制。原生进程测试用实际官方 frpc 验证关闭父进程描述符后锁仍保留，子进程退出后释放。
 
-剩余：运行配置缓存与备份治理、Keychain 签名升级访问验收、监督进程丢失后的安全恢复、控制后端重启/长时间离线及系统休眠验收、连接级状态/诊断、受限日志、发布和系统服务安装、远程端口并发约束验收与服务器作用域、旧 JWT 设备迁移。STCP/XTCP 继续按里程碑评估。未部署到真实公网服务器，未操作现有设备或生产数据库。具体本地测试和失败记录见 [测试记录](TESTING.md)。
+剩余：运行配置缓存与备份治理、Keychain 签名升级访问验收、监督进程丢失后的安全恢复、控制后端重启/长时间离线及系统休眠验收、连接级状态/诊断、受限日志、正式签名发布与 Linux 服务部署、远程端口并发约束验收与服务器作用域、旧 JWT 设备迁移。STCP/XTCP 继续按里程碑评估。未部署到真实公网服务器，未操作现有设备或生产数据库。具体本地测试和失败记录见 [测试记录](TESTING.md)。

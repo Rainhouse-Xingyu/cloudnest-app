@@ -24,6 +24,8 @@ jobs:
           cache-dependency-path: cloudnest_go/go.sum
       - run: CGO_ENABLED=1 go test -tags=keychainnative -race -count=1 -v ./internal/frpagent -run '^TestDarwinKeychain'
         working-directory: cloudnest_go
+      - run: go test -race -count=1 -v ./cmd/agent
+        working-directory: cloudnest_go
   agent-native:
     runs-on: ubuntu-latest
     timeout-minutes: 10

@@ -33,6 +33,12 @@ import (
 // Actual Agent CLI -> actual TLS server -> disposable MySQL -> pinned official
 // frpc/frps -> real local upstream. No simulated successful tunnel or executor.
 func TestAgentNativeCLIThreeTunnelsRestartAndReconnect(t *testing.T) {
+	testAgentNativeTunnels(t, nil)
+}
+
+type nativeServiceTest func(t *testing.T, ctx context.Context, bin, state, work string, probe, diagnose func())
+
+func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest) {
 	dir := os.Getenv("CLOUDNEST_TEST_FRP_BIN_DIR")
 	if !filepath.IsAbs(dir) {
 		t.Fatal("set CLOUDNEST_TEST_FRP_BIN_DIR to verified official 0.71.1 binaries")
@@ -51,7 +57,7 @@ func TestAgentNativeCLIThreeTunnelsRestartAndReconnect(t *testing.T) {
 	if e = os.WriteFile(caPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: resp.TLS.PeerCertificates[0].Raw}), 0600); e != nil {
 		t.Fatal(e)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 65*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 95*time.Second)
 	defer cancel()
 	upstream := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, "agent-tunnel:"+r.URL.Path) })
 	plain := httptest.NewServer(upstream)
@@ -122,7 +128,7 @@ func TestAgentNativeCLIThreeTunnelsRestartAndReconnect(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	statePath := filepath.Join(work, "agent-state")
+	statePath := filepath.Join(work, "Agent state & configs")
 	keyPath := filepath.Join(work, "agent-key")
 	if e = os.WriteFile(keyPath, bytes.Repeat([]byte{0x31}, 32), 0600); e != nil {
 		t.Fatal(e)
@@ -255,6 +261,27 @@ func TestAgentNativeCLIThreeTunnelsRestartAndReconnect(t *testing.T) {
 	}
 	command("start", 0, "ok")
 	probe()
+	// Only the Darwin service-specific test requests an actual launchd job.
+	if serviceTest != nil {
+		stopAgent()
+		serviceTest(t, ctx, bin, statePath, work, probe, func() { command("diagnose", 0, "ok") })
+		// bootout can return before the child's shutdown finishes.
+		for {
+			st, err := frpagent.OpenStore(statePath)
+			if err == nil {
+				st.Close()
+				break
+			}
+			if !errors.Is(err, frpagent.ErrLocked) || ctx.Err() != nil {
+				t.Fatal("service did not release Agent state", err)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		if _, err := os.Stat(filepath.Join(statePath, "active.json")); !errors.Is(err, os.ErrNotExist) {
+			t.Fatal("service shutdown retained runtime configuration", err)
+		}
+		return
+	}
 	// Saved desired state restores on graceful CLI restart after valid heartbeat.
 	stopAgent()
 	startAgent()

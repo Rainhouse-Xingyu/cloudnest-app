@@ -48,7 +48,7 @@
 | AI-004 P1 | `os.ReadFile` 图片全量载入，PDF/OpenXML 提取有上限但无完整资源预算 | 大图/损坏 PDF/压缩炸弹，受限容器观察资源 | G04 文档解析隔离、页/像素/展开字节限额和取消 | 待安全实测 |
 | AI-005 P2 | `handler/ai_handler.go` 与 `service/ai_service.go` 重复提取/模型 helper | 函数清单对比；调用图核对 | G04 统一 provider/parser 接口，保留单一实现与测试 | 已确认，待重构 |
 | FRP-001 P1 | `PullNextCommand` LPop 后更新状态，没有租约回收任务 | 领取后 Agent 崩溃；队列命令丢失/卡 running | G05 持久命令/ACK/幂等/超时重发/终态约束 | 新设备使用 MySQL 命令/租约，Agent 持久保存结果后 ACK，丢回执/新租约不重复执行已有结果；旧未登记设备路径及完整崩溃恢复仍待验收 |
-| FRP-002 P1 | 原仓库没有设备 Agent/frpc 进程管理实现 | 检查 Go cmd 与实际隧道访问 | G05 官方 frpc、白名单 start/stop/reload/diagnose、自动恢复 | 前台 Go Agent 已实现，实际 CLI 三种隧道、正常重启与 frps 重连通过；连接级状态、自动接管和服务安装待完成，见 [Agent 记录](FRP-AGENT.md) |
+| FRP-002 P1 | 原仓库没有设备 Agent/frpc 进程管理实现 | 检查 Go cmd 与实际隧道访问 | G05 官方 frpc、白名单 start/stop/reload/diagnose、自动恢复 | 前台 Go Agent 已实现，实际 CLI 三种隧道、正常重启与 frps 重连通过；macOS 用户 LaunchAgent 异常重启已实测，连接级状态、双故障恢复及 Linux 服务待完成，见 [Agent 记录](FRP-AGENT.md) |
 | FRP-003 P1 | 原 YAML 使用用户 serverAddr/token/domain 原文拼接 | 输入换行/冒号/特殊字符串，运行 frpc verify | G05 typed config 序列化+官方验证，拒绝注入 | 生成器引号/模板防护、Agent 严格白名单及规范 JSON、官方 verify 均已实现；正常特殊 token 和危险配置实际链路已测，代码完成待审 |
 | FRP-004 P1 | 端口冲突先查后写，server 作用域/唯一性与心跳离线任务需核对 | 并发相同端口、设备失联、配置回滚 | G05 唯一索引/端口预留/周期判离线/版本关联 | 部分实现，未验收 |
 | COLLAB-001 P1 | Workspace 成员管理存在；通用文件 ACL 主要用 owner/file_permission，空间角色链路不完整 | 空间 viewer/editor 对文件 CRUD 矩阵；禁止越级授权 | G06 明确空间/文件权限继承和管理员边界 | 待完整矩阵验证 |

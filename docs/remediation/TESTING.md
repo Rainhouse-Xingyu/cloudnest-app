@@ -184,3 +184,11 @@ Darwin arm64 使用测试专用临时文件钥匙串，通过真实 Security.fra
 真实 CLI/TLS、隔离 MySQL/Redis 和官方 frpc/frps 使用单独的外部密钥文件验证 TCP/HTTP/HTTPS、异常退出及恢复。增加磁盘密文、正常停止后运行配置消失以及使用错误密钥无法启动的断言；通过（用例 27.56s、包 29.865s，`/tmp/cloudnest-g05-vault-native-final.log`）。这项端到端测试没有使用登录钥匙串。`make -C cloudnest_go check test build-macos build-linux` 通过（`/tmp/cloudnest-g05-vault-check-final.log`）；本批未在本地重新运行完整普通数据库套件。
 
 运行中的 frpc 仍需可重复读取的私有配置；停止时删除不能擦除已有快照或备份。探索性 Darwin POSIX 共享内存探针不能按普通文件写入/定位（ENXIO），未用于实现，亦不算产品测试。SEC-010、正式签名后升级的钥匙串访问和生产历史迁移仍待验收。详见 [Agent 本机密钥与恢复](FRP-AGENT-VAULT.md)。
+
+## 2026-11-05 G05 macOS 用户 LaunchAgent 自动恢复
+
+增加 `cloudnest-agent launch-agent --state ...`，从实际二进制位置生成固定参数的用户服务定义。含空格、引号、Unicode 和 XML 特殊字符的路径通过系统 plutil 逐项解析；相对路径、控制字符和非规范路径被拒绝（race，包 1.642s）。生成不会加载服务或读取密钥。部署与卸载步骤见 [Agent 运行指南](FRP-AGENT.md)。
+
+Darwin arm64 首次真实 launchd 测试通过（35.27s，`/tmp/cloudnest-g05-launchd-native.log`）；补充 bootout 后释放状态锁、清理 active.json 的断言，再与原 CLI 三隧道/双故障回归一起执行，均通过：28.47s + 35.24s，包 66.565s（`/tmp/cloudnest-g05-launchd-native-final.log`）。测试使用临时 plist、随机服务标签、已编译 Agent、隔离 MySQL/Redis、实际 TLS、官方 frpc/frps，先确认三个上游可达，再对该临时服务执行 SIGKILL。launchd 自动启动不同 PID 的 Agent，新认证命令完成且 TCP、HTTP、HTTPS 再次实际可用；没有人工重启 Agent，没有在用户启动目录安装产品服务。
+
+`make -C cloudnest_go check test build-macos build-linux` 通过，日志 `/tmp/cloudnest-g05-launchd-check.log`。本地服务集成必须有 macOS 图形登录域和 Docker，显式运行 `scripts/test-integration.sh -tags=integration,frpnative,launchdnative -run '^TestLaunchAgentNativeCrashRecovery$'` 并提供官方二进制目录。GitHub macOS 作业单独检查真实 Keychain 和系统 plist 解析，不等于运行过完整 launchd/数据库集成。未实测用户注销/重新登录、休眠、钥匙串锁定后的无人值守服务、签名更新或 Linux 服务管理。
