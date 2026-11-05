@@ -202,3 +202,11 @@ Darwin arm64 首次真实 launchd 测试通过（35.27s，`/tmp/cloudnest-g05-la
 实际 CLI 和 launchd 两项集成均通过（27.79s、35.01s，包 64.772s，`/tmp/cloudnest-g05-tokenpipe-e2e.log`），增加运行中配置只有固定 fd 路径、没有认证 token 的检查。保持三种隧道、reload、Agent/监督进程 SIGKILL、frps 重连和 launchd 自动拉起的真实验证。`make -C cloudnest_go check test build-macos build-linux` 全通过（`/tmp/cloudnest-g05-tokenpipe-check.log`）。
 
 先前 vault 提交 `58d0428` 的两次 CI 中，真实 macOS Keychain、Linux 原生隧道和漏洞扫描分别通过；完整 build-test 尚未结束，随后因较新提交排队而整次取消，不能记为全绿。新提交的完整 CI 需按实际 SHA 单独核验。历史明文备份/生产迁移、实际签名升级和所有连接的实时健康仍未验收。
+
+## 2026-11-05 G05 控制后端停机/重启与运行设备撤销
+
+实际 TLS 服务夹具支持停止、等待已启动进程退出及在同一地址/证书/隔离存储上重新启动。原来的三个真实 TLS 调用方（设备注册轮换、配置脱敏注入、持久命令回执）重新运行全部通过（包 11.364s，`/tmp/cloudnest-g05-restart-helper-regression.log`）；带原生标签的集成 vet 通过。
+
+实际 Agent 隧道测试新增：停止已编译后端并确认连接失败，观察 Agent 的固定网络错误，确认既有三种隧道可达、数据库中新命令仍为 pending，再启动后端并等待命令成功回执。随后在真实隧道运行中撤销该测试设备凭据，要求 Agent 在十秒内报告失败退出、TCP 端口停止监听且状态锁释放。此项通过（35.59s）。与原 launchd 自动恢复测试（35.44s）一起通过，包 73.120s，运行日志 `/tmp/cloudnest-g05-backend-restart-e2e.log`。此次为短时中断，不是长期离线、睡眠或全机掉电测试；所有操作仅针对测试创建的进程与隔离数据库。
+
+`37d1e7c195e1500d76928584b16ff92fee5cc75c` 的 PR `41943203704`、push `41943196762` CI 均四作业全通过。后继 `8a4a7c4` 已核对 Linux 原生 token 管道/隧道、macOS Keychain 和漏洞作业通过，完整后端回归尚需等待该 SHA 的终态。

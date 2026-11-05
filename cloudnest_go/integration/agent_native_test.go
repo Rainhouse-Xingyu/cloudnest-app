@@ -46,7 +46,7 @@ func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest) {
 	f := newFixture(t)
 	device := agentDevice(t, f)
 	f.cfg.FRPKeyFile, f.cfg.FRPKeys = frpTestKeys(t, "one", map[string][]byte{"one": bytes.Repeat([]byte{1}, 32)})
-	base, httpClient := startAgentTLSServer(t, f)
+	base, httpClient, stopBackend, startBackend := restartableAgentTLSServer(t, f)
 	resp, e := httpClient.Get(base + "/api/resource/health")
 	if e != nil {
 		t.Fatal(e)
@@ -394,6 +394,52 @@ func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest) {
 	stopFRPS()
 	startFRPS()
 	probe()
+	// Terminate the actual compiled HTTPS backend, retaining the disposable
+	// datastores. Existing frpc traffic remains available during control outage.
+	stopBackend()
+	if response, err := httpClient.Get(base + "/api/resource/health"); err == nil {
+		response.Body.Close()
+		t.Fatal("stopped backend still reachable")
+	}
+	queued, err := m.Enqueue(ctx, f.aliceID, false, device, agentcommand.EnqueueInput{RequestID: strings.Repeat("f", 32), Action: "reload"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline = time.Now().Add(10 * time.Second)
+	for {
+		logged, err := os.ReadFile(logPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bytes.Contains(logged, []byte(frpagent.ErrNetwork.Error())) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("Agent did not observe control outage")
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	probe()
+	var waiting model.AgentCommand
+	if err := f.db.First(&waiting, "id=?", queued.ID).Error; err != nil || waiting.Status != "pending" {
+		t.Fatal("offline command was executed without backend authorization", err)
+	}
+	startBackend()
+	deadline = time.Now().Add(12 * time.Second)
+	for {
+		var recovered model.AgentCommand
+		if err := f.db.First(&recovered, "id=?", queued.ID).Error; err != nil {
+			t.Fatal(err)
+		}
+		if recovered.Status == "succeeded" && recovered.ResultCode == "ok" {
+			break
+		}
+		if recovered.Status == "failed" || time.Now().After(deadline) {
+			t.Fatal("queued command did not survive backend restart", recovered.Status)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	probe()
 	bad, e := repo.CreateConfig(ctx, f.aliceID, false, model.FrpConfig{DeviceID: &device, ConfigText: configText + "includes: ['/etc/*']\n"})
 	if e != nil {
 		t.Fatal(e)
@@ -425,9 +471,45 @@ func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest) {
 	if e = os.WriteFile(keyPath, bytes.Repeat([]byte{0x31}, 32), 0600); e != nil {
 		t.Fatal(e)
 	}
+	// A real revocation must close running tunnels after the next authenticated
+	// request is denied; it is not sufficient to mark the DB row revoked.
+	startAgent()
+	probe()
+	if e := agentauth.New(f.db).Revoke(ctx, f.aliceID, device, "disposable-fixture-password"); e != nil {
+		t.Fatal(e)
+	}
+	revokedAgent := agent
+	agent = nil
+	revokedExit := make(chan error, 1)
+	go func() { revokedExit <- revokedAgent.Wait() }()
+	select {
+	case err := <-revokedExit:
+		if err == nil {
+			t.Fatal("revoked Agent exited without reporting denial")
+		}
+	case <-time.After(10 * time.Second):
+		_ = revokedAgent.Process.Kill()
+		<-revokedExit
+		t.Fatal("revoked Agent did not stop")
+	}
+	if conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(remote)), time.Second); err == nil {
+		conn.Close()
+		t.Fatal("revoked Agent left its TCP tunnel listening")
+	}
+	if st, err := frpagent.OpenStore(statePath); err != nil {
+		t.Fatal("revoked Agent retained lock", err)
+	} else {
+		st.Close()
+	}
 	b, e := os.ReadFile(logPath)
 	if e != nil {
 		t.Fatal(e)
+	}
+	if !bytes.Contains(b, []byte(frpagent.HTTPError(401).Error())) {
+		t.Fatal("Agent did not report the credential denial")
+	}
+	if _, err := os.Stat(filepath.Join(statePath, "active.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("revocation retained runtime configuration", err)
 	}
 	for _, secret := range []string{enrollment.Enrollment, identity.Registration.Credential, "native-fixture # secret"} {
 		if bytes.Contains(b, []byte(secret)) {
@@ -437,5 +519,5 @@ func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest) {
 	if bytes.Contains(b, []byte("DATA RACE")) {
 		t.Fatal("agent race detector report")
 	}
-	t.Log("actual CLI enrolled; TCP/HTTP/HTTPS reached upstream; reload/stop/start, graceful restart, Agent SIGKILL recovery, supervisor SIGKILL exclusion, frps reconnect and invalid config rejection passed")
+	t.Log("actual CLI enrolled; TCP/HTTP/HTTPS reached upstream; reload/stop/start, graceful restart, Agent SIGKILL recovery, supervisor SIGKILL exclusion, frps reconnect, backend outage/restart queue recovery, credential revocation and invalid config rejection passed")
 }
