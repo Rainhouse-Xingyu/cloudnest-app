@@ -2,6 +2,8 @@ package model
 
 import (
 	"time"
+
+	"gorm.io/gorm"
 )
 
 // User 用户表
@@ -260,12 +262,13 @@ func (WorkspaceUser) TableName() string {
 
 // Device 设备表
 type Device struct {
-	ID         int64     `gorm:"primaryKey;autoIncrement" json:"id"`
-	UserID     int64     `gorm:"not null;index" json:"user_id"`
-	DeviceName string    `gorm:"type:varchar(100)" json:"device_name"`
-	DeviceIP   string    `gorm:"type:varchar(50);column:device_ip" json:"device_ip"`
-	Status     int8      `gorm:"type:tinyint;default:1" json:"status"`
-	CreateTime time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP" json:"create_time"`
+	RetiredAt  gorm.DeletedAt `gorm:"column:retired_at;type:datetime(6);index" json:"retired_at"`
+	ID         int64          `gorm:"primaryKey;autoIncrement" json:"id"`
+	UserID     int64          `gorm:"not null;index" json:"user_id"`
+	DeviceName string         `gorm:"type:varchar(100)" json:"device_name"`
+	DeviceIP   string         `gorm:"type:varchar(50);column:device_ip" json:"device_ip"`
+	Status     int8           `gorm:"type:tinyint;default:1" json:"status"`
+	CreateTime time.Time      `gorm:"type:datetime;default:CURRENT_TIMESTAMP" json:"create_time"`
 }
 
 func (Device) TableName() string {
@@ -291,7 +294,7 @@ func (FrpMapping) TableName() string {
 type FrpConfig struct {
 	ID         int64     `gorm:"primaryKey;autoIncrement" json:"id"`
 	DeviceID   *int64    `gorm:"type:bigint" json:"device_id"`
-	ConfigText string    `gorm:"type:text" json:"config_text"`
+	ConfigText string    `gorm:"type:text" json:"-"`
 	CreateTime time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP" json:"create_time"`
 }
 

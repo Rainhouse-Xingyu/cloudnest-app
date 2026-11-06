@@ -61,7 +61,10 @@ func Migrate(db *gorm.DB) error {
 		&model.SystemSetting{},
 		&model.LivePhoto{},
 		&model.Device{},
+		&model.AgentBinding{},
+		&model.AgentCommand{},
 		&model.FrpMapping{},
+		&model.FrpMappingPool{},
 		&model.FrpConfig{},
 		&model.AiMetadata{},
 		&model.AiTask{},
@@ -69,6 +72,12 @@ func Migrate(db *gorm.DB) error {
 		return fmt.Errorf("migrate schema failed: %w", err)
 	}
 
+	if err := installMappingSchema(db); err != nil {
+		return err
+	}
+	if err := installAgentTriggers(db); err != nil {
+		return fmt.Errorf("agent identity migration: %w", err)
+	}
 	return db.Clauses(clause.OnConflict{DoNothing: true}).Create(&model.StorageQuotaPolicy{ID: 1}).Error
 }
 

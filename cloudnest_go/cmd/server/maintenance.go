@@ -21,7 +21,7 @@ func parseMaintenanceArgs(args []string) (maintenanceCommand, bool, error) {
 		return maintenanceCommand{}, false, nil
 	}
 	switch args[0] {
-	case "migrate", "bootstrap-admin", "audit-file-names", "migrate-file-names", "audit-storage-references", "migrate-storage-references", "gc-storage", "prune-read-leases", "audit-transfers", "reconcile-transfers":
+	case "audit-frp-configs", "encrypt-frp-configs", "migrate", "bootstrap-admin", "audit-file-names", "migrate-file-names", "audit-storage-references", "migrate-storage-references", "gc-storage", "prune-read-leases", "audit-transfers", "reconcile-transfers":
 		if len(args) != 1 {
 			return maintenanceCommand{}, true, errors.New("maintenance command does not accept extra arguments")
 		}

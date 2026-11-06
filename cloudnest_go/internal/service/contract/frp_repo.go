@@ -7,8 +7,16 @@ import (
 	"cloudenest_go/model"
 )
 
+// FrpActor carries authenticated caller identity into the write transaction.
+type FrpActor struct {
+	UserID   int64
+	Admin    bool
+	ClientIP string
+}
+
 // FrpCreateMappingInput 定义创建映射输入。
 type FrpCreateMappingInput struct {
+	FrpActor
 	DeviceID   int64
 	LocalPort  int
 	RemotePort *int
@@ -18,6 +26,7 @@ type FrpCreateMappingInput struct {
 
 // FrpUpdateMappingInput 定义更新映射输入。
 type FrpUpdateMappingInput struct {
+	FrpActor
 	MappingID  int64
 	LocalPort  *int
 	RemotePort *int
@@ -31,21 +40,30 @@ type FrpDeviceDetailMeta struct {
 	LatestConfigTime *time.Time
 }
 
+type AgentHeartbeatState struct {
+	Active        bool
+	LastSeenAt    *time.Time
+	ClientVersion string
+}
+
 // FrpRepository 定义 FRP 模块存储访问能力。
 type FrpRepository interface {
-	CreateDevice(ctx context.Context, device model.Device) (model.Device, error)
-	ListDevices(ctx context.Context, uid int64, isAdmin bool, statusFilter *int8) ([]model.Device, error)
-	GetDeviceByID(ctx context.Context, deviceID int64) (model.Device, error)
+	GetAgentHeartbeat(context.Context, int64, bool, int64) (*AgentHeartbeatState, error)
+	WithLegacyDevice(context.Context, int64, bool, int64, func(context.Context) error) error
+	CreateDevice(ctx context.Context, actor FrpActor, device model.Device) (model.Device, error)
+	ListDevices(ctx context.Context, uid int64, isAdmin bool, statusFilter *int8, retired bool) ([]model.Device, error)
+	GetDeviceByID(ctx context.Context, deviceID int64, retired ...bool) (model.Device, error)
 	GetDeviceDetailMeta(ctx context.Context, deviceID int64) (FrpDeviceDetailMeta, error)
-	UpdateDevice(ctx context.Context, deviceID int64, updates map[string]interface{}) (model.Device, error)
-	DeleteDevice(ctx context.Context, deviceID int64) error
+	UpdateDevice(ctx context.Context, actor FrpActor, deviceID int64, updates map[string]interface{}) (model.Device, error)
+	DeleteDevice(ctx context.Context, actor FrpActor, deviceID int64) (model.Device, error)
 	CreateMapping(ctx context.Context, req FrpCreateMappingInput) (model.FrpMapping, error)
 	ListMappingsByDeviceID(ctx context.Context, deviceID int64) ([]model.FrpMapping, error)
 	GetMappingByID(ctx context.Context, mappingID int64) (model.FrpMapping, error)
 	UpdateMapping(ctx context.Context, req FrpUpdateMappingInput) (model.FrpMapping, error)
-	DeleteMapping(ctx context.Context, mappingID int64) error
+	DeleteMapping(ctx context.Context, actor FrpActor, mappingID int64) (model.FrpMapping, error)
 	ListActiveMappingsByDeviceID(ctx context.Context, deviceID int64) ([]model.FrpMapping, error)
-	CreateConfig(ctx context.Context, cfg model.FrpConfig) (model.FrpConfig, error)
+	CreateConfig(ctx context.Context, uid int64, isAdmin bool, cfg model.FrpConfig, clientIP ...string) (model.FrpConfig, error)
+	RollbackConfig(context.Context, int64, bool, int64, ...string) (model.FrpConfig, model.FrpConfig, error)
 	ListConfigsByDeviceID(ctx context.Context, deviceID int64) ([]model.FrpConfig, error)
 	GetConfigByID(ctx context.Context, configID int64) (model.FrpConfig, error)
 	ResolveConfigID(ctx context.Context, deviceID int64, requested *int64) (int64, error)

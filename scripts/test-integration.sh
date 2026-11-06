@@ -37,9 +37,14 @@ fi
 # and trigger settings apply solely to this newly created disposable container.
 docker exec -e MYSQL_PWD=cloudnest-disposable-test "$mysql_id" mysql -u root \
   -e "GRANT PROCESS ON *.* TO 'cloudnest_test'@'%'; CREATE USER 'cloudnest_gc_limited'@'%' IDENTIFIED BY 'cloudnest-disposable-test'; GRANT SELECT ON cloudnest_test.* TO 'cloudnest_gc_limited'@'%';" >/dev/null
+# Exercise the agent startup verifier without granting TRIGGER or DDL rights.
+docker exec -e MYSQL_PWD=cloudnest-disposable-test "$mysql_id" mysql -u root \
+  -e "CREATE USER 'cloudnest_agent_runtime'@'%' IDENTIFIED BY 'cloudnest-disposable-test'; GRANT SELECT,INSERT,UPDATE,DELETE,EXECUTE ON cloudnest_test.* TO 'cloudnest_agent_runtime'@'%';" >/dev/null
 mysql_addr=$(docker port "$mysql_id" 3306/tcp)
 redis_addr=$(docker port "$redis_id" 6379/tcp)
 export CLOUDNEST_TEST_DISPOSABLE=1
 export CLOUDNEST_TEST_MYSQL_DSN="cloudnest_test:cloudnest-disposable-test@tcp($mysql_addr)/cloudnest_test?charset=utf8mb4&parseTime=True&loc=UTC"
 export CLOUDNEST_TEST_REDIS_ADDR="$redis_addr"
-go test -tags=integration -race -count=1 -timeout=6m -v ./integration "$@"
+# The expanded complete suite exceeds six minutes on local Docker/macOS.
+# This is a suite watchdog; individual cancellation and resource deadlines stay strict.
+go test -tags=integration -race -count=1 -timeout=8m -v ./integration "$@"

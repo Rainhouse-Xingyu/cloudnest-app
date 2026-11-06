@@ -104,3 +104,165 @@ G03 下载阻塞写入治理追加两个独立 `integration,network` 测试函�
 写入期限与卷初始化修复的产品提交 b8cdfd2 随后独立完成 1 GiB 复测（2026-10-24；用例 219.79s / 包 221.774s）：上传 104.949s / 9.757 MiB/s，complete 4.344s；下载 103.575s / 9.887 MiB/s，初始/Range 首字节 0.570/0.610s；两次服务进程峰值 RSS 30,064,640 / 30,539,776 字节。半程暂停/重启续传、完成回执、实际连接取消后的 206 接续与完整 SHA-256 全部通过，见 TRANSFER-PERFORMANCE 和对应原始 JSON；不把单次本机结果外推多用户或生产性能。
 
 2026-10-25 首次远端 Linux 网络专项揭示夹具的跨平台问题：服务端 handler 已按期限退出、租约已释放，但测试将客户端 SO_RCVBUF 缩至 1 KiB，使 Linux 内核排队数据在关闭后仍缓慢排出，最终命中测试客户端自己的读取期限。该次 PR/push CI 网络项失败，普通 237 项和漏洞检查通过；没有将失败标为产品验收成功。夹具现改为限制测试服务端 SO_SNDBUF（16 KiB），保留客户端正常接收窗口，继续用真实 TCP、默认 30 秒写入期限、租约计数、完整截断前缀和“读取错误不能是客户端 timeout”断言。产品代码未改变。修正后 macOS 独立网络 race 测试两项通过（104.087s）；另以交叉编译的非 race Linux arm64 测试二进制，在新建 MySQL/Redis 共享网络命名空间和 Alpine 容器内实际执行两项，同样通过。Linux 预检没有冒充 race 验收；最终 GitHub Linux race 网络项按新提交重新核验。
+
+## 2026-11-02 G05 独立身份
+
+`scripts/test-integration.sh -run '^TestAgent'` 通过五项 race 集成，包耗时 9.574s。实际编译的服务完成 TLS 请求、注册码兑换、心跳及撤销。低权限账号缺少 TRIGGER 时，普通 definer 视图初版无法验证定义，已改为只读 definer 例程。首次例程测试因测试用户缺少授予权限失败，调整一次性数据库的授权后验证了触发器缺失、同名定义漂移和显式迁移拒绝覆盖。脚本只对新测试数据库授权。构建、vet 与全量 race 单元通过。详见 [G05 记录](G05-DEVICE-IDENTITY.md)。
+
+第一次普通全套运行发现归档回收和上传清理拒绝了四个新触发器。原传输清理契约拒绝库内的任何触发器。现先验证维护连接的元数据可见性，再读取完整触发器清单，核对名称、目标表、事件、时机和实际动作。未知触发器、缺失触发器、同名改写及权限不足均拒绝清理。针对触发器漂移、隐藏触发器和受影响的归档/上传路径重跑通过，包耗时 14.586s，见 `/tmp/cloudnest-g05-agent-transfer-guard.log`。
+
+官方 FRP 0.71.1 已用于实际 TCP/HTTP/HTTPS 回环转发测试，三个请求均到达上游，race 包通过（1.909s）。本次启动者是测试程序。Agent 派发、进程控制及重连仍待验收。
+
+## 2026-11-03 G05 配置边界及回归诊断
+
+G00/G01 状态再次核对。PR #1 仍开放，原始漏洞基线检查失败。PR #2 仍开放并基于 G00 分支，`588a187` 的构建/测试及漏洞检查全部通过。当前 G05 分支包含该提交，自定义权限下的 me/logout、固定时刻随机 JTI、独立登录会话及客户端契约回归保留。
+
+触发器修复 `f631cc9` 的两次远端 CI 已通过，运行 ID 为 `41396504541`、`41396499491`。本机修复后的完整集成仍以失败记录，包耗时 360.712s，触发六分钟总时限。此前 231 个顶层用例通过、无顶层失败，超时时跨实例暂停用例仅运行了 4 秒。该用例需要等待真实 20 秒心跳检查。独立重跑该用例通过，用例 22.10s、包 25.577s。保留 `/tmp/cloudnest-g05-full-fixed.log` 和 `/tmp/cloudnest-g05-config-api.log`，不将局部通过写成完整套件通过。
+
+新增配置回归覆盖 YAML 标量原值保留、注入/模板/边界拒绝，以及实际编译 TLS 服务的预览、保存、历史和回滚响应脱敏。官方 FRP 0.71.1 用含空格、冒号和井号的凭据验证三条实际隧道仍通过，race 包 1.891s，日志 `/tmp/cloudnest-g05-frp-native-quoted.log`。构建、vet、全量 race 单元、模块校验及仓库检查通过。
+
+最终按测试清单将普通套件分为 `^Test[A-M]` 与 `^Test[N-Z]` 两批串行运行，各自使用新建 MySQL/Redis，并保留 race 和每批六分钟期限。两批分别 **92 项通过（140.961s）**、**151 项通过（263.567s）**，合计 **243 项**，无失败、跳过或数据竞争。通过用例集合与 `go test -tags=integration -list '^Test' ./integration` 清单逐项相等，无遗漏或重叠。命令为 `scripts/test-integration.sh -run '^Test[A-M]'` 和 `scripts/test-integration.sh -run '^Test[N-Z]'`，日志为 `/tmp/cloudnest-g05-config-batch-am.log`、`/tmp/cloudnest-g05-config-batch-nz.log`。这是分批完整覆盖的结果，单次默认六分钟命令在本机超时的记录保留；脚本默认超时和 CI 完整套件入口未改动。新增 TLS 配置用例自身耗时 3.89s。
+
+## 2026-11-03 G05 加密配置
+
+新增 AES-256-GCM 配置写入、绑定设备/版本的认证数据、私有密钥环加载、事务审计和显式审计/迁移 CLI。单元测试覆盖随机 nonce、逐字节篡改、跨设备/版本搬用、错误密钥、未知版本、明文拒绝、密钥文件权限/链接/体积及格式错误。实际编译的 TLS 服务验证新配置数据库中不再含凭据明文，回滚内容相同但密文和版本身份不同，管理响应仍脱敏，保存/回滚审计保留来源 IP。
+
+首次专项集成失败源于测试共用一次性数据库，先前配置记录仍被全库迁移扫描到。已仅回收各测试自己创建的配置并将业务计数限定到本设备，没有更改迁移的全库范围。原失败日志保留在 `/tmp/cloudnest-g05-encryption-api.log`。修正后的三项 FRP 专项通过，包耗时 10.339s，日志 `/tmp/cloudnest-g05-encryption-api-v2.log`。实际 CLI 覆盖只读审计、明文迁移、重复执行不改写、缺旧密钥失败、旧密钥重加密及退役后读取；仓储测试覆盖越权、密文搬用、审计失败回滚、损坏行停止及重新执行恢复。
+
+前一配置边界提交 `d6d4d46` 的 PR CI `41580652999` 和 push CI `41580647351` 均已通过，当前加密提交的 CI 单独核验。部署和剩余风险见 [配置加密](FRP-CONFIG-ENCRYPTION.md)，未操作生产配置或真实凭据。
+
+加密版本最终按完整清单分批通过 **94 + 151 = 245 项普通 race 集成**，两批包耗时分别 186.731s、250.538s，无遗漏、重叠、失败、跳过或数据竞争。仍使用原隔离脚本、每批六分钟期限，日志 `/tmp/cloudnest-g05-encryption-batch-am.log`、`/tmp/cloudnest-g05-encryption-batch-nz.log`；实际通过集合与当前 `go test -tags=integration -list '^Test'` 清单相等。构建、vet、全量 race 单元、darwin/linux × amd64/arm64 四目标构建及仓库检查通过。新增系统调用只用于读取私有密钥文件，未修改宿主密钥、生产数据或历史备份。
+
+## 2026-11-04 G05 持久命令
+
+前一配置加密提交 `6779778` 的 PR `41582159454` 与 push `41582152998` CI 均通过。当前命令批次新增 agent_command 表、显式迁移/启动索引检查、管理端幂等入队、设备租约领取/续租、限定配置读取及幂等终态回执。
+
+首轮并发测试失败，日志 `/tmp/cloudnest-g05-command-api.log`。默认 REPEATABLE READ 的管理事务先读取所有权提示再等待设备行锁，后续普通查询仍使用旧快照，导致并发相同请求 ID 触发唯一约束错误。事务改为 READ COMMITTED 后，原测试通过；追加不同请求并发争用最后两个队列名额，验证最多 32 条活动命令。保留唯一索引和原断言，没有将重复键异常静默视为成功。
+
+四项专项在 `/tmp/cloudnest-g05-command-api-v3.log` 通过（9.341s），覆盖实际编译 TLS 服务、用户 JWT 拒绝、跨设备拒绝、配置内容变更检测、回执重试、领取/完成审计故障回滚、租约到期重领及旧回执拒绝、凭据代次隔离、命令期限和重试上限，以及索引丢失后启动失败。进一步将命令时间以数据库 UTC 微秒值和独立 DATETIME 编解码保存，避免 DSN loc=Local 影响租约；第五项用 UTC 与 Asia/Shanghai 两个实际连接双向入队、领取、续租和完成，最终五项专项通过（12.238s），日志 `/tmp/cloudnest-g05-command-api-v4.log`。
+
+服务管理器重建使用相同数据库记录恢复状态。上述结果不替代 Agent 本地执行记录、实际进程崩溃对账和断线重连验收，见 [命令协议](FRP-DURABLE-COMMANDS.md)。
+
+最终普通 race 集成按清单分批通过 **99 + 151 = 250 项**，包耗时 154.721s、244.380s，无遗漏、重叠、失败、跳过或数据竞争。每批保留原六分钟期限，日志 `/tmp/cloudnest-g05-command-batch-am.log`、`/tmp/cloudnest-g05-command-batch-nz.log`。构建、vet、全量 race 单元、darwin/linux × amd64/arm64 四目标构建与仓库检查通过。测试使用新建隔离 MySQL/Redis，本批未操作生产数据库。
+
+完整回归后进一步要求所有失败的配置响应也不包含测试凭据，针对性重跑实际 TLS 配置/回执用例通过，包耗时 6.393s，日志 `/tmp/cloudnest-g05-command-disclosure.log`。生产实现未因此更改。
+
+## 2026-11-04 G05 前台 Go Agent
+
+前一持久命令提交 `dba212c` 的 PR CI `41749572937`、push CI `41749567346` 均完成并通过。本批新增前台 Agent CLI、HTTPS 客户端、私有状态与继承锁、固定官方 frpc 校验、本机配置授权、执行记录及进程管理，不修改生产数据库或旧设备。
+
+首轮实际 CLI 集成失败，日志 `/tmp/cloudnest-g05-agent-native-integration.log`（70.190s）。Agent 心跳版本字符串使用 `/`，不符合既有服务端允许字符，故始终未领取命令。改用 `cloudnest-agent-0.1.0`，并将永久协议错误改为退出而非静默无限重试。第二轮真实 CLI、TLS 服务、隔离 MySQL/Redis 和官方 frpc/frps 完成三种隧道、reload、stop/start、正常 Agent 重启、frps 重连与恶意配置拒绝，日志 `/tmp/cloudnest-g05-agent-native-integration-v2.log`，测试 22.36s、包 24.215s。
+
+后续新增“未完成租约失效关闭意图”测试首次断言失败，`/tmp/cloudnest-g05-agent-final-native.log` 与 `/tmp/cloudnest-g05-agent-final-check.log` 保留失败。原因是测试把 JSON 再次解码到已有非零对象，已省略的 pending 字段保留旧值；磁盘记录和执行器状态正确。改为读取到新的零值对象，未改变协议或放宽断言。
+
+最终使用新下载并验证归档的 `scripts/test-agent-native.sh` 在 Darwin arm64 完整通过：**9 项 Agent 顶层 race 测试**（3.973s）和 **1 项实际 CLI/后端/隧道 race 集成**（测试 22.19s，包 24.147s），零跳过。日志 `/tmp/cloudnest-g05-agent-final-native-v2.log`。最终集成还为 frps 配置真实临时证书并要求 TLS，Agent 使用本机指定 CA 校验 FRP 控制连接；HTTPS 映射客户端独立验证上游证书。原生锁测试使用真实官方 frpc 验证父描述符关闭后拒绝第二 Agent，子进程退出后释放。
+
+最终 `make check test build-macos build-linux` 通过，含 vet、全部普通 race 单元、服务端与 Agent 的 darwin/linux × amd64/arm64 构建，日志 `/tmp/cloudnest-g05-agent-final-check-v2.log`。仓库检查和 diff 检查通过。本批本地未重复前一提交的 250 项普通数据库回归；Linux CI 保留完整原测试并新增 agent-native 作业，具体提交结果另行核验。四目标构建不代表四平台运行验收；本地真实隧道平台为 Darwin arm64。
+
+尚未验证或完成：系统级 SIGKILL/掉电自动接管、长时间离线/休眠、连接级状态/日志、Keychain、本地配置加密及真实公网部署。正常 `ok` 回执只表示本地进程操作，隧道可达性由上述端到端访问另行证明，不能把进程存活推广为所有映射健康。运行方法与边界见 [Agent 文档](FRP-AGENT.md)。
+
+提交前复核让 Agent 退出时传播子进程停止失败，并把响应上限测试改成有效但超限的 JSON。随后九项原生/race Agent 测试再次通过（3.502s，`/tmp/cloudnest-g05-agent-review-check.log`），实际 CLI 三隧道及恢复集成再次通过（测试 22.81s、包 24.988s，`/tmp/cloudnest-g05-agent-review-native.log`），专项 vet 通过。另核对 PR #1/#2 仍开放、#2 的 base 仍为 G00 分支：#1 原基线漏洞检查失败保留，#2 四项 CI 全通过；自定义权限会话例外、随机 JTI 及旧客户端契约测试仍在当前代码中，未重复实现。
+
+## 2026-11-04 G05 Agent 异常退出监督
+
+前一 Agent 提交 `ce89b6bb7d0aab5e6be75671a14eb1a50edb4836` 的 PR `41781004742`、push `41780999783` CI 均全部通过，包括完整后端回归、漏洞扫描和新增 Linux amd64 原生 Agent/隧道测试。
+
+本批新增独立监督进程，通过继承的目录/锁和存活/就绪管道管理官方 frpc。Agent 被 SIGKILL 时，监督进程停止并回收 frpc；监督进程自身被 SIGKILL 时，Agent 明确退出，残留 frpc 的锁拒绝另一个 Agent。没有引入 PID 文件接管、按名称杀进程或远程自定义命令。
+
+真实 CLI 故障测试首版已验证 Agent SIGKILL 后回收并恢复隧道（包 29.681s，`/tmp/cloudnest-g05-supervisor-native.log`）。随后增加监督进程 SIGKILL：验证 Agent 八秒内明确报错退出、残留 frpc 仍持锁，测试只停止提前取得句柄的本夹具子进程，锁释放后再次恢复三种隧道。最终集成通过，测试 27.31s、包 29.217s，日志 `/tmp/cloudnest-g05-supervisor-native-final.log`；仍包含可信 FRP TLS、正常启停/reload、frps 重连和危险配置拒绝。测试没有触碰用户已有的 frpc 进程。
+
+最终 **11 项原生/race Agent 顶层测试**全部通过，包 2.941s，日志 `/tmp/cloudnest-g05-supervisor-native-components.log`，包括新增继承目录/锁不匹配拒绝和监督进程未知退出后拒绝启动。锁保留测试改为占用临时回环端口，不访问固定端口上的已有服务。`make check test build-macos build-linux` 全通过，日志 `/tmp/cloudnest-g05-supervisor-check-final.log`；本地运行平台仍为 Darwin arm64，新提交的 Linux 结果需由对应 CI 验证。
+
+边界：重新运行 Agent 的动作由测试执行，尚未安装系统服务来自动重启 Agent。监督进程自身丢失后的残留恢复、整个进程组同时被强制终止、掉电与休眠尚未全面验收。文件凭据/配置的 Keychain 与本地加密、连接级状态仍未完成，G05 继续进行。
+
+## 2026-11-04 G05 Agent 本机密钥与持久状态（11-05 核验）
+
+前一提交 `6c8d0b5aec43cc65fd8fe0589784714862d77294` 的 PR `41782677910`、push `41782669413` 三个作业均通过，包含 Linux amd64 原生异常退出测试。11-05 复核：PR #2 的 base 仍是 PR #1 的分支，#1 保留原基线漏洞失败，#2 四项检查均通过。
+
+Darwin arm64 使用测试专用临时文件钥匙串，通过真实 Security.framework 验证密钥创建、查找、锁定后拒绝读取、解锁后恢复及已编译 CLI 跨进程迁移（两项，包 5.166s，`/tmp/cloudnest-g05-keychain-cli.log`）。合并运行原生 FRP、Keychain 及 race 测试：17 项顶层用例通过，零跳过，包 10.486s（`/tmp/cloudnest-g05-vault-components-final-v2.log`）。另验证跨 vault/跨文件替换、密文损坏、旧状态迁移重试和禁用 cgo 时明确拒绝 Keychain：专项 race 2.773s、禁用 cgo 0.562s。
+
+真实 CLI/TLS、隔离 MySQL/Redis 和官方 frpc/frps 使用单独的外部密钥文件验证 TCP/HTTP/HTTPS、异常退出及恢复。增加磁盘密文、正常停止后运行配置消失以及使用错误密钥无法启动的断言；通过（用例 27.56s、包 29.865s，`/tmp/cloudnest-g05-vault-native-final.log`）。这项端到端测试没有使用登录钥匙串。`make -C cloudnest_go check test build-macos build-linux` 通过（`/tmp/cloudnest-g05-vault-check-final.log`）；本批未在本地重新运行完整普通数据库套件。
+
+运行中的 frpc 仍需可重复读取的私有配置；停止时删除不能擦除已有快照或备份。探索性 Darwin POSIX 共享内存探针不能按普通文件写入/定位（ENXIO），未用于实现，亦不算产品测试。SEC-010、正式签名后升级的钥匙串访问和生产历史迁移仍待验收。详见 [Agent 本机密钥与恢复](FRP-AGENT-VAULT.md)。
+
+## 2026-11-05 G05 macOS 用户 LaunchAgent 自动恢复
+
+增加 `cloudnest-agent launch-agent --state ...`，从实际二进制位置生成固定参数的用户服务定义。含空格、引号、Unicode 和 XML 特殊字符的路径通过系统 plutil 逐项解析；相对路径、控制字符和非规范路径被拒绝（race，包 1.642s）。生成不会加载服务或读取密钥。部署与卸载步骤见 [Agent 运行指南](FRP-AGENT.md)。
+
+Darwin arm64 首次真实 launchd 测试通过（35.27s，`/tmp/cloudnest-g05-launchd-native.log`）；补充 bootout 后释放状态锁、清理 active.json 的断言，再与原 CLI 三隧道/双故障回归一起执行，均通过：28.47s + 35.24s，包 66.565s（`/tmp/cloudnest-g05-launchd-native-final.log`）。测试使用临时 plist、随机服务标签、已编译 Agent、隔离 MySQL/Redis、实际 TLS、官方 frpc/frps，先确认三个上游可达，再对该临时服务执行 SIGKILL。launchd 自动启动不同 PID 的 Agent，新认证命令完成且 TCP、HTTP、HTTPS 再次实际可用；没有人工重启 Agent，没有在用户启动目录安装产品服务。
+
+`make -C cloudnest_go check test build-macos build-linux` 通过，日志 `/tmp/cloudnest-g05-launchd-check.log`。本地服务集成必须有 macOS 图形登录域和 Docker，显式运行 `scripts/test-integration.sh -tags=integration,frpnative,launchdnative -run '^TestLaunchAgentNativeCrashRecovery$'` 并提供官方二进制目录。GitHub macOS 作业单独检查真实 Keychain 和系统 plist 解析，不等于运行过完整 launchd/数据库集成。未实测用户注销/重新登录、休眠、钥匙串锁定后的无人值守服务、签名更新或 Linux 服务管理。
+
+## 2026-11-05 G05 运行时 FRP token 不落盘
+
+固定版本官方源码确认认证初始化只解析一次文件 token 源，普通配置路径则会重复读取。先以独立真实 frpc/frps 验证继承匿名管道可完成认证，frps 重启后同一 frpc 仍能重连（`/tmp/cloudnest-g05-token-source-probe.log`）。随后接入实际 Agent 和监督进程，固定 fd 4 的源只由本机生成，不放开远端配置中的文件路径或执行能力。
+
+最终 20 项顶层 Agent 普通/原生/真实 Keychain race 用例通过，零跳过，包 6.027s（`/tmp/cloudnest-g05-tokenpipe-components-final.log`）。新增最大长度/Unicode/空 token 原样传递、缓存不含 token、拒绝首尾空白且不产生缓存，以及旧状态遇到无法原样传递的 token 时保持认证命令通道的回归。原先规范化加密状态格式未改，不静默改变历史凭据。
+
+实际 CLI 和 launchd 两项集成均通过（27.79s、35.01s，包 64.772s，`/tmp/cloudnest-g05-tokenpipe-e2e.log`），增加运行中配置只有固定 fd 路径、没有认证 token 的检查。保持三种隧道、reload、Agent/监督进程 SIGKILL、frps 重连和 launchd 自动拉起的真实验证。`make -C cloudnest_go check test build-macos build-linux` 全通过（`/tmp/cloudnest-g05-tokenpipe-check.log`）。
+
+先前 vault 提交 `58d0428` 的两次 CI 中，真实 macOS Keychain、Linux 原生隧道和漏洞扫描分别通过；完整 build-test 尚未结束，随后因较新提交排队而整次取消，不能记为全绿。新提交的完整 CI 需按实际 SHA 单独核验。历史明文备份/生产迁移、实际签名升级和所有连接的实时健康仍未验收。
+
+## 2026-11-05 G05 控制后端停机/重启与运行设备撤销
+
+实际 TLS 服务夹具支持停止、等待已启动进程退出及在同一地址/证书/隔离存储上重新启动。原来的三个真实 TLS 调用方（设备注册轮换、配置脱敏注入、持久命令回执）重新运行全部通过（包 11.364s，`/tmp/cloudnest-g05-restart-helper-regression.log`）；带原生标签的集成 vet 通过。
+
+实际 Agent 隧道测试新增：停止已编译后端并确认连接失败，观察 Agent 的固定网络错误，确认既有三种隧道可达、数据库中新命令仍为 pending，再启动后端并等待命令成功回执。随后在真实隧道运行中撤销该测试设备凭据，要求 Agent 在十秒内报告失败退出、TCP 端口停止监听且状态锁释放。此项通过（35.59s）。与原 launchd 自动恢复测试（35.44s）一起通过，包 73.120s，运行日志 `/tmp/cloudnest-g05-backend-restart-e2e.log`。此次为短时中断，不是长期离线、睡眠或全机掉电测试；所有操作仅针对测试创建的进程与隔离数据库。
+
+`37d1e7c195e1500d76928584b16ff92fee5cc75c` 的 PR `41943203704`、push `41943196762` CI 均四作业全通过。后继 `8a4a7c4` 已核对 Linux 原生 token 管道/隧道、macOS Keychain 和漏洞作业通过，完整后端回归尚需等待该 SHA 的终态。
+
+### CI 上传取消检查点纠正
+
+`8a4a7c423a7036eeac49eba778eb6c0ff7f1aea4` 的 push `41963150571` 全部通过，但 PR `41963154776` 的普通集成在 `TestUploadBodyCancellationInterruptsRateWait` 失败（“canceled rate wait leaked candidate”），其余三个作业通过。失败日志保存为 `/tmp/cloudnest-g05-tokenpipe-ci-failed.log`；不把这次 PR CI 记为成功。
+
+旧测试的 100ms 期限从请求入口开始，可能在 inode 登记前触发，混淆了“已取得候选句柄的限速取消”与“身份尚不确定的登记失败”。后者必须保留文件和预算，既有 `TestTransferUnprovenIntentAndReplacedInodeAreBlocked` 明确要求如此。修改前者，先确认数据库已提交 writing/inode 且磁盘有部分数据，再取消限速等待，仍要求取消后 400ms 内返回 408、释放准入并删除候选。未放宽清理时限或删除未知文件。
+
+另新增真实数据库回调阻塞在 inode 更新之前，等请求期限到达：确定复现 408、intent/inode=0 和保留的文件，证明这是独立的安全边界。上述三个用例各重复八次，24 次全部通过，包 24.648s（`/tmp/cloudnest-g05-cancel-checkpoint-final.log`）；带完整标签的集成 vet 通过。服务端逻辑未更改。
+
+撤销测试进一步要求日志出现固定 HTTP 401 拒绝原因且 active.json 已清理，避免将任意异常退出误认为撤销成功。真实 CLI 全部场景再次通过（用例 35.16s、包 36.996s，`/tmp/cloudnest-g05-revoke-final.log`）。
+
+## 2026-11-05 G05 官方注册状态与持久诊断快照
+
+前一提交 `88d411bfa2f78d7e3d452b37575b0d0a88ab280b` 的 PR `41964277371`、push `41964268639` 均四作业全通过，包含上传取消检查点修正、完整后端回归、Linux 原生与 macOS Keychain 测试。
+
+本批对照固定 0.71.1 源码接入实际代理状态 API。接口同时包含管理写能力，因此仅绑定回环地址，使用每次启动独立的 TLS 身份及随机 Basic 凭据；Agent 只调用状态 GET。TLS 私钥走匿名管道；Basic 凭据在 0600 启动配置中短暂存在，可信 API 读取后删除配置和公共证书。具体边界、升级次序与快照语义见 [注册诊断](FRP-AGENT-DIAGNOSTICS.md)，没有把“已注册”当作上游应用健康。
+
+本机原生/race/Keychain 测试最终 **23 项顶层通过、零跳过**：Agent 包 8.987s、报告协议包 1.531s（`/tmp/cloudnest-g05-diagnostics-review-components.log`）。实际官方 frpc 覆盖没有 FRP 控制连接时不能报告成功、Basic 认证拒绝、回环假冒 TLS 拒绝。协议测试验证固定状态/计数、自相矛盾或额外字段拒绝、规范化时间、回执重启/换租约后不替换原观察。
+
+隔离数据库与真实 CLI 的最终 **14 项集成均通过**，包 115.976s（`/tmp/cloudnest-g05-diagnostics-regression-final.log`）。其中实际 CLI 46.25s、launchd 48.55s，验证 frps 拒绝一个映射后管理端 HTTPS 历史显示 degraded/registered=2/failed=1，恢复后显示三条 registered；其余隧道、异常退出、后端重启、撤销、加密及运行缓存清理断言仍保留。另覆盖已有命令行的列迁移、缺列启动拒绝、跨设备配置、无效/非诊断动作快照、不可变回执、旧无快照回执、单次审计及身份/租约回归。
+
+复核后将 launchd 测试的新进程探测顺序明确为“先实际三隧道访问，再断言 registered 快照”，防止把正常的注册中状态误当作测试失败；单独再次通过（48.74s、包 50.731s，`/tmp/cloudnest-g05-diagnostics-launchd-review.log`）。进一步确认监督进程状态不明时只报告 unavailable，并保留启动失败与清理错误；专项 race 再次通过（Agent 2.827s、报告协议 2.168s，`/tmp/cloudnest-g05-diagnostics-final-review.log`）。
+
+`make -C cloudnest_go check test build-macos build-linux` 全通过（`/tmp/cloudnest-g05-diagnostics-review-check.log`），包含普通 race/vet 及四目标服务端/Agent 构建。新增数据库列只在隔离测试库上迁移；新提交的完整远端 CI 需按 SHA 独立核验。未宣称逐映射实时流、上游应用健康、长期离线/休眠或生产升级已验收。
+
+## 2026-11-06 G05 映射并发与预留
+
+复核 PR #1/#2 仍为 OPEN，#2 的 base 仍为 `codex/g00-audit-baseline`。#1 `4462b74` 两次构建成功、两次原漏洞基线失败；#2 `588a187` 四项检查全部成功。当前代码保留自定义权限下的 me/logout、独立随机 JTI、多会话注销和客户端契约回归；本批没有重新开发 G01。
+
+诊断提交 `e0da206` 的 push `41999443725` 四项成功。PR `41999454355` 初次 native job 在下载固定官方 FRP 时连续 HTTP 504、curl 退出 22，尚未执行 native 测试，其余三项成功；失败日志保留于 `/tmp/cloudnest-g05-diagnostics-ci-failed.log`。仅重跑失败任务，attempt 2 四项全部成功。没有通过删除测试或替换官方二进制来掩盖失败。
+
+映射首轮六项顶层 race 集成通过（10.107s，`/tmp/cloudnest-g05-mapping-regression.log`），包括 24 并发自动分配、24 并发规范域名竞争、跨用户真实 HTTP 相同端口竞争、1000 端口耗尽和空位复用、数据库直接写约束、事务审计故障、三个设备归属读取/加锁交错场景及历史重复数据迁移保留。开发验证曾发现 MySQL 将 SUBSTRING 表达式保存为 SUBSTR，以及域名规范化双重去前缀错误；已修复实现并保留严格校验/非法输入断言，未绕过 schema 验证。
+
+完整回归与最终复核结果见下文。本批边界见 [映射协议](FRP-MAPPING-RESERVATIONS.md)。
+
+首次完整套件在 238 项顶层用例通过后触发六分钟总看门狗，`TestTreeCyclesDepthAndOverlappingRootsFail` 刚开始（0s），没有业务断言失败；包退出 363.134s，日志 `/tmp/cloudnest-g05-mapping-full.log` 保留为**未通过**。当前普通套件共 260 项，已将隔离脚本的套件看门狗从 6m 调整为 8m，以容纳新增集成与每夹具 schema 校验。单项取消、锁等待、网络与资源释放断言没有延长；完整重跑另记结果，不将此超时计为成功。
+
+最终映射专项加真实 Agent CLI 共九项顶层 race 集成通过、零跳过（60.098s，`/tmp/cloudnest-g05-mapping-native-review.log`）。八项映射测试追加锁等待取消、删除释放、更新冲突、同名生成列篡改拒绝及审计自身 1062 错误不能冒充映射冲突。第九项使用固定官方 frpc/frps 和实际编译后端/Agent，验证三隧道、重连、重启、诊断及撤销链路在新 schema 下仍通过。
+
+`make -C cloudnest_go check test build-macos build-linux` 全通过（`/tmp/cloudnest-g05-mapping-check-final.log`），包括普通 race/vet、四目标服务端/Agent 构建；审计错误分类最后调整后四个受影响包 race 再次通过（`/tmp/cloudnest-g05-mapping-review-unit.log`），integration-tag vet、仓库检查及补丁格式检查通过。
+
+最终完整普通 race 集成 **260 项全部通过，零跳过**（412.869s，`/tmp/cloudnest-g05-mapping-full-final.log`）。包含原 G01 自定义会话权限、独立登录/注销和客户端 API 边界，以及文件/传输/身份/持久命令/诊断与本批八项映射测试。脚本退出 0，随后确认无残留的隔离测试容器。最终提交的远端 CI 仍按其 SHA 单独核验；本地通过不替代远端结果，也不表示 G05 或全项目完成。
+
+## 2026-11-06 G05 设备退役与历史保留
+
+上一映射提交 `33a0eb3727579e5eed78495a453014a2737929ff` 的 PR `42143136276`、push `42143128855` 四项检查均全部成功。G00/G01 与 PR #1/#2 状态沿用上节复核，没有合并操作。
+
+设备首轮定向 race 集成 15 项全部通过（22.992s，`/tmp/cloudnest-g05-retirement-targeted.log`）：五项新增设备用例、八项映射用例、两项身份/最低权限 schema 校验。覆盖历史/预留保留、过期身份拒绝、未完成命令取消、审计故障完全回滚、设备更新/退役归属加锁交错、旧结构升级、v1 例程保留及新触发器篡改拒绝。
+
+真实官方 frpc/frps、实际编译后端/Agent 的两项场景分别通过：原凭据撤销 47.88s，新增设备退役 47.75s；两者都保留 TCP/HTTP/HTTPS、重启、重连、后端停机恢复和诊断验证，并在最终撤销/退役后要求真实 HTTP 401、Agent 非成功退出、TCP 隧道关闭、单例锁释放和运行配置消失。连同六项设备测试共八项顶层 race 集成通过、零跳过（106.138s，`/tmp/cloudnest-g05-retirement-native.log`）。CI 的官方 FRP 脚本现分别运行两种退出场景。
+
+`make -C cloudnest_go check test build-macos build-linux` 全通过（`/tmp/cloudnest-g05-retirement-check.log`）。最终响应明确标记 retired/reservations_retained 后，四个受影响包的 race 与带 integration/frpnative 的 vet 单独复核，记录于 `/tmp/cloudnest-g05-retirement-final-review.log`。完整回归和最后 schema 默认值复核另记，不用专项结果替代全部验收。
+
+退役主体完整普通 race 集成 **266 项全部通过，零跳过**（443.983s，`/tmp/cloudnest-g05-retirement-full.log`）。最后另外收紧了退役列必须无默认表达式/自动更新行为的启动检查：初次两项专项中的故障注入 DDL 使用了 MySQL 不接受的 SET DEFAULT 函数语法，在注入前退出，日志 `/tmp/cloudnest-g05-retirement-schema-final.log` 保留为未通过；已改为 MODIFY COLUMN 的等价故障注入，不修改生产行为或放松校验。更正后专项结果另记。完整回归与最后 schema 专项的范围分开记录。
+
+更正故障注入语法后的两项最终 schema race 复核全部通过（7.248s，`/tmp/cloudnest-g05-retirement-schema-corrected.log`），实际验证自动退役默认值拒绝、无 DDL/TRIGGER 权限的运行账号校验、旧例程保留、新列迁移、缺失/篡改触发器拒绝及重复迁移保留退役状态。没有剩余测试进程或隔离容器；最终提交 CI 按新 SHA 单独核验。

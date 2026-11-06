@@ -10,7 +10,7 @@
 - [测试执行方法](TESTING.md)
 - [G01 安全整改与升级边界](G01-SECURITY.md)
 - [现有客户端 API 权限兼容性](CLIENT-API-COMPATIBILITY.md)
-- [设备身份边界设计（G05 待实现）](DEVICE-IDENTITY-DESIGN.md)
+- [设备身份边界设计](DEVICE-IDENTITY-DESIGN.md)
 - [受控账号恢复与会话撤销](ACCOUNT-RECOVERY.md)
 - [G02 文件一致性与递归安全](G02-FILE-CONSISTENCY.md)
 - [只读文件名称约束预检](FILE-NAME-AUDIT.md)
@@ -64,3 +64,18 @@ G03 已完成独立 1 GiB 真实服务验收：16 × 64 MiB 上传在半程暂�
 G03 已补齐下载写入/刷新 30 秒期限、上下文取消唤醒和最终刷新错误传播；独立真实网络套件覆盖 HTTP/1.1、TLS HTTP/2、超时租约释放/同连接后续 Range 与健康低速长下载，见 [写入期限](DOWNLOAD-WRITE-BOUNDS.md)。完整回归另揭示 macOS 首次并发创建卷锁文件的 ENOENT，已改独占创建后打开现存 inode，保留失败记录和原断言；最终验证结果见 TESTING。
 
 本批最终普通 237 项 race 回归通过（329.401s），独立网络两项通过（106.183s），空文件并发完成重复 30 轮通过；完整失败诊断和验证边界已保留于 TESTING。
+
+- [G05 设备注册、轮换、撤销和心跳](G05-DEVICE-IDENTITY.md)
+- [G05 Go Agent 运行、约束与真实隧道验收](FRP-AGENT.md)
+- [G05 Agent Keychain、状态加密与旧状态迁移](FRP-AGENT-VAULT.md)
+- [G05 注册诊断与持久快照](FRP-AGENT-DIAGNOSTICS.md)
+
+G05 在 [PR #6](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/6) 继续推进，基于 G03。独立身份、配置加密/迁移、持久命令与 Go Agent 已接入。实际 CLI 三种隧道、重启、frps 重连及 Agent SIGKILL 回收/重启通过；监督进程丢失时拒绝重复启动。Agent Keychain 与持久状态加密已接入，已验证 macOS 用户 launchd 自动重启与三条隧道恢复；已移除运行配置中的认证 token，并接入本机注册诊断和持久回执；历史缓存/备份治理、Linux 服务、持续逐映射状态与上游可达性仍待完成，见 [Agent 记录](FRP-AGENT.md)。G04 在独立 [PR #5](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/5)，固定压力集仍未通过质量门槛。
+
+- [FRP 配置加密、密钥轮换与历史迁移](FRP-CONFIG-ENCRYPTION.md)
+
+- [FRP 持久命令、配置领取与执行回执](FRP-DURABLE-COMMANDS.md)
+
+G05 已追加映射事务分配、归属锁后复核、规范域名数据库唯一约束及原子审计，见 [映射预留与升级](FRP-MAPPING-RESERVATIONS.md)。全局端口池仍沿用旧 API 范围，多服务器注册/作用域与运行配置占用生命周期尚未完成，FRP-004 保持开放。测试及 CI 以 TESTING 中的实际记录为准。
+
+G05 设备更新/删除已移入授权与审计事务，删除改为保留历史和端口预留的退役，支持受归属保护的退役列表/元数据。新增退役撤销/命令取消触发器和 v2 校验例程，见 [退役协议](FRP-DEVICE-RETIREMENT.md)；离线占用确认与释放仍未完成。
