@@ -70,8 +70,10 @@ G03 已补齐下载写入/刷新 30 秒期限、上下文取消唤醒和最终�
 - [G05 Agent Keychain、状态加密与旧状态迁移](FRP-AGENT-VAULT.md)
 - [G05 注册诊断与持久快照](FRP-AGENT-DIAGNOSTICS.md)
 
-G05 在 [PR #6](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/6) 继续推进，基于 G03。独立身份、配置加密/迁移、持久命令与 Go Agent 已接入。实际 CLI 三种隧道、重启、frps 重连及 Agent SIGKILL 回收/重启通过；监督进程丢失时拒绝重复启动。Agent Keychain 与持久状态加密已接入，已验证 macOS 用户 launchd 自动重启与三条隧道恢复；已移除运行配置中的认证 token，历史缓存/备份治理、本机注册诊断和持久回执已接入；Linux 服务、持续逐映射状态与上游可达性仍待完成，见 [Agent 记录](FRP-AGENT.md)。G04 在独立 [PR #5](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/5)，固定压力集仍未通过质量门槛。
+G05 在 [PR #6](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/6) 继续推进，基于 G03。独立身份、配置加密/迁移、持久命令与 Go Agent 已接入。实际 CLI 三种隧道、重启、frps 重连及 Agent SIGKILL 回收/重启通过；监督进程丢失时拒绝重复启动。Agent Keychain 与持久状态加密已接入，已验证 macOS 用户 launchd 自动重启与三条隧道恢复；已移除运行配置中的认证 token，并接入本机注册诊断和持久回执；历史缓存/备份治理、Linux 服务、持续逐映射状态与上游可达性仍待完成，见 [Agent 记录](FRP-AGENT.md)。G04 在独立 [PR #5](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/5)，固定压力集仍未通过质量门槛。
 
 - [FRP 配置加密、密钥轮换与历史迁移](FRP-CONFIG-ENCRYPTION.md)
 
 - [FRP 持久命令、配置领取与执行回执](FRP-DURABLE-COMMANDS.md)
+
+G05 已追加映射事务分配、归属锁后复核、规范域名数据库唯一约束及原子审计，见 [映射预留与升级](FRP-MAPPING-RESERVATIONS.md)。全局端口池仍沿用旧 API 范围，多服务器注册/作用域与运行配置占用生命周期尚未完成，FRP-004 保持开放。测试及 CI 以 TESTING 中的实际记录为准。

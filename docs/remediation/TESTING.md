@@ -234,3 +234,21 @@ Darwin arm64 首次真实 launchd 测试通过（35.27s，`/tmp/cloudnest-g05-la
 复核后将 launchd 测试的新进程探测顺序明确为“先实际三隧道访问，再断言 registered 快照”，防止把正常的注册中状态误当作测试失败；单独再次通过（48.74s、包 50.731s，`/tmp/cloudnest-g05-diagnostics-launchd-review.log`）。进一步确认监督进程状态不明时只报告 unavailable，并保留启动失败与清理错误；专项 race 再次通过（Agent 2.827s、报告协议 2.168s，`/tmp/cloudnest-g05-diagnostics-final-review.log`）。
 
 `make -C cloudnest_go check test build-macos build-linux` 全通过（`/tmp/cloudnest-g05-diagnostics-review-check.log`），包含普通 race/vet 及四目标服务端/Agent 构建。新增数据库列只在隔离测试库上迁移；新提交的完整远端 CI 需按 SHA 独立核验。未宣称逐映射实时流、上游应用健康、长期离线/休眠或生产升级已验收。
+
+## 2026-11-06 G05 映射并发与预留
+
+复核 PR #1/#2 仍为 OPEN，#2 的 base 仍为 `codex/g00-audit-baseline`。#1 `4462b74` 两次构建成功、两次原漏洞基线失败；#2 `588a187` 四项检查全部成功。当前代码保留自定义权限下的 me/logout、独立随机 JTI、多会话注销和客户端契约回归；本批没有重新开发 G01。
+
+诊断提交 `e0da206` 的 push `41999443725` 四项成功。PR `41999454355` 初次 native job 在下载固定官方 FRP 时连续 HTTP 504、curl 退出 22，尚未执行 native 测试，其余三项成功；失败日志保留于 `/tmp/cloudnest-g05-diagnostics-ci-failed.log`。仅重跑失败任务，attempt 2 四项全部成功。没有通过删除测试或替换官方二进制来掩盖失败。
+
+映射首轮六项顶层 race 集成通过（10.107s，`/tmp/cloudnest-g05-mapping-regression.log`），包括 24 并发自动分配、24 并发规范域名竞争、跨用户真实 HTTP 相同端口竞争、1000 端口耗尽和空位复用、数据库直接写约束、事务审计故障、三个设备归属读取/加锁交错场景及历史重复数据迁移保留。开发验证曾发现 MySQL 将 SUBSTRING 表达式保存为 SUBSTR，以及域名规范化双重去前缀错误；已修复实现并保留严格校验/非法输入断言，未绕过 schema 验证。
+
+完整回归与最终复核结果见下文。本批边界见 [映射协议](FRP-MAPPING-RESERVATIONS.md)。
+
+首次完整套件在 238 项顶层用例通过后触发六分钟总看门狗，`TestTreeCyclesDepthAndOverlappingRootsFail` 刚开始（0s），没有业务断言失败；包退出 363.134s，日志 `/tmp/cloudnest-g05-mapping-full.log` 保留为**未通过**。当前普通套件共 260 项，已将隔离脚本的套件看门狗从 6m 调整为 8m，以容纳新增集成与每夹具 schema 校验。单项取消、锁等待、网络与资源释放断言没有延长；完整重跑另记结果，不将此超时计为成功。
+
+最终映射专项加真实 Agent CLI 共九项顶层 race 集成通过、零跳过（60.098s，`/tmp/cloudnest-g05-mapping-native-review.log`）。八项映射测试追加锁等待取消、删除释放、更新冲突、同名生成列篡改拒绝及审计自身 1062 错误不能冒充映射冲突。第九项使用固定官方 frpc/frps 和实际编译后端/Agent，验证三隧道、重连、重启、诊断及撤销链路在新 schema 下仍通过。
+
+`make -C cloudnest_go check test build-macos build-linux` 全通过（`/tmp/cloudnest-g05-mapping-check-final.log`），包括普通 race/vet、四目标服务端/Agent 构建；审计错误分类最后调整后四个受影响包 race 再次通过（`/tmp/cloudnest-g05-mapping-review-unit.log`），integration-tag vet、仓库检查及补丁格式检查通过。
+
+最终完整普通 race 集成 **260 项全部通过，零跳过**（412.869s，`/tmp/cloudnest-g05-mapping-full-final.log`）。包含原 G01 自定义会话权限、独立登录/注销和客户端 API 边界，以及文件/传输/身份/持久命令/诊断与本批八项映射测试。脚本退出 0，随后确认无残留的隔离测试容器。最终提交的远端 CI 仍按其 SHA 单独核验；本地通过不替代远端结果，也不表示 G05 或全项目完成。

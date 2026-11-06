@@ -119,6 +119,9 @@ func CheckAgentSchema(db *gorm.DB) error {
 			return fmt.Errorf("agent trigger %s missing; run explicit migrate", s.name)
 		}
 	}
+	if err := CheckMappingSchema(db); err != nil {
+		return err
+	}
 	return checkAgentCommandSchema(db)
 }
 

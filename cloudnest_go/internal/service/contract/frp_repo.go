@@ -7,8 +7,16 @@ import (
 	"cloudenest_go/model"
 )
 
+// FrpMappingActor carries authenticated caller identity into the write transaction.
+type FrpMappingActor struct {
+	UserID   int64
+	Admin    bool
+	ClientIP string
+}
+
 // FrpCreateMappingInput 定义创建映射输入。
 type FrpCreateMappingInput struct {
+	FrpMappingActor
 	DeviceID   int64
 	LocalPort  int
 	RemotePort *int
@@ -18,6 +26,7 @@ type FrpCreateMappingInput struct {
 
 // FrpUpdateMappingInput 定义更新映射输入。
 type FrpUpdateMappingInput struct {
+	FrpMappingActor
 	MappingID  int64
 	LocalPort  *int
 	RemotePort *int
@@ -51,7 +60,7 @@ type FrpRepository interface {
 	ListMappingsByDeviceID(ctx context.Context, deviceID int64) ([]model.FrpMapping, error)
 	GetMappingByID(ctx context.Context, mappingID int64) (model.FrpMapping, error)
 	UpdateMapping(ctx context.Context, req FrpUpdateMappingInput) (model.FrpMapping, error)
-	DeleteMapping(ctx context.Context, mappingID int64) error
+	DeleteMapping(ctx context.Context, actor FrpMappingActor, mappingID int64) (model.FrpMapping, error)
 	ListActiveMappingsByDeviceID(ctx context.Context, deviceID int64) ([]model.FrpMapping, error)
 	CreateConfig(ctx context.Context, uid int64, isAdmin bool, cfg model.FrpConfig, clientIP ...string) (model.FrpConfig, error)
 	RollbackConfig(context.Context, int64, bool, int64, ...string) (model.FrpConfig, model.FrpConfig, error)

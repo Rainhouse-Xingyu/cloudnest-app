@@ -10,6 +10,7 @@ import (
 	"cloudenest_go/internal/frpconfig"
 	"cloudenest_go/internal/middleware"
 	"cloudenest_go/internal/service"
+	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
 
 	"github.com/gin-gonic/gin"
@@ -262,6 +263,7 @@ func (h *FrpHandler) CreateMapping(c *gin.Context) {
 	req.Domain = strings.TrimSpace(req.Domain)
 
 	created, allocErr := h.Svc.CreateMapping(c.Request.Context(), uid, h.isAdmin(c), service.CreateMappingInput{
+		ClientIP:   c.ClientIP(),
 		DeviceID:   req.DeviceID,
 		LocalPort:  req.LocalPort,
 		RemotePort: req.RemotePort,
@@ -269,24 +271,9 @@ func (h *FrpHandler) CreateMapping(c *gin.Context) {
 		Status:     req.Status,
 	})
 	if allocErr != nil {
-		if errors.Is(allocErr, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "device not found"})
-			return
-		}
-		if errors.Is(allocErr, service.ErrFrpForbidden) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-			return
-		}
-		msg := strings.ToLower(allocErr.Error())
-		if strings.Contains(msg, "remote_port already exists") || strings.Contains(msg, "domain already exists") || strings.Contains(msg, "device disabled") {
-			c.JSON(http.StatusConflict, gin.H{"error": allocErr.Error()})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "create mapping failed"})
+		h.writeMappingError(c, allocErr)
 		return
 	}
-
-	_ = h.Svc.LogOperation(c.Request.Context(), uid, "frp_mapping_create", fmt.Sprintf("mapping_id=%d device_id=%d", created.ID, created.DeviceID), c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{"item": created})
 }
 
@@ -332,33 +319,16 @@ func (h *FrpHandler) UpdateMapping(c *gin.Context) {
 	}
 
 	mapping, err := h.Svc.UpdateMapping(c.Request.Context(), uid, h.isAdmin(c), mappingID, service.UpdateMappingInput{
+		ClientIP:   c.ClientIP(),
 		LocalPort:  req.LocalPort,
 		RemotePort: req.RemotePort,
 		Domain:     req.Domain,
 		Status:     req.Status,
 	})
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "mapping not found"})
-			return
-		}
-		if errors.Is(err, service.ErrFrpForbidden) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-			return
-		}
-		if errors.Is(err, gorm.ErrInvalidData) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "no fields to update"})
-			return
-		}
-		msg := strings.ToLower(err.Error())
-		if strings.Contains(msg, "already exists") || strings.Contains(msg, "device disabled") {
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "update mapping failed"})
+		h.writeMappingError(c, err)
 		return
 	}
-	_ = h.Svc.LogOperation(c.Request.Context(), uid, "frp_mapping_update", fmt.Sprintf("mapping_id=%d device_id=%d", mapping.ID, mapping.DeviceID), c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{"item": mapping})
 }
 
@@ -371,20 +341,11 @@ func (h *FrpHandler) DeleteMapping(c *gin.Context) {
 		return
 	}
 
-	mapping, err := h.Svc.DeleteMapping(c.Request.Context(), uid, h.isAdmin(c), mappingID)
+	_, err = h.Svc.DeleteMapping(c.Request.Context(), uid, h.isAdmin(c), mappingID, c.ClientIP())
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "mapping not found"})
-			return
-		}
-		if errors.Is(err, service.ErrFrpForbidden) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+		h.writeMappingError(c, err)
 		return
 	}
-	_ = h.Svc.LogOperation(c.Request.Context(), uid, "frp_mapping_delete", fmt.Sprintf("mapping_id=%d device_id=%d", mapping.ID, mapping.DeviceID), c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 
@@ -752,4 +713,25 @@ func (h *FrpHandler) writeConfigError(c *gin.Context, err error) {
 
 func publicFRPConfig(cfg model.FrpConfig) gin.H {
 	return gin.H{"id": cfg.ID, "device_id": cfg.DeviceID, "create_time": cfg.CreateTime, "config_text": "", "config_text_redacted": true}
+}
+
+func (h *FrpHandler) writeMappingError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		c.JSON(404, gin.H{"error": "mapping or device not found"})
+	case errors.Is(err, contract.ErrForbidden):
+		c.JSON(403, gin.H{"error": "permission denied"})
+	case errors.Is(err, contract.ErrInvalidInput):
+		c.JSON(400, gin.H{"error": "invalid mapping fields"})
+	case errors.Is(err, contract.ErrFrpMappingBusy):
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "mapping operation busy; retry later"})
+	case errors.Is(err, contract.ErrFrpMappingConflict):
+		c.JSON(409, gin.H{"error": "mapping port or domain already exists"})
+	case errors.Is(err, contract.ErrFrpPortExhausted):
+		c.JSON(409, gin.H{"error": "remote port pool exhausted"})
+	case errors.Is(err, contract.ErrFrpDeviceDisabled):
+		c.JSON(409, gin.H{"error": "device disabled"})
+	default:
+		c.JSON(500, gin.H{"error": "mapping operation failed"})
+	}
 }

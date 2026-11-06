@@ -73,6 +73,7 @@ type UpdateDeviceInput struct {
 
 // CreateMappingInput 表示映射创建输入。
 type CreateMappingInput struct {
+	ClientIP   string
 	DeviceID   int64
 	LocalPort  int
 	RemotePort *int
@@ -82,6 +83,7 @@ type CreateMappingInput struct {
 
 // UpdateMappingInput 表示映射更新输入。
 type UpdateMappingInput struct {
+	ClientIP   string
 	LocalPort  *int
 	RemotePort *int
 	Domain     *string
@@ -218,25 +220,18 @@ func (s *FrpService) DeleteDevice(ctx context.Context, uid int64, isAdmin bool, 
 
 // CreateMapping 创建映射，支持自动分配 remote_port。
 func (s *FrpService) CreateMapping(ctx context.Context, uid int64, isAdmin bool, req CreateMappingInput) (model.FrpMapping, error) {
-	device, err := s.findDeviceWithPermission(ctx, uid, isAdmin, req.DeviceID)
-	if err != nil {
-		return model.FrpMapping{}, err
-	}
-	if device.Status == 0 {
-		return model.FrpMapping{}, fmt.Errorf("device disabled")
-	}
-
 	status := int8(1)
 	if req.Status != nil {
 		status = *req.Status
 	}
 
 	return s.repo.CreateMapping(ctx, contract.FrpCreateMappingInput{
-		DeviceID:   req.DeviceID,
-		LocalPort:  req.LocalPort,
-		RemotePort: req.RemotePort,
-		Domain:     req.Domain,
-		Status:     status,
+		FrpMappingActor: contract.FrpMappingActor{UserID: uid, Admin: isAdmin, ClientIP: req.ClientIP},
+		DeviceID:        req.DeviceID,
+		LocalPort:       req.LocalPort,
+		RemotePort:      req.RemotePort,
+		Domain:          req.Domain,
+		Status:          status,
 	})
 }
 
@@ -252,51 +247,23 @@ func (s *FrpService) ListDeviceMappings(ctx context.Context, uid int64, isAdmin 
 
 // UpdateMapping 更新映射信息（端口、域名、状态）。
 func (s *FrpService) UpdateMapping(ctx context.Context, uid int64, isAdmin bool, mappingID int64, req UpdateMappingInput) (model.FrpMapping, error) {
-	mapping, device, err := s.findMappingWithPermission(ctx, uid, isAdmin, mappingID)
-	if err != nil {
-		return model.FrpMapping{}, err
-	}
-	if device.Status == 0 {
-		return model.FrpMapping{}, fmt.Errorf("device disabled")
-	}
-
-	updates := map[string]interface{}{}
-	if req.LocalPort != nil {
-		updates["local_port"] = *req.LocalPort
-	}
-	if req.RemotePort != nil {
-		updates["remote_port"] = *req.RemotePort
-	}
-	if req.Domain != nil {
-		domain := strings.TrimSpace(*req.Domain)
-		updates["domain"] = domain
-	}
-	if req.Status != nil {
-		updates["status"] = *req.Status
-	}
-	if len(updates) == 0 {
-		return model.FrpMapping{}, gorm.ErrInvalidData
-	}
-
 	return s.repo.UpdateMapping(ctx, contract.FrpUpdateMappingInput{
-		MappingID:  mapping.ID,
-		LocalPort:  req.LocalPort,
-		RemotePort: req.RemotePort,
-		Domain:     req.Domain,
-		Status:     req.Status,
+		FrpMappingActor: contract.FrpMappingActor{UserID: uid, Admin: isAdmin, ClientIP: req.ClientIP},
+		MappingID:       mappingID,
+		LocalPort:       req.LocalPort,
+		RemotePort:      req.RemotePort,
+		Domain:          req.Domain,
+		Status:          req.Status,
 	})
 }
 
 // DeleteMapping 删除映射。
-func (s *FrpService) DeleteMapping(ctx context.Context, uid int64, isAdmin bool, mappingID int64) (model.FrpMapping, error) {
-	mapping, _, err := s.findMappingWithPermission(ctx, uid, isAdmin, mappingID)
-	if err != nil {
-		return model.FrpMapping{}, err
+func (s *FrpService) DeleteMapping(ctx context.Context, uid int64, isAdmin bool, mappingID int64, clientIP ...string) (model.FrpMapping, error) {
+	actor := contract.FrpMappingActor{UserID: uid, Admin: isAdmin}
+	if len(clientIP) > 0 {
+		actor.ClientIP = clientIP[0]
 	}
-	if err := s.repo.DeleteMapping(ctx, mapping.ID); err != nil {
-		return model.FrpMapping{}, err
-	}
-	return mapping, nil
+	return s.repo.DeleteMapping(ctx, actor, mappingID)
 }
 
 // PreviewConfig 预览某设备的 frpc.yaml 内容（不入库）。
