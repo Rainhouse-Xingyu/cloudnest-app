@@ -108,13 +108,11 @@ func (h *FrpHandler) CreateDevice(c *gin.Context) {
 		return
 	}
 
-	device, err := h.Svc.CreateDevice(c.Request.Context(), uid, req.DeviceName, req.DeviceIP)
+	device, err := h.Svc.CreateDevice(c.Request.Context(), uid, req.DeviceName, req.DeviceIP, c.ClientIP())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "create device failed"})
+		h.writeDeviceError(c, err)
 		return
 	}
-
-	_ = h.Svc.LogOperation(c.Request.Context(), uid, "frp_device_create", fmt.Sprintf("device_id=%d", device.ID), c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{"item": device})
 }
 
@@ -135,7 +133,12 @@ func (h *FrpHandler) ListDevices(c *gin.Context) {
 		statusFilter = &t
 	}
 
-	rows, err := h.Svc.ListDevices(c.Request.Context(), uid, isAdmin, statusFilter)
+	retired := c.Query("retired")
+	if retired != "" && retired != "0" && retired != "1" {
+		c.JSON(400, gin.H{"error": "invalid retired filter"})
+		return
+	}
+	rows, err := h.Svc.ListDevices(c.Request.Context(), uid, isAdmin, statusFilter, retired == "1")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
@@ -153,7 +156,12 @@ func (h *FrpHandler) GetDevice(c *gin.Context) {
 		return
 	}
 
-	res, err := h.Svc.GetDeviceDetail(c.Request.Context(), uid, h.isAdmin(c), deviceID)
+	retired := c.Query("retired")
+	if retired != "" && retired != "0" && retired != "1" {
+		c.JSON(400, gin.H{"error": "invalid retired filter"})
+		return
+	}
+	res, err := h.Svc.GetDeviceDetail(c.Request.Context(), uid, h.isAdmin(c), deviceID, retired == "1")
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "device not found"})
@@ -192,31 +200,19 @@ func (h *FrpHandler) UpdateDevice(c *gin.Context) {
 	}
 
 	device, err := h.Svc.UpdateDevice(c.Request.Context(), uid, h.isAdmin(c), deviceID, service.UpdateDeviceInput{
+		ClientIP:   c.ClientIP(),
 		DeviceName: req.DeviceName,
 		DeviceIP:   req.DeviceIP,
 		Status:     req.Status,
 	})
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "device not found"})
-			return
-		}
-		if errors.Is(err, service.ErrFrpForbidden) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-			return
-		}
-		if errors.Is(err, gorm.ErrInvalidData) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "no fields to update"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+		h.writeDeviceError(c, err)
 		return
 	}
-	_ = h.Svc.LogOperation(c.Request.Context(), uid, "frp_device_update", fmt.Sprintf("device_id=%d", device.ID), c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{"item": device})
 }
 
-// DeleteDevice 删除设备及其关联映射（数据库已配置级联删除）。
+// DeleteDevice retires a device; related history and reservations are retained.
 func (h *FrpHandler) DeleteDevice(c *gin.Context) {
 	uid := c.GetInt64(middleware.ContextUserIDKey)
 	deviceID, err := strconv.ParseInt(c.Param("id"), 10, 64)
@@ -225,21 +221,12 @@ func (h *FrpHandler) DeleteDevice(c *gin.Context) {
 		return
 	}
 
-	device, err := h.Svc.DeleteDevice(c.Request.Context(), uid, h.isAdmin(c), deviceID)
+	_, err = h.Svc.DeleteDevice(c.Request.Context(), uid, h.isAdmin(c), deviceID, c.ClientIP())
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "device not found"})
-			return
-		}
-		if errors.Is(err, service.ErrFrpForbidden) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+		h.writeDeviceError(c, err)
 		return
 	}
-	_ = h.Svc.LogOperation(c.Request.Context(), uid, "frp_device_delete", fmt.Sprintf("device_id=%d", device.ID), c.ClientIP())
-	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
+	c.JSON(http.StatusOK, gin.H{"message": "retired", "retired": true, "reservations_retained": true})
 }
 
 // CreateMapping 创建映射，支持自动分配 remote_port。
@@ -733,5 +720,20 @@ func (h *FrpHandler) writeMappingError(c *gin.Context, err error) {
 		c.JSON(409, gin.H{"error": "device disabled"})
 	default:
 		c.JSON(500, gin.H{"error": "mapping operation failed"})
+	}
+}
+
+func (h *FrpHandler) writeDeviceError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		c.JSON(404, gin.H{"error": "device not found"})
+	case errors.Is(err, contract.ErrForbidden):
+		c.JSON(403, gin.H{"error": "permission denied"})
+	case errors.Is(err, contract.ErrInvalidInput):
+		c.JSON(400, gin.H{"error": "invalid device fields"})
+	case errors.Is(err, contract.ErrFrpMappingBusy):
+		c.JSON(503, gin.H{"error": "device operation busy; retry later"})
+	default:
+		c.JSON(500, gin.H{"error": "device operation failed"})
 	}
 }

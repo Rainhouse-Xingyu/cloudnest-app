@@ -77,3 +77,5 @@ G05 在 [PR #6](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/6) 继续
 - [FRP 持久命令、配置领取与执行回执](FRP-DURABLE-COMMANDS.md)
 
 G05 已追加映射事务分配、归属锁后复核、规范域名数据库唯一约束及原子审计，见 [映射预留与升级](FRP-MAPPING-RESERVATIONS.md)。全局端口池仍沿用旧 API 范围，多服务器注册/作用域与运行配置占用生命周期尚未完成，FRP-004 保持开放。测试及 CI 以 TESTING 中的实际记录为准。
+
+G05 设备更新/删除已移入授权与审计事务，删除改为保留历史和端口预留的退役，支持受归属保护的退役列表/元数据。新增退役撤销/命令取消触发器和 v2 校验例程，见 [退役协议](FRP-DEVICE-RETIREMENT.md)；离线占用确认与释放仍未完成。

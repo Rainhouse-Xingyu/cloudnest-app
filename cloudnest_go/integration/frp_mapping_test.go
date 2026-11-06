@@ -56,7 +56,7 @@ func TestFRPMappingConcurrentAllocationAndDomains(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			<-start
-			m, err := r.CreateMapping(context.Background(), contract.FrpCreateMappingInput{FrpMappingActor: contract.FrpMappingActor{UserID: users[i%2]}, DeviceID: ids[i%2], LocalPort: 8080, Status: 1})
+			m, err := r.CreateMapping(context.Background(), contract.FrpCreateMappingInput{FrpActor: contract.FrpActor{UserID: users[i%2]}, DeviceID: ids[i%2], LocalPort: 8080, Status: 1})
 			results <- result{m, err}
 		}(i)
 	}
@@ -89,7 +89,7 @@ func TestFRPMappingConcurrentAllocationAndDomains(t *testing.T) {
 				domain = " HTTP://ALIAS-" + fmt.Sprint(ids[0]) + ".EXAMPLE. "
 			}
 			port := 30000 + i
-			m, err := r.CreateMapping(context.Background(), contract.FrpCreateMappingInput{FrpMappingActor: contract.FrpMappingActor{UserID: users[i%2]}, DeviceID: ids[i%2], LocalPort: 8080, RemotePort: &port, Domain: domain, Status: 1})
+			m, err := r.CreateMapping(context.Background(), contract.FrpCreateMappingInput{FrpActor: contract.FrpActor{UserID: users[i%2]}, DeviceID: ids[i%2], LocalPort: 8080, RemotePort: &port, Domain: domain, Status: 1})
 			results <- result{m, err}
 		}(i)
 	}
@@ -110,7 +110,7 @@ func TestFRPMappingConcurrentAllocationAndDomains(t *testing.T) {
 		t.Fatal("domain arbitration", wins, conflicts)
 	}
 	port := 31000
-	if _, err := r.CreateMapping(context.Background(), contract.FrpCreateMappingInput{FrpMappingActor: contract.FrpMappingActor{UserID: f.aliceID}, DeviceID: ids[0], LocalPort: 443, RemotePort: &port, Domain: fmt.Sprintf("https://alias-%d.example", ids[0]), Status: 1}); err != nil {
+	if _, err := r.CreateMapping(context.Background(), contract.FrpCreateMappingInput{FrpActor: contract.FrpActor{UserID: f.aliceID}, DeviceID: ids[0], LocalPort: 443, RemotePort: &port, Domain: fmt.Sprintf("https://alias-%d.example", ids[0]), Status: 1}); err != nil {
 		t.Fatal("independent HTTPS listener rejected", err)
 	}
 	var count int64
@@ -235,8 +235,8 @@ func TestFRPMappingRechecksOwnershipAfterLockWait(t *testing.T) {
 			f := newFixture(t)
 			id := mappingDevice(t, f, f.aliceID)
 			r := repo.NewFrpRepo(f.db)
-			actor := contract.FrpMappingActor{UserID: f.aliceID}
-			original, err := r.CreateMapping(context.Background(), contract.FrpCreateMappingInput{FrpMappingActor: actor, DeviceID: id, LocalPort: 8080, Status: 1})
+			actor := contract.FrpActor{UserID: f.aliceID}
+			original, err := r.CreateMapping(context.Background(), contract.FrpCreateMappingInput{FrpActor: actor, DeviceID: id, LocalPort: 8080, Status: 1})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -266,10 +266,10 @@ func TestFRPMappingRechecksOwnershipAfterLockWait(t *testing.T) {
 				var err error
 				switch action {
 				case "create":
-					_, err = r.CreateMapping(context.Background(), contract.FrpCreateMappingInput{FrpMappingActor: actor, DeviceID: id, LocalPort: 8090, Status: 1})
+					_, err = r.CreateMapping(context.Background(), contract.FrpCreateMappingInput{FrpActor: actor, DeviceID: id, LocalPort: 8090, Status: 1})
 				case "update":
 					port := 8090
-					_, err = r.UpdateMapping(context.Background(), contract.FrpUpdateMappingInput{FrpMappingActor: actor, MappingID: original.ID, LocalPort: &port})
+					_, err = r.UpdateMapping(context.Background(), contract.FrpUpdateMappingInput{FrpActor: actor, MappingID: original.ID, LocalPort: &port})
 				case "delete":
 					_, err = r.DeleteMapping(context.Background(), actor, original.ID)
 				}
@@ -385,7 +385,7 @@ func TestFRPMappingLockDeadlineAndReservationRelease(t *testing.T) {
 	f := newFixture(t)
 	id := mappingDevice(t, f, f.aliceID)
 	r := repo.NewFrpRepo(f.db)
-	actor := contract.FrpMappingActor{UserID: f.aliceID}
+	actor := contract.FrpActor{UserID: f.aliceID}
 	holder := f.db.Begin()
 	if holder.Error != nil {
 		t.Fatal(holder.Error)
@@ -396,7 +396,7 @@ func TestFRPMappingLockDeadlineAndReservationRelease(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
 	defer cancel()
-	if _, err := r.CreateMapping(ctx, contract.FrpCreateMappingInput{FrpMappingActor: actor, DeviceID: id, LocalPort: 8080, Status: 1}); !errors.Is(err, contract.ErrFrpMappingBusy) {
+	if _, err := r.CreateMapping(ctx, contract.FrpCreateMappingInput{FrpActor: actor, DeviceID: id, LocalPort: 8080, Status: 1}); !errors.Is(err, contract.ErrFrpMappingBusy) {
 		t.Fatal("lock cancellation lost bounded error", err)
 	}
 	if err := holder.Rollback().Error; err != nil {
@@ -408,7 +408,7 @@ func TestFRPMappingLockDeadlineAndReservationRelease(t *testing.T) {
 	}
 	port := 35000
 	domain := fmt.Sprintf("release-%d.example", id)
-	req := contract.FrpCreateMappingInput{FrpMappingActor: actor, DeviceID: id, LocalPort: 8080, RemotePort: &port, Domain: domain, Status: 1}
+	req := contract.FrpCreateMappingInput{FrpActor: actor, DeviceID: id, LocalPort: 8080, RemotePort: &port, Domain: domain, Status: 1}
 	m, err := r.CreateMapping(context.Background(), req)
 	if err != nil {
 		t.Fatal(err)
@@ -420,16 +420,16 @@ func TestFRPMappingLockDeadlineAndReservationRelease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.UpdateMapping(context.Background(), contract.FrpUpdateMappingInput{FrpMappingActor: actor, MappingID: second.ID, RemotePort: &port}); !errors.Is(err, contract.ErrFrpMappingConflict) {
+	if _, err := r.UpdateMapping(context.Background(), contract.FrpUpdateMappingInput{FrpActor: actor, MappingID: second.ID, RemotePort: &port}); !errors.Is(err, contract.ErrFrpMappingConflict) {
 		t.Fatal("update duplicated port", err)
 	}
-	if _, err := r.UpdateMapping(context.Background(), contract.FrpUpdateMappingInput{FrpMappingActor: actor, MappingID: second.ID, Domain: &domain}); !errors.Is(err, contract.ErrFrpMappingConflict) {
+	if _, err := r.UpdateMapping(context.Background(), contract.FrpUpdateMappingInput{FrpActor: actor, MappingID: second.ID, Domain: &domain}); !errors.Is(err, contract.ErrFrpMappingConflict) {
 		t.Fatal("update duplicated domain", err)
 	}
 	if _, err := r.DeleteMapping(context.Background(), actor, m.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.UpdateMapping(context.Background(), contract.FrpUpdateMappingInput{FrpMappingActor: actor, MappingID: second.ID, RemotePort: &port, Domain: &domain}); err != nil {
+	if _, err := r.UpdateMapping(context.Background(), contract.FrpUpdateMappingInput{FrpActor: actor, MappingID: second.ID, RemotePort: &port, Domain: &domain}); err != nil {
 		t.Fatal("committed delete did not release reservations", err)
 	}
 	var audits []model.OperationLog

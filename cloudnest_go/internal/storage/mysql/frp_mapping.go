@@ -19,7 +19,7 @@ import (
 // transactions across backend instances; a process-local mutex is insufficient.
 // The lock order is pool -> owner -> device -> mapping. READ COMMITTED avoids
 // freezing an ownership hint or allocation scan before a competing commit.
-func (r *FrpRepo) mappingTransaction(ctx context.Context, fn func(*gorm.DB) error) error {
+func (r *FrpRepo) frpTransaction(ctx context.Context, fn func(*gorm.DB) error) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -45,7 +45,7 @@ func (r *FrpRepo) mappingTransaction(ctx context.Context, fn func(*gorm.DB) erro
 	return err
 }
 
-func lockMappingDevice(tx *gorm.DB, actor contract.FrpMappingActor, deviceID int64, requireEnabled bool) error {
+func lockMappingDevice(tx *gorm.DB, actor contract.FrpActor, deviceID int64, requireEnabled bool) error {
 	var hint model.Device
 	if err := tx.First(&hint, "id=?", deviceID).Error; err != nil {
 		return err
@@ -73,7 +73,7 @@ func lockMappingDevice(tx *gorm.DB, actor contract.FrpMappingActor, deviceID int
 	return nil
 }
 
-func mappingAudit(tx *gorm.DB, actor contract.FrpMappingActor, action string, m model.FrpMapping) error {
+func mappingAudit(tx *gorm.DB, actor contract.FrpActor, action string, m model.FrpMapping) error {
 	return tx.Create(&model.OperationLog{UserID: &actor.UserID, Action: action, Detail: fmt.Sprintf("mapping_id=%d device_id=%d", m.ID, m.DeviceID), ClientIP: actor.ClientIP}).Error
 }
 
@@ -87,8 +87,8 @@ func (r *FrpRepo) CreateMapping(ctx context.Context, req contract.FrpCreateMappi
 	if err := normalizeMapping(&m); err != nil {
 		return model.FrpMapping{}, err
 	}
-	err := r.mappingTransaction(ctx, func(tx *gorm.DB) error {
-		if err := lockMappingDevice(tx, req.FrpMappingActor, req.DeviceID, true); err != nil {
+	err := r.frpTransaction(ctx, func(tx *gorm.DB) error {
+		if err := lockMappingDevice(tx, req.FrpActor, req.DeviceID, true); err != nil {
 			return err
 		}
 		if req.RemotePort == nil {
@@ -107,7 +107,7 @@ func (r *FrpRepo) CreateMapping(ctx context.Context, req contract.FrpCreateMappi
 			return err
 		}
 		m.Status = req.Status
-		return mappingAudit(tx, req.FrpMappingActor, "frp_mapping_create", m)
+		return mappingAudit(tx, req.FrpActor, "frp_mapping_create", m)
 	})
 	if err != nil {
 		return model.FrpMapping{}, err
@@ -120,12 +120,12 @@ func (r *FrpRepo) UpdateMapping(ctx context.Context, req contract.FrpUpdateMappi
 	if req.LocalPort == nil && req.RemotePort == nil && req.Domain == nil && req.Status == nil {
 		return m, contract.ErrInvalidInput
 	}
-	err := r.mappingTransaction(ctx, func(tx *gorm.DB) error {
+	err := r.frpTransaction(ctx, func(tx *gorm.DB) error {
 		var hint model.FrpMapping
 		if err := tx.First(&hint, "id=?", req.MappingID).Error; err != nil {
 			return err
 		}
-		if err := lockMappingDevice(tx, req.FrpMappingActor, hint.DeviceID, true); err != nil {
+		if err := lockMappingDevice(tx, req.FrpActor, hint.DeviceID, true); err != nil {
 			return err
 		}
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&m, "id=?", req.MappingID).Error; err != nil {
@@ -152,7 +152,7 @@ func (r *FrpRepo) UpdateMapping(ctx context.Context, req contract.FrpUpdateMappi
 		if err := tx.Model(&m).Updates(map[string]any{"local_port": m.LocalPort, "remote_port": m.RemotePort, "domain": m.Domain, "status": m.Status}).Error; err != nil {
 			return mappingWriteError(err)
 		}
-		return mappingAudit(tx, req.FrpMappingActor, "frp_mapping_update", m)
+		return mappingAudit(tx, req.FrpActor, "frp_mapping_update", m)
 	})
 	if err != nil {
 		return model.FrpMapping{}, err
@@ -160,9 +160,9 @@ func (r *FrpRepo) UpdateMapping(ctx context.Context, req contract.FrpUpdateMappi
 	return m, nil
 }
 
-func (r *FrpRepo) DeleteMapping(ctx context.Context, actor contract.FrpMappingActor, id int64) (model.FrpMapping, error) {
+func (r *FrpRepo) DeleteMapping(ctx context.Context, actor contract.FrpActor, id int64) (model.FrpMapping, error) {
 	var m model.FrpMapping
-	err := r.mappingTransaction(ctx, func(tx *gorm.DB) error {
+	err := r.frpTransaction(ctx, func(tx *gorm.DB) error {
 		var hint model.FrpMapping
 		if err := tx.First(&hint, "id=?", id).Error; err != nil {
 			return err

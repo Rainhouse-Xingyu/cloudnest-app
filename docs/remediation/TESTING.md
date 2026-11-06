@@ -252,3 +252,17 @@ Darwin arm64 首次真实 launchd 测试通过（35.27s，`/tmp/cloudnest-g05-la
 `make -C cloudnest_go check test build-macos build-linux` 全通过（`/tmp/cloudnest-g05-mapping-check-final.log`），包括普通 race/vet、四目标服务端/Agent 构建；审计错误分类最后调整后四个受影响包 race 再次通过（`/tmp/cloudnest-g05-mapping-review-unit.log`），integration-tag vet、仓库检查及补丁格式检查通过。
 
 最终完整普通 race 集成 **260 项全部通过，零跳过**（412.869s，`/tmp/cloudnest-g05-mapping-full-final.log`）。包含原 G01 自定义会话权限、独立登录/注销和客户端 API 边界，以及文件/传输/身份/持久命令/诊断与本批八项映射测试。脚本退出 0，随后确认无残留的隔离测试容器。最终提交的远端 CI 仍按其 SHA 单独核验；本地通过不替代远端结果，也不表示 G05 或全项目完成。
+
+## 2026-11-06 G05 设备退役与历史保留
+
+上一映射提交 `33a0eb3727579e5eed78495a453014a2737929ff` 的 PR `42143136276`、push `42143128855` 四项检查均全部成功。G00/G01 与 PR #1/#2 状态沿用上节复核，没有合并操作。
+
+设备首轮定向 race 集成 15 项全部通过（22.992s，`/tmp/cloudnest-g05-retirement-targeted.log`）：五项新增设备用例、八项映射用例、两项身份/最低权限 schema 校验。覆盖历史/预留保留、过期身份拒绝、未完成命令取消、审计故障完全回滚、设备更新/退役归属加锁交错、旧结构升级、v1 例程保留及新触发器篡改拒绝。
+
+真实官方 frpc/frps、实际编译后端/Agent 的两项场景分别通过：原凭据撤销 47.88s，新增设备退役 47.75s；两者都保留 TCP/HTTP/HTTPS、重启、重连、后端停机恢复和诊断验证，并在最终撤销/退役后要求真实 HTTP 401、Agent 非成功退出、TCP 隧道关闭、单例锁释放和运行配置消失。连同六项设备测试共八项顶层 race 集成通过、零跳过（106.138s，`/tmp/cloudnest-g05-retirement-native.log`）。CI 的官方 FRP 脚本现分别运行两种退出场景。
+
+`make -C cloudnest_go check test build-macos build-linux` 全通过（`/tmp/cloudnest-g05-retirement-check.log`）。最终响应明确标记 retired/reservations_retained 后，四个受影响包的 race 与带 integration/frpnative 的 vet 单独复核，记录于 `/tmp/cloudnest-g05-retirement-final-review.log`。完整回归和最后 schema 默认值复核另记，不用专项结果替代全部验收。
+
+退役主体完整普通 race 集成 **266 项全部通过，零跳过**（443.983s，`/tmp/cloudnest-g05-retirement-full.log`）。最后另外收紧了退役列必须无默认表达式/自动更新行为的启动检查：初次两项专项中的故障注入 DDL 使用了 MySQL 不接受的 SET DEFAULT 函数语法，在注入前退出，日志 `/tmp/cloudnest-g05-retirement-schema-final.log` 保留为未通过；已改为 MODIFY COLUMN 的等价故障注入，不修改生产行为或放松校验。更正后专项结果另记。完整回归与最后 schema 专项的范围分开记录。
+
+更正故障注入语法后的两项最终 schema race 复核全部通过（7.248s，`/tmp/cloudnest-g05-retirement-schema-corrected.log`），实际验证自动退役默认值拒绝、无 DDL/TRIGGER 权限的运行账号校验、旧例程保留、新列迁移、缺失/篡改触发器拒绝及重复迁移保留退役状态。没有剩余测试进程或隔离容器；最终提交 CI 按新 SHA 单独核验。

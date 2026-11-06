@@ -66,6 +66,7 @@ func NewFrpService(repo contract.FrpRepository, rdb *redis.Client) *FrpService {
 
 // UpdateDeviceInput 表示设备更新输入。
 type UpdateDeviceInput struct {
+	ClientIP   string
 	DeviceName string
 	DeviceIP   string
 	Status     *int8
@@ -146,24 +147,28 @@ type CommandResultInput struct {
 }
 
 // CreateDevice 创建设备并绑定当前用户。
-func (s *FrpService) CreateDevice(ctx context.Context, uid int64, deviceName string, deviceIP string) (model.Device, error) {
+func (s *FrpService) CreateDevice(ctx context.Context, uid int64, deviceName string, deviceIP string, clientIP ...string) (model.Device, error) {
 	device := model.Device{
 		UserID:     uid,
 		DeviceName: strings.TrimSpace(deviceName),
 		DeviceIP:   strings.TrimSpace(deviceIP),
 		Status:     1,
 	}
-	return s.repo.CreateDevice(ctx, device)
+	actor := contract.FrpActor{UserID: uid}
+	if len(clientIP) > 0 {
+		actor.ClientIP = clientIP[0]
+	}
+	return s.repo.CreateDevice(ctx, actor, device)
 }
 
 // ListDevices 查询当前用户可见的设备；管理员可查看全部。
-func (s *FrpService) ListDevices(ctx context.Context, uid int64, isAdmin bool, statusFilter *int8) ([]model.Device, error) {
-	return s.repo.ListDevices(ctx, uid, isAdmin, statusFilter)
+func (s *FrpService) ListDevices(ctx context.Context, uid int64, isAdmin bool, statusFilter *int8, retired ...bool) ([]model.Device, error) {
+	return s.repo.ListDevices(ctx, uid, isAdmin, statusFilter, len(retired) > 0 && retired[0])
 }
 
 // GetDeviceDetail 查询设备详情（含映射数量、最近配置时间）。
-func (s *FrpService) GetDeviceDetail(ctx context.Context, uid int64, isAdmin bool, deviceID int64) (DeviceDetailResult, error) {
-	device, err := s.findDeviceWithPermission(ctx, uid, isAdmin, deviceID)
+func (s *FrpService) GetDeviceDetail(ctx context.Context, uid int64, isAdmin bool, deviceID int64, retired ...bool) (DeviceDetailResult, error) {
+	device, err := s.findDeviceWithPermission(ctx, uid, isAdmin, deviceID, retired...)
 	if err != nil {
 		return DeviceDetailResult{}, err
 	}
@@ -182,11 +187,6 @@ func (s *FrpService) GetDeviceDetail(ctx context.Context, uid int64, isAdmin boo
 
 // UpdateDevice 更新设备名称、IP 和状态。
 func (s *FrpService) UpdateDevice(ctx context.Context, uid int64, isAdmin bool, deviceID int64, req UpdateDeviceInput) (model.Device, error) {
-	device, err := s.findDeviceWithPermission(ctx, uid, isAdmin, deviceID)
-	if err != nil {
-		return model.Device{}, err
-	}
-
 	updates := map[string]interface{}{}
 	if strings.TrimSpace(req.DeviceName) != "" {
 		updates["device_name"] = strings.TrimSpace(req.DeviceName)
@@ -199,23 +199,19 @@ func (s *FrpService) UpdateDevice(ctx context.Context, uid int64, isAdmin bool, 
 	}
 
 	if len(updates) == 0 {
-		return model.Device{}, gorm.ErrInvalidData
+		return model.Device{}, contract.ErrInvalidInput
 	}
 
-	return s.repo.UpdateDevice(ctx, device.ID, updates)
+	return s.repo.UpdateDevice(ctx, contract.FrpActor{UserID: uid, Admin: isAdmin, ClientIP: req.ClientIP}, deviceID, updates)
 }
 
-// DeleteDevice 删除设备及其关联映射。
-func (s *FrpService) DeleteDevice(ctx context.Context, uid int64, isAdmin bool, deviceID int64) (model.Device, error) {
-	device, err := s.findDeviceWithPermission(ctx, uid, isAdmin, deviceID)
-	if err != nil {
-		return model.Device{}, err
+// DeleteDevice retires the device while preserving its history and reservations.
+func (s *FrpService) DeleteDevice(ctx context.Context, uid int64, isAdmin bool, deviceID int64, clientIP ...string) (model.Device, error) {
+	actor := contract.FrpActor{UserID: uid, Admin: isAdmin}
+	if len(clientIP) > 0 {
+		actor.ClientIP = clientIP[0]
 	}
-
-	if err := s.repo.DeleteDevice(ctx, device.ID); err != nil {
-		return model.Device{}, err
-	}
-	return device, nil
+	return s.repo.DeleteDevice(ctx, actor, deviceID)
 }
 
 // CreateMapping 创建映射，支持自动分配 remote_port。
@@ -226,12 +222,12 @@ func (s *FrpService) CreateMapping(ctx context.Context, uid int64, isAdmin bool,
 	}
 
 	return s.repo.CreateMapping(ctx, contract.FrpCreateMappingInput{
-		FrpMappingActor: contract.FrpMappingActor{UserID: uid, Admin: isAdmin, ClientIP: req.ClientIP},
-		DeviceID:        req.DeviceID,
-		LocalPort:       req.LocalPort,
-		RemotePort:      req.RemotePort,
-		Domain:          req.Domain,
-		Status:          status,
+		FrpActor:   contract.FrpActor{UserID: uid, Admin: isAdmin, ClientIP: req.ClientIP},
+		DeviceID:   req.DeviceID,
+		LocalPort:  req.LocalPort,
+		RemotePort: req.RemotePort,
+		Domain:     req.Domain,
+		Status:     status,
 	})
 }
 
@@ -248,18 +244,18 @@ func (s *FrpService) ListDeviceMappings(ctx context.Context, uid int64, isAdmin 
 // UpdateMapping 更新映射信息（端口、域名、状态）。
 func (s *FrpService) UpdateMapping(ctx context.Context, uid int64, isAdmin bool, mappingID int64, req UpdateMappingInput) (model.FrpMapping, error) {
 	return s.repo.UpdateMapping(ctx, contract.FrpUpdateMappingInput{
-		FrpMappingActor: contract.FrpMappingActor{UserID: uid, Admin: isAdmin, ClientIP: req.ClientIP},
-		MappingID:       mappingID,
-		LocalPort:       req.LocalPort,
-		RemotePort:      req.RemotePort,
-		Domain:          req.Domain,
-		Status:          req.Status,
+		FrpActor:   contract.FrpActor{UserID: uid, Admin: isAdmin, ClientIP: req.ClientIP},
+		MappingID:  mappingID,
+		LocalPort:  req.LocalPort,
+		RemotePort: req.RemotePort,
+		Domain:     req.Domain,
+		Status:     req.Status,
 	})
 }
 
 // DeleteMapping 删除映射。
 func (s *FrpService) DeleteMapping(ctx context.Context, uid int64, isAdmin bool, mappingID int64, clientIP ...string) (model.FrpMapping, error) {
-	actor := contract.FrpMappingActor{UserID: uid, Admin: isAdmin}
+	actor := contract.FrpActor{UserID: uid, Admin: isAdmin}
 	if len(clientIP) > 0 {
 		actor.ClientIP = clientIP[0]
 	}
@@ -536,8 +532,8 @@ func (s *FrpService) LogOperation(ctx context.Context, userID int64, action stri
 }
 
 // findDeviceWithPermission 查询设备并校验当前用户是否有权限访问。
-func (s *FrpService) findDeviceWithPermission(ctx context.Context, userID int64, isAdmin bool, deviceID int64) (model.Device, error) {
-	device, err := s.repo.GetDeviceByID(ctx, deviceID)
+func (s *FrpService) findDeviceWithPermission(ctx context.Context, userID int64, isAdmin bool, deviceID int64, retired ...bool) (model.Device, error) {
+	device, err := s.repo.GetDeviceByID(ctx, deviceID, retired...)
 	if err != nil {
 		return model.Device{}, err
 	}

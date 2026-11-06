@@ -36,9 +36,13 @@ func TestAgentNativeCLIThreeTunnelsRestartAndReconnect(t *testing.T) {
 	testAgentNativeTunnels(t, nil)
 }
 
+func TestAgentNativeRetirementStopsTunnels(t *testing.T) {
+	testAgentNativeTunnels(t, nil, true)
+}
+
 type nativeServiceTest func(t *testing.T, ctx context.Context, bin, state, work string, probe, diagnose func())
 
-func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest) {
+func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest, retire ...bool) {
 	dir := os.Getenv("CLOUDNEST_TEST_FRP_BIN_DIR")
 	if !filepath.IsAbs(dir) {
 		t.Fatal("set CLOUDNEST_TEST_FRP_BIN_DIR to verified official 0.71.1 binaries")
@@ -523,7 +527,25 @@ func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest) {
 	// request is denied; it is not sufficient to mark the DB row revoked.
 	startAgent()
 	probe()
-	if e := agentauth.New(f.db).Revoke(ctx, f.aliceID, device, "disposable-fixture-password"); e != nil {
+	if len(retire) > 0 && retire[0] {
+		req, err := http.NewRequestWithContext(ctx, "DELETE", fmt.Sprintf("%s/api/frp/devices/%d", base, device), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Authorization", "Bearer "+f.alice)
+		res, err := httpClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if res.StatusCode != 200 {
+			t.Fatal("real backend retirement failed", res.StatusCode)
+		}
+		var preserved model.Device
+		if err := f.db.Unscoped().First(&preserved, device).Error; err != nil || !preserved.RetiredAt.Valid || preserved.Status != 0 {
+			t.Fatal("retirement did not preserve identity", err)
+		}
+	} else if e := agentauth.New(f.db).Revoke(ctx, f.aliceID, device, "disposable-fixture-password"); e != nil {
 		t.Fatal(e)
 	}
 	revokedAgent := agent

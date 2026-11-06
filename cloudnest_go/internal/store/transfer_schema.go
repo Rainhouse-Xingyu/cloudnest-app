@@ -81,7 +81,7 @@ func CheckTransferCleanupContract(db *gorm.DB) error {
 		return err
 	}
 	// Read all definitions in one catalog snapshot. Only the reviewed agent
-	// triggers, which exclusively clear credential columns, may coexist with
+	// triggers, which clear credentials and cancel retired-device commands, may coexist with
 	// deletion of transfer artifacts. An identifier alone is insufficient.
 	var rows []triggerDefinition
 	if err := db.Raw(agentTriggerProjection + " WHERE trigger_schema=DATABASE()").Scan(&rows).Error; err != nil {

@@ -33,15 +33,11 @@ func NewFrpRepo(db *gorm.DB, keys ...*frpconfig.Keyring) *FrpRepo {
 	return r
 }
 
-func (r *FrpRepo) CreateDevice(ctx context.Context, device model.Device) (model.Device, error) {
-	if err := r.db.WithContext(ctx).Create(&device).Error; err != nil {
-		return model.Device{}, err
-	}
-	return device, nil
-}
-
-func (r *FrpRepo) ListDevices(ctx context.Context, uid int64, isAdmin bool, statusFilter *int8) ([]model.Device, error) {
+func (r *FrpRepo) ListDevices(ctx context.Context, uid int64, isAdmin bool, statusFilter *int8, retired bool) ([]model.Device, error) {
 	q := r.db.WithContext(ctx).Model(&model.Device{})
+	if retired {
+		q = q.Unscoped().Where("retired_at IS NOT NULL")
+	}
 	if !isAdmin {
 		q = q.Where("user_id = ?", uid)
 	}
@@ -55,9 +51,13 @@ func (r *FrpRepo) ListDevices(ctx context.Context, uid int64, isAdmin bool, stat
 	return rows, nil
 }
 
-func (r *FrpRepo) GetDeviceByID(ctx context.Context, deviceID int64) (model.Device, error) {
+func (r *FrpRepo) GetDeviceByID(ctx context.Context, deviceID int64, retired ...bool) (model.Device, error) {
 	var device model.Device
-	if err := r.db.WithContext(ctx).First(&device, "id = ?", deviceID).Error; err != nil {
+	q := r.db.WithContext(ctx)
+	if len(retired) > 0 && retired[0] {
+		q = q.Unscoped().Where("retired_at IS NOT NULL")
+	}
+	if err := q.First(&device, "id = ?", deviceID).Error; err != nil {
 		return model.Device{}, err
 	}
 	return device, nil
@@ -71,26 +71,13 @@ func (r *FrpRepo) GetDeviceDetailMeta(ctx context.Context, deviceID int64) (cont
 
 	var latestCfg model.FrpConfig
 	var latestConfigTime *time.Time
-	if err := r.db.WithContext(ctx).Where("device_id = ?", deviceID).Order("id DESC").First(&latestCfg).Error; err == nil {
+	if err := r.db.WithContext(ctx).Select("id,create_time").Where("device_id = ?", deviceID).Order("id DESC").First(&latestCfg).Error; err == nil {
 		latestConfigTime = &latestCfg.CreateTime
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return contract.FrpDeviceDetailMeta{}, err
 	}
 
 	return contract.FrpDeviceDetailMeta{MappingCount: mappingCount, LatestConfigTime: latestConfigTime}, nil
-}
-
-func (r *FrpRepo) UpdateDevice(ctx context.Context, deviceID int64, updates map[string]interface{}) (model.Device, error) {
-	if err := r.db.WithContext(ctx).Model(&model.Device{}).Where("id = ?", deviceID).Updates(updates).Error; err != nil {
-		return model.Device{}, err
-	}
-	var device model.Device
-	if err := r.db.WithContext(ctx).First(&device, deviceID).Error; err != nil {
-		return model.Device{}, err
-	}
-	return device, nil
-}
-
-func (r *FrpRepo) DeleteDevice(ctx context.Context, deviceID int64) error {
-	return r.db.WithContext(ctx).Delete(&model.Device{}, "id = ?", deviceID).Error
 }
 
 func (r *FrpRepo) ListMappingsByDeviceID(ctx context.Context, deviceID int64) ([]model.FrpMapping, error) {
@@ -162,7 +149,7 @@ func (r *FrpRepo) GetAgentHeartbeat(ctx context.Context, uid int64, admin bool, 
 	}
 	result := r.db.WithContext(ctx).Table("device d").Joins("LEFT JOIN agent_binding b ON b.device_id=d.id").
 		Select("d.user_id AS owner_id,b.device_id AS binding_id,(b.credential_id IS NOT NULL AND b.owner_id=d.user_id AND d.status=1) AS active,b.last_seen_at,COALESCE(b.client_version,'') AS client_version").
-		Where("d.id=?", id).Scan(&snapshot)
+		Where("d.id=? AND d.retired_at IS NULL", id).Scan(&snapshot)
 	if result.Error != nil {
 		return nil, result.Error
 	}

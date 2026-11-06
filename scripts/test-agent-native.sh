@@ -22,4 +22,4 @@ PY
 tar -xzf "$probe_dir/$archive" -C "$probe_dir"
 export CLOUDNEST_TEST_FRP_BIN_DIR="$probe_dir/frp_0.71.1_${platform}"
 go -C cloudnest_go test -tags=frpnative -race -count=1 -v ./internal/frpagent
-./scripts/test-integration.sh -tags=integration,frpnative -run '^TestAgentNativeCLIThreeTunnelsRestartAndReconnect$'
+./scripts/test-integration.sh -tags=integration,frpnative -run '^TestAgentNative(CLIThreeTunnelsRestartAndReconnect|RetirementStopsTunnels)$'

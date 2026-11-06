@@ -16,6 +16,7 @@ func agentTriggers() []agentTrigger {
 		{"cn_agent_user_delete_v1", "user", "DELETE", clear + "owner_id=OLD.id"},
 		{"cn_agent_device_change_v1", "device", "UPDATE", "BEGIN IF NEW.user_id<>OLD.user_id OR (OLD.status=1 AND NEW.status<>1) THEN " + clear + "device_id=OLD.id; END IF; END"},
 		{"cn_agent_device_delete_v1", "device", "DELETE", clear + "device_id=OLD.id"},
+		{"cn_agent_device_retire_v1", "device", "UPDATE", "BEGIN IF OLD.retired_at IS NULL AND NEW.retired_at IS NOT NULL THEN " + clear + "device_id=OLD.id; UPDATE agent_command SET status='cancelled',completed_at=UTC_TIMESTAMP(6) WHERE device_id=OLD.id AND status IN ('pending','leased'); END IF; END"},
 	}
 }
 
@@ -30,7 +31,7 @@ func (row triggerDefinition) matches(s agentTrigger) bool {
 
 func inspectTrigger(db *gorm.DB, s agentTrigger, migration bool) (bool, error) {
 	var rows []triggerDefinition
-	query := "CALL cn_agent_trigger_check_v1(?)"
+	query := "CALL cn_agent_trigger_check_v2(?)"
 	if migration {
 		query = agentTriggerProjection + " WHERE trigger_schema=DATABASE() AND trigger_name=?"
 	}
@@ -60,7 +61,7 @@ func installAgentTriggers(db *gorm.DB) error {
 		}
 	}
 	// INFORMATION_SCHEMA.TRIGGERS depends on the caller's TRIGGER privilege.
-	// This routine exposes only four named definitions from its own database.
+	// This routine exposes only five named definitions from its own database.
 	// Runtime credentials need EXECUTE on this one read-only definer routine.
 	var schema string
 	if err := db.Raw("SELECT DATABASE()").Scan(&schema).Error; err != nil {
@@ -78,12 +79,12 @@ func installAgentTriggers(db *gorm.DB) error {
 		Body     string
 		Security string
 	}
-	err := db.Raw("SELECT routine_definition AS body,security_type AS security FROM information_schema.routines WHERE routine_schema=DATABASE() AND routine_name='cn_agent_trigger_check_v1' AND routine_type='PROCEDURE'").Scan(&routines).Error
+	err := db.Raw("SELECT routine_definition AS body,security_type AS security FROM information_schema.routines WHERE routine_schema=DATABASE() AND routine_name='cn_agent_trigger_check_v2' AND routine_type='PROCEDURE'").Scan(&routines).Error
 	if err != nil {
 		return err
 	}
 	if len(routines) == 0 {
-		if err := db.Exec("CREATE PROCEDURE cn_agent_trigger_check_v1(IN p_trigger_name VARCHAR(64)) READS SQL DATA SQL SECURITY DEFINER " + body).Error; err != nil {
+		if err := db.Exec("CREATE PROCEDURE cn_agent_trigger_check_v2(IN p_trigger_name VARCHAR(64)) READS SQL DATA SQL SECURITY DEFINER " + body).Error; err != nil {
 			return err
 		}
 	} else if len(routines) != 1 || routines[0].Security != "DEFINER" || strings.Join(strings.Fields(routines[0].Body), " ") != strings.Join(strings.Fields(body), " ") {
@@ -93,6 +94,14 @@ func installAgentTriggers(db *gorm.DB) error {
 }
 
 func CheckAgentSchema(db *gorm.DB) error {
+	var retirement int
+	if err := db.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='device' AND column_name='retired_at' AND data_type='datetime' AND datetime_precision=6 AND is_nullable='YES' AND column_default IS NULL AND extra='' AND generation_expression=''").Scan(&retirement).Error; err != nil {
+		return err
+	}
+	if retirement != 1 {
+		return fmt.Errorf("device retirement schema missing; run explicit migrate")
+	}
+
 	var columns int
 	if err := db.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='agent_binding' AND column_name IN ('device_id','owner_id','enrollment_id','enrollment_digest','enrollment_expires','credential_id','credential_digest','last_seen_at','client_version')").Scan(&columns).Error; err != nil {
 		return err
