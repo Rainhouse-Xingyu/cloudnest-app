@@ -54,18 +54,22 @@ type UpdateMappingRequest struct {
 
 // PreviewConfigRequest 预览 FRPC 配置请求。
 type PreviewConfigRequest struct {
-	DeviceID   int64  `json:"device_id" binding:"required"`
-	ServerAddr string `json:"server_addr" binding:"required"`
-	ServerPort int    `json:"server_port"`
-	Token      string `json:"token"`
+	ServerID         int64  `json:"server_id"`
+	ServerRevisionID int64  `json:"server_revision_id"`
+	DeviceID         int64  `json:"device_id" binding:"required"`
+	ServerAddr       string `json:"server_addr"`
+	ServerPort       int    `json:"server_port"`
+	Token            string `json:"token"`
 }
 
 // SaveConfigRequest 保存 FRPC 配置请求。
 type SaveConfigRequest struct {
-	DeviceID   int64  `json:"device_id" binding:"required"`
-	ServerAddr string `json:"server_addr" binding:"required"`
-	ServerPort int    `json:"server_port"`
-	Token      string `json:"token"`
+	ServerID         int64  `json:"server_id"`
+	ServerRevisionID int64  `json:"server_revision_id"`
+	DeviceID         int64  `json:"device_id" binding:"required"`
+	ServerAddr       string `json:"server_addr"`
+	ServerPort       int    `json:"server_port"`
+	Token            string `json:"token"`
 }
 
 // DeployConfigRequest 下发配置请求（预留）。
@@ -346,11 +350,13 @@ func (h *FrpHandler) PreviewConfig(c *gin.Context) {
 	}
 
 	text, deviceID, err := h.Svc.PreviewConfig(c.Request.Context(), uid, h.isAdmin(c), service.SaveConfigInput{
-		ClientIP:   c.ClientIP(),
-		DeviceID:   req.DeviceID,
-		ServerAddr: req.ServerAddr,
-		ServerPort: req.ServerPort,
-		Token:      req.Token,
+		ServerID:         req.ServerID,
+		ServerRevisionID: req.ServerRevisionID,
+		ClientIP:         c.ClientIP(),
+		DeviceID:         req.DeviceID,
+		ServerAddr:       req.ServerAddr,
+		ServerPort:       req.ServerPort,
+		Token:            req.Token,
 	})
 	if err != nil {
 		h.writeConfigError(c, err)
@@ -374,11 +380,13 @@ func (h *FrpHandler) SaveConfig(c *gin.Context) {
 	}
 
 	cfg, err := h.Svc.SaveConfig(c.Request.Context(), uid, h.isAdmin(c), service.SaveConfigInput{
-		ClientIP:   c.ClientIP(),
-		DeviceID:   req.DeviceID,
-		ServerAddr: req.ServerAddr,
-		ServerPort: req.ServerPort,
-		Token:      req.Token,
+		ServerID:         req.ServerID,
+		ServerRevisionID: req.ServerRevisionID,
+		ClientIP:         c.ClientIP(),
+		DeviceID:         req.DeviceID,
+		ServerAddr:       req.ServerAddr,
+		ServerPort:       req.ServerPort,
+		Token:            req.Token,
 	})
 	if err != nil {
 		h.writeConfigError(c, err)
@@ -668,6 +676,10 @@ func parseLimitWithDefault(raw string, defaultVal int, maxVal int) (int, error) 
 
 // writeConfigError 统一处理配置相关错误码。
 func (h *FrpHandler) writeConfigError(c *gin.Context, err error) {
+	if errors.Is(err, contract.ErrInvalidInput) || errors.Is(err, contract.ErrConflict) || errors.Is(err, contract.ErrFrpMappingBusy) || errors.Is(err, contract.ErrFrpDeviceDisabled) {
+		h.writeServerError(c, err)
+		return
+	}
 	if err == nil {
 		return
 	}
@@ -699,7 +711,7 @@ func (h *FrpHandler) writeConfigError(c *gin.Context, err error) {
 }
 
 func publicFRPConfig(cfg model.FrpConfig) gin.H {
-	return gin.H{"id": cfg.ID, "device_id": cfg.DeviceID, "create_time": cfg.CreateTime, "config_text": "", "config_text_redacted": true}
+	return gin.H{"id": cfg.ID, "device_id": cfg.DeviceID, "create_time": cfg.CreateTime, "config_text": "", "config_text_redacted": true, "server_id": cfg.ServerID, "server_revision_id": cfg.ServerRevisionID}
 }
 
 func (h *FrpHandler) writeMappingError(c *gin.Context, err error) {

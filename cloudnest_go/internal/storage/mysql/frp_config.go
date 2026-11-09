@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"cloudenest_go/internal/frpconfig"
+	"cloudenest_go/internal/frpserver"
 	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
 	"gorm.io/gorm"
@@ -25,14 +26,18 @@ func lockConfigDevice(tx *gorm.DB, uid int64, admin bool, deviceID int64) error 
 // Reserve the version ID inside the transaction. The empty placeholder cannot
 // become visible on commit unless sealing and the audit both succeed.
 func (r *FrpRepo) insertSealedConfig(tx *gorm.DB, deviceID int64, plain string) (model.FrpConfig, error) {
+	return r.insertServerConfig(tx, deviceID, 0, 0, plain)
+}
+
+func (r *FrpRepo) insertServerConfig(tx *gorm.DB, deviceID, serverID, revisionID int64, plain string) (model.FrpConfig, error) {
 	if r.keys == nil {
 		return model.FrpConfig{}, frpconfig.ErrUnavailable
 	}
-	cfg := model.FrpConfig{DeviceID: &deviceID}
+	cfg := model.FrpConfig{DeviceID: &deviceID, ServerID: serverID, ServerRevisionID: revisionID}
 	if err := tx.Create(&cfg).Error; err != nil {
 		return model.FrpConfig{}, err
 	}
-	sealed, err := r.keys.Seal(deviceID, cfg.ID, plain)
+	sealed, err := r.keys.SealConfig(deviceID, cfg.ID, serverID, revisionID, plain)
 	if err != nil {
 		return model.FrpConfig{}, err
 	}
@@ -67,7 +72,7 @@ func (r *FrpRepo) CreateConfig(ctx context.Context, uid int64, admin bool, cfg m
 
 func (r *FrpRepo) RollbackConfig(ctx context.Context, uid int64, admin bool, id int64, clientIP ...string) (model.FrpConfig, model.FrpConfig, error) {
 	var old, created model.FrpConfig
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := r.frpTransaction(ctx, func(tx *gorm.DB) error {
 		var lookup model.FrpConfig
 		if err := tx.Select("id,device_id").First(&lookup, id).Error; err != nil {
 			return err
@@ -75,7 +80,7 @@ func (r *FrpRepo) RollbackConfig(ctx context.Context, uid int64, admin bool, id 
 		if lookup.DeviceID == nil || *lookup.DeviceID <= 0 {
 			return frpconfig.ErrInvalid
 		}
-		if err := lockConfigDevice(tx, uid, admin, *lookup.DeviceID); err != nil {
+		if err := lockMappingDevice(tx, contract.FrpActor{UserID: uid, Admin: admin}, *lookup.DeviceID, true); err != nil {
 			return err
 		}
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&old, id).Error; err != nil {
@@ -84,11 +89,20 @@ func (r *FrpRepo) RollbackConfig(ctx context.Context, uid int64, admin bool, id 
 		if old.DeviceID == nil || *old.DeviceID != *lookup.DeviceID {
 			return frpconfig.ErrInvalid
 		}
-		plain, err := r.keys.Open(*old.DeviceID, old.ID, old.ConfigText)
+		if old.ServerID != 0 || old.ServerRevisionID != 0 {
+			var device model.Device
+			if err := tx.First(&device, *old.DeviceID).Error; err != nil {
+				return err
+			}
+			if err := frpserver.CheckAccess(tx, device.UserID, old.ServerID, old.ServerRevisionID); err != nil {
+				return err
+			}
+		}
+		plain, err := r.keys.OpenConfig(*old.DeviceID, old.ID, old.ServerID, old.ServerRevisionID, old.ConfigText)
 		if err != nil {
 			return err
 		}
-		created, err = r.insertSealedConfig(tx, *old.DeviceID, plain)
+		created, err = r.insertServerConfig(tx, *old.DeviceID, old.ServerID, old.ServerRevisionID, plain)
 		if err != nil {
 			return err
 		}
@@ -101,11 +115,15 @@ func (r *FrpRepo) RollbackConfig(ctx context.Context, uid int64, admin bool, id 
 }
 
 type FRPEncryptionReport struct {
-	Scanned   int64 `json:"scanned"`
-	Legacy    int64 `json:"legacy"`
-	OldKey    int64 `json:"old_key"`
-	Current   int64 `json:"current"`
-	Rewritten int64 `json:"rewritten"`
+	Scanned         int64 `json:"scanned"`
+	Legacy          int64 `json:"legacy"`
+	OldKey          int64 `json:"old_key"`
+	Current         int64 `json:"current"`
+	Rewritten       int64 `json:"rewritten"`
+	ServerScanned   int64 `json:"server_scanned"`
+	ServerCurrent   int64 `json:"server_current"`
+	ServerOldKey    int64 `json:"server_old_key"`
+	ServerRewritten int64 `json:"server_rewritten"`
 }
 
 // ReencryptConfigs is an explicit, resumable maintenance operation. Each row
@@ -123,7 +141,7 @@ func (r *FrpRepo) ReencryptConfigs(ctx context.Context, dryRun bool) (FRPEncrypt
 			return report, err
 		}
 		if len(ids) == 0 {
-			return report, nil
+			return r.reencryptServers(ctx, dryRun, report)
 		}
 		for _, id := range ids {
 			var delta FRPEncryptionReport
@@ -138,7 +156,7 @@ func (r *FrpRepo) ReencryptConfigs(ctx context.Context, dryRun bool) (FRPEncrypt
 				plain := row.ConfigText
 				if frpconfig.IsEnvelope(plain) {
 					var err error
-					plain, err = r.keys.Open(*row.DeviceID, row.ID, row.ConfigText)
+					plain, err = r.keys.OpenConfig(*row.DeviceID, row.ID, row.ServerID, row.ServerRevisionID, row.ConfigText)
 					if err != nil {
 						return err
 					}
@@ -148,9 +166,12 @@ func (r *FrpRepo) ReencryptConfigs(ctx context.Context, dryRun bool) (FRPEncrypt
 					}
 					delta.OldKey = 1
 				} else {
+					if row.ServerID != 0 || row.ServerRevisionID != 0 {
+						return frpconfig.ErrInvalid
+					}
 					delta.Legacy = 1
 				}
-				sealed, err := r.keys.Seal(*row.DeviceID, row.ID, plain)
+				sealed, err := r.keys.SealConfig(*row.DeviceID, row.ID, row.ServerID, row.ServerRevisionID, plain)
 				if err != nil {
 					return err
 				}

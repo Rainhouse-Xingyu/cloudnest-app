@@ -66,6 +66,8 @@ func Migrate(db *gorm.DB) error {
 		&model.FrpMapping{},
 		&model.FrpMappingPool{},
 		&model.FrpConfig{},
+		&model.FrpServer{},
+		&model.FrpServerRevision{},
 		&model.AiMetadata{},
 		&model.AiTask{},
 	); err != nil {

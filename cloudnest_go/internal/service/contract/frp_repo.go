@@ -48,6 +48,7 @@ type AgentHeartbeatState struct {
 
 // FrpRepository 定义 FRP 模块存储访问能力。
 type FrpRepository interface {
+	FrpServerRepository
 	GetAgentHeartbeat(context.Context, int64, bool, int64) (*AgentHeartbeatState, error)
 	WithLegacyDevice(context.Context, int64, bool, int64, func(context.Context) error) error
 	CreateDevice(ctx context.Context, actor FrpActor, device model.Device) (model.Device, error)

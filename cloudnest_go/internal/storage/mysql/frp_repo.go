@@ -106,7 +106,7 @@ func (r *FrpRepo) ListActiveMappingsByDeviceID(ctx context.Context, deviceID int
 
 func (r *FrpRepo) ListConfigsByDeviceID(ctx context.Context, deviceID int64) ([]model.FrpConfig, error) {
 	rows := make([]model.FrpConfig, 0)
-	if err := r.db.WithContext(ctx).Select("id,device_id,create_time").Where("device_id = ?", deviceID).Order("id DESC").Find(&rows).Error; err != nil {
+	if err := r.db.WithContext(ctx).Select("id,device_id,create_time,server_id,server_revision_id").Where("device_id = ?", deviceID).Order("id DESC").Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	return rows, nil

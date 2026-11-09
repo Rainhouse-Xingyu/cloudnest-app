@@ -26,6 +26,7 @@ import (
 	"cloudenest_go/internal/agentauth"
 	"cloudenest_go/internal/agentcommand"
 	"cloudenest_go/internal/frpagent"
+	"cloudenest_go/internal/service/contract"
 	storageMysql "cloudenest_go/internal/storage/mysql"
 	"cloudenest_go/model"
 )
@@ -183,13 +184,74 @@ func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest, retire 
 	}
 	defer stopAgent()
 	startAgent()
-	configText := fmt.Sprintf("serverAddr: 127.0.0.1\nserverPort: %d\nauth:\n  token: 'native-fixture # secret'\nproxies:\n  - name: device_%d_tcp\n    type: tcp\n    localPort: %d\n    remotePort: %d\n  - name: device_%d_http\n    type: http\n    localPort: %d\n    customDomains: ['example.com']\n  - name: device_%d_https\n    type: https\n    localPort: %d\n    customDomains: ['example.com']\n", control, device, plainPort, remote, device, plainPort, device, securePort)
+	// Exercise the real server registry and generator over authenticated TLS.
 	repo := storageMysql.NewFrpRepo(f.db, f.cfg.FRPKeys)
-	cfg, e := repo.CreateConfig(ctx, f.aliceID, false, model.FrpConfig{DeviceID: &device, ConfigText: configText})
+	management := func(path string, body any, dst any) {
+		t.Helper()
+		raw, err := json.Marshal(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req, err := http.NewRequestWithContext(ctx, "POST", base+path, bytes.NewReader(raw))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Authorization", "Bearer "+f.alice)
+		req.Header.Set("Content-Type", "application/json")
+		res, err := httpClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		if res.StatusCode != 200 {
+			t.Fatalf("native management %s: %d", path, res.StatusCode)
+		}
+		if err := json.NewDecoder(res.Body).Decode(dst); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var registered struct{ Item contract.FrpServerView }
+	management("/api/frp/servers", map[string]any{"name": "native fixture", "server_addr": "127.0.0.1", "server_port": control, "token": "native-fixture # secret", "tcp_start": remote, "tcp_end": remote, "http_port": httpPort, "https_port": httpsPort}, &registered)
+	t.Cleanup(func() {
+		if err := f.db.Where("server_id=?", registered.Item.ID).Delete(&model.FrpServerRevision{}).Error; err != nil {
+			t.Error(err)
+		}
+		if err := f.db.Delete(&model.FrpServer{}, registered.Item.ID).Error; err != nil {
+			t.Error(err)
+		}
+	})
+	t.Cleanup(func() {
+		if err := f.db.Where("device_id=?", device).Delete(&model.FrpMapping{}).Error; err != nil {
+			t.Error(err)
+		}
+	})
+	for _, mapping := range []contract.FrpCreateMappingInput{
+		{FrpActor: contract.FrpActor{UserID: f.aliceID}, DeviceID: device, LocalPort: plainPort, RemotePort: &remote, Status: 1},
+		{FrpActor: contract.FrpActor{UserID: f.aliceID}, DeviceID: device, LocalPort: plainPort, Domain: "example.com", Status: 1},
+		{FrpActor: contract.FrpActor{UserID: f.aliceID}, DeviceID: device, LocalPort: securePort, Domain: "https://example.com", Status: 1},
+	} {
+		if _, err := repo.CreateMapping(ctx, mapping); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var saved struct{ Item model.FrpConfig }
+	management("/api/frp/configs/save", map[string]any{"device_id": device, "server_id": registered.Item.ID, "server_revision_id": registered.Item.RevisionID}, &saved)
+	var cfg model.FrpConfig
+	if e = f.db.First(&cfg, saved.Item.ID).Error; e != nil {
+		t.Fatal(e)
+	}
+	if cfg.ServerID != registered.Item.ID || cfg.ServerRevisionID != registered.Item.RevisionID {
+		t.Fatal("native generated configuration association missing")
+	}
+	configText, e := f.cfg.FRPKeys.OpenConfig(device, cfg.ID, cfg.ServerID, cfg.ServerRevisionID, cfg.ConfigText)
 	if e != nil {
 		t.Fatal(e)
 	}
-	t.Cleanup(func() { f.db.Where("device_id=?", device).Delete(&model.FrpConfig{}) })
+	t.Cleanup(func() {
+		if err := f.db.Where("device_id=?", device).Delete(&model.FrpConfig{}).Error; err != nil {
+			t.Error(err)
+		}
+	})
 	m := agentcommand.New(f.db, f.cfg.FRPKeys)
 	sequence := 0
 	var lastDiagnostic *frpagent.RegistrationStatus

@@ -100,11 +100,13 @@ type DeviceDetailResult struct {
 
 // SaveConfigInput 表示保存配置输入。
 type SaveConfigInput struct {
-	ClientIP   string
-	DeviceID   int64
-	ServerAddr string
-	ServerPort int
-	Token      string
+	ServerID         int64
+	ServerRevisionID int64
+	ClientIP         string
+	DeviceID         int64
+	ServerAddr       string
+	ServerPort       int
+	Token            string
 }
 
 // ReportDeviceStatusInput 表示设备状态上报输入。
@@ -264,6 +266,10 @@ func (s *FrpService) DeleteMapping(ctx context.Context, uid int64, isAdmin bool,
 
 // PreviewConfig 预览某设备的 frpc.yaml 内容（不入库）。
 func (s *FrpService) PreviewConfig(ctx context.Context, uid int64, isAdmin bool, req SaveConfigInput) (string, int64, error) {
+	if req.ServerID != 0 || req.ServerRevisionID != 0 {
+		_, text, err := s.buildServerConfig(ctx, uid, isAdmin, req, true)
+		return text, req.DeviceID, err
+	}
 	if !validFRPScalar(req.Token, 1024) {
 		return "", 0, ErrFrpBadConfig
 	}
@@ -275,6 +281,10 @@ func (s *FrpService) PreviewConfig(ctx context.Context, uid int64, isAdmin bool,
 
 // SaveConfig 生成并保存设备配置到 frp_config 表。
 func (s *FrpService) SaveConfig(ctx context.Context, uid int64, isAdmin bool, req SaveConfigInput) (model.FrpConfig, error) {
+	if req.ServerID != 0 || req.ServerRevisionID != 0 {
+		cfg, _, err := s.buildServerConfig(ctx, uid, isAdmin, req, false)
+		return cfg, err
+	}
 	text, deviceID, err := s.buildConfigTextForDevice(ctx, uid, isAdmin, req.DeviceID, req.ServerAddr, req.ServerPort, req.Token)
 	if err != nil {
 		return model.FrpConfig{}, err

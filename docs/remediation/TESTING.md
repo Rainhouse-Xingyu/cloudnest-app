@@ -266,3 +266,17 @@ Darwin arm64 首次真实 launchd 测试通过（35.27s，`/tmp/cloudnest-g05-la
 退役主体完整普通 race 集成 **266 项全部通过，零跳过**（443.983s，`/tmp/cloudnest-g05-retirement-full.log`）。最后另外收紧了退役列必须无默认表达式/自动更新行为的启动检查：初次两项专项中的故障注入 DDL 使用了 MySQL 不接受的 SET DEFAULT 函数语法，在注入前退出，日志 `/tmp/cloudnest-g05-retirement-schema-final.log` 保留为未通过；已改为 MODIFY COLUMN 的等价故障注入，不修改生产行为或放松校验。更正后专项结果另记。完整回归与最后 schema 专项的范围分开记录。
 
 更正故障注入语法后的两项最终 schema race 复核全部通过（7.248s，`/tmp/cloudnest-g05-retirement-schema-corrected.log`），实际验证自动退役默认值拒绝、无 DDL/TRIGGER 权限的运行账号校验、旧例程保留、新列迁移、缺失/篡改触发器拒绝及重复迁移保留退役状态。没有剩余测试进程或隔离容器；最终提交 CI 按新 SHA 单独核验。
+
+## 2026-11-07 G05 服务器身份、策略版本与托管配置
+
+退役提交 `2bb27577fed4f6c22e21409b274e4e2ee5d420fd` 的 PR `42172431560`、push `42172425352` 四个作业均全部成功。按用户最新要求，G01/G02 两份正式 Review 未读取，保留到整个 Goal 完成后处理，见 [延后审查记录](DEFERRED-REVIEWS.md)。
+
+服务器策略/信封单元及相关仓储/schema 的 race 检查通过（`/tmp/cloudnest-g05-server-unit.log`）。首轮集成编译发现测试构造器遗漏 Redis 参数，未执行用例，日志 `/tmp/cloudnest-g05-server-targeted.log` 保留为失败；修正夹具后五项服务器定向 race 集成全部通过（11.216s，`/tmp/cloudnest-g05-server-targeted-fixed.log`）。覆盖 TLS/所有者隔离/无秘密响应、八并发 CAS 仅一个成功、规范端点唯一、审计 1062 不能冒充业务冲突、生成策略/回滚/设备转移、托管配置关联认证、两类历史密钥轮换、schema 漂移拒绝和旧明文不擅自关联。
+
+真实 Agent 测试现通过实际后端 HTTPS 创建服务器、保存固定版本的生成配置，再使用官方 0.71.1 frpc/frps 访问三种上游。首轮原撤销场景通过（49.51s）；第二场景在建映射时被前一夹具遗留的 `example.com` 全局预留拒绝，未进入隧道验收。该轮六项服务器专项也通过，但整轮为失败（64.214s，`/tmp/cloudnest-g05-server-native.log`）。已增加仅针对各自临时设备的映射清理，保留产品唯一约束、退役保留语义及原真实连接断言。重跑结果另记。
+
+`make -C cloudnest_go check test build-macos build-linux` 全部通过（`/tmp/cloudnest-g05-server-check.log`）：普通 race/vet 和四目标服务端/Agent 构建。带 integration/frpnative 的 vet、仓库卫生与 diff 检查通过。后续全部回归以最终结果为准，不用这些定向结果代替整体 Goal 验收。
+
+清理修正后的真实 Agent 与服务器专项 **8 项顶层 race 集成全部通过，零跳过**（105.088s，`/tmp/cloudnest-g05-server-native-fixed.log`）；凭据撤销场景 47.83s、设备退役场景 48.64s，均由新服务器 API 生成配置后完成原三隧道/诊断/故障恢复/认证退出链路。新服务器快照篡改和轮换审计故障用例同时通过；未削弱任何唯一约束或退役保留断言。最后区分部署权限冲突与真实数据库错误后，受影响包 race 和带原生标签的 vet 另行复核通过。
+
+服务器管理批次完整普通 race 集成 **272 项顶层全部通过，零跳过**（415.733s，`/tmp/cloudnest-g05-server-full.log`），进程最终退出 0，2026-11-09 恢复任务后再次核验终态。覆盖已有 G01 安全/客户端契约、文件与传输、设备/命令/退役及本批服务器测试。服务器级端口命名空间、运行配置占用和其余里程碑仍未完成；没有据此完成整个 Goal。新提交的远端 CI 单独跟踪。

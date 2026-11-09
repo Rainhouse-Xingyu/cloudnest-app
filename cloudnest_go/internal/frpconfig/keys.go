@@ -156,5 +156,5 @@ func (k *Keyring) Open(deviceID, configID int64, sealed string) (string, error) 
 
 func IsEnvelope(text string) bool { return strings.HasPrefix(text, "cnfrp:") }
 func (k *Keyring) IsCurrent(text string) bool {
-	return k != nil && strings.HasPrefix(text, prefix+k.active+":")
+	return k != nil && (strings.HasPrefix(text, prefix+k.active+":") || strings.HasPrefix(text, managedPrefix+k.active+":"))
 }

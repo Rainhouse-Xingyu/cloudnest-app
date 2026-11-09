@@ -12,6 +12,8 @@ import (
 	"cloudenest_go/internal/agentauth"
 	"cloudenest_go/internal/agentstatus"
 	"cloudenest_go/internal/frpconfig"
+	"cloudenest_go/internal/frpserver"
+	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -144,7 +146,15 @@ func (m *Manager) Enqueue(ctx context.Context, actor int64, admin bool, device i
 			if err := q.Order("id DESC").First(&cfg).Error; err != nil {
 				return err
 			}
-			plain, err := m.keys.Open(device, cfg.ID, cfg.ConfigText)
+			if cfg.ServerID != 0 || cfg.ServerRevisionID != 0 {
+				if err := frpserver.CheckAccess(tx, b.OwnerID, cfg.ServerID, cfg.ServerRevisionID); err != nil {
+					if errors.Is(err, contract.ErrForbidden) || errors.Is(err, contract.ErrConflict) || errors.Is(err, contract.ErrInvalidInput) || errors.Is(err, gorm.ErrRecordNotFound) {
+						return ErrConflict
+					}
+					return err
+				}
+			}
+			plain, err := m.keys.OpenConfig(device, cfg.ID, cfg.ServerID, cfg.ServerRevisionID, cfg.ConfigText)
 			if err != nil {
 				return err
 			}
@@ -293,7 +303,7 @@ func (m *Manager) Configuration(ctx context.Context, key, id, lease string) (Con
 		if err := tx.Where("id=? AND device_id=?", row.ConfigID, b.DeviceID).First(&cfg).Error; err != nil {
 			return err
 		}
-		plain, err := m.keys.Open(b.DeviceID, cfg.ID, cfg.ConfigText)
+		plain, err := m.keys.OpenConfig(b.DeviceID, cfg.ID, cfg.ServerID, cfg.ServerRevisionID, cfg.ConfigText)
 		if err != nil {
 			return err
 		}
