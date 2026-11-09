@@ -75,7 +75,7 @@ func credential(b model.AgentBinding) string {
 func live(s string) bool { return s == "pending" || s == "leased" }
 func allowed(action string) bool {
 	switch action {
-	case "deploy_config", "start", "stop", "reload", "diagnose":
+	case "deploy_config", "start", "stop", "reload", "diagnose", "forget_config":
 		return true
 	}
 	return false
@@ -131,6 +131,22 @@ func (m *Manager) Enqueue(ctx context.Context, actor int64, admin bool, device i
 		}
 		if count >= MaxPending {
 			return ErrFull
+		}
+		// Forget is an exclusive barrier. A successful receipt proves the
+		// conforming Agent stopped and durably removed its restart config.
+		// It must not race an already queued deployment or a later start.
+		if input.Action == "forget_config" {
+			if count != 0 || b.ClientVersion != "cloudnest-agent-0.3.0" || b.LastSeenAt == nil || b.LastSeenAt.Before(now.Add(-90*time.Second)) || b.LastSeenAt.After(now.Add(5*time.Second)) {
+				return ErrConflict
+			}
+		} else {
+			var barriers int64
+			if err := tx.Model(&model.AgentCommand{}).Where("device_id=? AND status IN ? AND action='forget_config'", device, []string{"pending", "leased"}).Count(&barriers).Error; err != nil {
+				return err
+			}
+			if barriers != 0 {
+				return ErrConflict
+			}
 		}
 		id, err := randomID()
 		if err != nil {

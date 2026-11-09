@@ -39,3 +39,5 @@ G04 先验证现有 Ollama 的 embedding 与视觉模型能力，再以部署复
 G05 STCP/XTCP 在 TCP/HTTP/HTTPS 闭环完成后评估；File Provider 在基础 macOS 应用稳定后评估。两者不提前标记完成。
 
 2026-11-07 G05 继续增加服务器身份、加密版本及托管配置关联，升级与边界见 [FRP-SERVER-REGISTRY](FRP-SERVER-REGISTRY.md)。这不完成 G05 的服务器级端口分配、历史运行占用和离线释放验收；总 Goal 不变。两份用户正式 Review 按 [DEFERRED-REVIEWS](DEFERRED-REVIEWS.md) 延后到整个 Goal 完成后读取。
+
+2026-11-09：G05 为资源释放补齐 `forget_config`，真实 Agent 清除后重启/start/reload 不再恢复旧配置，须新部署才能恢复。端口命名空间与资源账本尚未完成，不能把该前置命令当作 G05 结束；见[协议边界](FRP-FORGET-CONFIG.md)。

@@ -258,9 +258,18 @@ func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest, retire 
 	command := func(action string, configID int64, want string) {
 		t.Helper()
 		sequence++
-		row, e := m.Enqueue(ctx, f.aliceID, false, device, agentcommand.EnqueueInput{RequestID: fmt.Sprintf("%032x", sequence), Action: action, ConfigID: configID}, "")
-		if e != nil {
-			t.Fatal(e)
+		input := agentcommand.EnqueueInput{RequestID: fmt.Sprintf("%032x", sequence), Action: action, ConfigID: configID}
+		var row model.AgentCommand
+		if action == "forget_config" {
+			var response struct{ Item model.AgentCommand }
+			management(fmt.Sprintf("/api/frp/devices/%d/commands", device), input, &response)
+			row = response.Item
+		} else {
+			var err error
+			row, err = m.Enqueue(ctx, f.aliceID, false, device, input, "")
+			if err != nil {
+				t.Fatal(err)
+			}
 		}
 		for {
 			var current model.AgentCommand
@@ -378,6 +387,44 @@ func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest, retire 
 		t.Fatal("stop left tunnel open")
 	}
 	command("start", 0, "ok")
+	probe()
+	// Forget is stronger than stop: no restart/start/reload can recover the
+	// old configuration until a new authenticated deployment replaces it.
+	command("forget_config", 0, "ok")
+	if conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(remote)), time.Second); err == nil {
+		conn.Close()
+		t.Fatal("forget left actual tunnel open")
+	}
+	stopAgent()
+	forgottenStore, err := frpagent.OpenStore(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = frpagent.UnlockVault(forgottenStore, frpagent.VaultOptions{}, false); err != nil {
+		forgottenStore.Close()
+		t.Fatal(err)
+	}
+	rawState, err := forgottenStore.ReadSecret("state.json")
+	forgottenStore.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var forgottenState frpagent.State
+	if err = json.Unmarshal(rawState, &forgottenState); err != nil || forgottenState.Running || forgottenState.ConfigID != 0 || len(forgottenState.Config) != 0 || len(forgottenState.Source) != 0 {
+		t.Fatal("forget retained recoverable intent", err)
+	}
+	startAgent()
+	command("start", 0, "config_invalid")
+	command("reload", 0, "config_invalid")
+	command("diagnose", 0, "diagnostic_failed")
+	if lastDiagnostic.ConfigID != 0 || lastDiagnostic.Registered != 0 {
+		t.Fatal("forgotten configuration still reported", lastDiagnostic)
+	}
+	if conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(remote)), time.Second); err == nil {
+		conn.Close()
+		t.Fatal("restart resurrected forgotten tunnel")
+	}
+	command("deploy_config", cfg.ID, "ok")
 	probe()
 	// Only the Darwin service-specific test requests an actual launchd job.
 	if serviceTest != nil {

@@ -135,7 +135,7 @@ func (c *Client) Heartbeat(ctx context.Context) error {
 	var out struct {
 		DeviceID int64 `json:"device_id"`
 	}
-	status, e := c.post(ctx, "/api/agent/heartbeat", map[string]string{"client_version": "cloudnest-agent-0.2.0"}, &out, 200)
+	status, e := c.post(ctx, "/api/agent/heartbeat", map[string]string{"client_version": "cloudnest-agent-0.3.0"}, &out, 200)
 	if e == nil && (status != 200 || out.DeviceID <= 0) {
 		return ErrProtocol
 	}
@@ -163,7 +163,7 @@ func (c *Client) Claim(ctx context.Context, id string) (*Delivery, error) {
 		if e != nil || len(b) != 32 || strings.ToLower(v.SHA256) != v.SHA256 || v.ConfigID <= 0 {
 			return nil, ErrProtocol
 		}
-	case "start", "stop", "reload", "diagnose":
+	case "start", "stop", "reload", "diagnose", "forget_config":
 	default:
 		return nil, ErrProtocol
 	}

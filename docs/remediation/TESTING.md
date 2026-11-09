@@ -280,3 +280,15 @@ Darwin arm64 首次真实 launchd 测试通过（35.27s，`/tmp/cloudnest-g05-la
 清理修正后的真实 Agent 与服务器专项 **8 项顶层 race 集成全部通过，零跳过**（105.088s，`/tmp/cloudnest-g05-server-native-fixed.log`）；凭据撤销场景 47.83s、设备退役场景 48.64s，均由新服务器 API 生成配置后完成原三隧道/诊断/故障恢复/认证退出链路。新服务器快照篡改和轮换审计故障用例同时通过；未削弱任何唯一约束或退役保留断言。最后区分部署权限冲突与真实数据库错误后，受影响包 race 和带原生标签的 vet 另行复核通过。
 
 服务器管理批次完整普通 race 集成 **272 项顶层全部通过，零跳过**（415.733s，`/tmp/cloudnest-g05-server-full.log`），进程最终退出 0，2026-11-09 恢复任务后再次核验终态。覆盖已有 G01 安全/客户端契约、文件与传输、设备/命令/退役及本批服务器测试。服务器级端口命名空间、运行配置占用和其余里程碑仍未完成；没有据此完成整个 Goal。新提交的远端 CI 单独跟踪。
+
+## 2026-11-09 G05 清除恢复配置与排他命令
+
+上一服务器管理提交 `80fdb6adcac2d86261d658e4684208cba4808c98` 的 PR `42540614490`、push `42540606874` 均四作业全部成功，包含普通/网络集成、Linux 真实 Agent、macOS Keychain 及漏洞扫描。PR #1/#2 仍 OPEN，#2 base 仍为 `codex/g00-audit-baseline`；G01 四项检查通过。仅查询分支与 checks，未读取用户指定延后的正式 Review。
+
+本批增加 `forget_config`，区分停止进程和清除可再次启动的恢复配置。单元 race 检查通过（Agent 3.037s，`/tmp/cloudnest-g05-forget-unit.log`），新增用例实际断开回执连接，检查发出成功回执前磁盘状态已清空、重建 Runner 只重发一次持久结果、start/reload 不恢复旧配置，以及失去租约时不伪造清除结果。
+
+两项排他队列 race 集成与两项真实 Agent 场景 **4 项顶层全部通过，零跳过**（125.816s，`/tmp/cloudnest-g05-forget-native.log`）。队列覆盖版本/心跳新鲜度、pending/leased 排他、同请求 ID 重试、重复回执单次审计、12 并发只有一个成功及审计失败不提交。原生撤销场景 61.56s、退役场景 60.17s：通过真正的 HTTPS 所有者 API 发出 forget，验证真实端口关闭、解密当前 Agent 状态无恢复配置、重启后 start/reload 拒绝及 diagnose 的配置 ID 为零；新部署后三条隧道重新可达。全部原先故障/恢复/退出断言保留。
+
+`make -C cloudnest_go check test build-macos build-linux` 全部通过（`/tmp/cloudnest-g05-forget-check.log`），进程退出 0。设备/FRP 全部相关集成和最终 CI 另记结果；本批没有放宽全局唯一约束或宣称自动端口释放。
+
+最终全部设备身份、持久命令、配置/映射/服务器相关 race 集成 **35 项顶层全部通过，零跳过**（48.095s，`/tmp/cloudnest-g05-forget-regression.log`），脚本退出 0。带 integration/frpnative 的 vet、仓库检查和补丁格式检查通过。全后端普通/网络回归由新提交的 CI 执行，按 SHA 独立核验。

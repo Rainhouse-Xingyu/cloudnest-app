@@ -375,7 +375,7 @@ func (r *Runner) execute(ctx context.Context, d Delivery) (string, error) {
 			return processOutcome(e, d.Command.Action+"_failed")
 		}
 		return "ok", nil
-	case "stop":
+	case "stop", "forget_config":
 		r.state.Running = false
 		if e := r.save(); e != nil {
 			return "", e
@@ -385,6 +385,16 @@ func (r *Runner) execute(ctx context.Context, d Delivery) (string, error) {
 				return "", e
 			}
 			return "stop_failed", nil
+		}
+		if d.Command.Action == "forget_config" {
+			// The unfinished command remains in the journal across both
+			// writes. A crash cannot restore old intent before reconciliation.
+			r.state.Config = nil
+			r.state.Source = nil
+			r.state.ConfigID = 0
+			if e := r.save(); e != nil {
+				return "", e
+			}
 		}
 		return "ok", nil
 	case "diagnose":

@@ -1,6 +1,6 @@
 # G05 前台 Go Agent
 
-`cloudnest_go/cmd/agent` 已接入独立注册、HTTPS 心跳、持久命令、官方 frpc 启停及本地执行记录。Agent 只接受 deploy_config、start、stop、reload、diagnose。身份/执行记录已加密，macOS 默认用 Keychain 保管密钥。可在终端运行，也可由当前 macOS 登录用户的 launchd 启动。G05 尚未整体验收。
+`cloudnest_go/cmd/agent` 已接入独立注册、HTTPS 心跳、持久命令、官方 frpc 启停及本地执行记录。Agent 只接受 deploy_config、start、stop、reload、diagnose，以及 0.3.0 新增的 forget_config。身份/执行记录已加密，macOS 默认用 Keychain 保管密钥。可在终端运行，也可由当前 macOS 登录用户的 launchd 启动。G05 尚未整体验收。
 
 ## 运行与本机授权
 
@@ -91,3 +91,5 @@ launchd 直接执行 Agent，无 shell 展开。KeepAlive 保持服务运行，�
 普通测试还覆盖 TLS 信任/重定向/响应边界、回执网络丢失后从磁盘恢复、同命令新租约不再执行、未完成租约失效关闭意图、状态配置重新验证、文件访问边界和假冒二进制。原生进程测试用实际官方 frpc 验证关闭父进程描述符后锁仍保留，子进程退出后释放。
 
 剩余：运行配置缓存与备份治理、Keychain 签名升级访问验收、监督进程丢失后的安全恢复、长时间离线及系统休眠验收、逐映射持续状态/上游可达性、受限日志、正式签名发布与 Linux 服务部署、远程端口并发约束验收与服务器作用域、旧 JWT 设备迁移。STCP/XTCP 继续按里程碑评估。未部署到真实公网服务器，未操作现有设备或生产数据库。具体本地测试和失败记录见 [测试记录](TESTING.md)。
+
+2026-11-09 新增 `forget_config`：停止并持久清除 Agent 恢复配置；服务器端要求新版本近期认证心跳和排他队列。它不同于保留恢复配置的 stop，不自动释放映射或端口。协议、升级及回执边界见[清除恢复配置](FRP-FORGET-CONFIG.md)。
