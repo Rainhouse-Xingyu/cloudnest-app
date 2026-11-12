@@ -307,3 +307,12 @@ Darwin arm64 首次真实 launchd 测试通过（35.27s，`/tmp/cloudnest-g05-la
 最终源码 `make check test build-macos build-linux` 通过，覆盖 vet、全部 race 单元、服务端与 Agent 的 Darwin/Linux × amd64/arm64 构建；标签 integration,frpnative 的 vet、仓库与 diff 检查通过。日志 `/tmp/cloudnest-g05-reservation-check.log`。本地测试全部使用新 disposable MySQL/Redis、临时目录和测试自己的进程，未迁移生产库。
 
 最终全量普通集成 **281 项 race 通过、零跳过（473.974s）**，没有失败或数据竞争，原八分钟总期限及逐操作期限不变。日志 `/tmp/cloudnest-g05-reservation-full.log`；运行结束无剩余 cloudnest.test 容器。本批仍保留全局映射唯一性；服务器分区索引草稿没有进入实现。旧配置回填为 unknown 且新身份不能自动清除，受控历史对账和升级演练未完成，见 [FRP-RUNTIME-RESERVATIONS](FRP-RUNTIME-RESERVATIONS.md)。G05 和整个 Goal 继续进行。
+
+
+## 2026-11-12 Go 标准库安全更新
+
+运行资源提交 `cef1bce3103b296c7e3bea205b14db8faf2b4293` 的 PR `43168756267` 和 push `43168750114` 均是 **failure**：build-test、agent-native、agent-keychain 三项通过，vulnerabilities 失败。失败原因是 Go 1.26.10 标准库的 GO-2026-6859（net/http MaxBytesReader 并发响应头问题），扫描器指出修复版本为 1.26.11；没有重跑旧提交来隐藏这个结果。
+
+`cloudnest_go/go.mod` 最低版本现更新至 Go 1.26.11，CI 继续从该文件选择工具链。官方 [Go 发布记录](https://go.dev/doc/devel/release#go1.26.11) 记录该版本于 2026-11-10 发布并含 net/http 安全修复。没有关闭或放宽漏洞检查。
+
+本地实际工具链为 go1.26.11 darwin/arm64，漏洞扫描 **0 个可达漏洞**（另有三个仅位于所需模块、当前调用路径不可达的告警），`make check test` 的 vet/build/race 单元均通过。原始记录为 `/tmp/cloudnest-go12611-version.log`、`/tmp/cloudnest-go12611-vuln.log`、`/tmp/cloudnest-go12611-check.log`。此处不把上一版 Go 1.26.10 的全量集成计为新版工具链的全量验收；新提交的远端 CI 单独核验。
