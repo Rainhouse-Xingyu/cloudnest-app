@@ -155,6 +155,7 @@ func checkPathPermission(ctx context.Context, userID int64, method string, path 
 // Explicit authenticated-user capabilities. Keys are Gin route templates, not
 // URL prefixes. Unlisted routes/methods are denied; resource ACLs still apply.
 var defaultUserRoutes = map[string]struct{}{
+	"GET /api/frp/reservations":                    {},
 	"POST /api/auth/logout-all":                    {},
 	"POST /api/auth/logout":                        {},
 	"GET /api/auth/me":                             {},

@@ -12,6 +12,7 @@ import (
 	"cloudenest_go/internal/agentauth"
 	"cloudenest_go/internal/agentstatus"
 	"cloudenest_go/internal/frpconfig"
+	"cloudenest_go/internal/frpreservation"
 	"cloudenest_go/internal/frpserver"
 	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
@@ -174,6 +175,9 @@ func (m *Manager) Enqueue(ctx context.Context, actor int64, admin bool, device i
 			if err != nil {
 				return err
 			}
+			if err := frpreservation.Acquire(tx, b.OwnerID, device, credential(b), out.ID, cfg, plain); err != nil {
+				return err
+			}
 			out.ConfigID = cfg.ID
 			out.ConfigSHA256 = fmt.Sprintf("%x", sha256.Sum256([]byte(plain)))
 		}
@@ -181,7 +185,7 @@ func (m *Manager) Enqueue(ctx context.Context, actor int64, admin bool, device i
 			return err
 		}
 		return audit(tx, &actor, id, "queued", ip)
-	})
+	}, frpreservation.Lock)
 	if err != nil {
 		return model.AgentCommand{}, err
 	}
@@ -390,8 +394,13 @@ func (m *Manager) FinishWithReport(ctx context.Context, key, id, lease string, s
 		if err := tx.Model(&row).Updates(map[string]any{"status": state, "result_code": code, "diagnostic_data": data, "completed_at": utc(now)}).Error; err != nil {
 			return err
 		}
+		if success && row.Action == "forget_config" {
+			if err := frpreservation.Release(tx, b.DeviceID, credential(b)); err != nil {
+				return err
+			}
+		}
 		return audit(tx, nil, row.ID, state, "")
-	})
+	}, frpreservation.Lock)
 }
 
 func (m *Manager) List(ctx context.Context, actor int64, admin bool, device int64, limit int) ([]model.AgentCommand, error) {

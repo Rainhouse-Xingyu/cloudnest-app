@@ -99,3 +99,23 @@ func (h *FrpHandler) writeServerError(c *gin.Context, err error) {
 		c.JSON(500, gin.H{"error": "server operation failed"})
 	}
 }
+
+func (h *FrpHandler) ListReservations(c *gin.Context) {
+	device, e1 := strconv.ParseInt(c.DefaultQuery("device_id", "0"), 10, 64)
+	after, e2 := strconv.ParseInt(c.DefaultQuery("after_id", "0"), 10, 64)
+	limit, e3 := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	if e1 != nil || e2 != nil || e3 != nil {
+		c.JSON(400, gin.H{"error": "invalid reservation cursor"})
+		return
+	}
+	rows, err := h.Svc.ListReservations(c.Request.Context(), h.serverActor(c), device, after, limit)
+	if err != nil {
+		h.writeServerError(c, err)
+		return
+	}
+	var next int64
+	if len(rows) > 0 {
+		next = rows[len(rows)-1].ID
+	}
+	c.JSON(200, gin.H{"items": rows, "next_after_id": next})
+}

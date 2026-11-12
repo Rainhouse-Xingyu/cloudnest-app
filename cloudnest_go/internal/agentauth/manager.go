@@ -250,7 +250,7 @@ func (m *Manager) Beat(ctx context.Context, raw, version string) (Heartbeat, err
 
 // WithCredential serializes a device operation with rotation, revocation and
 // owner/device lifecycle changes. Callbacks must use this transaction only.
-func (m *Manager) WithCredential(ctx context.Context, raw string, fn func(*gorm.DB, model.AgentBinding) error) error {
+func (m *Manager) WithCredential(ctx context.Context, raw string, fn func(*gorm.DB, model.AgentBinding) error, before ...func(*gorm.DB) error) error {
 	input, ok := parseToken(credentialPrefix, raw)
 	if !ok {
 		return ErrDenied
@@ -258,6 +258,11 @@ func (m *Manager) WithCredential(ctx context.Context, raw string, fn func(*gorm.
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	return m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for _, hook := range before {
+			if err := hook(tx); err != nil {
+				return err
+			}
+		}
 		binding, err := lockBinding(tx, input.id, false)
 		if err != nil {
 			return err
@@ -273,10 +278,15 @@ func (m *Manager) WithCredential(ctx context.Context, raw string, fn func(*gorm.
 // device authentication. An empty binding permits read-only management history.
 // READ COMMITTED prevents the initial ownership hint from freezing a snapshot
 // before waiting for these locks, so queue counts and deduplication see commits.
-func (m *Manager) WithManagedDevice(ctx context.Context, actorID int64, admin bool, deviceID int64, fn func(*gorm.DB, model.AgentBinding) error) error {
+func (m *Manager) WithManagedDevice(ctx context.Context, actorID int64, admin bool, deviceID int64, fn func(*gorm.DB, model.AgentBinding) error, before ...func(*gorm.DB) error) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	return m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for _, hook := range before {
+			if err := hook(tx); err != nil {
+				return err
+			}
+		}
 		var hint model.Device
 		if err := tx.First(&hint, deviceID).Error; err != nil {
 			return err

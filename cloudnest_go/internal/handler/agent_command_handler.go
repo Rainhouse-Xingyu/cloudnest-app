@@ -10,6 +10,7 @@ import (
 	"cloudenest_go/internal/agentstatus"
 	"cloudenest_go/internal/frpconfig"
 	"cloudenest_go/internal/middleware"
+	"cloudenest_go/internal/service/contract"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -24,7 +25,7 @@ func commandError(c *gin.Context, err error) {
 		c.JSON(401, gin.H{"error": "invalid device credentials"})
 	case errors.Is(err, agentauth.ErrOwner), errors.Is(err, gorm.ErrRecordNotFound):
 		c.JSON(404, gin.H{"error": "resource unavailable"})
-	case errors.Is(err, agentcommand.ErrConflict), errors.Is(err, agentcommand.ErrUnregistered):
+	case errors.Is(err, agentcommand.ErrConflict), errors.Is(err, agentcommand.ErrUnregistered), errors.Is(err, contract.ErrFrpMappingConflict):
 		c.JSON(409, gin.H{"error": "command state conflict or registration required"})
 	case errors.Is(err, agentcommand.ErrFull):
 		c.JSON(429, gin.H{"error": "device command queue full"})

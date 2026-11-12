@@ -25,3 +25,7 @@ func (s *FrpService) buildServerConfig(ctx context.Context, uid int64, admin boo
 		return generateFRPCYaml(spec.Address, spec.Port, spec.Token, mappings)
 	})
 }
+
+func (s *FrpService) ListReservations(ctx context.Context, actor contract.FrpActor, device, after int64, limit int) ([]model.FrpReservation, error) {
+	return s.repo.ListReservations(ctx, actor, device, after, limit)
+}

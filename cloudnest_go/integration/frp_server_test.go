@@ -251,7 +251,7 @@ func TestFRPServerRollbackDeploymentOwnershipAndRotation(t *testing.T) {
 	ctx := context.Background()
 	actor := contract.FrpActor{UserID: f.aliceID}
 	key := commandIdentity(t, f, device)
-	cfg, _, err := r.BuildServerConfig(ctx, actor, device, server.ID, server.RevisionID, false, func(s frpconfig.ServerSpec, _ []model.FrpMapping) (string, error) { return "config " + s.Token, nil })
+	cfg, err := service.NewFrpService(r, f.rdb).SaveConfig(ctx, actor.UserID, false, service.SaveConfigInput{DeviceID: device, ServerID: server.ID, ServerRevisionID: server.RevisionID})
 	if err != nil {
 		t.Fatal(err)
 	}

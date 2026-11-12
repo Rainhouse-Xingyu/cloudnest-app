@@ -1,10 +1,13 @@
 package mysql
 
 import (
+	"cloudenest_go/internal/frpreservation"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -23,11 +26,7 @@ func (r *FrpRepo) frpTransaction(ctx context.Context, fn func(*gorm.DB) error) e
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var pool model.FrpMappingPool
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&pool, "id=1").Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return contract.ErrFrpMappingBusy
-			}
+		if err := frpreservation.Lock(tx); err != nil {
 			return err
 		}
 		return fn(tx)
@@ -92,11 +91,14 @@ func (r *FrpRepo) CreateMapping(ctx context.Context, req contract.FrpCreateMappi
 			return err
 		}
 		if req.RemotePort == nil {
-			port, err := allocateRemotePort(tx)
+			port, err := allocateRemotePort(tx, req.DeviceID)
 			if err != nil {
 				return err
 			}
 			m.RemotePort = port
+		}
+		if err := checkMappingReservation(tx, m); err != nil {
+			return err
 		}
 		// Override status inside this transaction: the legacy default:1 tag
 		// otherwise turns an explicitly disabled mapping into an enabled one.
@@ -134,6 +136,7 @@ func (r *FrpRepo) UpdateMapping(ctx context.Context, req contract.FrpUpdateMappi
 		if m.DeviceID != hint.DeviceID {
 			return contract.ErrForbidden
 		}
+		old := m
 		if req.LocalPort != nil {
 			m.LocalPort = *req.LocalPort
 		}
@@ -148,6 +151,11 @@ func (r *FrpRepo) UpdateMapping(ctx context.Context, req contract.FrpUpdateMappi
 		}
 		if err := normalizeMapping(&m); err != nil {
 			return err
+		}
+		if !slices.Equal(frpreservation.MappingKeys(old), frpreservation.MappingKeys(m)) {
+			if err := checkMappingReservation(tx, m); err != nil {
+				return err
+			}
 		}
 		if err := tx.Model(&m).Updates(map[string]any{"local_port": m.LocalPort, "remote_port": m.RemotePort, "domain": m.Domain, "status": m.Status}).Error; err != nil {
 			return mappingWriteError(err)
@@ -190,11 +198,21 @@ func (r *FrpRepo) DeleteMapping(ctx context.Context, actor contract.FrpActor, id
 
 // One bounded scan, including holes, instead of up to 5,000 COUNT queries.
 // All supported mapping writers hold the pool row until insert/audit commit.
-func allocateRemotePort(tx *gorm.DB) (int, error) {
+func allocateRemotePort(tx *gorm.DB, device int64) (int, error) {
 	var used []int
 	if err := tx.Model(&model.FrpMapping{}).Where("remote_port BETWEEN ? AND ?", defaultFrpRemotePortStart, defaultFrpRemotePortEnd).Order("remote_port").Pluck("remote_port", &used).Error; err != nil {
 		return 0, err
 	}
+	credential, err := frpreservation.Credential(tx, device)
+	if err != nil {
+		return 0, err
+	}
+	held, err := frpreservation.UsedPorts(tx, 0, device, credential, defaultFrpRemotePortStart, defaultFrpRemotePortEnd)
+	if err != nil {
+		return 0, err
+	}
+	used = append(used, held...)
+	sort.Ints(used)
 	candidate := defaultFrpRemotePortStart
 	for _, port := range used {
 		if port > candidate {
@@ -258,4 +276,12 @@ func mappingWriteError(err error) error {
 		return contract.ErrFrpMappingConflict
 	}
 	return err
+}
+
+func checkMappingReservation(tx *gorm.DB, m model.FrpMapping) error {
+	credential, err := frpreservation.Credential(tx, m.DeviceID)
+	if err != nil {
+		return err
+	}
+	return frpreservation.Check(tx, m.ServerID, m.DeviceID, credential, frpreservation.MappingKeys(m))
 }

@@ -134,6 +134,13 @@ func newFixture(t *testing.T) *fixture {
 			f.bobID = user.ID
 		}
 	}
+	// Isolated fixtures retain business history for migration tests, but runtime
+	// holds from their synthetic Agents must not leak into later fixture users.
+	t.Cleanup(func() {
+		if err := db.Where("owner_id IN ?", []int64{f.aliceID, f.bobID}).Delete(&model.FrpReservation{}).Error; err != nil {
+			t.Error(err)
+		}
+	})
 	return f
 }
 

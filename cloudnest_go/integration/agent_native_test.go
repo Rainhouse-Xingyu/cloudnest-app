@@ -376,6 +376,10 @@ func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest, retire 
 	command("reload", 0, "ok")
 	probe()
 	command("stop", 0, "ok")
+	var retained int64
+	if err := f.db.Model(&model.FrpReservation{}).Where("device_id=?", device).Count(&retained).Error; err != nil || retained < 3 {
+		t.Fatal("stop released potential runtime claims", retained, err)
+	}
 	for _, name := range []string{"active.json", "candidate.json"} {
 		if _, err := os.Stat(filepath.Join(statePath, name)); !errors.Is(err, os.ErrNotExist) {
 			t.Fatal("plaintext runtime cache retained after stop", name, err)
@@ -391,6 +395,9 @@ func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest, retire 
 	// Forget is stronger than stop: no restart/start/reload can recover the
 	// old configuration until a new authenticated deployment replaces it.
 	command("forget_config", 0, "ok")
+	if err := f.db.Model(&model.FrpReservation{}).Where("device_id=?", device).Count(&retained).Error; err != nil || retained != 0 {
+		t.Fatal("real forget receipt did not clear generation claims", retained, err)
+	}
 	if conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(remote)), time.Second); err == nil {
 		conn.Close()
 		t.Fatal("forget left actual tunnel open")
@@ -426,6 +433,9 @@ func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest, retire 
 	}
 	command("deploy_config", cfg.ID, "ok")
 	probe()
+	if err := f.db.Model(&model.FrpReservation{}).Where("device_id=?", device).Count(&retained).Error; err != nil || retained != 3 {
+		t.Fatal("fresh deployment did not reacquire three resources", retained, err)
+	}
 	// Only the Darwin service-specific test requests an actual launchd job.
 	if serviceTest != nil {
 		stopAgent()
@@ -698,5 +708,5 @@ func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest, retire 
 	if bytes.Contains(b, []byte("DATA RACE")) {
 		t.Fatal("agent race detector report")
 	}
-	t.Log("actual CLI enrolled; TCP/HTTP/HTTPS reached upstream; reload/stop/start, graceful restart, Agent SIGKILL recovery, supervisor SIGKILL exclusion, frps reconnect, backend outage/restart queue recovery, credential revocation and invalid config rejection passed")
+	t.Log("actual CLI enrolled; TCP/HTTP/HTTPS reached upstream; reload/stop/start, graceful restart, Agent SIGKILL recovery, supervisor SIGKILL exclusion, frps reconnect, backend outage/restart queue recovery, credential revocation, runtime resource retention/forget/reacquisition and invalid config rejection passed")
 }

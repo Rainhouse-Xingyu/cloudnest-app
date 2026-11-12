@@ -3,18 +3,13 @@
 package frpagent
 
 import (
-	"bytes"
+	"cloudenest_go/internal/frpwire"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/netip"
 	"strings"
 	"unicode"
 	"unicode/utf8"
-
-	"github.com/goccy/go-yaml"
-	"github.com/goccy/go-yaml/lexer"
-	"github.com/goccy/go-yaml/token"
 )
 
 var ErrConfig = errors.New("configuration rejected by local policy")
@@ -30,22 +25,8 @@ type Policy struct {
 	ServerName    string `json:"server_name,omitempty"`
 }
 
-type proxy struct {
-	Name          string   `yaml:"name" json:"name"`
-	Type          string   `yaml:"type" json:"type"`
-	LocalIP       string   `yaml:"localIP" json:"localIP"`
-	LocalPort     int      `yaml:"localPort" json:"localPort"`
-	RemotePort    int      `yaml:"remotePort" json:"remotePort,omitempty"`
-	CustomDomains []string `yaml:"customDomains" json:"customDomains,omitempty"`
-}
-type inputConfig struct {
-	ServerAddr string `yaml:"serverAddr" json:"serverAddr"`
-	ServerPort int    `yaml:"serverPort" json:"serverPort"`
-	Auth       struct {
-		Token string `yaml:"token" json:"token"`
-	} `yaml:"auth" json:"auth"`
-	Proxies []proxy `yaml:"proxies" json:"proxies"`
-}
+type inputConfig = frpwire.Config
+type proxy = frpwire.Proxy
 
 func port(p int) bool { return p > 0 && p <= 65535 }
 func safeString(s string, max int) bool {
@@ -104,18 +85,11 @@ func (p Policy) Validate() error {
 // decoded values are validated and encoded as a new JSON document, preventing
 // parser differences, template evaluation, includes, plugins and file loaders.
 func Normalize(raw []byte, p Policy) ([]byte, error) {
-	if p.Validate() != nil || len(raw) == 0 || len(raw) > 32768 || !utf8.Valid(raw) || bytes.Contains(raw, []byte("{{")) || bytes.Contains(raw, []byte("}}")) {
+	if p.Validate() != nil {
 		return nil, ErrConfig
 	}
-	var c inputConfig
-	for _, t := range lexer.Tokenize(string(raw)) {
-		switch t.Type {
-		case token.AnchorType, token.AliasType, token.TagType, token.DirectiveType:
-			return nil, ErrConfig
-		}
-	}
-	d := yaml.NewDecoder(bytes.NewReader(raw), yaml.Strict())
-	if d.Decode(&c) != nil || d.Decode(&struct{}{}) != io.EOF {
+	c, err := frpwire.Decode(raw)
+	if err != nil {
 		return nil, ErrConfig
 	}
 	if c.ServerAddr != p.ServerAddr || c.ServerPort != p.ServerPort || !safeString(c.Auth.Token, 1024) || len(c.Proxies) > 512 {

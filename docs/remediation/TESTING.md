@@ -292,3 +292,18 @@ Darwin arm64 首次真实 launchd 测试通过（35.27s，`/tmp/cloudnest-g05-la
 `make -C cloudnest_go check test build-macos build-linux` 全部通过（`/tmp/cloudnest-g05-forget-check.log`），进程退出 0。设备/FRP 全部相关集成和最终 CI 另记结果；本批没有放宽全局唯一约束或宣称自动端口释放。
 
 最终全部设备身份、持久命令、配置/映射/服务器相关 race 集成 **35 项顶层全部通过，零跳过**（48.095s，`/tmp/cloudnest-g05-forget-regression.log`），脚本退出 0。带 integration/frpnative 的 vet、仓库检查和补丁格式检查通过。全后端普通/网络回归由新提交的 CI 执行，按 SHA 独立核验。
+
+
+## 2026-11-12 G05 运行资源占用与清除回执
+
+上一批 `50ac977d416823487ee8ba2bdb63462610ad930c` 已按精确 SHA 核验：PR `42542622909`、push `42542617091` 均为 success，四项 build-test、agent-native、agent-keychain、vulnerabilities 全部通过。本次只查询运行状态/任务，没有读取用户指定延后的 G01/G02 Review。
+
+本批增加七项资源占用集成用例。最终 Agent/FRP 定向 race **42 项通过、零跳过（72.400s）**，日志 `/tmp/cloudnest-g05-reservation-regression-fixed.log`。验证部署入队及审计原子登记、删除/修改映射后的端口与域名保留、HTTP/HTTPS 独立资源、普通 stop/失败/超时/退役/删除配置不释放、新身份代次不能清旧占用、并发部署只允许一个取得相同资源、首次 forget 回执/审计原子释放及旧回执重放不影响后来部署；还覆盖 TLS/归属/脱敏、结构漂移、unknown 历史回填和幂等重跑。
+
+官方固定 FRP 0.71.1 归档重新下载并验证 SHA-256 后，`scripts/test-agent-native.sh` 实际通过：Agent 单元/原生进程 **22 项、5.495s**，两项实际 Agent CLI/后端/frpc/frps 集成 **122.934s**（60.98s、60.02s），均零跳过。两个场景都包含三种隧道到达上游、stop 后运行占用保留、forget 后真实端口关闭与账本清空、重启 start/reload 拒绝、重新部署恢复三条隧道并重新登记，以及原有 SIGKILL/监督进程丢失/后端重启/凭据撤销或设备退役验证。日志 `/tmp/cloudnest-g05-reservation-native.log` 的最终消息明确包含 runtime resource retention/forget/reacquisition。
+
+前一轮合并标签回归失败 **77.025s**：两项原生用例因旧临时目录中的 frpc 已不存在而被官方摘要校验拒绝；一项服务器回滚测试以普通字符串充当配置，严格资源解析将其记为 unknown 后正确阻止其与其他映射并存。现重新获取已验证官方包，并让该回滚测试调用正式配置生成器；没有放宽校验、占用约束或原来的回滚/授权/轮换断言。失败日志 `/tmp/cloudnest-g05-reservation-regression.log` 保留。早期编译还发现共享类型移动后遗漏 proxy 别名，已修正，见 `/tmp/cloudnest-g05-reservation-compile.log`。这些失败不计为验收通过。
+
+最终源码 `make check test build-macos build-linux` 通过，覆盖 vet、全部 race 单元、服务端与 Agent 的 Darwin/Linux × amd64/arm64 构建；标签 integration,frpnative 的 vet、仓库与 diff 检查通过。日志 `/tmp/cloudnest-g05-reservation-check.log`。本地测试全部使用新 disposable MySQL/Redis、临时目录和测试自己的进程，未迁移生产库。
+
+最终全量普通集成 **281 项 race 通过、零跳过（473.974s）**，没有失败或数据竞争，原八分钟总期限及逐操作期限不变。日志 `/tmp/cloudnest-g05-reservation-full.log`；运行结束无剩余 cloudnest.test 容器。本批仍保留全局映射唯一性；服务器分区索引草稿没有进入实现。旧配置回填为 unknown 且新身份不能自动清除，受控历史对账和升级演练未完成，见 [FRP-RUNTIME-RESERVATIONS](FRP-RUNTIME-RESERVATIONS.md)。G05 和整个 Goal 继续进行。

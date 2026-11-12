@@ -230,6 +230,7 @@ func (c *Container) NewRouter() *gin.Engine {
 	api.GET("/settings/rate-window", c.SettingsHandler.GetMyRateWindow)
 	api.PUT("/settings/rate-window", c.SettingsHandler.UpdateMyRateWindow)
 	api.GET("/storage/overview", c.StorageHandler.GetOverview)
+	api.GET("/frp/reservations", handler.AgentTransport, c.FrpHandler.ListReservations)
 	api.POST("/frp/servers", handler.AgentTransport, c.FrpHandler.WriteServer)
 	api.PUT("/frp/servers/:id", handler.AgentTransport, c.FrpHandler.WriteServer)
 	api.GET("/frp/servers", handler.AgentTransport, c.FrpHandler.ListServers)

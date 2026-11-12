@@ -277,6 +277,7 @@ func (Device) TableName() string {
 
 // FrpMapping FRP映射
 type FrpMapping struct {
+	ServerID   int64     `gorm:"not null;default:0;index" json:"server_id"`
 	ID         int64     `gorm:"primaryKey;autoIncrement" json:"id"`
 	DeviceID   int64     `gorm:"not null" json:"device_id"`
 	LocalPort  int       `gorm:"not null" json:"local_port"`

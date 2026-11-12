@@ -65,6 +65,8 @@ func Migrate(db *gorm.DB) error {
 		&model.AgentCommand{},
 		&model.FrpMapping{},
 		&model.FrpMappingPool{},
+		&model.FrpReservation{},
+		&model.FrpReservationSchema{},
 		&model.FrpConfig{},
 		&model.FrpServer{},
 		&model.FrpServerRevision{},
@@ -75,6 +77,9 @@ func Migrate(db *gorm.DB) error {
 	}
 
 	if err := installMappingSchema(db); err != nil {
+		return err
+	}
+	if err := installReservationSchema(db); err != nil {
 		return err
 	}
 	if err := installAgentTriggers(db); err != nil {

@@ -134,6 +134,9 @@ func CheckAgentSchema(db *gorm.DB) error {
 	if err := CheckServerSchema(db); err != nil {
 		return err
 	}
+	if err := CheckReservationSchema(db); err != nil {
+		return err
+	}
 	return checkAgentCommandSchema(db)
 }
 
