@@ -348,3 +348,5 @@ G05 旧版升级演练使用 `50ac977d416823487ee8ba2bdb63462610ad930c` 编译�
 G05 Linux 用户服务增加 `systemd-unit` 及临时服务验收。路径转义/非法路径测试、`make check test build-linux`、Linux amd64 专项集成编译及脚本语法通过（`/tmp/cloudnest-g05-systemd-check.log`）。本机是 Darwin，systemd 运行验证由新提交的 Ubuntu CI 执行。
 
 G05 旧协议离线判定改用服务端接收时间，保留状态字段和七天缓存。旧协议超时、未来时间、坏时间、恢复上报和主动离线与现有 Agent 心跳/身份、退役行为的 3 项 race 集成通过（8.329s，`/tmp/cloudnest-g05-heartbeat-final.log`）。
+
+补齐旧设备停用检查后，同三项 race 集成再次通过（9.006s，`/tmp/cloudnest-g05-heartbeat-disabled.log`）。停用后状态立即离线，旧上报和领命令被拒绝。

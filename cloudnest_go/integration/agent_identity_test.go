@@ -413,4 +413,9 @@ func TestLegacyFRPStatusExpiresByServerReceipt(t *testing.T) {
 	online(true)
 	f.json(t, "POST", path+"/report", f.alice, map[string]any{"online": false}, 200)
 	online(false)
+	f.json(t, "POST", path+"/report", f.alice, map[string]any{"online": true}, 200)
+	f.json(t, "PUT", fmt.Sprintf("/api/frp/devices/%d", id), f.alice, map[string]any{"status": 0}, 200)
+	online(false)
+	f.json(t, "POST", path+"/report", f.alice, map[string]any{"online": true}, 403)
+	f.json(t, "GET", fmt.Sprintf("/api/frp/devices/%d/commands/next", id), f.alice, nil, 403)
 }
