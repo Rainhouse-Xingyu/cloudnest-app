@@ -120,8 +120,11 @@ func (s *AIService) hybridSearch(parent context.Context, uid int64, question str
 	subject := namedSubject(question)
 	result.Query.RequiredTechnology = subject
 	hasSubject := false
+	documentRule := explicitDocumentEvidence(question)
+	result.Query.RequiredDocumentEvidence = documentRule
+	var documentProof documentEvidence
 	flush := func() {
-		if currentID == 0 || !ipEvidence.accepts(ipClause) || (subject != "" && !hasSubject) {
+		if currentID == 0 || !ipEvidence.accepts(ipClause) || (subject != "" && !hasSubject) || !documentProof.accepts(documentRule) {
 			return
 		}
 		if bestLex.lexical > 0 || bestSemantic.semantic >= minCosine {
@@ -143,10 +146,12 @@ func (s *AIService) hybridSearch(parent context.Context, uid int64, question str
 			bestSemantic = hybridHit{semantic: -1}
 			ipEvidence = configIPEvidence{}
 			hasSubject = false
+			documentProof = documentEvidence{}
 		}
 		if subject != "" && !hasSubject {
 			hasSubject = hasNamedSubject(row.Content, subject, row.StartRune > 0, row.Ordinal+1 < row.ChunkCount)
 		}
+		documentProof.observe(documentRule, row.Content)
 		literal, allowed := ipEvidence.observe(ipClause, row)
 		if !allowed {
 			return nil
