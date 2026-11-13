@@ -35,7 +35,11 @@ jobs:
         with:
           go-version-file: cloudnest_go/go.mod
           cache-dependency-path: cloudnest_go/go.sum
-      - run: ./scripts/test-agent-native.sh
+      - name: Verify Linux Agent and systemd recovery
+        run: |
+          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+          sudo systemctl start "user@$(id -u).service"
+          ./scripts/test-agent-native.sh --systemd
   build-test:
     runs-on: ubuntu-latest
     timeout-minutes: 15

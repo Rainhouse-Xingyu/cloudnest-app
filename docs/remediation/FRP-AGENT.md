@@ -71,6 +71,33 @@ launchd 直接执行 Agent，无 shell 展开。KeepAlive 保持服务运行，�
 
 本机验收使用随机标签、临时 plist 和单独的测试身份，未写入真实登录启动目录。试验比较 SIGKILL 前后的 launchd 进程标识，通过新命令回执与三种隧道请求验证恢复。此次采用外部测试密钥，签名升级、用户实际钥匙串的非交互访问、跨登录/休眠恢复需分别验收。这里提供独立 CLI 的服务方式；未来 macOS App 内的后台项应通过 [Apple Service Management](https://developer.apple.com/documentation/servicemanagement/) 注册，并尊重系统用户审批。
 
+## Linux 用户服务
+
+以运行 Agent 的普通用户完成注册和前台连接检查。Linux 注册需要状态目录外的私有密钥文件。停止前台实例后，在有 systemd 用户管理器的 Linux 主机上执行以下首次安装示例：
+
+```sh
+(
+  set -euC
+  umask 077
+  agent=/absolute/path/cloudnest-agent
+  state="$HOME/.local/share/cloudnest-agent"
+  units="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+  unit="$units/cloudnest-agent.service"
+  mkdir -p "$units"
+  "$agent" systemd-unit --state "$state" > "$unit"
+  systemd-analyze --user verify "$unit"
+  systemctl --user daemon-reload
+  systemctl --user enable --now cloudnest-agent.service
+)
+systemctl --user status cloudnest-agent.service
+```
+
+生成的 unit 直接执行 Agent。异常退出后间隔 10 秒重试。停止时由 Agent 先回收 frpc，systemd 在需要时清理该服务控制组中的剩余进程。密钥仍由原注册配置读取。Linux 无登录会话时能否运行取决于该账户的用户管理器设置。需要在注销后继续运行或在开机后自动运行时，由管理员按主机策略为该账户启用 linger。
+
+查看状态用 `systemctl --user status cloudnest-agent.service`。临时停止用 `systemctl --user stop cloudnest-agent.service`。停用自启动并停止用 `systemctl --user disable --now cloudnest-agent.service`。变更二进制或状态路径前先停止服务，再审阅新 unit、执行 daemon-reload 并启动。
+
+`scripts/test-agent-native.sh --systemd` 使用临时身份和唯一 unit 名称，检查主进程被终止后的自动重启、三种隧道恢复、诊断回执和停止后的状态锁释放。相关服务行为参照 [systemd.service](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html) 与 [systemd.kill](https://www.freedesktop.org/software/systemd/man/latest/systemd.kill.html)。
+
 ## 固定官方制品
 
 来源：[FRP v0.71.1 官方发布](https://github.com/fatedier/frp/releases/tag/v0.71.1)。2026-11-04 获取 GitHub release asset digest，逐个验证归档后读取其中 frpc 的 SHA-256。运行代码固定的是提取后的二进制摘要，脚本固定的是归档摘要；不会仅信任 `--version` 输出。

@@ -436,11 +436,11 @@ func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest, retire 
 	if err := f.db.Model(&model.FrpReservation{}).Where("device_id=?", device).Count(&retained).Error; err != nil || retained != 3 {
 		t.Fatal("fresh deployment did not reacquire three resources", retained, err)
 	}
-	// Only the Darwin service-specific test requests an actual launchd job.
+	// Service-specific tests run a disposable job under the platform manager.
 	if serviceTest != nil {
 		stopAgent()
 		serviceTest(t, ctx, bin, statePath, work, probe, func() { command("diagnose", 0, "ok") })
-		// bootout can return before the child's shutdown finishes.
+		// Wait for the supervisor to finish releasing the state lock.
 		for {
 			st, err := frpagent.OpenStore(statePath)
 			if err == nil {
@@ -454,6 +454,10 @@ func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest, retire 
 		}
 		if _, err := os.Stat(filepath.Join(statePath, "active.json")); !errors.Is(err, os.ErrNotExist) {
 			t.Fatal("service shutdown retained runtime configuration", err)
+		}
+		if conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(remote)), time.Second); err == nil {
+			conn.Close()
+			t.Fatal("service shutdown left TCP tunnel reachable")
 		}
 		return
 	}

@@ -344,3 +344,5 @@ G05 历史占用维护命令的 8 项 race 集成通过（16.737s，`/tmp/cloudn
 G05 旧版升级演练使用 `50ac977d416823487ee8ba2bdb63462610ad930c` 编译的真实旧服务端在 disposable MySQL 创建结构，再执行当前 `migrate` 和对账 CLI。首次运行在最后新部署时被夹具留在队列中的 `forget_config` 排他屏障正确拒绝（`/tmp/cloudnest-g05-real-upgrade.log`）；修正夹具通过真实回执结束保留命令，屏障规则保持原样。最终演练通过（5.47s，包 7.315s，`/tmp/cloudnest-g05-real-upgrade-fixed.log`）。验证重复迁移、旧映射、密文逐字节保留且可解密、旧身份心跳、启动类命令取消/其他命令继续完成、保留账本以及对账后新部署。
 
 补充旧租约与新占用断言后，同一真实旧版升级演练再次通过（4.61s，包 6.427s，`/tmp/cloudnest-g05-real-upgrade-final.log`）。旧启动类命令的成功回执被拒绝，重新入队的部署生成 TCP 占用。8 项运行占用 race 专项通过（14.640s，`/tmp/cloudnest-g05-upgrade-reservations.log`），覆盖已升级库中仍有未结束启动命令时拒绝对账。`make check test`、升级标签 vet、脚本语法和补丁检查通过。
+
+G05 Linux 用户服务增加 `systemd-unit` 及临时服务验收。路径转义/非法路径测试、`make check test build-linux`、Linux amd64 专项集成编译及脚本语法通过（`/tmp/cloudnest-g05-systemd-check.log`）。本机是 Darwin，systemd 运行验证由新提交的 Ubuntu CI 执行。

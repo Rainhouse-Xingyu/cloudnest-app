@@ -33,8 +33,11 @@ func run(args []string) error {
 	if len(args) > 0 && args[0] == "launch-agent" {
 		return launchAgent(args[1:], os.Stdout)
 	}
+	if len(args) > 0 && args[0] == "systemd-unit" {
+		return systemdUnit(args[1:], os.Stdout)
+	}
 	if len(args) == 0 || (args[0] != "enroll" && args[0] != "run" && args[0] != "protect-state") {
-		return errors.New("usage: cloudnest-agent enroll|run|protect-state|launch-agent --state /absolute/private/directory (see docs/remediation/FRP-AGENT.md)")
+		return errors.New("usage: cloudnest-agent enroll|run|protect-state|launch-agent|systemd-unit --state /absolute/private/directory (see docs/remediation/FRP-AGENT.md)")
 	}
 	f := flag.NewFlagSet("cloudnest-agent", flag.ContinueOnError)
 	state := f.String("state", "", "absolute private state directory")

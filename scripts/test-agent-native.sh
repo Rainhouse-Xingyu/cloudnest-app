@@ -2,6 +2,17 @@
 # Only pinned official FRP assets and disposable database containers are used.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+if [[ $# -gt 1 || ($# -eq 1 && ${1:-} != --systemd) ]]; then
+  echo 'Usage: test-agent-native.sh [--systemd]' >&2
+  exit 2
+fi
+if [[ ${1:-} == --systemd ]]; then
+  if [[ "$(uname -s)" != Linux || "$(id -u)" == 0 ]]; then
+    echo 'The systemd acceptance test needs an unprivileged Linux user.' >&2
+    exit 2
+  fi
+  systemctl --user show-environment >/dev/null
+fi
 case "$(uname -s)/$(uname -m)" in
   Darwin/arm64) platform=darwin_arm64; digest=d15d0324b99e14619c9aa46e37f6db588c06a09be4bc6f7948890b6b61077842 ;;
   Darwin/x86_64) platform=darwin_amd64; digest=8acb59b6fb998cc8d209d1373d90bf70fa5ec3efeb4dfbc7bda6ce3abd78cb45 ;;
@@ -23,3 +34,7 @@ tar -xzf "$probe_dir/$archive" -C "$probe_dir"
 export CLOUDNEST_TEST_FRP_BIN_DIR="$probe_dir/frp_0.71.1_${platform}"
 go -C cloudnest_go test -tags=frpnative -race -count=1 -v ./internal/frpagent
 ./scripts/test-integration.sh -tags=integration,frpnative -run '^TestAgentNative(CLIThreeTunnelsRestartAndReconnect|RetirementStopsTunnels)$'
+
+if [[ ${1:-} == --systemd ]]; then
+  ./scripts/test-integration.sh -tags=integration,frpnative,systemdnative -run '^TestSystemdNativeCrashRecovery$'
+fi
