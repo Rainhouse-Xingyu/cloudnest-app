@@ -350,3 +350,5 @@ G05 Linux 用户服务增加 `systemd-unit` 及临时服务验收。路径转义
 G05 旧协议离线判定改用服务端接收时间，保留状态字段和七天缓存。旧协议超时、未来时间、坏时间、恢复上报和主动离线与现有 Agent 心跳/身份、退役行为的 3 项 race 集成通过（8.329s，`/tmp/cloudnest-g05-heartbeat-final.log`）。
 
 补齐旧设备停用检查后，同三项 race 集成再次通过（9.006s，`/tmp/cloudnest-g05-heartbeat-disabled.log`）。停用后状态立即离线，旧上报和领命令被拒绝。
+
+Ubuntu push `43393865932` 的 agent-native 日志记录 systemd 将 Agent PID 11239 替换为 11338，三条隧道与诊断回执恢复。测试随后在重复停止已经卸载的临时服务时退出 5，整项记为失败。清理现分开停止和取消链接，并跳过已成功完成的停止操作。修正后的真实 Linux 验收由新提交执行。

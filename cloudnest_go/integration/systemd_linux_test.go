@@ -37,11 +37,17 @@ func testSystemdRecovery(t *testing.T, ctx context.Context, bin, state, work str
 	}
 	run("systemd-analyze", "--user", "verify", unit)
 	run("systemctl", "--user", "link", unit)
+	stopped := false
 	defer func() {
 		c, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
-		if out, err := exec.CommandContext(c, "systemctl", "--user", "disable", "--now", label).CombinedOutput(); err != nil {
-			t.Errorf("cleanup fixture unit: %v: %s", err, out)
+		if !stopped {
+			if out, err := exec.CommandContext(c, "systemctl", "--user", "stop", label).CombinedOutput(); err != nil {
+				t.Errorf("stop fixture during cleanup: %v: %s", err, out)
+			}
+		}
+		if out, err := exec.CommandContext(c, "systemctl", "--user", "disable", label).CombinedOutput(); err != nil {
+			t.Errorf("unlink fixture unit: %v: %s", err, out)
 		}
 	}()
 	run("systemctl", "--user", "start", label)
@@ -65,6 +71,7 @@ func testSystemdRecovery(t *testing.T, ctx context.Context, bin, state, work str
 	probe()
 	diagnose()
 	run("systemctl", "--user", "stop", label)
+	stopped = true
 	if pid := run("systemctl", "--user", "show", "--property=MainPID", "--value", label); pid != "0" {
 		t.Fatal("systemd retained main process after stop")
 	}
