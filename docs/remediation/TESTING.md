@@ -316,3 +316,23 @@ Darwin arm64 首次真实 launchd 测试通过（35.27s，`/tmp/cloudnest-g05-la
 `cloudnest_go/go.mod` 最低版本现更新至 Go 1.26.11，CI 继续从该文件选择工具链。官方 [Go 发布记录](https://go.dev/doc/devel/release#go1.26.11) 记录该版本于 2026-11-10 发布并含 net/http 安全修复。没有关闭或放宽漏洞检查。
 
 本地实际工具链为 go1.26.11 darwin/arm64，漏洞扫描 **0 个可达漏洞**（另有三个仅位于所需模块、当前调用路径不可达的告警），`make check test` 的 vet/build/race 单元均通过。原始记录为 `/tmp/cloudnest-go12611-version.log`、`/tmp/cloudnest-go12611-vuln.log`、`/tmp/cloudnest-go12611-check.log`。此处不把上一版 Go 1.26.10 的全量集成计为新版工具链的全量验收；新提交的远端 CI 单独核验。
+
+## 2026-11-13 G05 服务器作用域与公网验收（进行中）
+
+工具链修复提交 `843180f3582ff7d14663d256fb9386abc302b087` 的 PR `43237919993`、push `43237905382` 已按精确 SHA 核验为 success，build-test、agent-native、agent-keychain、vulnerabilities 四项全部成功。
+
+最终映射/作用域/运行资源专项 **20 项顶层 race 通过、零跳过（45.551s）**，日志 `/tmp/cloudnest-g05-scope-final-targeted.log`。新增五项作用域测试验证不同服务器复用资源、全局零作用域与所有服务器重叠、管理员不能混用跨用户服务器、策略与协议切换、分区账本清除、并发全局/分区竞争，以及缺少 server_id 的旧表真实升级后保持原记录与原文、重复迁移、非唯一索引漂移拒绝。早期迁移用例误把数据库填充的创建时间与插入前零值比较而失败；已改为升级前读取真实历史行，保持全部保留断言，失败记录 `/tmp/cloudnest-g05-scope-migration.log` 不计为通过。此前口头专项计数有误，以此处实际日志的 20 项顶层用例为准。
+
+`make check test build-macos build-linux` 通过（`/tmp/cloudnest-g05-scope-check.log`），包含 vet、race 单元及 Darwin/Linux × amd64/arm64 服务端/Agent 构建。固定官方 FRP 0.71.1 原生测试 **22 项 Agent 用例通过（5.331s）**；实际三隧道的 CLI 撤销和退役两项集成通过（59.99s、59.87s，包 121.718s），日志 `/tmp/cloudnest-g05-scope-native.log`。这两项已改用正值 server_id 创建映射，全部原有重启、故障恢复、诊断、资源保留/释放断言保留。
+
+公网测试使用操作者的独立 Ubuntu frps 及本机私有目录中的同一 CA/token。设置 IP DIRECT 后控制 TLS 验证成功。第一次探测曾误把 TUN 接受本地 TCP socket 当作远端端口已监听，未部署即失败（`/tmp/cloudnest-g05-public-first.log`）；现以 TLS 认证、真实注册和随机上游响应为证据，未放宽证书校验。
+
+北京时间 10:31 开始的 Agent 公网验收部署回执成功但 TCP 随机响应失败（40.46s，`/tmp/cloudnest-g05-public-direct.log`）；10:33 紧跟部署的 diagnose 返回 diagnostic_failed（18.72s，`/tmp/cloudnest-g05-public-diagnostic.log`）。早期注册快照现仅作为诊断，数据探测后仍须断言三个代理全部 registered。操作者提供的服务器 UTC 日志确认两次 `device_1_map_1` 均为 `port already used`（02:31:16.523、02:33:51.738）；10:35 独立官方 frpc 成功登录后注册 TCP 20080 也被相同原因拒绝。操作者此前手工 frpc 0.71.0 已注册同一测试端口。正在等待释放该手工测试映射后重跑，不能把手工连通或本地原生验收计作公网完整验收。详细运行与边界见 [公网验收说明](FRP-PUBLIC-ACCEPTANCE.md)。
+
+本批首次完整普通 race 回归在 **275 项顶层通过后触发八分钟套件看门狗**，包 480.804s，日志 `/tmp/cloudnest-g05-scope-full.log` 保留为失败。触发时跨实例上传暂停测试运行 17s，仍处于其原有 27s 单项等待限额内，未有业务断言失败；这不计作完整通过。新增用例后普通套件为 286 项，套件期限改为十分钟；逐操作取消、资源租约、网络和单项超时全部不变。最终完整验收由新提交 CI 独立核验。
+
+公网释放端口后的第一轮三代理均 registered，但使用 example.com Host 的 TCP 请求等待响应头超时（42.52s，`/tmp/cloudnest-g05-public-released.log`）。分开探测后，TCP 使用 IP Host 与 HTTPS 使用 example.com SNI 均通过随机响应校验；HTTP 的 example.com Host 仍超时（43.53s，`/tmp/cloudnest-g05-public-routes.log`）。正在以 IP 作为 HTTP 虚拟主机作对照，不能把这些部分结果记作完整验收，也未确定 HTTP 域名路径超时的最终原因。
+
+最终公网 IP 虚拟主机对照 **完整通过（74.39s，包 76.431s）**，日志 `/tmp/cloudnest-g05-public-iphost.log`。真实 Agent 0.3.0 + 官方 frpc 0.71.1 经 HTTPS 管理接口部署到操作者的独立 frps：TCP 20080、HTTP 18080（Host 为测试 IP）、HTTPS 18443（example.com SNI 且校验上游证书）均返回本轮随机 nonce。stop/start、正常 Agent 重启、forget 后三种上游响应消失且控制 TLS 仍可认证、账本 3→0、重启 start/reload 拒绝旧配置、重新部署三隧道及再次清除全部通过。未修改正式 frpc/frps 或远端配置。example.com 纯 HTTP 路径超时仍单独开放，不能宣称真实 DNS/所有代理配置已通过。
+
+受全量套件看门狗中断的上传暂停/恢复相关四项顶层 race 补测通过（28.314s，`/tmp/cloudnest-g05-scope-timeout-tail.log`），包含原有跨实例 27s 取消界限；不以补测替代新提交完整 CI。带全部三种测试标签的 vet、脚本语法、仓库卫生和补丁格式检查通过。

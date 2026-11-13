@@ -74,6 +74,7 @@ type UpdateDeviceInput struct {
 
 // CreateMappingInput 表示映射创建输入。
 type CreateMappingInput struct {
+	ServerID   int64
 	ClientIP   string
 	DeviceID   int64
 	LocalPort  int
@@ -224,6 +225,7 @@ func (s *FrpService) CreateMapping(ctx context.Context, uid int64, isAdmin bool,
 	}
 
 	return s.repo.CreateMapping(ctx, contract.FrpCreateMappingInput{
+		ServerID:   req.ServerID,
 		FrpActor:   contract.FrpActor{UserID: uid, Admin: isAdmin, ClientIP: req.ClientIP},
 		DeviceID:   req.DeviceID,
 		LocalPort:  req.LocalPort,

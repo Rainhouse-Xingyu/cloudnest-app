@@ -317,7 +317,7 @@ func TestFRPMappingSchemaRefusesDriftAndPreservesDuplicates(t *testing.T) {
 	if err := store.Migrate(f.db); err != nil {
 		t.Fatal("explicit migration did not restore gate", err)
 	}
-	if err := f.db.Exec("ALTER TABLE frp_mapping DROP INDEX uq_frp_domain_v1, DROP COLUMN cn_domain_key_v1").Error; err != nil {
+	if err := f.db.Exec("ALTER TABLE frp_mapping DROP INDEX uq_frp_port_v2, DROP INDEX uq_frp_domain_v2, DROP COLUMN cn_port_key_v2, DROP COLUMN cn_domain_key_v1, ADD UNIQUE INDEX uni_frp_mapping_remote_port(remote_port)").Error; err != nil {
 		t.Fatal(err)
 	}
 	// Restore schema before the fixture closes, even if assertions fail.
@@ -441,7 +441,7 @@ func TestFRPMappingLockDeadlineAndReservationRelease(t *testing.T) {
 func TestFRPMappingSchemaRejectsAlteredExpression(t *testing.T) {
 	f := newFixture(t)
 	defer func() {
-		if err := f.db.Exec("ALTER TABLE frp_mapping DROP INDEX uq_frp_domain_v1, DROP COLUMN cn_domain_key_v1").Error; err != nil {
+		if err := f.db.Exec("ALTER TABLE frp_mapping DROP INDEX uq_frp_port_v2, DROP INDEX uq_frp_domain_v2, DROP COLUMN cn_port_key_v2, DROP COLUMN cn_domain_key_v1, ADD UNIQUE INDEX uni_frp_mapping_remote_port(remote_port)").Error; err != nil {
 			t.Error(err)
 			return
 		}

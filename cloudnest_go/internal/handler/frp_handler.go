@@ -37,6 +37,7 @@ type UpdateDeviceRequest struct {
 
 // CreateMappingRequest 创建 FRP 映射请求。
 type CreateMappingRequest struct {
+	ServerID   int64  `json:"server_id"`
 	DeviceID   int64  `json:"device_id" binding:"required"`
 	LocalPort  int    `json:"local_port" binding:"required"`
 	RemotePort *int   `json:"remote_port"`
@@ -46,6 +47,7 @@ type CreateMappingRequest struct {
 
 // UpdateMappingRequest 更新 FRP 映射请求。
 type UpdateMappingRequest struct {
+	ServerID   *int64  `json:"server_id"`
 	LocalPort  *int    `json:"local_port"`
 	RemotePort *int    `json:"remote_port"`
 	Domain     *string `json:"domain"`
@@ -247,13 +249,14 @@ func (h *FrpHandler) CreateMapping(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid local_port"})
 		return
 	}
-	if req.RemotePort != nil && (*req.RemotePort <= 0 || *req.RemotePort > 65535) {
+	if req.RemotePort != nil && (*req.RemotePort < 0 || *req.RemotePort > 65535) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid remote_port"})
 		return
 	}
 	req.Domain = strings.TrimSpace(req.Domain)
 
 	created, allocErr := h.Svc.CreateMapping(c.Request.Context(), uid, h.isAdmin(c), service.CreateMappingInput{
+		ServerID:   req.ServerID,
 		ClientIP:   c.ClientIP(),
 		DeviceID:   req.DeviceID,
 		LocalPort:  req.LocalPort,
@@ -309,6 +312,10 @@ func (h *FrpHandler) UpdateMapping(c *gin.Context) {
 		return
 	}
 
+	if req.ServerID != nil {
+		c.JSON(400, gin.H{"error": "mapping server_id is immutable"})
+		return
+	}
 	mapping, err := h.Svc.UpdateMapping(c.Request.Context(), uid, h.isAdmin(c), mappingID, service.UpdateMappingInput{
 		ClientIP:   c.ClientIP(),
 		LocalPort:  req.LocalPort,
@@ -717,14 +724,16 @@ func publicFRPConfig(cfg model.FrpConfig) gin.H {
 func (h *FrpHandler) writeMappingError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, gorm.ErrRecordNotFound):
-		c.JSON(404, gin.H{"error": "mapping or device not found"})
+		c.JSON(404, gin.H{"error": "mapping, device or server not found"})
 	case errors.Is(err, contract.ErrForbidden):
 		c.JSON(403, gin.H{"error": "permission denied"})
 	case errors.Is(err, contract.ErrInvalidInput):
 		c.JSON(400, gin.H{"error": "invalid mapping fields"})
+	case errors.Is(err, frpconfig.ErrInvalid), errors.Is(err, frpconfig.ErrUnavailable), errors.Is(err, frpconfig.ErrLegacy):
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "mapping server policy unavailable"})
 	case errors.Is(err, contract.ErrFrpMappingBusy):
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "mapping operation busy; retry later"})
-	case errors.Is(err, contract.ErrFrpMappingConflict):
+	case errors.Is(err, contract.ErrFrpMappingConflict), errors.Is(err, contract.ErrConflict):
 		c.JSON(409, gin.H{"error": "mapping port or domain already exists"})
 	case errors.Is(err, contract.ErrFrpPortExhausted):
 		c.JSON(409, gin.H{"error": "remote port pool exhausted"})

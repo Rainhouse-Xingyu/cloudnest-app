@@ -77,6 +77,15 @@ func Check(tx *gorm.DB, server, device int64, credential string, keys []Key) err
 	return nil
 }
 func mappingConflicts(tx *gorm.DB, server, device int64, keys []Key) error {
+	return checkMappings(tx, namespace(tx.Model(&model.FrpMapping{}), server).Where("device_id<>?", device), keys)
+}
+
+// CheckMapping includes other mappings on the same device: namespace zero and
+// a selected server must not allocate overlapping resources even to one owner.
+func CheckMapping(tx *gorm.DB, mapping model.FrpMapping) error {
+	return checkMappings(tx, namespace(tx.Model(&model.FrpMapping{}), mapping.ServerID).Where("id<>?", mapping.ID), MappingKeys(mapping))
+}
+func checkMappings(tx, q *gorm.DB, keys []Key) error {
 	var ports []int
 	var domains []string
 	unknown := false
@@ -91,7 +100,6 @@ func mappingConflicts(tx *gorm.DB, server, device int64, keys []Key) error {
 			domains = append(domains, key.Kind+"://"+key.Resource)
 		}
 	}
-	q := namespace(tx.Model(&model.FrpMapping{}), server).Where("device_id<>?", device)
 	if !unknown {
 		filter := tx.Session(&gorm.Session{NewDB: true}).Where("1=0")
 		if len(ports) > 0 {

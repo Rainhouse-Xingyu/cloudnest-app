@@ -226,9 +226,9 @@ func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest, retire 
 		}
 	})
 	for _, mapping := range []contract.FrpCreateMappingInput{
-		{FrpActor: contract.FrpActor{UserID: f.aliceID}, DeviceID: device, LocalPort: plainPort, RemotePort: &remote, Status: 1},
-		{FrpActor: contract.FrpActor{UserID: f.aliceID}, DeviceID: device, LocalPort: plainPort, Domain: "example.com", Status: 1},
-		{FrpActor: contract.FrpActor{UserID: f.aliceID}, DeviceID: device, LocalPort: securePort, Domain: "https://example.com", Status: 1},
+		{FrpActor: contract.FrpActor{UserID: f.aliceID}, DeviceID: device, ServerID: registered.Item.ID, LocalPort: plainPort, RemotePort: &remote, Status: 1},
+		{FrpActor: contract.FrpActor{UserID: f.aliceID}, DeviceID: device, ServerID: registered.Item.ID, LocalPort: plainPort, Domain: "example.com", Status: 1},
+		{FrpActor: contract.FrpActor{UserID: f.aliceID}, DeviceID: device, ServerID: registered.Item.ID, LocalPort: securePort, Domain: "https://example.com", Status: 1},
 	} {
 		if _, err := repo.CreateMapping(ctx, mapping); err != nil {
 			t.Fatal(err)

@@ -98,7 +98,7 @@ func (r *FrpRepo) GetMappingByID(ctx context.Context, mappingID int64) (model.Fr
 
 func (r *FrpRepo) ListActiveMappingsByDeviceID(ctx context.Context, deviceID int64) ([]model.FrpMapping, error) {
 	rows := make([]model.FrpMapping, 0)
-	if err := r.db.WithContext(ctx).Where("device_id = ? AND status = 1", deviceID).Order("id ASC").Find(&rows).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("device_id = ? AND status = 1 AND server_id = 0", deviceID).Limit(513).Order("id ASC").Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	return rows, nil

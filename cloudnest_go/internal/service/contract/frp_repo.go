@@ -16,6 +16,7 @@ type FrpActor struct {
 
 // FrpCreateMappingInput 定义创建映射输入。
 type FrpCreateMappingInput struct {
+	ServerID int64
 	FrpActor
 	DeviceID   int64
 	LocalPort  int

@@ -281,7 +281,7 @@ type FrpMapping struct {
 	ID         int64     `gorm:"primaryKey;autoIncrement" json:"id"`
 	DeviceID   int64     `gorm:"not null" json:"device_id"`
 	LocalPort  int       `gorm:"not null" json:"local_port"`
-	RemotePort int       `gorm:"not null;unique" json:"remote_port"`
+	RemotePort int       `gorm:"not null" json:"remote_port"`
 	Domain     string    `gorm:"type:varchar(100)" json:"domain"`
 	Status     int8      `gorm:"type:tinyint;default:1" json:"status"`
 	CreateTime time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP" json:"create_time"`

@@ -45,6 +45,6 @@ redis_addr=$(docker port "$redis_id" 6379/tcp)
 export CLOUDNEST_TEST_DISPOSABLE=1
 export CLOUDNEST_TEST_MYSQL_DSN="cloudnest_test:cloudnest-disposable-test@tcp($mysql_addr)/cloudnest_test?charset=utf8mb4&parseTime=True&loc=UTC"
 export CLOUDNEST_TEST_REDIS_ADDR="$redis_addr"
-# The expanded complete suite exceeds six minutes on local Docker/macOS.
+# The 286-case suite can exceed eight minutes on local Docker/macOS.
 # This is a suite watchdog; individual cancellation and resource deadlines stay strict.
-go test -tags=integration -race -count=1 -timeout=8m -v ./integration "$@"
+go test -tags=integration -race -count=1 -timeout=10m -v ./integration "$@"

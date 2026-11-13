@@ -197,7 +197,7 @@ func (r *FrpRepo) BuildServerConfig(ctx context.Context, actor contract.FrpActor
 			return err
 		}
 		var mappings []model.FrpMapping
-		if err := tx.Where("device_id=? AND status=1", deviceID).Order("id").Find(&mappings).Error; err != nil {
+		if err := tx.Where("device_id=? AND status=1 AND server_id IN ?", deviceID, []int64{0, serverID}).Order("id").Limit(513).Find(&mappings).Error; err != nil {
 			return err
 		}
 		if len(mappings) == 0 || len(mappings) > 512 {

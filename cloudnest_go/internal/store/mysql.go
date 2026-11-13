@@ -63,7 +63,6 @@ func Migrate(db *gorm.DB) error {
 		&model.Device{},
 		&model.AgentBinding{},
 		&model.AgentCommand{},
-		&model.FrpMapping{},
 		&model.FrpMappingPool{},
 		&model.FrpReservation{},
 		&model.FrpReservationSchema{},
@@ -76,10 +75,13 @@ func Migrate(db *gorm.DB) error {
 		return fmt.Errorf("migrate schema failed: %w", err)
 	}
 
-	if err := installMappingSchema(db); err != nil {
+	if err := prepareMappingSchema(db); err != nil {
 		return err
 	}
 	if err := installReservationSchema(db); err != nil {
+		return err
+	}
+	if err := upgradeScopedMappingSchema(db); err != nil {
 		return err
 	}
 	if err := installAgentTriggers(db); err != nil {
