@@ -346,3 +346,5 @@ G05 旧版升级演练使用 `50ac977d416823487ee8ba2bdb63462610ad930c` 编译�
 补充旧租约与新占用断言后，同一真实旧版升级演练再次通过（4.61s，包 6.427s，`/tmp/cloudnest-g05-real-upgrade-final.log`）。旧启动类命令的成功回执被拒绝，重新入队的部署生成 TCP 占用。8 项运行占用 race 专项通过（14.640s，`/tmp/cloudnest-g05-upgrade-reservations.log`），覆盖已升级库中仍有未结束启动命令时拒绝对账。`make check test`、升级标签 vet、脚本语法和补丁检查通过。
 
 G05 Linux 用户服务增加 `systemd-unit` 及临时服务验收。路径转义/非法路径测试、`make check test build-linux`、Linux amd64 专项集成编译及脚本语法通过（`/tmp/cloudnest-g05-systemd-check.log`）。本机是 Darwin，systemd 运行验证由新提交的 Ubuntu CI 执行。
+
+G05 旧协议离线判定改用服务端接收时间，保留状态字段和七天缓存。旧协议超时、未来时间、坏时间、恢复上报和主动离线与现有 Agent 心跳/身份、退役行为的 3 项 race 集成通过（8.329s，`/tmp/cloudnest-g05-heartbeat-final.log`）。

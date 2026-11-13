@@ -385,3 +385,32 @@ func TestAgentOwnershipChangeAndDeletionInvalidateBothSecrets(t *testing.T) {
 		t.Fatal("deleted owner still has lookup keys", err)
 	}
 }
+
+func TestLegacyFRPStatusExpiresByServerReceipt(t *testing.T) {
+	f := newFixture(t)
+	id := agentDevice(t, f)
+	path := fmt.Sprintf("/api/frp/devices/%d/status", id)
+	cache := fmt.Sprintf("frp:device:status:%d", id)
+	online := func(want bool) {
+		t.Helper()
+		var result struct{ Item struct{ Online bool } }
+		decode(t, f.json(t, "GET", path, f.alice, nil, 200), &result)
+		if result.Item.Online != want {
+			t.Fatalf("online=%t, want %t", result.Item.Online, want)
+		}
+	}
+	online(false)
+	future := time.Now().UTC().Add(time.Hour).Format(time.RFC3339)
+	f.json(t, "POST", path+"/report", f.alice, map[string]any{"online": true, "last_heartbeat": future}, 200)
+	online(true)
+	for _, stale := range []string{time.Now().UTC().Add(-2 * time.Minute).Format(time.RFC3339Nano), future, "invalid"} {
+		if err := f.rdb.HSet(t.Context(), cache, "updated_at", stale).Err(); err != nil {
+			t.Fatal(err)
+		}
+		online(false)
+	}
+	f.json(t, "POST", path+"/report", f.alice, map[string]any{"online": true}, 200)
+	online(true)
+	f.json(t, "POST", path+"/report", f.alice, map[string]any{"online": false}, 200)
+	online(false)
+}

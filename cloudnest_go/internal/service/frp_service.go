@@ -318,7 +318,8 @@ func (s *FrpService) ReportDeviceStatus(ctx context.Context, uid int64, isAdmin 
 }
 func (s *FrpService) writeLegacyStatus(ctx context.Context, deviceID int64, req ReportDeviceStatusInput) error {
 
-	heartbeatAt := time.Now()
+	receivedAt := time.Now().UTC()
+	heartbeatAt := receivedAt
 	if strings.TrimSpace(req.LastHeartbeat) != "" {
 		parsed, parseErr := time.Parse(time.RFC3339, strings.TrimSpace(req.LastHeartbeat))
 		if parseErr != nil {
@@ -341,7 +342,7 @@ func (s *FrpService) writeLegacyStatus(ctx context.Context, deviceID int64, req 
 		"last_heartbeat":    heartbeatAt.Format(time.RFC3339),
 		"last_error":        lastError,
 		"client_version":    strings.TrimSpace(req.ClientVersion),
-		"updated_at":        time.Now().Format(time.RFC3339),
+		"updated_at":        receivedAt.Format(time.RFC3339Nano),
 		"current_config_id": 0,
 	}
 	if req.CurrentConfigID != nil && *req.CurrentConfigID > 0 {
@@ -366,10 +367,9 @@ func (s *FrpService) GetDeviceStatus(ctx context.Context, uid int64, isAdmin boo
 		state := DeviceStatusResult{ClientVersion: heartbeat.ClientVersion}
 		if heartbeat.Active && heartbeat.LastSeenAt != nil {
 			received := heartbeat.LastSeenAt.UTC().Format(time.RFC3339Nano)
-			age := time.Since(*heartbeat.LastSeenAt)
 			state.LastHeartbeat = &received
 			state.UpdatedAt = received
-			state.Online = age >= 0 && age < agentauth.HeartbeatTTL
+			state.Online = freshFRPHeartbeat(*heartbeat.LastSeenAt)
 		}
 		return state, nil
 	}
@@ -384,14 +384,20 @@ func (s *FrpService) GetDeviceStatus(ctx context.Context, uid int64, isAdmin boo
 	}
 
 	lastHeartbeat := data["last_heartbeat"]
+	receivedAt, parseErr := time.Parse(time.RFC3339Nano, data["updated_at"])
 	return DeviceStatusResult{
-		Online:          data["online"] == "1",
+		Online:          data["online"] == "1" && parseErr == nil && freshFRPHeartbeat(receivedAt),
 		LastHeartbeat:   &lastHeartbeat,
 		LastError:       data["last_error"],
 		ClientVersion:   data["client_version"],
 		UpdatedAt:       data["updated_at"],
 		CurrentConfigID: data["current_config_id"],
 	}, nil
+}
+
+func freshFRPHeartbeat(receivedAt time.Time) bool {
+	age := time.Since(receivedAt)
+	return age >= 0 && age < agentauth.HeartbeatTTL
 }
 
 // PullNextCommand 拉取设备下一条待执行命令。
