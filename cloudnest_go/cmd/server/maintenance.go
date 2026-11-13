@@ -7,13 +7,16 @@ import (
 	"strings"
 
 	"cloudenest_go/internal/auth"
+	storageMysql "cloudenest_go/internal/storage/mysql"
 )
 
 type maintenanceCommand struct {
-	kind       string
-	userID     int64
-	username   string
-	limitBytes int64
+	kind          string
+	userID        int64
+	username      string
+	limitBytes    int64
+	reservationID int64
+	evidence      string
 }
 
 func parseMaintenanceArgs(args []string) (maintenanceCommand, bool, error) {
@@ -26,6 +29,23 @@ func parseMaintenanceArgs(args []string) (maintenanceCommand, bool, error) {
 			return maintenanceCommand{}, true, errors.New("maintenance command does not accept extra arguments")
 		}
 		return maintenanceCommand{kind: args[0]}, true, nil
+	case "reconcile-frp-reservation":
+		usage := errors.New("usage: cloudnest reconcile-frp-reservation <positive-reservation-id> [--confirm-decommissioned <evidence-reference>]")
+		if len(args) != 2 && len(args) != 4 {
+			return maintenanceCommand{}, true, usage
+		}
+		id, err := strconv.ParseInt(args[1], 10, 64)
+		if err != nil || id <= 0 {
+			return maintenanceCommand{}, true, usage
+		}
+		command := maintenanceCommand{kind: args[0], reservationID: id}
+		if len(args) == 4 {
+			if args[2] != "--confirm-decommissioned" || !storageMysql.ValidFRPReservationEvidence(args[3]) {
+				return maintenanceCommand{}, true, usage
+			}
+			command.evidence = args[3]
+		}
+		return command, true, nil
 	case "set-transfer-limit":
 		if len(args) != 2 {
 			return maintenanceCommand{}, true, errors.New("usage: cloudnest set-transfer-limit <positive-bytes>; DATA_DIR must be explicit")

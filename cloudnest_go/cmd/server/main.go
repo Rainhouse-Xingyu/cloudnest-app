@@ -51,7 +51,7 @@ func main() {
 	if err := applyCLIOverrides(&cfg, args); err != nil {
 		log.Fatalf("启动参数错误: %v", err)
 	}
-	databaseOnly := maintenance.kind == "audit-frp-configs" || maintenance.kind == "encrypt-frp-configs" || maintenance.kind == "audit-file-names" || maintenance.kind == "migrate-file-names" || maintenance.kind == "audit-storage-references" || maintenance.kind == "migrate-storage-references" || maintenance.kind == "gc-storage" || maintenance.kind == "prune-read-leases" || maintenance.kind == "audit-transfers" || maintenance.kind == "reconcile-transfers" || maintenance.kind == "set-transfer-limit"
+	databaseOnly := maintenance.kind == "reconcile-frp-reservation" || maintenance.kind == "audit-frp-configs" || maintenance.kind == "encrypt-frp-configs" || maintenance.kind == "audit-file-names" || maintenance.kind == "migrate-file-names" || maintenance.kind == "audit-storage-references" || maintenance.kind == "migrate-storage-references" || maintenance.kind == "gc-storage" || maintenance.kind == "prune-read-leases" || maintenance.kind == "audit-transfers" || maintenance.kind == "reconcile-transfers" || maintenance.kind == "set-transfer-limit"
 	if databaseOnly {
 		err = cfg.ValidateDatabase()
 	} else {
@@ -99,6 +99,15 @@ func main() {
 	}
 	if maintenance.kind != "" {
 		switch maintenance.kind {
+		case "reconcile-frp-reservation":
+			if err = store.CheckAgentSchema(db); err != nil {
+				break
+			}
+			var report storageMysql.FRPReservationReview
+			report, err = storageMysql.NewFrpRepo(db).ReconcileReservation(context.Background(), maintenance.reservationID, maintenance.evidence)
+			if err == nil {
+				err = json.NewEncoder(os.Stdout).Encode(report)
+			}
 		case "audit-frp-configs", "encrypt-frp-configs":
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 			defer cancel()
@@ -375,6 +384,7 @@ func printUsage() {
 	fmt.Println("  cloudnest reconcile-transfers  有界对账/清理已登记且不再使用的候选，需要显式 DATA_DIR")
 	fmt.Println("  cloudnest set-transfer-limit <bytes> 设置当前本地卷的持久临时存储上限")
 	fmt.Println("  cloudnest prune-read-leases    每次最多清理 256 条已过期内部读取租约，不删除文件")
+	fmt.Println("  cloudnest reconcile-frp-reservation <id> [--confirm-decommissioned <evidence>]  核对历史占用，或凭停用证据解除阻挡")
 	fmt.Println("  cloudnest audit-frp-configs     校验配置密文并统计明文/旧密钥记录（只读）")
 	fmt.Println("  cloudnest encrypt-frp-configs   显式加密历史配置或重加密旧密钥版本（先备份并停旧实例）")
 	fmt.Println("  cloudnest migrate              显式应用模型结构（先备份数据库）")

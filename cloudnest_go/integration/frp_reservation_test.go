@@ -255,8 +255,20 @@ func TestFRPReservationExplicitMigrationKeepsOpaqueHistory(t *testing.T) {
 	if err := f.db.Model(&model.FrpReservation{}).Where("reference=?", held.Reference).Count(&count).Error; err != nil || count != 1 {
 		t.Fatal("migration duplicated opaque hold", count, err)
 	}
-	if err := store.CheckReservationSchema(f.db); err != nil {
+	// Upgrade a v1 ledger without the reconciliation field. Existing claims
+	// must remain active and keep their original IDs.
+	if err := f.db.Exec("ALTER TABLE frp_reservation DROP COLUMN reconciled_at").Error; err != nil {
 		t.Fatal(err)
+	}
+	if err := store.CheckReservationSchema(f.db); err == nil {
+		t.Fatal("missing reconciliation column accepted")
+	}
+	if err := store.Migrate(f.db); err != nil {
+		t.Fatal(err)
+	}
+	var upgraded model.FrpReservation
+	if err := f.db.First(&upgraded, held.ID).Error; err != nil || upgraded.Reference != held.Reference || upgraded.ReconciledAt != nil {
+		t.Fatal("ledger upgrade changed historical claim", err)
 	}
 }
 
@@ -451,5 +463,88 @@ func TestFRPReservationDomainSurvivesMappingChange(t *testing.T) {
 	request.Domain = domain
 	if _, err := r.CreateMapping(ctx, request); err != nil {
 		t.Fatal("confirmed forget did not free old HTTP domain", err)
+	}
+}
+
+func TestFRPReservationHistoricalReconciliation(t *testing.T) {
+	f := newFixture(t)
+	device := mappingDevice(t, f, f.aliceID)
+	ctx := context.Background()
+	r := repo.NewFrpRepo(f.db)
+	actor := contract.FrpActor{UserID: f.aliceID}
+	cfg := model.FrpConfig{DeviceID: &device, ConfigText: "historical fixture content"}
+	if err := f.db.Create(&cfg).Error; err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { f.db.Delete(&cfg) })
+	old := model.FrpReservation{OwnerID: f.aliceID, DeviceID: device, ConfigID: cfg.ID, Reference: fmt.Sprintf("legacy-config:%d", cfg.ID), Kind: "unknown"}
+	if err := f.db.Create(&old).Error; err != nil {
+		t.Fatal(err)
+	}
+	inspect, err := r.ReconcileReservation(ctx, old.ID, "")
+	if err != nil || inspect.Eligibility != "legacy_execution_enabled" {
+		t.Fatal(inspect, err)
+	}
+	if _, err := r.ReconcileReservation(ctx, old.ID, "CHG-42"); !errors.Is(err, contract.ErrConflict) {
+		t.Fatal("unfenced legacy claim released", err)
+	}
+	commandIdentity(t, f, device)
+	var binding model.AgentBinding
+	if err := f.db.First(&binding, "device_id=?", device).Error; err != nil {
+		t.Fatal(err)
+	}
+	current := model.FrpReservation{OwnerID: f.aliceID, DeviceID: device, CredentialID: *binding.CredentialID, ConfigID: cfg.ID, Reference: fmt.Sprintf("fixture-current:%d", device), Kind: "tcp", Resource: "32401"}
+	if err := f.db.Create(&current).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.ReconcileReservation(ctx, current.ID, "CHG-42"); !errors.Is(err, contract.ErrConflict) {
+		t.Fatal("current claim released", err)
+	}
+	input := contract.FrpCreateMappingInput{FrpActor: actor, DeviceID: device, LocalPort: 8080, Status: 1}
+	if _, err := r.CreateMapping(ctx, input); !errors.Is(err, contract.ErrFrpMappingConflict) {
+		t.Fatal("historical unknown claim did not block allocation", err)
+	}
+	hook := "test:reconciliation_audit_failure"
+	if err := f.db.Callback().Create().Before("gorm:create").Register(hook, func(tx *gorm.DB) {
+		if row, ok := tx.Statement.Dest.(*model.OperationLog); ok && row.Action == "frp.reservation.reconcile" {
+			tx.AddError(errors.New("fixture audit failure"))
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, fault := r.ReconcileReservation(ctx, old.ID, "CHG-42")
+	if err := f.db.Callback().Create().Remove(hook); err != nil {
+		t.Fatal(err)
+	}
+	if fault == nil {
+		t.Fatal("reconciliation committed without audit")
+	}
+	inspect, err = r.ReconcileReservation(ctx, old.ID, "")
+	if err != nil || inspect.Eligibility != "historical" || inspect.Claim.ReconciledAt != nil {
+		t.Fatal(inspect, err)
+	}
+	for _, expected := range []string{"reconciled", "already_reconciled"} {
+		got, err := r.ReconcileReservation(ctx, old.ID, "CHG-42")
+		if err != nil || got.Eligibility != expected || got.Claim.ReconciledAt == nil {
+			t.Fatal(got, err)
+		}
+	}
+	if _, err := r.CreateMapping(ctx, input); err != nil {
+		t.Fatal("reconciled historical claim still blocks allocation", err)
+	}
+	var preserved model.FrpConfig
+	if err := f.db.First(&preserved, cfg.ID).Error; err != nil || preserved.ConfigText != cfg.ConfigText {
+		t.Fatal("configuration history changed", err)
+	}
+	var audits int64
+	if err := f.db.Model(&model.OperationLog{}).Where("action=? AND detail=?", "frp.reservation.reconcile", fmt.Sprintf("reservation_id=%d device_id=%d config_id=%d evidence=CHG-42", old.ID, device, cfg.ID)).Count(&audits).Error; err != nil || audits != 1 {
+		t.Fatal("reconciliation audit count", audits, err)
+	}
+	if err := agentauth.New(f.db).Revoke(ctx, f.aliceID, device, "disposable-fixture-password"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := r.ReconcileReservation(ctx, current.ID, "CHG-43")
+	if err != nil || got.Eligibility != "reconciled" {
+		t.Fatal(got, err)
 	}
 }

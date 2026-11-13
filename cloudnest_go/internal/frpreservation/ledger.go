@@ -64,7 +64,7 @@ func Check(tx *gorm.DB, server, device int64, credential string, keys []Key) err
 	if len(keys) == 0 {
 		return nil
 	}
-	q := namespace(tx.Model(&model.FrpReservation{}), server)
+	q := namespace(tx.Model(&model.FrpReservation{}).Where("reconciled_at IS NULL"), server)
 	q = excludeCurrent(q, device, credential).Where(matching(tx.Session(&gorm.Session{NewDB: true}), keys))
 	var found model.FrpReservation
 	err := q.Select("id").Limit(1).Take(&found).Error
@@ -147,7 +147,7 @@ func Release(tx *gorm.DB, device int64, credential string) error {
 	if device <= 0 || credential == "" {
 		return contract.ErrInvalidInput
 	}
-	return tx.Where("device_id=? AND credential_id=?", device, credential).Delete(&model.FrpReservation{}).Error
+	return tx.Where("device_id=? AND credential_id=? AND reconciled_at IS NULL", device, credential).Delete(&model.FrpReservation{}).Error
 }
 func Credential(tx *gorm.DB, device int64) (string, error) {
 	var row model.AgentBinding
@@ -181,7 +181,7 @@ func MappingKeys(m model.FrpMapping) []Key {
 }
 func UsedPorts(tx *gorm.DB, server, device int64, credential string, start, end int) ([]int, error) {
 	var unknown model.FrpReservation
-	q := excludeCurrent(namespace(tx.Model(&model.FrpReservation{}), server), device, credential)
+	q := excludeCurrent(namespace(tx.Model(&model.FrpReservation{}).Where("reconciled_at IS NULL"), server), device, credential)
 	err := q.Where("kind='unknown'").Select("id").Take(&unknown).Error
 	if err == nil {
 		return nil, contract.ErrFrpMappingConflict
@@ -190,7 +190,7 @@ func UsedPorts(tx *gorm.DB, server, device int64, credential string, start, end 
 		return nil, err
 	}
 	var values []string
-	q = excludeCurrent(namespace(tx.Model(&model.FrpReservation{}), server), device, credential)
+	q = excludeCurrent(namespace(tx.Model(&model.FrpReservation{}).Where("reconciled_at IS NULL"), server), device, credential)
 	if err := q.Where("kind='tcp' AND CAST(resource AS UNSIGNED) BETWEEN ? AND ?", start, end).Distinct().Pluck("resource", &values).Error; err != nil {
 		return nil, err
 	}

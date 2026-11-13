@@ -79,6 +79,13 @@ func CheckReservationSchema(db *gorm.DB) error {
 			return fmt.Errorf("FRP resource column invalid: %s.%s", spec.table, spec.column)
 		}
 	}
+	var reconciled int
+	if err := db.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='frp_reservation' AND column_name='reconciled_at' AND data_type='datetime' AND datetime_precision=6 AND is_nullable='YES' AND column_default IS NULL AND extra='' AND generation_expression=''").Scan(&reconciled).Error; err != nil {
+		return err
+	}
+	if reconciled != 1 {
+		return fmt.Errorf("FRP reservation reconciliation column invalid; run explicit migrate")
+	}
 	var engines int
 	if err := db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('frp_reservation','frp_reservation_schema') AND engine='InnoDB'").Scan(&engines).Error; err != nil {
 		return err

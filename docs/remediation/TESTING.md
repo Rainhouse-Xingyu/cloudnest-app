@@ -336,3 +336,7 @@ Darwin arm64 首次真实 launchd 测试通过（35.27s，`/tmp/cloudnest-g05-la
 最终公网 IP 虚拟主机对照 **完整通过（74.39s，包 76.431s）**，日志 `/tmp/cloudnest-g05-public-iphost.log`。真实 Agent 0.3.0 + 官方 frpc 0.71.1 经 HTTPS 管理接口部署到操作者的独立 frps：TCP 20080、HTTP 18080（Host 为测试 IP）、HTTPS 18443（example.com SNI 且校验上游证书）均返回本轮随机 nonce。stop/start、正常 Agent 重启、forget 后三种上游响应消失且控制 TLS 仍可认证、账本 3→0、重启 start/reload 拒绝旧配置、重新部署三隧道及再次清除全部通过。未修改正式 frpc/frps 或远端配置。example.com 纯 HTTP 路径超时仍单独开放，不能宣称真实 DNS/所有代理配置已通过。
 
 受全量套件看门狗中断的上传暂停/恢复相关四项顶层 race 补测通过（28.314s，`/tmp/cloudnest-g05-scope-timeout-tail.log`），包含原有跨实例 27s 取消界限；不以补测替代新提交完整 CI。带全部三种测试标签的 vet、脚本语法、仓库卫生和补丁格式检查通过。
+
+提交 `57c38b62b990368709e8346c068e4dd31cec2309` 的 PR `43354306624` 和 push `43354300132` 四项 CI 均成功。PR 日志确认完整普通 race 集成 376.724s、独立网络集成 97.765s，覆盖新旧映射迁移。此前本地总期限超时保留原记录。
+
+G05 历史占用维护命令的 8 项 race 集成通过（16.737s，`/tmp/cloudnest-g05-reconciliation-final.log`）。覆盖旧账本加列且保留 ID/有效状态、拒绝仍可领取旧 JWT 命令的设备、拒绝当前凭据代次、审计故障回滚、重复确认及恢复分配。`make check test`、带 integration/frpnative/frppublic 标签的 vet、仓库卫生和补丁格式检查通过。所有写入均限于临时测试库。
