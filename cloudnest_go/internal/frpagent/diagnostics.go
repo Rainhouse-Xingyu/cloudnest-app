@@ -35,6 +35,7 @@ type localDiagnostics struct {
 	address, password string
 	expected          map[string]string
 	order             []string
+	upstreams         []proxy
 }
 
 func (d *localDiagnostics) close() { d.client.CloseIdleConnections() }
@@ -138,7 +139,7 @@ func prepareDiagnostics(s *Store) (*localDiagnostics, *os.File, error) {
 		ResponseHeaderTimeout: time.Second, MaxResponseHeaderBytes: 8192, DisableKeepAlives: true}
 	client := &http.Client{Transport: tr, Timeout: 2 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	ok = true
-	return &localDiagnostics{client: client, address: "https://127.0.0.1:" + strconv.Itoa(port), password: password, expected: expected, order: order}, reader, nil
+	return &localDiagnostics{client: client, address: "https://127.0.0.1:" + strconv.Itoa(port), password: password, expected: expected, order: order, upstreams: proxies}, reader, nil
 }
 func (d *localDiagnostics) read(ctx context.Context) (RegistrationStatus, error) {
 	result := RegistrationStatus{State: "unavailable", Expected: len(d.expected)}

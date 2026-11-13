@@ -392,11 +392,11 @@ func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest, retire 
 					t.Fatal("runtime mapping metadata missing")
 				}
 				for i, id := range mappingIDs {
-					if view := body.Item.RuntimeProxies[i]; view.MappingID != id || view.State != "registered" {
+					if view := body.Item.RuntimeProxies[i]; view.MappingID != id || view.State != "registered" || view.Upstream != "reachable" {
 						t.Fatal("runtime mapping association incorrect", view)
 					}
 				}
-				t.Log("ordinary heartbeat published all three registered mappings without a diagnose command")
+				t.Log("ordinary heartbeat published registration and local TCP reachability for all three mappings")
 				break
 			}
 			if time.Now().After(until) {

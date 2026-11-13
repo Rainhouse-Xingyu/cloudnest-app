@@ -31,6 +31,7 @@ type Client struct {
 	http             *http.Client
 	proxyStatusV1    bool
 	runtimeStatusV1  bool
+	upstreamTCPV1    bool
 }
 type Registration struct {
 	DeviceID   int64  `json:"device_id"`
@@ -142,6 +143,7 @@ func (c *Client) heartbeat(ctx context.Context, report *RegistrationStatus) erro
 		DeviceID        int64 `json:"device_id"`
 		ProxyStatusV1   bool  `json:"proxy_status_v1"`
 		RuntimeStatusV1 bool  `json:"runtime_status_v1"`
+		UpstreamTCPV1   bool  `json:"upstream_tcp_v1"`
 	}
 	body := map[string]any{"client_version": "cloudnest-agent-0.3.0"}
 	if c.runtimeStatusV1 && report != nil {
@@ -159,6 +161,7 @@ func (c *Client) heartbeat(ctx context.Context, report *RegistrationStatus) erro
 		}
 		c.proxyStatusV1 = out.ProxyStatusV1
 		c.runtimeStatusV1 = out.RuntimeStatusV1
+		c.upstreamTCPV1 = out.UpstreamTCPV1
 	}
 	return e
 }

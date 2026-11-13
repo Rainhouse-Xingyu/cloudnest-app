@@ -51,6 +51,10 @@ func Registration(report *agentstatus.Report, ids []int64) []agentstatus.ProxyVi
 	for i, id := range ids {
 		state := (report.ProxyStates[i/4] >> (2 * (i % 4))) & 3
 		out[i] = agentstatus.ProxyView{MappingID: id, State: states[state]}
+		if len(report.UpstreamStates) != 0 {
+			upstream := (report.UpstreamStates[i/4] >> (2 * (i % 4))) & 3
+			out[i].Upstream = [...]string{"unknown", "reachable", "unreachable"}[upstream]
+		}
 	}
 	return out
 }

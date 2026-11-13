@@ -176,11 +176,13 @@ func TestDiagnosticMappingIDsComeFromSavedVersion(t *testing.T) {
 	if len(proxies) != 2 || proxies[0].MappingID != mapping.ID || proxies[0].State != "failed" || proxies[1].MappingID != 0 || proxies[1].State != "registered" {
 		t.Fatal("status did not match historical configuration", proxies)
 	}
-	if _, err := agentauth.New(f.db).BeatWithReport(ctx, key, "cloudnest-agent-0.3.0", &report); err != nil {
+	runtime := report
+	runtime.UpstreamStates = []byte{9}
+	if _, err := agentauth.New(f.db).BeatWithReport(ctx, key, "cloudnest-agent-0.3.0", &runtime); err != nil {
 		t.Fatal(err)
 	}
 	heartbeat, err := repo.GetAgentHeartbeat(ctx, f.aliceID, false, device)
-	if err != nil || heartbeat == nil || len(heartbeat.RuntimeProxies) != 2 || heartbeat.RuntimeProxies[0] != proxies[0] || heartbeat.RuntimeProxies[1] != proxies[1] {
+	if err != nil || heartbeat == nil || len(heartbeat.RuntimeProxies) != 2 || heartbeat.RuntimeProxies[0] != (agentstatus.ProxyView{MappingID: mapping.ID, State: "failed", Upstream: "reachable"}) || heartbeat.RuntimeProxies[1] != (agentstatus.ProxyView{State: "registered", Upstream: "unreachable"}) {
 		t.Fatal("automatic sample did not match historical configuration", heartbeat, err)
 	}
 	if _, err := repo.GetAgentHeartbeat(ctx, f.bobID, false, device); !errors.Is(err, contract.ErrForbidden) {

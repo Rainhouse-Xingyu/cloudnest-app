@@ -46,6 +46,7 @@ type Registered struct {
 type Heartbeat struct {
 	DeviceID        int64     `json:"device_id"`
 	ReceivedAt      time.Time `json:"received_at"`
+	UpstreamTCPV1   bool      `json:"upstream_tcp_v1,omitempty"`
 	RuntimeStatusV1 bool      `json:"runtime_status_v1,omitempty"`
 	ProxyStatusV1   bool      `json:"proxy_status_v1,omitempty"`
 }
@@ -234,7 +235,7 @@ func (m *Manager) BeatWithReport(ctx context.Context, raw, version string, repor
 			return Heartbeat{}, ErrInput
 		}
 	}
-	data, err := agentstatus.Encode(report)
+	data, err := agentstatus.EncodeRuntime(report)
 	if err != nil {
 		return Heartbeat{}, ErrInput
 	}
@@ -262,7 +263,7 @@ func (m *Manager) BeatWithReport(ctx context.Context, raw, version string, repor
 		if err = tx.Model(&b).Updates(map[string]any{"last_seen_at": now, "client_version": version, "runtime_report": data}).Error; err != nil {
 			return err
 		}
-		result = Heartbeat{DeviceID: b.DeviceID, ReceivedAt: now, ProxyStatusV1: true, RuntimeStatusV1: true}
+		result = Heartbeat{DeviceID: b.DeviceID, ReceivedAt: now, ProxyStatusV1: true, RuntimeStatusV1: true, UpstreamTCPV1: true}
 		return nil
 	})
 	if err != nil {

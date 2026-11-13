@@ -172,7 +172,7 @@ func (r *FrpRepo) GetAgentHeartbeat(ctx context.Context, uid int64, admin bool, 
 	state := &contract.AgentHeartbeatState{Active: snapshot.Active, LastSeenAt: snapshot.LastSeenAt, ClientVersion: snapshot.ClientVersion}
 	if snapshot.Active {
 		// A damaged optional snapshot must not hide the device's online state.
-		state.Runtime, _ = agentstatus.Decode(snapshot.RuntimeReport)
+		state.Runtime, _ = agentstatus.DecodeRuntime(snapshot.RuntimeReport)
 		if r.keys != nil && state.Runtime != nil && len(state.Runtime.ProxyStates) != 0 {
 			var cfg model.FrpConfig
 			err := r.db.WithContext(ctx).Where("id=? AND device_id=?", state.Runtime.ConfigID, id).Take(&cfg).Error

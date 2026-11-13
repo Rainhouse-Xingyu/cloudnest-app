@@ -76,3 +76,28 @@ func TestProxyStatesFitLegacyColumnAndMatchCounts(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestRuntimeUpstreamStatesValidation(t *testing.T) {
+	report := Report{State: "registered", ConfigID: 9223372036854775807, Expected: 512, Registered: 512, ObservedAt: time.Now(), ProxyStates: make([]byte, 128), UpstreamStates: make([]byte, 128)}
+	for i := range report.ProxyStates {
+		report.ProxyStates[i], report.UpstreamStates[i] = 0x55, 0xaa
+	}
+	raw, err := EncodeRuntime(&report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := DecodeRuntime(raw); err != nil || len(got.UpstreamStates) != 128 {
+		t.Fatal("maximum sample failed round trip", err)
+	}
+	if _, err := Encode(&report); err == nil {
+		t.Fatal("command receipt accepted heartbeat-only data")
+	}
+	report.Expected, report.Registered = 1, 1
+	report.ProxyStates = []byte{1}
+	for _, invalid := range [][]byte{{3}, {5}, {1, 0}} {
+		report.UpstreamStates = invalid
+		if _, err := EncodeRuntime(&report); err == nil {
+			t.Fatalf("accepted invalid upstream state %x", invalid)
+		}
+	}
+}

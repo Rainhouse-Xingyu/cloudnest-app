@@ -163,6 +163,10 @@ func (r *Runner) Run(ctx context.Context) (runErr error) {
 			var sample *RegistrationStatus
 			if r.Client.runtimeStatusV1 {
 				value := r.registrationSnapshot(ctx)
+				if r.Client.upstreamTCPV1 && len(value.ProxyStates) != 0 && r.process.diagnostics != nil {
+					value.UpstreamStates = probeUpstreams(ctx, r.process.diagnostics.upstreams, r.Identity.Policy.LocalPorts)
+					value.ObservedAt = time.Now().UTC()
+				}
 				sample = &value
 			}
 			if e := r.Client.heartbeat(ctx, sample); e != nil {

@@ -14,7 +14,7 @@ type AgentBinding struct {
 	CredentialDigest  []byte     `gorm:"type:binary(32)" json:"-"`
 	LastSeenAt        *time.Time `gorm:"type:datetime(6)" json:"-"`
 	ClientVersion     string     `gorm:"type:varchar(64);not null;default:''" json:"-"`
-	RuntimeReport     string     `gorm:"type:varchar(512);not null;default:''" json:"-"`
+	RuntimeReport     string     `gorm:"type:varchar(640);not null;default:''" json:"-"`
 }
 
 func (AgentBinding) TableName() string { return "agent_binding" }

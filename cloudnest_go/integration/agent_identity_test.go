@@ -124,6 +124,20 @@ func TestAgentTLSRegistrationRotationAndIsolation(t *testing.T) {
 		}
 	}
 	readSample(true)
+	// An existing 512-character runtime column must expand without losing data.
+	if err := f.db.Exec("ALTER TABLE agent_binding MODIFY COLUMN runtime_report VARCHAR(512) NOT NULL DEFAULT ''").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CheckAgentSchema(f.db); err == nil {
+		t.Fatal("old runtime column accepted before migration")
+	}
+	if err := store.Migrate(f.db); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CheckAgentSchema(f.db); err != nil {
+		t.Fatal(err)
+	}
+	readSample(true)
 	httpStatus := f.json(t, "GET", statusPath, f.alice, nil, 200)
 	if strings.Contains(httpStatus.Body.String(), `"runtime"`) {
 		t.Fatal("runtime snapshot exposed over plain HTTP")
