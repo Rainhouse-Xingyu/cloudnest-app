@@ -8,6 +8,7 @@ import (
 
 func TestRegistrationCountsRejectUntrustedState(t *testing.T) {
 	expected := map[string]string{"a": "tcp", "b": "https"}
+	order := []string{"b", "a"}
 	for _, tc := range []struct {
 		raw, state                  string
 		registered, failed, pending int
@@ -18,9 +19,12 @@ func TestRegistrationCountsRejectUntrustedState(t *testing.T) {
 		{`{"tcp":[{"name":"a","type":"tcp","status":"wait start"}]}`, "starting", 0, 0, 2},
 		{`{"tcp":[{"name":"a","type":"tcp","status":"running","err":"SYNTHETIC_SECRET"}]}`, "degraded", 0, 1, 1},
 	} {
-		got, err := decodeRegistration([]byte(tc.raw), expected)
+		got, err := decodeRegistration([]byte(tc.raw), expected, order)
 		if err != nil || got.State != tc.state || got.Registered != tc.registered || got.Failed != tc.failed || got.Pending != tc.pending || got.Expected != 2 {
 			t.Fatal("incorrect registration state", got, err)
+		}
+		if got.State == "degraded" && got.Registered == 1 && (len(got.ProxyStates) != 1 || got.ProxyStates[0] != 6) {
+			t.Fatal("report lost configuration order", got.ProxyStates)
 		}
 		raw, _ := json.Marshal(got)
 		if strings.Contains(string(raw), "SECRET") {
@@ -34,11 +38,11 @@ func TestRegistrationCountsRejectUntrustedState(t *testing.T) {
 		`{"tcp":[{"name":"a","type":"tcp","status":"running"},{"name":"a","type":"tcp","status":"running"}]}`,
 		`{"tcp":[{"name":"a","type":"tcp","status":"new phase"}]}`,
 	} {
-		if _, err := decodeRegistration([]byte(raw), expected); err != ErrDiagnostics {
+		if _, err := decodeRegistration([]byte(raw), expected, order); err != ErrDiagnostics {
 			t.Fatal("unknown state accepted", raw, err)
 		}
 	}
-	zero, err := decodeRegistration([]byte(`{}`), nil)
+	zero, err := decodeRegistration([]byte(`{}`), nil, nil)
 	if err != nil || zero.State == "registered" {
 		t.Fatal("empty config claimed healthy")
 	}

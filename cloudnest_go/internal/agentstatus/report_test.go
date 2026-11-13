@@ -50,3 +50,29 @@ func TestReportValidationAndCanonicalRetry(t *testing.T) {
 		}
 	}
 }
+
+func TestProxyStatesFitLegacyColumnAndMatchCounts(t *testing.T) {
+	report := Report{State: "registered", ConfigID: 4, Expected: 512, Registered: 512, ObservedAt: time.Now(), ProxyStates: make([]byte, 128)}
+	for i := range report.ProxyStates {
+		report.ProxyStates[i] = 0x55
+	}
+	raw, err := Encode(&report)
+	if err != nil || len(raw) > 512 {
+		t.Fatal("maximum report exceeded existing storage", len(raw), err)
+	}
+	if _, err := Decode(raw); err != nil {
+		t.Fatal(err)
+	}
+
+	report.Expected, report.Registered = 1, 1
+	for _, invalid := range [][]byte{{0}, {2}, {3}, {5}, {1, 0}} {
+		report.ProxyStates = invalid
+		if _, err := Encode(&report); err == nil {
+			t.Fatalf("accepted invalid packed status %x", invalid)
+		}
+	}
+	report.ProxyStates = []byte{1}
+	if _, err := Encode(&report); err != nil {
+		t.Fatal(err)
+	}
+}

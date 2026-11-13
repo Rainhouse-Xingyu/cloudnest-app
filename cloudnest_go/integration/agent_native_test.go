@@ -26,6 +26,7 @@ import (
 	"cloudenest_go/internal/agentauth"
 	"cloudenest_go/internal/agentcommand"
 	"cloudenest_go/internal/frpagent"
+	"cloudenest_go/internal/frpwire"
 	"cloudenest_go/internal/service/contract"
 	storageMysql "cloudenest_go/internal/storage/mysql"
 	"cloudenest_go/model"
@@ -369,6 +370,22 @@ func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest, retire 
 	command("diagnose", 0, "diagnostic_failed")
 	if lastDiagnostic.State != "degraded" || lastDiagnostic.Registered != 2 || lastDiagnostic.Failed != 1 || lastDiagnostic.ConfigID != refused.ID {
 		t.Fatal("refused mapping was not distinguished", lastDiagnostic)
+	}
+	if len(lastDiagnostic.ProxyStates) != 1 {
+		t.Fatal("diagnostic lost per-proxy status")
+	}
+	parsed, err := frpwire.Decode([]byte(refusedText))
+	if err != nil || len(parsed.Proxies) != 3 {
+		t.Fatal("cannot read fixture proxy order", err)
+	}
+	for i, proxy := range parsed.Proxies {
+		want := byte(1)
+		if proxy.Type == "tcp" {
+			want = 2
+		}
+		if got := (lastDiagnostic.ProxyStates[0] >> (2 * i)) & 3; got != want {
+			t.Fatalf("proxy %d (%s) state=%d, want %d", i, proxy.Type, got, want)
+		}
 	}
 	command("deploy_config", cfg.ID, "ok")
 	probe()

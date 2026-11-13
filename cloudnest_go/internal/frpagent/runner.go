@@ -402,6 +402,9 @@ func (r *Runner) execute(ctx context.Context, d Delivery) (string, error) {
 		if err != nil {
 			status = RegistrationStatus{State: "unavailable"}
 		}
+		if !r.Client.proxyStatusV1 {
+			status.ProxyStates = nil
+		}
 		status.ConfigID = r.state.ConfigID
 		status.ObservedAt = time.Now().UTC()
 		r.lastDiagnostic = &status

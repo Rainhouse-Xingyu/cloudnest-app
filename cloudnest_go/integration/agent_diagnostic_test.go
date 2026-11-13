@@ -68,6 +68,16 @@ func TestDiagnosticReceiptImmutableValidatedAndMigrated(t *testing.T) {
 	if err := finish(false, "diagnostic_failed", &foreign); !errors.Is(err, agentcommand.ErrInput) {
 		t.Fatal("unbound configuration accepted", err)
 	}
+	// A 512-proxy snapshot must fit the existing column and round-trip.
+	config, err := storageMysql.NewFrpRepo(f.db, f.cfg.FRPKeys).CreateConfig(ctx, f.aliceID, false, model.FrpConfig{DeviceID: &device, ConfigText: "synthetic diagnostic fixture config"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { f.db.Where("id=?", config.ID).Delete(&model.FrpConfig{}) })
+	report = agentstatus.Report{
+		State: "degraded", ConfigID: config.ID, ObservedAt: report.ObservedAt,
+		Expected: 512, Failed: 512, ProxyStates: bytes.Repeat([]byte{0xaa}, 128),
+	}
 	if err := finish(false, "diagnostic_failed", &report); err != nil {
 		t.Fatal(err)
 	}
@@ -75,12 +85,20 @@ func TestDiagnosticReceiptImmutableValidatedAndMigrated(t *testing.T) {
 		t.Fatal("same observation retry", err)
 	}
 	changed := report
+	changed.ProxyStates = append([]byte(nil), report.ProxyStates...)
+	changed.ProxyStates[0] = 0xa9
+	changed.Failed--
+	changed.Registered++
+	if err := finish(false, "diagnostic_failed", &changed); !errors.Is(err, agentcommand.ErrConflict) {
+		t.Fatal("receipt proxy state overwritten", err)
+	}
+	changed = report
 	changed.ObservedAt = changed.ObservedAt.Add(time.Second)
 	if err := finish(false, "diagnostic_failed", &changed); !errors.Is(err, agentcommand.ErrConflict) {
 		t.Fatal("receipt observation overwritten", err)
 	}
 	rows, err := manager.List(ctx, f.aliceID, false, device, 20)
-	if err != nil || len(rows) != 1 || rows[0].Diagnostic == nil || !rows[0].Diagnostic.ObservedAt.Equal(report.ObservedAt) {
+	if err != nil || len(rows) != 1 || rows[0].Diagnostic == nil || !rows[0].Diagnostic.ObservedAt.Equal(report.ObservedAt) || !bytes.Equal(rows[0].Diagnostic.ProxyStates, report.ProxyStates) {
 		t.Fatal("persisted observation missing", err)
 	}
 	if _, err := manager.List(ctx, f.bobID, false, device, 20); err == nil {

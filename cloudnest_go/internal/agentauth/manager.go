@@ -43,8 +43,9 @@ type Registered struct {
 	Credential string `json:"credential"`
 }
 type Heartbeat struct {
-	DeviceID   int64     `json:"device_id"`
-	ReceivedAt time.Time `json:"received_at"`
+	DeviceID      int64     `json:"device_id"`
+	ReceivedAt    time.Time `json:"received_at"`
+	ProxyStatusV1 bool      `json:"proxy_status_v1,omitempty"`
 }
 
 func lockOwnerAndDevice(tx *gorm.DB, ownerID, deviceID int64) (model.User, error) {
@@ -239,7 +240,7 @@ func (m *Manager) Beat(ctx context.Context, raw, version string) (Heartbeat, err
 		if err = tx.Model(&b).Updates(map[string]any{"last_seen_at": now, "client_version": version}).Error; err != nil {
 			return err
 		}
-		result = Heartbeat{DeviceID: b.DeviceID, ReceivedAt: now}
+		result = Heartbeat{DeviceID: b.DeviceID, ReceivedAt: now, ProxyStatusV1: true}
 		return nil
 	})
 	if err != nil {

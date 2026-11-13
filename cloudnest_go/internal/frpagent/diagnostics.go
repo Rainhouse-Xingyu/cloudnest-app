@@ -34,6 +34,7 @@ type localDiagnostics struct {
 	client            *http.Client
 	address, password string
 	expected          map[string]string
+	order             []string
 }
 
 func (d *localDiagnostics) close() { d.client.CloseIdleConnections() }
@@ -49,11 +50,13 @@ func prepareDiagnostics(s *Store) (*localDiagnostics, *os.File, error) {
 		return nil, nil, ErrConfig
 	}
 	expected := make(map[string]string, len(proxies))
+	order := make([]string, 0, len(proxies))
 	for _, p := range proxies {
 		if p.Name == "" || expected[p.Name] != "" {
 			return nil, nil, ErrConfig
 		}
 		expected[p.Name] = p.Type
+		order = append(order, p.Name)
 	}
 	listener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
@@ -135,7 +138,7 @@ func prepareDiagnostics(s *Store) (*localDiagnostics, *os.File, error) {
 		ResponseHeaderTimeout: time.Second, MaxResponseHeaderBytes: 8192, DisableKeepAlives: true}
 	client := &http.Client{Transport: tr, Timeout: 2 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	ok = true
-	return &localDiagnostics{client: client, address: "https://127.0.0.1:" + strconv.Itoa(port), password: password, expected: expected}, reader, nil
+	return &localDiagnostics{client: client, address: "https://127.0.0.1:" + strconv.Itoa(port), password: password, expected: expected, order: order}, reader, nil
 }
 func (d *localDiagnostics) read(ctx context.Context) (RegistrationStatus, error) {
 	result := RegistrationStatus{State: "unavailable", Expected: len(d.expected)}
@@ -156,9 +159,9 @@ func (d *localDiagnostics) read(ctx context.Context) (RegistrationStatus, error)
 	if err != nil || len(raw) > 512<<10 {
 		return result, ErrDiagnostics
 	}
-	return decodeRegistration(raw, d.expected)
+	return decodeRegistration(raw, d.expected, d.order)
 }
-func decodeRegistration(raw []byte, expected map[string]string) (RegistrationStatus, error) {
+func decodeRegistration(raw []byte, expected map[string]string, order []string) (RegistrationStatus, error) {
 	result := RegistrationStatus{State: "unavailable", Expected: len(expected)}
 	var groups map[string][]struct {
 		Name   string `json:"name"`
@@ -170,25 +173,28 @@ func decodeRegistration(raw []byte, expected map[string]string) (RegistrationSta
 	if decoder.Decode(&groups) != nil || groups == nil || decoder.Decode(&struct{}{}) != io.EOF {
 		return result, ErrDiagnostics
 	}
-	seen := map[string]bool{}
+	seen := make(map[string]byte, len(expected))
 	for kind, items := range groups {
 		if kind != "tcp" && kind != "http" && kind != "https" {
 			return result, ErrDiagnostics
 		}
 		for _, item := range items {
-			if seen[item.Name] || expected[item.Name] != kind || item.Type != kind {
+			if _, duplicate := seen[item.Name]; duplicate || expected[item.Name] != kind || item.Type != kind {
 				return result, ErrDiagnostics
 			}
-			seen[item.Name] = true
+			seen[item.Name] = 0
 			switch item.Status {
 			case "running":
 				if item.Error != "" {
 					result.Failed++
+					seen[item.Name] = 2
 				} else {
 					result.Registered++
+					seen[item.Name] = 1
 				}
 			case "start error", "check failed", "closed":
 				result.Failed++
+				seen[item.Name] = 2
 			case "new", "wait start":
 				result.Pending++
 			default:
@@ -197,6 +203,13 @@ func decodeRegistration(raw []byte, expected map[string]string) (RegistrationSta
 		}
 	}
 	result.Pending += len(expected) - len(seen)
+	if len(order) != len(expected) {
+		return result, ErrDiagnostics
+	}
+	result.ProxyStates = make([]byte, (len(order)+3)/4)
+	for pos, name := range order {
+		result.ProxyStates[pos/4] |= seen[name] << (2 * (pos % 4))
+	}
 	switch {
 	case result.Failed > 0:
 		result.State = "degraded"

@@ -29,6 +29,7 @@ func (e HTTPError) Error() string { return fmt.Sprintf("agent service returned H
 type Client struct {
 	base, credential string
 	http             *http.Client
+	proxyStatusV1    bool
 }
 type Registration struct {
 	DeviceID   int64  `json:"device_id"`
@@ -79,7 +80,7 @@ func NewClient(endpoint, credential string, ca []byte) (*Client, error) {
 		}
 	}
 	tr := &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}, DialContext: (&net.Dialer{Timeout: 5 * time.Second}).DialContext, TLSHandshakeTimeout: 5 * time.Second, ResponseHeaderTimeout: 10 * time.Second, MaxResponseHeaderBytes: 16384, MaxIdleConnsPerHost: 2, IdleConnTimeout: 30 * time.Second}
-	return &Client{strings.TrimSuffix(endpoint, "/"), credential, &http.Client{Transport: tr, Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}, nil
+	return &Client{base: strings.TrimSuffix(endpoint, "/"), credential: credential, http: &http.Client{Transport: tr, Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}, nil
 }
 func (c *Client) Close() { c.http.CloseIdleConnections() }
 func (c *Client) post(ctx context.Context, path string, in, out any, want int) (int, error) {
@@ -133,11 +134,15 @@ func (c *Client) Enroll(ctx context.Context, enrollment string) (Registration, e
 }
 func (c *Client) Heartbeat(ctx context.Context) error {
 	var out struct {
-		DeviceID int64 `json:"device_id"`
+		DeviceID      int64 `json:"device_id"`
+		ProxyStatusV1 bool  `json:"proxy_status_v1"`
 	}
 	status, e := c.post(ctx, "/api/agent/heartbeat", map[string]string{"client_version": "cloudnest-agent-0.3.0"}, &out, 200)
-	if e == nil && (status != 200 || out.DeviceID <= 0) {
-		return ErrProtocol
+	if e == nil {
+		if status != 200 || out.DeviceID <= 0 {
+			return ErrProtocol
+		}
+		c.proxyStatusV1 = out.ProxyStatusV1
 	}
 	return e
 }

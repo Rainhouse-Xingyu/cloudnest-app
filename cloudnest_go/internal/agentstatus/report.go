@@ -12,13 +12,14 @@ import (
 var ErrInvalid = errors.New("invalid registration report")
 
 type Report struct {
-	State      string    `json:"state"`
-	ConfigID   int64     `json:"config_id"`
-	ObservedAt time.Time `json:"observed_at"`
-	Expected   int       `json:"expected"`
-	Registered int       `json:"registered"`
-	Failed     int       `json:"failed"`
-	Pending    int       `json:"pending"`
+	State       string    `json:"state"`
+	ConfigID    int64     `json:"config_id"`
+	ObservedAt  time.Time `json:"observed_at"`
+	Expected    int       `json:"expected"`
+	Registered  int       `json:"registered"`
+	Failed      int       `json:"failed"`
+	Pending     int       `json:"pending"`
+	ProxyStates []byte    `json:"proxy_states,omitempty"`
 }
 
 func (r Report) Validate() error {
@@ -29,6 +30,9 @@ func (r Report) Validate() error {
 		if n < 0 || n > 512 {
 			return ErrInvalid
 		}
+	}
+	if !r.validProxyStates() {
+		return ErrInvalid
 	}
 	switch r.State {
 	case "stopped":
@@ -61,6 +65,33 @@ func (r Report) Validate() error {
 	}
 	return ErrInvalid
 }
+
+// Each configuration position uses two bits, from least to most significant.
+// Values are 0 pending, 1 registered, and 2 failed. 3 is reserved.
+func (r Report) validProxyStates() bool {
+	if len(r.ProxyStates) == 0 {
+		return true // Older agents send only aggregate counts.
+	}
+	if r.State == "stopped" || r.State == "unavailable" || len(r.ProxyStates) != (r.Expected+3)/4 {
+		return false
+	}
+	var counts [3]int
+	for pos := 0; pos < len(r.ProxyStates)*4; pos++ {
+		state := (r.ProxyStates[pos/4] >> (2 * (pos % 4))) & 3
+		if pos >= r.Expected {
+			if state != 0 {
+				return false
+			}
+			continue
+		}
+		if state == 3 {
+			return false
+		}
+		counts[state]++
+	}
+	return counts[0] == r.Pending && counts[1] == r.Registered && counts[2] == r.Failed
+}
+
 func Encode(r *Report) (string, error) {
 	if r == nil {
 		return "", nil

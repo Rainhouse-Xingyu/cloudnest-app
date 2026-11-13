@@ -48,6 +48,8 @@ func TestClientTLSBoundsRedirectAndRedaction(t *testing.T) {
 			_, _ = w.Write([]byte(`{"device_id":1} {}`))
 		case "empty":
 			w.WriteHeader(204)
+		case "proxy-status":
+			_, _ = w.Write([]byte(`{"device_id":1,"proxy_status_v1":true}`))
 		default:
 			_, _ = w.Write([]byte(`{"device_id":1}`))
 		}
@@ -71,6 +73,17 @@ func TestClientTLSBoundsRedirectAndRedaction(t *testing.T) {
 	mode = "ok"
 	if e := c.Heartbeat(ctx); e != nil {
 		t.Fatal(e)
+	}
+	if c.proxyStatusV1 {
+		t.Fatal("assumed capability on older backend")
+	}
+	mode = "proxy-status"
+	if e := c.Heartbeat(ctx); e != nil || !c.proxyStatusV1 {
+		t.Fatal("failed to negotiate per-proxy capability", e)
+	}
+	mode = "ok"
+	if e := c.Heartbeat(ctx); e != nil || c.proxyStatusV1 {
+		t.Fatal("retained stale capability after backend change", e)
 	}
 	untrusted, e := NewClient(s.URL, fixtureToken(), nil)
 	if e != nil {
