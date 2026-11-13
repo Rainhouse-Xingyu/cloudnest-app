@@ -1,0 +1,304 @@
+package frpagent
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"time"
+
+	"golang.org/x/sys/unix"
+)
+
+const FRPVersion = "0.71.1"
+
+var ErrBinary = errors.New("frpc does not match the pinned official release")
+var ErrProcess = errors.New("managed frpc operation failed")
+var ErrSupervisor = errors.New("frpc supervisor lost; local process recovery required")
+
+// Hashes are for extracted frpc bytes, obtained only after verifying the
+// official release archive SHA-256 (documented in FRP-AGENT.md).
+var binaryHashes = map[string]string{
+	"darwin/amd64": "01cb3d59aba860a7097e1343ce04f9b5d8164b7488e21f5c551a34e62406c4c6",
+	"darwin/arm64": "7aaaba058dbeeedc86be876c44912c4f33756ab3e6e7a085f8d7af7814a073c1",
+	"linux/amd64":  "35c6054d4549bbcf2f02875543895fd9e44c2aae2925f61cd8ff5a693703c28b",
+	"linux/arm64":  "651de3428bdc7f37b4bad76ed3236b221939a989c433cd7daee79d2817519f8b",
+}
+
+func digest(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
+func verifyBinary(b []byte) bool {
+	want := binaryHashes[runtime.GOOS+"/"+runtime.GOARCH]
+	return want != "" && digest(b) == want
+}
+
+// InstallBinary never executes the supplied path. It copies bounded, verified
+// bytes into private storage before any invocation of official frpc.
+func InstallBinary(s *Store, path string) error {
+	if !filepath.IsAbs(path) {
+		return ErrBinary
+	}
+	fd, e := unix.Open(path, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK|unix.O_CLOEXEC, 0)
+	if e != nil {
+		return ErrBinary
+	}
+	f := os.NewFile(uintptr(fd), "frpc-source")
+	defer f.Close()
+	var st unix.Stat_t
+	if unix.Fstat(fd, &st) != nil || st.Mode&unix.S_IFMT != unix.S_IFREG {
+		return ErrBinary
+	}
+	b, e := io.ReadAll(io.LimitReader(f, 32<<20))
+	if e != nil || !verifyBinary(b) {
+		return ErrBinary
+	}
+	return s.Write("frpc", b, 0700)
+}
+
+type Process struct {
+	store         *Store
+	cmd           *exec.Cmd
+	done          chan error
+	supervised    bool
+	poisoned      bool
+	life          *os.File
+	diagnosticKey *os.File // raw child only, inherited at fd 5
+	diagnostics   *localDiagnostics
+}
+
+func newRawProcess(s *Store) *Process        { return &Process{store: s} }
+func newSupervisedProcess(s *Store) *Process { return &Process{store: s, supervised: true} }
+func (p *Process) command(ctx context.Context, tokenPipe *os.File, args ...string) (*exec.Cmd, error) {
+	if tokenPipe == nil {
+		return nil, ErrConfig
+	}
+	b, e := p.store.Read("frpc", 32<<20)
+	if e != nil || !verifyBinary(b) {
+		return nil, ErrBinary
+	}
+	c := exec.CommandContext(ctx, filepath.Join(p.store.Path, "frpc"), args...)
+	c.Dir = p.store.Path
+	c.Env = []string{"LANG=C", "HOME=" + p.store.Path} // no proxy, template or runtime env inheritance
+	c.ExtraFiles = []*os.File{p.store.lock, tokenPipe} // child fd 3: singleton; fd 4: token source
+	if p.diagnosticKey != nil {
+		c.ExtraFiles = append(c.ExtraFiles, p.diagnosticKey)
+	}
+	// stdout/stderr are discarded: frpc diagnostics may contain auth secrets.
+	return c, nil
+}
+func (p *Process) Verify(ctx context.Context, tokenPipe *os.File) (verifyErr error) {
+	defer func() {
+		if e := p.store.RemoveRuntime("candidate.json"); e != nil {
+			verifyErr = e
+		}
+	}()
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	c, e := p.command(ctx, tokenPipe, "verify", "-c", filepath.Join(p.store.Path, "candidate.json"))
+	if e != nil {
+		return e
+	}
+	if c.Run() != nil {
+		return ErrConfig
+	}
+	return nil
+}
+func (p *Process) Running() bool {
+	if p.cmd == nil {
+		return false
+	}
+	select {
+	case err := <-p.done:
+		p.exited(err)
+		return false
+	default:
+		return true
+	}
+}
+func (p *Process) Start(ctx context.Context, tokenPipe *os.File) error {
+	running := p.Running()
+	if p.poisoned {
+		return ErrSupervisor
+	}
+	if running {
+		return nil
+	}
+	if p.supervised {
+		return p.startSupervisor(ctx, tokenPipe)
+	}
+	// Child lifetime is explicit, not tied to an individual command lease.
+	c, e := p.command(context.Background(), tokenPipe, "-c", filepath.Join(p.store.Path, "active.json"))
+	if e != nil {
+		return e
+	}
+	if e = c.Start(); e != nil {
+		return ErrProcess
+	}
+	p.cmd = c
+	p.done = make(chan error, 1)
+	done := p.done
+	go func() { done <- c.Wait() }()
+	select {
+	case <-done:
+		p.cmd = nil
+		p.done = nil
+		return ErrProcess
+	case <-ctx.Done():
+		_ = p.Stop()
+		return ErrProcess
+	case <-time.After(500 * time.Millisecond):
+		return nil
+	}
+}
+func (p *Process) Stop() error {
+	if !p.Running() {
+		if p.poisoned {
+			return ErrSupervisor
+		}
+		return nil
+	}
+	if p.supervised {
+		if p.life != nil {
+			p.life.Close()
+			p.life = nil
+		}
+		select {
+		case err := <-p.done:
+			p.exited(err)
+			if p.poisoned {
+				return ErrSupervisor
+			}
+			return nil
+		case <-time.After(5 * time.Second):
+			// Killing this supervisor could strand its child. Keep the lock
+			// held and report failure instead of launching another process.
+			p.poisoned = true
+			return ErrSupervisor
+		}
+	}
+	if e := p.cmd.Process.Signal(os.Interrupt); e != nil && !errors.Is(e, os.ErrProcessDone) {
+		return ErrProcess
+	}
+	select {
+	case <-p.done:
+	case <-time.After(2 * time.Second):
+		if e := p.cmd.Process.Kill(); e != nil && !errors.Is(e, os.ErrProcessDone) {
+			return ErrProcess
+		}
+		<-p.done
+	}
+	p.cmd = nil
+	p.done = nil
+	return nil
+}
+
+func (p *Process) exited(err error) {
+	if p.diagnostics != nil {
+		p.diagnostics.close()
+		p.diagnostics = nil
+	}
+	if p.supervised && err != nil {
+		var exit *exec.ExitError
+		if !errors.As(err, &exit) || (exit.ExitCode() != supervisorChildExited && exit.ExitCode() != supervisorSetupFailed) {
+			p.poisoned = true
+		}
+	}
+	if p.life != nil {
+		p.life.Close()
+		p.life = nil
+	}
+	p.cmd = nil
+	p.done = nil
+}
+
+func (p *Process) startSupervisor(ctx context.Context, tokenPipe *os.File) (startErr error) {
+	if tokenPipe == nil {
+		return ErrConfig
+	}
+	diag, key, err := prepareDiagnostics(p.store)
+	if err != nil {
+		return errors.Join(err, p.store.RemoveRuntime("active.json"), p.store.RemoveRuntime("diagnostics.pem"))
+	}
+	defer key.Close()
+	p.diagnostics = diag
+	defer func() {
+		if startErr != nil {
+			diag.close()
+			p.diagnostics = nil
+			startErr = errors.Join(startErr, p.store.RemoveRuntime("active.json"), p.store.RemoveRuntime("diagnostics.pem"))
+		}
+	}()
+	executable, err := os.Executable()
+	if err != nil {
+		return ErrProcess
+	}
+	lifeRead, lifeWrite, err := os.Pipe()
+	if err != nil {
+		return ErrProcess
+	}
+	defer lifeRead.Close()
+	readyRead, readyWrite, err := os.Pipe()
+	if err != nil {
+		lifeWrite.Close()
+		return ErrProcess
+	}
+	defer readyWrite.Close()
+	c := exec.Command(executable, "__supervise-frpc", p.store.Path)
+	c.Dir = p.store.Path
+	c.Env = []string{"LANG=C", "HOME=" + p.store.Path}
+	c.ExtraFiles = []*os.File{p.store.dir, p.store.lock, lifeRead, readyWrite, tokenPipe, key}
+	if err = c.Start(); err != nil {
+		lifeWrite.Close()
+		readyRead.Close()
+		return ErrProcess
+	}
+	p.cmd = c
+	p.life = lifeWrite
+	p.done = make(chan error, 1)
+	done := p.done
+	go func() { done <- c.Wait() }()
+	// Parent copies must close now so EOF really means the supervisor exited.
+	lifeRead.Close()
+	readyWrite.Close()
+	ready := make(chan bool, 1)
+	go func() {
+		defer readyRead.Close()
+		var b [1]byte
+		_, err := io.ReadFull(readyRead, b[:])
+		ready <- err == nil && b[0] == 1
+	}()
+	select {
+	case ok := <-ready:
+		if ok && p.Running() {
+			waitCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			for waitCtx.Err() == nil && p.Running() {
+				if _, err := diag.read(waitCtx); err == nil {
+					// The trusted API proves config + TLS key were consumed.
+					// No later CloudNest action reuses that runtime file.
+					if err := p.store.RemoveRuntime("active.json"); err != nil {
+						return errors.Join(err, p.Stop())
+					}
+					if err := p.store.RemoveRuntime("diagnostics.pem"); err != nil {
+						return errors.Join(err, p.Stop())
+					}
+					return nil
+				}
+				if !wait(waitCtx, 100*time.Millisecond) {
+					break
+				}
+			}
+		}
+	case <-ctx.Done():
+	case <-time.After(10 * time.Second):
+	}
+	readyRead.Close()
+	if err := p.Stop(); err != nil {
+		return err
+	}
+	return ErrProcess
+}
