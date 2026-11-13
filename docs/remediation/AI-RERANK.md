@@ -62,3 +62,11 @@ dev 与已暴露 heldout 的 Recall@5、MRR@10 均为 **1.0**，负例分别 3/3
 - [紧凑结构化判定](AI-RELEVANCE-VERIFIER-DEV-STRESS-20261029.json)：raw Qwen 提示带空 thinking 后缀，按输入顺序输出定长布尔数组。13 条开发查询、21 批、312 对真实文本，全部完成但 **24 对错判**；三个负查询仍全部产生误报。串行模型调用累计 178.077 秒；20 候选批次约 11 秒，首批 13.605 秒。该实验只验证可解析协议与模型可行性，未接入生产，也没有延长产品搜索的二十秒总期限。
 
 这些报告不使用 heldout 调整标签，不宣称独立盲测；每份保留脚本、清单、模型或权重哈希。所有失败结果都保留，G04 质量门槛仍未通过。
+
+## 本地批量评分（2026-11-13）
+
+设置 `AI_RERANK_BATCH_URL` 可让专用 llama.cpp 服务一次评分整个候选窗口。未配置该 URL 时仍使用 Ollama 逐对评分。两种方式共用六秒时限、推理准入、整批回退及评分后权限和代次复核。批量响应必须覆盖每个输入索引，重复、缺项、空值、非有限分数或模型别名变化都会使整批回退。模型原始分数仅参与同一次查询的排序。
+
+运行专用服务前校验 GGUF 文件 SHA-256，并用 `--alias NAME@sha256:SHA256` 启动单模型服务。将该别名填入 `AI_RERANK_MODEL`，将仅后端可访问的服务地址填入 `AI_RERANK_BATCH_URL`。服务前后读取 `/v1/models` 确认别名；权重摘要来自部署时校验的别名，远端 API 不独立证明权重内容。部署应提供足够的每槽上下文，并使用 `--no-context-shift`，避免自动丢弃输入内容。全量评估使用 `CLOUDNEST_AI_EVAL_RERANK_BATCH_URL` 和相同的 `CLOUDNEST_AI_EVAL_RERANK_MODEL` 别名。
+
+协议参考 [llama.cpp 批量重排接口](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md#post-reranking-rerank-documents-according-to-a-given-query)。

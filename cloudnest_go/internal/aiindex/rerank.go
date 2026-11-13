@@ -42,16 +42,8 @@ type rerankResponse struct {
 func (o *Ollama) Rerank(parent context.Context, question string, documents []string) ([]float64, string, error) {
 	ctx, cancel := context.WithTimeout(parent, RerankTimeout)
 	defer cancel()
-	valid := func(text string, limit int) bool {
-		return utf8.ValidString(text) && strings.TrimSpace(text) != "" && len(text) <= limit && !strings.ContainsRune(text, 0)
-	}
-	if !valid(question, 4096) || len(documents) == 0 || len(documents) > MaxRerankDocuments {
-		return nil, "", ErrTextLimit
-	}
-	for _, doc := range documents {
-		if !valid(doc, 8192) {
-			return nil, "", ErrTextLimit
-		}
+	if err := validateRerankInput(question, documents); err != nil {
+		return nil, "", err
 	}
 	release, err := admitGeneration(ctx)
 	if err != nil {
@@ -90,6 +82,21 @@ func (o *Ollama) Rerank(parent context.Context, question string, documents []str
 		return nil, "", ErrModelChanged
 	}
 	return scores, digest, nil
+}
+
+func validateRerankInput(question string, documents []string) error {
+	valid := func(text string, limit int) bool {
+		return utf8.ValidString(text) && strings.TrimSpace(text) != "" && len(text) <= limit && !strings.ContainsRune(text, 0)
+	}
+	if !valid(question, 4096) || len(documents) == 0 || len(documents) > MaxRerankDocuments {
+		return ErrTextLimit
+	}
+	for _, doc := range documents {
+		if !valid(doc, 8192) {
+			return ErrTextLimit
+		}
+	}
+	return nil
 }
 
 func rerankPrompt(question, document string) string {

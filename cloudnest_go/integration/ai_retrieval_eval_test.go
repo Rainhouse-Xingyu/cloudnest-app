@@ -85,6 +85,7 @@ type evalReport struct {
 	VisionModel       string                            `json:"vision_model"`
 	VisionDigest      string                            `json:"vision_digest"`
 	RerankModel       string                            `json:"rerank_model,omitempty"`
+	RerankBackend     string                            `json:"rerank_backend,omitempty"`
 	RerankDigest      string                            `json:"rerank_digest,omitempty"`
 	Gates             retrievaleval.Gates               `json:"quality_gates"`
 	Documents         []evalDocumentResult              `json:"documents"`
@@ -208,8 +209,26 @@ func TestAIRetrievalEvaluation(t *testing.T) {
 	report.EmbeddingDigest = digest(report.EmbeddingModel)
 	report.VisionDigest = digest(report.VisionModel)
 	report.RerankModel = strings.TrimSpace(os.Getenv("CLOUDNEST_AI_EVAL_RERANK_MODEL"))
+	batchURL := strings.TrimSpace(os.Getenv("CLOUDNEST_AI_EVAL_RERANK_BATCH_URL"))
+	rerankDigest := func() string { return digest(report.RerankModel) }
+	if batchURL != "" {
+		provider, err := aiindex.NewBatchReranker(batchURL, report.RerankModel)
+		if err != nil {
+			t.Fatal(err)
+		}
+		report.RerankBackend = "llama.cpp"
+		rerankDigest = func() string {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			value, err := provider.Digest(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return value
+		}
+	}
 	if report.RerankModel != "" {
-		report.RerankDigest = digest(report.RerankModel)
+		report.RerankDigest = rerankDigest()
 	}
 	save()
 	f, _ := indexFixture(t)
@@ -217,6 +236,7 @@ func TestAIRetrievalEvaluation(t *testing.T) {
 	f.cfg.AIEmbeddingModel = report.EmbeddingModel
 	f.cfg.AIOCRModel = report.VisionModel
 	f.cfg.AIRerankModel = report.RerankModel
+	f.cfg.AIRerankBatchURL = batchURL
 	report.MinCosine, report.MinLexical = f.cfg.SearchThresholds()
 	report.QueryPolicy = "qwen3-task-instruction-calendar-separated-v1"
 	f.cfg.AIPDFBinDir = os.Getenv("CLOUDNEST_TEST_POPPLER_BIN")
@@ -412,7 +432,7 @@ func TestAIRetrievalEvaluation(t *testing.T) {
 	if digest(report.EmbeddingModel) != report.EmbeddingDigest || digest(report.VisionModel) != report.VisionDigest {
 		t.Fatal("models changed during evaluation")
 	}
-	if report.RerankModel != "" && digest(report.RerankModel) != report.RerankDigest {
+	if report.RerankModel != "" && rerankDigest() != report.RerankDigest {
 		t.Fatal("reranker changed during evaluation")
 	}
 	if time.Now().In(loc).Format("2006-01") != anchor.Format("2006-01") {

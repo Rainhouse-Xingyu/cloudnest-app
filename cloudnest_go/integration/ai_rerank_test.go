@@ -21,7 +21,7 @@ import (
 
 // Deliberately scripted scores test the real API/SQL race boundary, not quality.
 func TestAIHybridRerankRechecksSQLAfterInference(t *testing.T) {
-	for _, mode := range []string{"revoke", "revoke-failure", "rename", "source", "generation"} {
+	for _, mode := range []string{"revoke", "revoke-failure", "rename", "source", "generation", "batch-revoke"} {
 		t.Run(mode, func(t *testing.T) {
 			f, _ := indexFixture(t)
 			shared := f.upload(t, f.bob, "shared.md", []byte("invoice shared"))
@@ -32,6 +32,7 @@ func TestAIHybridRerankRechecksSQLAfterInference(t *testing.T) {
 				t.Fatal(err)
 			}
 			var calls atomic.Int32
+			batchAlias := "rank-test@sha256:" + strings.Repeat("b", 64)
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				switch r.URL.Path {
 				case "/api/tags":
@@ -41,12 +42,14 @@ func TestAIHybridRerankRechecksSQLAfterInference(t *testing.T) {
 					}})
 				case "/api/embed":
 					json.NewEncoder(w).Encode(map[string]any{"model": "embed:test", "embeddings": [][]float64{{1, 0}}})
-				case "/api/generate":
+				case "/v1/models":
+					json.NewEncoder(w).Encode(map[string]any{"data": []any{map[string]string{"id": batchAlias}}})
+				case "/api/generate", "/v1/rerank":
 					io.Copy(io.Discard, r.Body)
 					if calls.Add(1) == 1 {
 						var err error
 						switch mode {
-						case "revoke", "revoke-failure":
+						case "revoke", "revoke-failure", "batch-revoke":
 							err = f.db.Where("file_id=? AND user_id=?", shared.ID, f.aliceID).Delete(&model.FilePermission{}).Error
 						case "rename":
 							err = f.db.Model(&model.File{}).Where("id=?", shared.ID).Update("filename", "new.md").Error
@@ -65,6 +68,13 @@ func TestAIHybridRerankRechecksSQLAfterInference(t *testing.T) {
 						w.WriteHeader(503)
 						return
 					}
+					if r.URL.Path == "/v1/rerank" {
+						json.NewEncoder(w).Encode(map[string]any{"model": batchAlias, "results": []any{
+							map[string]any{"index": 1, "relevance_score": .9},
+							map[string]any{"index": 0, "relevance_score": .8},
+						}})
+						return
+					}
 					yes := map[string]any{"token": "yes", "bytes": []int{121, 101, 115}, "logprob": math.Log(.8)}
 					no := map[string]any{"token": "no", "bytes": []int{110, 111}, "logprob": math.Log(.2)}
 					chosen := map[string]any{"token": "yes", "bytes": []int{121, 101, 115}, "logprob": math.Log(.8), "top_logprobs": []any{yes, no}}
@@ -75,6 +85,9 @@ func TestAIHybridRerankRechecksSQLAfterInference(t *testing.T) {
 			}))
 			defer server.Close()
 			f.cfg.AIOllamaBaseURL, f.cfg.AIEmbeddingModel, f.cfg.AIRerankModel = server.URL, "embed:test", "rank:test"
+			if mode == "batch-revoke" {
+				f.cfg.AIRerankBatchURL, f.cfg.AIRerankModel = server.URL, batchAlias
+			}
 			f.router = fixtureRouter(app.NewContainer(f.cfg, f.db, f.rdb).NewRouter())
 			var reply struct {
 				Items []struct {

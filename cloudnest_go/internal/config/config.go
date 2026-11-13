@@ -29,6 +29,7 @@ type Config struct {
 	AIOllamaModel          string
 	AIEmbeddingModel       string
 	AIRerankModel          string
+	AIRerankBatchURL       string
 	AISearchMinCosine      float64
 	AISearchMinLexical     float64
 	AIPDFBinDir            string
@@ -69,6 +70,7 @@ func Load() Config {
 		AIOCRModel:         getEnv("AI_OCR_MODEL", "qwen3-vl:4b"),
 		AIEmbeddingModel:   getEnv("AI_EMBEDDING_MODEL", "qwen3-embedding:0.6b"),
 		AIRerankModel:      strings.TrimSpace(os.Getenv("AI_RERANK_MODEL")),
+		AIRerankBatchURL:   strings.TrimSpace(os.Getenv("AI_RERANK_BATCH_URL")),
 		AISearchMinCosine:  searchThreshold("AI_SEARCH_MIN_COSINE", DefaultSearchMinCosine),
 		AISearchMinLexical: searchThreshold("AI_SEARCH_MIN_LEXICAL", DefaultSearchMinLexical),
 		AIGuideDocPath:     getEnv("AI_GUIDE_DOC_PATH", "../../项目功能汇总.md"),

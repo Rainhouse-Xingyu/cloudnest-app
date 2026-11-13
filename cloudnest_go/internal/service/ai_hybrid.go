@@ -300,14 +300,22 @@ func (s *AIService) hybridSearch(parent context.Context, uid int64, question str
 func (s *AIService) rerankHybrid(ctx context.Context, question string, hits []hybridHit, result *AINLSearchResult) error {
 	n := min(len(hits), aiindex.MaxRerankDocuments)
 	result.Rerank.WindowLimited = len(hits) > n
-	provider, err := aiindex.NewOllama(s.cfg.AIOllamaBaseURL, s.cfg.AIRerankModel)
+	documents := make([]string, n)
+	for i, h := range hits[:n] {
+		documents[i] = "Filename: " + h.row.Filename + "\nContent: " + h.row.Content
+	}
+	var provider interface {
+		Rerank(context.Context, string, []string) ([]float64, string, error)
+	}
+	var err error
+	if s.cfg.AIRerankBatchURL != "" {
+		provider, err = aiindex.NewBatchReranker(s.cfg.AIRerankBatchURL, s.cfg.AIRerankModel)
+	} else {
+		provider, err = aiindex.NewOllama(s.cfg.AIOllamaBaseURL, s.cfg.AIRerankModel)
+	}
 	var scores []float64
 	var digest string
 	if err == nil {
-		documents := make([]string, n)
-		for i, h := range hits[:n] {
-			documents[i] = "Filename: " + h.row.Filename + "\nContent: " + h.row.Content
-		}
 		scores, digest, err = provider.Rerank(ctx, question, documents)
 	}
 	if ctx.Err() != nil {
