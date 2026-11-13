@@ -340,3 +340,7 @@ Darwin arm64 首次真实 launchd 测试通过（35.27s，`/tmp/cloudnest-g05-la
 提交 `57c38b62b990368709e8346c068e4dd31cec2309` 的 PR `43354306624` 和 push `43354300132` 四项 CI 均成功。PR 日志确认完整普通 race 集成 376.724s、独立网络集成 97.765s，覆盖新旧映射迁移。此前本地总期限超时保留原记录。
 
 G05 历史占用维护命令的 8 项 race 集成通过（16.737s，`/tmp/cloudnest-g05-reconciliation-final.log`）。覆盖旧账本加列且保留 ID/有效状态、拒绝仍可领取旧 JWT 命令的设备、拒绝当前凭据代次、审计故障回滚、重复确认及恢复分配。`make check test`、带 integration/frpnative/frppublic 标签的 vet、仓库卫生和补丁格式检查通过。所有写入均限于临时测试库。
+
+G05 旧版升级演练使用 `50ac977d416823487ee8ba2bdb63462610ad930c` 编译的真实旧服务端在 disposable MySQL 创建结构，再执行当前 `migrate` 和对账 CLI。首次运行在最后新部署时被夹具留在队列中的 `forget_config` 排他屏障正确拒绝（`/tmp/cloudnest-g05-real-upgrade.log`）；修正夹具通过真实回执结束保留命令，屏障规则保持原样。最终演练通过（5.47s，包 7.315s，`/tmp/cloudnest-g05-real-upgrade-fixed.log`）。验证重复迁移、旧映射、密文逐字节保留且可解密、旧身份心跳、启动类命令取消/其他命令继续完成、保留账本以及对账后新部署。
+
+补充旧租约与新占用断言后，同一真实旧版升级演练再次通过（4.61s，包 6.427s，`/tmp/cloudnest-g05-real-upgrade-final.log`）。旧启动类命令的成功回执被拒绝，重新入队的部署生成 TCP 占用。8 项运行占用 race 专项通过（14.640s，`/tmp/cloudnest-g05-upgrade-reservations.log`），覆盖已升级库中仍有未结束启动命令时拒绝对账。`make check test`、升级标签 vet、脚本语法和补丁检查通过。

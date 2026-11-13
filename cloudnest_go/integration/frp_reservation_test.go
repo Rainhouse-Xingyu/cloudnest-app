@@ -500,6 +500,21 @@ func TestFRPReservationHistoricalReconciliation(t *testing.T) {
 	if _, err := r.ReconcileReservation(ctx, current.ID, "CHG-42"); !errors.Is(err, contract.ErrConflict) {
 		t.Fatal("current claim released", err)
 	}
+	// Simulate a live activation retained by a previous ledger upgrade.
+	pending := model.AgentCommand{ID: strings.Repeat("e", 32), RequestID: strings.Repeat("f", 32), DeviceID: device, CredentialID: *binding.CredentialID, Action: "start", Status: "pending"}
+	if err := f.db.Exec("INSERT INTO agent_command (id,request_id,device_id,credential_id,action,status,requested_config_id,config_id,config_sha256,attempts,claim_id,lease_id,expires_at,created_at,result_code) VALUES (?,?,?,?,?,?,0,0,'',0,'','',DATE_ADD(UTC_TIMESTAMP(6),INTERVAL 1 HOUR),UTC_TIMESTAMP(6),'')", pending.ID, pending.RequestID, pending.DeviceID, pending.CredentialID, pending.Action, pending.Status).Error; err != nil {
+		t.Fatal(err)
+	}
+	inspect, err = r.ReconcileReservation(ctx, old.ID, "")
+	if err != nil || inspect.Eligibility != "activation_pending" {
+		t.Fatal(inspect, err)
+	}
+	if _, err := r.ReconcileReservation(ctx, old.ID, "CHG-42"); !errors.Is(err, contract.ErrConflict) {
+		t.Fatal("legacy hold released while activation was pending", err)
+	}
+	if err := f.db.Model(&pending).UpdateColumn("status", "cancelled").Error; err != nil {
+		t.Fatal(err)
+	}
 	input := contract.FrpCreateMappingInput{FrpActor: actor, DeviceID: device, LocalPort: 8080, Status: 1}
 	if _, err := r.CreateMapping(ctx, input); !errors.Is(err, contract.ErrFrpMappingConflict) {
 		t.Fatal("historical unknown claim did not block allocation", err)

@@ -25,6 +25,11 @@ func installReservationSchema(db *gorm.DB) error {
 		if err := tx.Exec("INSERT INTO frp_reservation (owner_id,device_id,credential_id,reference,config_id,server_id,kind,resource) SELECT COALESCE(d.user_id,0),COALESCE(c.device_id,0),'',CONCAT('legacy-config:',c.id),c.id,0,'unknown','' FROM frp_config c LEFT JOIN device d ON d.id=c.device_id").Error; err != nil {
 			return err
 		}
+		// Older queue entries were admitted without an individual resource claim.
+		// Preserve them as history, but require a fresh enqueue under the ledger.
+		if err := tx.Exec("UPDATE agent_command SET status='cancelled', result_code='upgrade_requeue', completed_at=UTC_TIMESTAMP(6) WHERE status IN ('pending','leased') AND action IN ('deploy_config','start','reload')").Error; err != nil {
+			return err
+		}
 		if err := tx.Create(&model.FrpReservationSchema{ID: 1, Version: 1}).Error; err != nil {
 			return err
 		}

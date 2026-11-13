@@ -115,5 +115,16 @@ func historicalReservationEligibility(tx *gorm.DB, claim model.FrpReservation) (
 	if binding.CredentialID != nil && *binding.CredentialID == claim.CredentialID {
 		return "current_generation", nil
 	}
+	if claim.CredentialID == "" && binding.CredentialID != nil {
+		// A database upgraded by an earlier ledger release might still have a
+		// live command admitted before reservations existed.
+		var live int64
+		if err := tx.Model(&model.AgentCommand{}).Where("device_id=? AND credential_id=? AND action IN ? AND status IN ? AND expires_at>UTC_TIMESTAMP(6)", device.ID, *binding.CredentialID, []string{"deploy_config", "start", "reload"}, []string{"pending", "leased"}).Count(&live).Error; err != nil {
+			return "", err
+		}
+		if live > 0 {
+			return "activation_pending", nil
+		}
+	}
 	return "historical", nil
 }

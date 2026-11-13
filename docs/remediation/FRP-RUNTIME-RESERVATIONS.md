@@ -33,7 +33,7 @@ Authorization: Bearer <用户会话>
 
 ## 显式迁移与升级限制
 
-后端连接和普通启动只验证结构，不自动迁移。`migrate` 新建两张账本表、增加映射 server_id 默认 0，并在共享池锁下把全部既有 frp_config 逐行保留为 `legacy-config:<id>` 的 unknown 记录。不得猜测旧配置属于哪台服务器、是否部署过或哪个凭据代次；不解密、不覆盖、不删除旧配置。无设备归属的历史行记 owner_id/device_id 为 0。回填与单例版本标记 1 原子提交，重跑不重复登记。结构检查验证 InnoDB、关键列、完整索引定义和版本标记。
+后端连接和普通启动只验证结构，不自动迁移。`migrate` 新建两张账本表、增加映射 server_id 默认 0，并在共享池锁下把全部既有 frp_config 逐行保留为 `legacy-config:<id>` 的 unknown 记录。不得猜测旧配置属于哪台服务器、是否部署过或哪个凭据代次；不解密、不覆盖、不删除旧配置。无设备归属的历史行记 owner_id/device_id 为 0。首次回填同时把旧队列中 pending/leased 的 deploy_config、start 和 reload 保留为取消记录，结果码为 `upgrade_requeue`。这些命令在没有占用账本时入队，升级后应使用新请求 ID 重新入队。stop、diagnose、forget 和终态历史保留。回填、命令更新与单例版本标记 1 原子提交，重跑不重复登记或取消新命令。结构检查验证 InnoDB、关键列、完整索引定义和版本标记。
 
 升级需要先停止旧后端写入，再由运维在已备份环境显式执行迁移。旧版本后端不认识此账本，不能与新版本混合写入。测试仅在 disposable MySQL/Redis 中执行，没有迁移生产库。
 
@@ -47,7 +47,7 @@ Authorization: Bearer <用户会话>
 cloudnest reconcile-frp-reservation 42
 ```
 
-`legacy_execution_enabled` 表示设备尚未建立 Agent 绑定，仍能领取旧 JWT 命令。先建立绑定并确认旧执行端已停用。`current_generation` 表示该记录仍属于当前凭据，应使用正常 `forget_config`。`historical` 表示可进入人工核验，仍需在对应机器和 frps 确认旧进程已停止、可恢复配置已清除，或旧配置已无法通过服务端认证。把核验结果记录在维护工单中。主机失联或仅看到端口空闲不足以解除占用。
+`legacy_execution_enabled` 表示设备尚未建立 Agent 绑定，仍能领取旧 JWT 命令。先建立绑定并确认旧执行端已停用。`current_generation` 表示该记录仍属于当前凭据，应使用正常 `forget_config`。`activation_pending` 表示当前身份仍有未到期的部署、启动或重载命令，待其终止后再次检查。`historical` 表示可进入人工核验，仍需在对应机器和 frps 确认旧进程已停止、可恢复配置已清除，或旧配置已无法通过服务端认证。把核验结果记录在维护工单中。主机失联或仅看到端口空闲不足以解除占用。
 
 核验完成后，在明确选择的数据库上执行：
 
@@ -55,7 +55,7 @@ cloudnest reconcile-frp-reservation 42
 cloudnest reconcile-frp-reservation 42 --confirm-decommissioned CHG-42
 ```
 
-命令再次检查当前身份和旧执行入口。在共享分配锁下标记指定记录并原子写入 `frp.reservation.reconcile` 审计，重复执行返回 `already_reconciled`。证据参数只接受工单编号一类的短标识。输出和审计只包含记录元数据，不读取配置正文或凭据。原配置和账本行均保留，查询通过 `reconciled_at` 展示已解除状态。命令记录的是维护人员提供的确认，不能自行验证远端状态。旧库的生产升级演练和离线设备逐条核验仍需完成。
+命令再次检查当前身份和旧执行入口。在共享分配锁下标记指定记录并原子写入 `frp.reservation.reconcile` 审计，重复执行返回 `already_reconciled`。证据参数只接受工单编号一类的短标识。输出和审计只包含记录元数据，不读取配置正文或凭据。原配置和账本行均保留，查询通过 `reconciled_at` 展示已解除状态。命令记录的是维护人员提供的确认，不能自行验证远端状态。`scripts/test-frp-upgrade.sh` 使用固定的账本引入前提交编译旧服务端，在临时 MySQL 中执行旧版和新版迁移命令，并验证密文、旧凭据、命令与对账行为。实际安装的备份恢复演练和离线设备逐条核验仍需完成。
 
 ## 验证范围
 
