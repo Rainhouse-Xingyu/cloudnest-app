@@ -432,7 +432,7 @@ func (m *Manager) List(ctx context.Context, actor int64, admin bool, device int6
 				r.Status = "timed_out"
 			}
 		}
-		return nil
+		return m.attachDiagnosticProxies(tx, device, rows)
 	})
 	if err != nil {
 		return nil, err

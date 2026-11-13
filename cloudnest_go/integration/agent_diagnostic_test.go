@@ -6,12 +6,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	"cloudenest_go/internal/agentcommand"
 	"cloudenest_go/internal/agentstatus"
+	"cloudenest_go/internal/service/contract"
 	storageMysql "cloudenest_go/internal/storage/mysql"
 	"cloudenest_go/internal/store"
 	"cloudenest_go/model"
@@ -123,5 +125,58 @@ func TestDiagnosticReceiptImmutableValidatedAndMigrated(t *testing.T) {
 	rows, err = manager.List(ctx, f.aliceID, false, device, 20)
 	if err != nil || len(rows) != 2 || rows[0].Diagnostic != nil {
 		t.Fatal("legacy receipt invented status", err)
+	}
+}
+
+func TestDiagnosticMappingIDsComeFromSavedVersion(t *testing.T) {
+	f := newFixture(t)
+	device := agentDevice(t, f)
+	key := commandIdentity(t, f, device)
+	ctx := t.Context()
+	_, keys := frpTestKeys(t, "one", map[string][]byte{"one": bytes.Repeat([]byte{1}, 32)})
+	repo := storageMysql.NewFrpRepo(f.db, keys)
+	actor := contract.FrpActor{UserID: f.aliceID}
+	mapping, err := repo.CreateMapping(ctx, contract.FrpCreateMappingInput{FrpActor: actor, DeviceID: device, LocalPort: 8080, Status: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := fmt.Sprintf("serverAddr: 127.0.0.1\nserverPort: 7000\nproxies:\n  - name: device_%d_map_%d\n    type: tcp\n  - name: device_%d_map_99\n    type: https\n", device, mapping.ID, device+1)
+	config, err := repo.CreateConfig(ctx, f.aliceID, false, model.FrpConfig{DeviceID: &device, ConfigText: raw})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { f.db.Where("id=?", config.ID).Delete(&model.FrpConfig{}) })
+	m := agentcommand.New(f.db, keys)
+	queued, err := m.Enqueue(ctx, f.aliceID, false, device, agentcommand.EnqueueInput{RequestID: strings.Repeat("a", 32), Action: "diagnose"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	delivery, err := m.Claim(ctx, key, strings.Repeat("c", 32))
+	if err != nil || delivery == nil || delivery.Command.ID != queued.ID {
+		t.Fatal("missing diagnose lease", err)
+	}
+	report := agentstatus.Report{State: "degraded", ConfigID: config.ID, ObservedAt: time.Now(), Expected: 2, Registered: 1, Failed: 1, ProxyStates: []byte{6}}
+	if err := m.FinishWithReport(ctx, key, queued.ID, delivery.LeaseID, false, "diagnostic_failed", &report); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.DeleteMapping(ctx, actor, mapping.ID); err != nil {
+		t.Fatal(err)
+	}
+	newMapping, err := repo.CreateMapping(ctx, contract.FrpCreateMappingInput{FrpActor: actor, DeviceID: device, LocalPort: 8080, RemotePort: &mapping.RemotePort, Status: 1})
+	if err != nil || newMapping.ID == mapping.ID {
+		t.Fatal("mapping replacement fixture failed", err)
+	}
+	t.Cleanup(func() { f.db.Delete(&newMapping) })
+	rows, err := m.List(ctx, f.aliceID, false, device, 20)
+	if err != nil || len(rows) != 1 {
+		t.Fatal("diagnostic list failed", err)
+	}
+	proxies := rows[0].DiagnosticProxies
+	if len(proxies) != 2 || proxies[0].MappingID != mapping.ID || proxies[0].State != "failed" || proxies[1].MappingID != 0 || proxies[1].State != "registered" {
+		t.Fatal("status did not match historical configuration", proxies)
+	}
+	rows, err = agentcommand.New(f.db, nil).List(ctx, f.aliceID, false, device, 20)
+	if err != nil || len(rows) != 1 || rows[0].Diagnostic == nil || len(rows[0].DiagnosticProxies) != 0 {
+		t.Fatal("old report unavailable when key is missing", err)
 	}
 }

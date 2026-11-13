@@ -358,3 +358,7 @@ Ubuntu push `43393865932` 的 agent-native 日志记录 systemd 将 Agent PID 11
 逐条诊断的 512 项快照、不可变回执和旧 schema 专项通过（4.453s，`/tmp/cloudnest-g05-proxy-status-receipt.log`），心跳能力协商与大小、位序、非法编码等 race 测试通过。初次本地两项真实 Agent 测试在能力协商改动前已开始编译后端，覆盖逐条结果提取和回执读取（131.377s，`/tmp/cloudnest-g05-proxy-status-native.log`）。最终版本另外重跑。
 
 包含心跳能力协商的最终版本，22 项 Agent 单元/原生进程测试通过（5.717s），两项真实 Agent/后端/frpc/frps 场景通过（包 124.250s，`/tmp/cloudnest-g05-proxy-status-native-final.log`）。真实注册拒绝的逐条状态经管理端历史读取，凭据撤销与设备退役仍关闭隧道。构建、普通 race 单元、带升级/原生标签的 vet、Linux systemd 专项编译及仓库检查通过。前一提交 `715a21f` 的完整 PR CI `43394693046` 已成功。
+
+逐条诊断映射 ID 关联的两项隔离 MySQL race 集成通过（5.169s，`/tmp/cloudnest-g05-mapping-diagnostics.log`）。原配置使用的映射删除并复用端口后，历史仍关联原 ID。跨设备名称省略映射 ID，无密钥时仍可读取汇总快照。构建、普通 race 单元和带集成标签的 vet 通过。真实 Agent 场景新增 HTTPS 历史中的 ID/状态断言。
+
+正式 HTTPS 命令历史关联验证通过。两项本地真实 Agent 集成共 124.570s（61.47s、61.08s），包含 frps 拒绝 TCP 时返回对应映射 ID 和 failed、其余两条 registered，以及凭据撤销和退役后的隧道关闭。原生 Agent 测试包 5.540s，记录于 `/tmp/cloudnest-g05-mapping-diagnostics-native.log`。

@@ -22,6 +22,12 @@ type Report struct {
 	ProxyStates []byte    `json:"proxy_states,omitempty"`
 }
 
+// ProxyView is response-only metadata derived from the saved configuration.
+type ProxyView struct {
+	MappingID int64  `json:"mapping_id,omitempty"`
+	State     string `json:"state"`
+}
+
 func (r Report) Validate() error {
 	if r.ConfigID < 0 || r.ObservedAt.IsZero() || r.ObservedAt.Year() < 2020 || r.ObservedAt.Year() > 2200 {
 		return ErrInvalid

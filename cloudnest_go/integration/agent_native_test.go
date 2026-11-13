@@ -25,6 +25,7 @@ import (
 
 	"cloudenest_go/internal/agentauth"
 	"cloudenest_go/internal/agentcommand"
+	"cloudenest_go/internal/agentstatus"
 	"cloudenest_go/internal/frpagent"
 	"cloudenest_go/internal/frpwire"
 	"cloudenest_go/internal/service/contract"
@@ -226,14 +227,17 @@ func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest, retire 
 			t.Error(err)
 		}
 	})
+	var mappingIDs []int64
 	for _, mapping := range []contract.FrpCreateMappingInput{
 		{FrpActor: contract.FrpActor{UserID: f.aliceID}, DeviceID: device, ServerID: registered.Item.ID, LocalPort: plainPort, RemotePort: &remote, Status: 1},
 		{FrpActor: contract.FrpActor{UserID: f.aliceID}, DeviceID: device, ServerID: registered.Item.ID, LocalPort: plainPort, Domain: "example.com", Status: 1},
 		{FrpActor: contract.FrpActor{UserID: f.aliceID}, DeviceID: device, ServerID: registered.Item.ID, LocalPort: securePort, Domain: "https://example.com", Status: 1},
 	} {
-		if _, err := repo.CreateMapping(ctx, mapping); err != nil {
+		created, err := repo.CreateMapping(ctx, mapping)
+		if err != nil {
 			t.Fatal(err)
 		}
+		mappingIDs = append(mappingIDs, created.ID)
 	}
 	var saved struct{ Item model.FrpConfig }
 	management("/api/frp/configs/save", map[string]any{"device_id": device, "server_id": registered.Item.ID, "server_revision_id": registered.Item.RevisionID}, &saved)
@@ -256,6 +260,7 @@ func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest, retire 
 	m := agentcommand.New(f.db, f.cfg.FRPKeys)
 	sequence := 0
 	var lastDiagnostic *frpagent.RegistrationStatus
+	var lastProxies []agentstatus.ProxyView
 	command := func(action string, configID int64, want string) {
 		t.Helper()
 		sequence++
@@ -303,6 +308,7 @@ func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest, retire 
 					for _, item := range history.Items {
 						if item.ID == row.ID {
 							lastDiagnostic = item.Diagnostic
+							lastProxies = item.DiagnosticProxies
 						}
 					}
 					if lastDiagnostic == nil || lastDiagnostic.Validate() != nil {
@@ -371,7 +377,7 @@ func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest, retire 
 	if lastDiagnostic.State != "degraded" || lastDiagnostic.Registered != 2 || lastDiagnostic.Failed != 1 || lastDiagnostic.ConfigID != refused.ID {
 		t.Fatal("refused mapping was not distinguished", lastDiagnostic)
 	}
-	if len(lastDiagnostic.ProxyStates) != 1 {
+	if len(lastDiagnostic.ProxyStates) != 1 || len(lastProxies) != len(mappingIDs) {
 		t.Fatal("diagnostic lost per-proxy status")
 	}
 	parsed, err := frpwire.Decode([]byte(refusedText))
@@ -380,8 +386,13 @@ func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest, retire 
 	}
 	for i, proxy := range parsed.Proxies {
 		want := byte(1)
+		wantState := "registered"
 		if proxy.Type == "tcp" {
 			want = 2
+			wantState = "failed"
+		}
+		if lastProxies[i].MappingID != mappingIDs[i] || lastProxies[i].State != wantState {
+			t.Fatal("history did not associate mapping with registration outcome", lastProxies[i])
 		}
 		if got := (lastDiagnostic.ProxyStates[0] >> (2 * i)) & 3; got != want {
 			t.Fatalf("proxy %d (%s) state=%d, want %d", i, proxy.Type, got, want)
