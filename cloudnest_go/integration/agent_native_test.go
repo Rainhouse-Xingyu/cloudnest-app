@@ -378,7 +378,8 @@ func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest, retire 
 			}
 			var body struct {
 				Item struct {
-					Runtime *agentstatus.Report `json:"runtime"`
+					Runtime        *agentstatus.Report     `json:"runtime"`
+					RuntimeProxies []agentstatus.ProxyView `json:"runtime_proxies"`
 				} `json:"item"`
 			}
 			err = json.NewDecoder(io.LimitReader(res.Body, 4096)).Decode(&body)
@@ -387,7 +388,15 @@ func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest, retire 
 				t.Fatal("runtime status request failed", res.StatusCode, err)
 			}
 			if sample := body.Item.Runtime; sample != nil && sample.ConfigID == cfg.ID && sample.State == "registered" && sample.Registered == 3 && len(sample.ProxyStates) == 1 && sample.ProxyStates[0] == 0x15 {
-				t.Log("ordinary heartbeat published all three registered proxies without a diagnose command")
+				if len(body.Item.RuntimeProxies) != len(mappingIDs) {
+					t.Fatal("runtime mapping metadata missing")
+				}
+				for i, id := range mappingIDs {
+					if view := body.Item.RuntimeProxies[i]; view.MappingID != id || view.State != "registered" {
+						t.Fatal("runtime mapping association incorrect", view)
+					}
+				}
+				t.Log("ordinary heartbeat published all three registered mappings without a diagnose command")
 				break
 			}
 			if time.Now().After(until) {

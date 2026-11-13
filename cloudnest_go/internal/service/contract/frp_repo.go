@@ -43,10 +43,11 @@ type FrpDeviceDetailMeta struct {
 }
 
 type AgentHeartbeatState struct {
-	Active        bool
-	LastSeenAt    *time.Time
-	ClientVersion string
-	Runtime       *agentstatus.Report
+	Active         bool
+	LastSeenAt     *time.Time
+	ClientVersion  string
+	Runtime        *agentstatus.Report
+	RuntimeProxies []agentstatus.ProxyView
 }
 
 // FrpRepository 定义 FRP 模块存储访问能力。

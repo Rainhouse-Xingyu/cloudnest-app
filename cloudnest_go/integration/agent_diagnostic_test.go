@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"cloudenest_go/internal/agentauth"
 	"cloudenest_go/internal/agentcommand"
 	"cloudenest_go/internal/agentstatus"
 	"cloudenest_go/internal/service/contract"
@@ -174,6 +175,20 @@ func TestDiagnosticMappingIDsComeFromSavedVersion(t *testing.T) {
 	proxies := rows[0].DiagnosticProxies
 	if len(proxies) != 2 || proxies[0].MappingID != mapping.ID || proxies[0].State != "failed" || proxies[1].MappingID != 0 || proxies[1].State != "registered" {
 		t.Fatal("status did not match historical configuration", proxies)
+	}
+	if _, err := agentauth.New(f.db).BeatWithReport(ctx, key, "cloudnest-agent-0.3.0", &report); err != nil {
+		t.Fatal(err)
+	}
+	heartbeat, err := repo.GetAgentHeartbeat(ctx, f.aliceID, false, device)
+	if err != nil || heartbeat == nil || len(heartbeat.RuntimeProxies) != 2 || heartbeat.RuntimeProxies[0] != proxies[0] || heartbeat.RuntimeProxies[1] != proxies[1] {
+		t.Fatal("automatic sample did not match historical configuration", heartbeat, err)
+	}
+	if _, err := repo.GetAgentHeartbeat(ctx, f.bobID, false, device); !errors.Is(err, contract.ErrForbidden) {
+		t.Fatal("another owner read runtime mapping IDs", err)
+	}
+	heartbeat, err = storageMysql.NewFrpRepo(f.db).GetAgentHeartbeat(ctx, f.aliceID, false, device)
+	if err != nil || heartbeat == nil || heartbeat.Runtime == nil || len(heartbeat.RuntimeProxies) != 0 {
+		t.Fatal("automatic sample lost when key is missing", err)
 	}
 	rows, err = agentcommand.New(f.db, nil).List(ctx, f.aliceID, false, device, 20)
 	if err != nil || len(rows) != 1 || rows[0].Diagnostic == nil || len(rows[0].DiagnosticProxies) != 0 {

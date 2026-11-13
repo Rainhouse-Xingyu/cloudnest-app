@@ -556,6 +556,9 @@ func (h *FrpHandler) GetDeviceStatus(c *gin.Context) {
 	if c.Request.TLS != nil && item.Runtime != nil {
 		c.Header("Cache-Control", "no-store")
 		payload["runtime"] = item.Runtime
+		if len(item.RuntimeProxies) != 0 {
+			payload["runtime_proxies"] = item.RuntimeProxies
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"item": payload})
 }

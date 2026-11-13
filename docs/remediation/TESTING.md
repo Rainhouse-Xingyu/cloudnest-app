@@ -364,3 +364,5 @@ Ubuntu push `43393865932` 的 agent-native 日志记录 systemd 将 Agent PID 11
 正式 HTTPS 命令历史关联验证通过。两项本地真实 Agent 集成共 124.570s（61.47s、61.08s），包含 frps 拒绝 TCP 时返回对应映射 ID 和 failed、其余两条 registered，以及凭据撤销和退役后的隧道关闭。原生 Agent 测试包 5.540s，记录于 `/tmp/cloudnest-g05-mapping-diagnostics-native.log`。
 
 逐条诊断映射关联提交 `4a43208` 的 PR `43396704049` 与 push `43396695833` 四项 CI 均通过。自动运行采样的 3 项隔离集成通过（11.620s），覆盖 HTTPS 状态读取、过期隐藏、轮换清除、无效配置归属和旧协议回归。官方 frpc 的两项真实 Agent 集成通过（147.631s），包括普通心跳自动发布三条已注册状态、凭据撤销和设备退役。旧版升级首轮因夹具用新版 enrollment 写入旧表而失败，改用旧结构写入隔离凭据后通过（6.386s），验证现有凭据及配置可发布和读取新快照。`make check test`、旧后端回退的心跳重试和带标签 vet 通过。日志分别为 `/tmp/cloudnest-g05-runtime-heartbeat.log`、`/tmp/cloudnest-g05-runtime-native.log`、`/tmp/cloudnest-g05-runtime-upgrade-final.log`。
+
+自动采样的映射 ID 关联由手动诊断共用原版本解析规则。两项隔离集成通过（5.162s，`/tmp/cloudnest-g05-runtime-mapping-ids.log`），覆盖复用端口、跨用户拒绝和缺少密钥。最终真实 Agent 验收通过（145.912s，`/tmp/cloudnest-g05-runtime-mapping-native.log`）：普通心跳在 HTTPS 状态接口发布三条正确的映射 ID 和 registered，撤销及退役后隧道关闭。Agent 原生包、`make check test` 和带标签 vet 通过。

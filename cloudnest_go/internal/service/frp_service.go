@@ -130,6 +130,7 @@ type DeviceStatusResult struct {
 	UpdatedAt       string
 	CurrentConfigID string
 	Runtime         *agentstatus.Report
+	RuntimeProxies  []agentstatus.ProxyView
 }
 
 // PullCommandResult 表示拉取到的命令。
@@ -374,6 +375,7 @@ func (s *FrpService) GetDeviceStatus(ctx context.Context, uid int64, isAdmin boo
 			state.Online = freshFRPHeartbeat(*heartbeat.LastSeenAt)
 			if state.Online {
 				state.Runtime = heartbeat.Runtime
+				state.RuntimeProxies = heartbeat.RuntimeProxies
 			}
 		}
 		return state, nil
