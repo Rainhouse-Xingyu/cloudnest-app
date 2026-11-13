@@ -117,8 +117,11 @@ func (s *AIService) hybridSearch(parent context.Context, uid int64, question str
 	ipClause := explicitConfigIP(question)
 	result.Query.IPCondition = ipClause.descriptor()
 	var ipEvidence configIPEvidence
+	subject := namedSubject(question)
+	result.Query.RequiredTechnology = subject
+	hasSubject := false
 	flush := func() {
-		if currentID == 0 || !ipEvidence.accepts(ipClause) {
+		if currentID == 0 || !ipEvidence.accepts(ipClause) || (subject != "" && !hasSubject) {
 			return
 		}
 		if bestLex.lexical > 0 || bestSemantic.semantic >= minCosine {
@@ -139,6 +142,10 @@ func (s *AIService) hybridSearch(parent context.Context, uid int64, question str
 			bestLex = hybridHit{}
 			bestSemantic = hybridHit{semantic: -1}
 			ipEvidence = configIPEvidence{}
+			hasSubject = false
+		}
+		if subject != "" && !hasSubject {
+			hasSubject = hasNamedSubject(row.Content, subject, row.StartRune > 0, row.Ordinal+1 < row.ChunkCount)
 		}
 		literal, allowed := ipEvidence.observe(ipClause, row)
 		if !allowed {

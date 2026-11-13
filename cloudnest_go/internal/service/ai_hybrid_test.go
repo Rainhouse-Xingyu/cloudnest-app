@@ -170,3 +170,34 @@ func TestHybridContentQuestionKeepsUnfilteredMeaning(t *testing.T) {
 		t.Fatal("unfiltered subject changed", q)
 	}
 }
+
+func TestExplicitTechnologyKeepsScopeAndTokenBoundaries(t *testing.T) {
+	for question, want := range map[string]string{
+		"记录 Oracle 数据库迁移方案":           "oracle",
+		"使用 Keycloak 配置单点登录":          "keycloak",
+		"查找 SQL 数据库迁移方案":              "",
+		"查找 Oracle 数据库或 Redis 数据库的方案": "",
+		"不使用 Keycloak 配置单点登录":         "",
+		"使用 Keycloak 配置或使用其他组件设置":     "",
+		"查找 PostgreSQL 主库切换方案":        "",
+	} {
+		if got := namedSubject(question); got != want {
+			t.Errorf("%q got %q want %q", question, got, want)
+		}
+	}
+	for _, tc := range []struct {
+		text              string
+		left, right, want bool
+	}{
+		{"连接 ORACLE 数据库", false, false, true},
+		{"OracleX", false, false, false},
+		{"my-oracle", false, false, false},
+		{"Oracle 在片段开头", true, false, false},
+		{"片段结束前 Oracle", false, true, false},
+		{"Oracle", false, false, true},
+	} {
+		if got := hasNamedSubject(tc.text, "oracle", tc.left, tc.right); got != tc.want {
+			t.Errorf("%q got %t want %t", tc.text, got, tc.want)
+		}
+	}
+}

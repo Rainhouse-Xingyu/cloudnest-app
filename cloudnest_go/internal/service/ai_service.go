@@ -67,16 +67,17 @@ type AISummaryResult struct {
 }
 
 type AISearchQuery struct {
-	IPCondition *AIConfigIPCondition `json:"ip_condition,omitempty"`
-	Keyword     string               `json:"keyword"`
-	FileType    string               `json:"file_type"`
-	Location    string               `json:"location"`
-	Landmark    string               `json:"landmark"`
-	StartTime   string               `json:"start_time"`
-	EndTime     string               `json:"end_time"`
-	TagOnly     bool                 `json:"tag_only"`
-	Page        int                  `json:"page"`
-	Limit       int                  `json:"limit"`
+	IPCondition        *AIConfigIPCondition `json:"ip_condition,omitempty"`
+	RequiredTechnology string               `json:"required_technology,omitempty"`
+	Keyword            string               `json:"keyword"`
+	FileType           string               `json:"file_type"`
+	Location           string               `json:"location"`
+	Landmark           string               `json:"landmark"`
+	StartTime          string               `json:"start_time"`
+	EndTime            string               `json:"end_time"`
+	TagOnly            bool                 `json:"tag_only"`
+	Page               int                  `json:"page"`
+	Limit              int                  `json:"limit"`
 }
 
 type AIConfigIPCondition struct {
