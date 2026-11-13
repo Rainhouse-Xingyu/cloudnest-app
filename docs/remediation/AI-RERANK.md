@@ -70,3 +70,9 @@ dev 与已暴露 heldout 的 Recall@5、MRR@10 均为 **1.0**，负例分别 3/3
 运行专用服务前校验 GGUF 文件 SHA-256，并用 `--alias NAME@sha256:SHA256` 启动单模型服务。将该别名填入 `AI_RERANK_MODEL`，将仅后端可访问的服务地址填入 `AI_RERANK_BATCH_URL`。服务前后读取 `/v1/models` 确认别名；权重摘要来自部署时校验的别名，远端 API 不独立证明权重内容。部署应提供足够的每槽上下文，并使用 `--no-context-shift`，避免自动丢弃输入内容。全量评估使用 `CLOUDNEST_AI_EVAL_RERANK_BATCH_URL` 和相同的 `CLOUDNEST_AI_EVAL_RERANK_MODEL` 别名。
 
 协议参考 [llama.cpp 批量重排接口](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md#post-reranking-rerank-documents-according-to-a-given-query)。
+
+本轮在 Apple M1 使用 Ollama 应用随附的 llama-server（构建 `8c146a836`），绑定本机回环接口。模型为 ggml-org Qwen3-Reranker-0.6B Q8_0，revision `a02f48bb4f057028298c21fa033da2b30d7742d5`，GGUF SHA-256 `22c9979ce4fbcdc5acdc310c6641c32797eff1aa980b8f7a2db8a8ea23429a48`。以 `--offline --reranking --no-context-shift -c 16384 -np 4 -ngl 99` 启动，实际每槽 4096 token。独立越界请求收到非成功响应，正常全量运行无服务端截断。十组固定文本候选各测三次，最慢一批 1.293s。纯文本预检排除了图像和扫描件，且单机顺序执行。
+
+[完整 API 复测](AI-RETRIEVAL-BATCH-STRESS-20261113.json) 使用提交 `31bc6b6`，实际重建 48 个文件并查询 24 次，15 条执行重排、9 条无需评分、零回退。全部查询 API 耗时最大 3.778s。六项边界检查通过。整组质量 **FAIL 329.214s**，dev 仍有两条负例误命中，发票族 Recall@5 从 1.0 降至 0.80。该模型仍会将报价单排在购买发票前。使用不同视觉索引输出的两轮结果可作产品回归比较，无法独立归因于重排模型。批量后端保持显式启用。
+
+`make check test` 通过，真实 MySQL/Redis 搜索专项 44 个顶层测试通过、零跳过（102.956s）。另单独执行评分期间权限/源变化集成测试，六项均通过（包 8.399s），包含批量评分返回前的共享撤销复核。
