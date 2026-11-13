@@ -356,3 +356,5 @@ Ubuntu push `43393865932` 的 agent-native 日志记录 systemd 将 Agent PID 11
 修正后提交 `715a21f906393846361e954f090eee68884d15e7` 的 Ubuntu push `43394682540` 通过 agent-native。日志记录 systemd 将 Agent PID 11692 替换为 11790，三条隧道和诊断回执恢复。测试随后确认停止服务后状态锁释放、运行缓存清除和 TCP 端口关闭，并完成临时 unit 清理（60.35s，包 61.384s）。两项前台真实 Agent 集成也通过（145.756s）。
 
 逐条诊断的 512 项快照、不可变回执和旧 schema 专项通过（4.453s，`/tmp/cloudnest-g05-proxy-status-receipt.log`），心跳能力协商与大小、位序、非法编码等 race 测试通过。初次本地两项真实 Agent 测试在能力协商改动前已开始编译后端，覆盖逐条结果提取和回执读取（131.377s，`/tmp/cloudnest-g05-proxy-status-native.log`）。最终版本另外重跑。
+
+包含心跳能力协商的最终版本，22 项 Agent 单元/原生进程测试通过（5.717s），两项真实 Agent/后端/frpc/frps 场景通过（包 124.250s，`/tmp/cloudnest-g05-proxy-status-native-final.log`）。真实注册拒绝的逐条状态经管理端历史读取，凭据撤销与设备退役仍关闭隧道。构建、普通 race 单元、带升级/原生标签的 vet、Linux systemd 专项编译及仓库检查通过。前一提交 `715a21f` 的完整 PR CI `43394693046` 已成功。
