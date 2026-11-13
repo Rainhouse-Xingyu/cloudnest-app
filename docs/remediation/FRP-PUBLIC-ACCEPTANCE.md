@@ -25,3 +25,9 @@
 这套公网验收覆盖 IP 虚拟主机 HTTP 和域名 SNI HTTPS，不等于真实 DNS 配置或所有本机代理规则已验收。example.com 纯 HTTP Host 路径在本机曾超时，而相同端口的 IP Host 与 HTTPS SNI 对照可达；原因尚未确定，保留在测试记录中，不将换 Host 表述为已修复域名路径。
 
 结果以 [TESTING](TESTING.md) 的实际运行记录为准。准备脚本成功、端口放行、控制 TLS 成功或操作者手工连通，均不能替代完整 Agent 验收。
+
+## 2026-11-13 复测记录
+
+北京时间 10:33 的早期 Agent 诊断原文为 `public command diagnose: failed/diagnostic_failed, want ok`。服务器在北京时间 10:33:51.738（UTC 02:33:51.738）记录 `new proxy [device_1_map_1] type [tcp] error: port already used`。两次测试的控制目标均为 `129.146.81.189:17000`，手工 frpc 配置通过 `auth.tokenSource` 读取与 Agent 相同的 token 文件，TLS 也信任同一份 CA。手工 frpc 0.71.0 直接注册单条 TCP 20080 并在服务器回环地址验证，Agent 则从管理 API 接收部署，调用官方 frpc 0.71.1 注册 TCP/HTTP/HTTPS 后从 Mac 探测公网数据路径。
+
+端口释放后，提交 `f83e4b641ddee819596b49266a1ade4e92016f7a` 于北京时间 19:42:30 启动的公网复测 **通过（测试 87.60s，包 90.382s）**，日志 `/tmp/cloudnest-g05-f83e4b6-public-20261113.log`。三种代理全部注册，验证随机响应、启停、Agent 重启、持久清除与重新部署。HTTP 使用公网 IP 作为 Host，HTTPS 使用 example.com 作为 SNI。该提交的 PR CI 和 push CI 均通过。
