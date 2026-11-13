@@ -289,3 +289,7 @@ HTTP 协议夹具只用于错误/并发边界测试，不替代模型识别验�
 2026-11-02 复核本地日志时发现，上述三次统计将启动数当作通过数。缺少 CLOUDNEST_TEST_POPPLER_BIN 时，一个 PDF 顶层测试和另一个测试中的四个 PDF 子用例会跳过。已显式配置 Poppler 并重新执行当前 AI 专项，30 个顶层测试全部通过，无跳过，包耗时 60.391s（`/tmp/cloudnest-ip-poppler-aisearch.log`）。提交 4328e8e 的 PR 41368659078 和 push 41368654870 两次 CI 均通过。
 
 G04 显式技术名条件回归通过。真实 API 与隔离 MySQL/Redis 验证完整名称、近似名称拒绝、文件名不作正文证据，以及与已有配置 IP 条件共存。使用原生 Poppler 的 AI 专项共 31 项顶层通过（69.491s，`/tmp/cloudnest-g04-named-subject-search.log`），service/aiindex race 通过。冻结 stress-v2 的真实模型评估已启动于分块边界加严之前，质量结果另记。
+
+2026-11-13，冻结 stress-v2 的早期显式技术名实现完成实际评估，整组 **FAIL 391.358s**，负例空结果 4/6，五条查询重排超时。报告的代码来源、指标变化和剩余失败见 [评估记录](AI-RETRIEVAL-EVALUATION.md)。
+
+G04 CI 在 Go 1.26.10 上报告可达的标准库公告 GO-2026-6859。Go 1.26.11 下本地 `make check test` 通过，`make vuln` 未发现可达漏洞，仍有 3 个不可达模块公告。未修改扫描规则。工作树内已有的 blob 测试文件移动未纳入提交，完整检出以当前提交 CI 为准。
