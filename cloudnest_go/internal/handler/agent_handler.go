@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"cloudenest_go/internal/agentauth"
+	"cloudenest_go/internal/agentstatus"
 	"cloudenest_go/internal/middleware"
 	"github.com/gin-gonic/gin"
 )
@@ -113,7 +114,8 @@ func (h *AgentHandler) Exchange(c *gin.Context) {
 }
 func (h *AgentHandler) Heartbeat(c *gin.Context) {
 	var req struct {
-		ClientVersion string `json:"client_version"`
+		ClientVersion string              `json:"client_version"`
+		Runtime       *agentstatus.Report `json:"runtime"`
 	}
 	if !agentBody(c, &req) {
 		return
@@ -123,7 +125,7 @@ func (h *AgentHandler) Heartbeat(c *gin.Context) {
 		agentError(c, agentauth.ErrDenied)
 		return
 	}
-	out, err := h.Identity.Beat(c.Request.Context(), key, req.ClientVersion)
+	out, err := h.Identity.BeatWithReport(c.Request.Context(), key, req.ClientVersion, req.Runtime)
 	if err != nil {
 		agentError(c, err)
 		return

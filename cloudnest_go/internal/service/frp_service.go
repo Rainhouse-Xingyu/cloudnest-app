@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"cloudenest_go/internal/agentauth"
+	"cloudenest_go/internal/agentstatus"
 	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
 
@@ -128,6 +129,7 @@ type DeviceStatusResult struct {
 	ClientVersion   string
 	UpdatedAt       string
 	CurrentConfigID string
+	Runtime         *agentstatus.Report
 }
 
 // PullCommandResult 表示拉取到的命令。
@@ -370,6 +372,9 @@ func (s *FrpService) GetDeviceStatus(ctx context.Context, uid int64, isAdmin boo
 			state.LastHeartbeat = &received
 			state.UpdatedAt = received
 			state.Online = freshFRPHeartbeat(*heartbeat.LastSeenAt)
+			if state.Online {
+				state.Runtime = heartbeat.Runtime
+			}
 		}
 		return state, nil
 	}

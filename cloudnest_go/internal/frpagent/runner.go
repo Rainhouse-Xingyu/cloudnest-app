@@ -160,7 +160,12 @@ func (r *Runner) Run(ctx context.Context) (runErr error) {
 			return ErrSupervisor
 		}
 		if time.Since(heartbeat) >= 25*time.Second {
-			if e := r.Client.Heartbeat(ctx); e != nil {
+			var sample *RegistrationStatus
+			if r.Client.runtimeStatusV1 {
+				value := r.registrationSnapshot(ctx)
+				sample = &value
+			}
+			if e := r.Client.heartbeat(ctx, sample); e != nil {
 				report(e)
 				if permanent(e) {
 					return e
@@ -398,17 +403,12 @@ func (r *Runner) execute(ctx context.Context, d Delivery) (string, error) {
 		}
 		return "ok", nil
 	case "diagnose":
-		status, err := r.process.Registration(ctx)
-		if err != nil {
-			status = RegistrationStatus{State: "unavailable"}
-		}
+		status := r.registrationSnapshot(ctx)
 		if !r.Client.proxyStatusV1 {
 			status.ProxyStates = nil
 		}
-		status.ConfigID = r.state.ConfigID
-		status.ObservedAt = time.Now().UTC()
 		r.lastDiagnostic = &status
-		if err != nil || status.State != "registered" {
+		if status.State != "registered" {
 			return "diagnostic_failed", nil
 		}
 		return "ok", nil
@@ -421,4 +421,14 @@ func processOutcome(e error, code string) (string, error) {
 		return "", e
 	}
 	return code, nil
+}
+
+func (r *Runner) registrationSnapshot(ctx context.Context) RegistrationStatus {
+	status, err := r.process.Registration(ctx)
+	if err != nil {
+		status = RegistrationStatus{State: "unavailable"}
+	}
+	status.ConfigID = r.state.ConfigID
+	status.ObservedAt = time.Now().UTC()
+	return status
 }

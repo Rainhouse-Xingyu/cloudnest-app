@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"time"
 
+	"cloudenest_go/internal/agentstatus"
 	"cloudenest_go/model"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -43,9 +44,10 @@ type Registered struct {
 	Credential string `json:"credential"`
 }
 type Heartbeat struct {
-	DeviceID      int64     `json:"device_id"`
-	ReceivedAt    time.Time `json:"received_at"`
-	ProxyStatusV1 bool      `json:"proxy_status_v1,omitempty"`
+	DeviceID        int64     `json:"device_id"`
+	ReceivedAt      time.Time `json:"received_at"`
+	RuntimeStatusV1 bool      `json:"runtime_status_v1,omitempty"`
+	ProxyStatusV1   bool      `json:"proxy_status_v1,omitempty"`
 }
 
 func lockOwnerAndDevice(tx *gorm.DB, ownerID, deviceID int64) (model.User, error) {
@@ -184,6 +186,7 @@ func (m *Manager) Exchange(ctx context.Context, raw string) (Registered, error) 
 		b.CredentialDigest = key.digest[:]
 		b.LastSeenAt = nil
 		b.ClientVersion = ""
+		b.RuntimeReport = ""
 		if err = tx.Save(&b).Error; err != nil {
 			return err
 		}
@@ -205,7 +208,7 @@ func (m *Manager) Revoke(ctx context.Context, ownerID, deviceID int64, password 
 			return err
 		}
 		err := tx.Model(&model.AgentBinding{}).Where("device_id=? AND owner_id=?", deviceID, ownerID).Updates(map[string]any{
-			"enrollment_id": nil, "enrollment_digest": nil, "enrollment_expires": nil, "credential_id": nil, "credential_digest": nil, "last_seen_at": nil, "client_version": "",
+			"enrollment_id": nil, "enrollment_digest": nil, "enrollment_expires": nil, "credential_id": nil, "credential_digest": nil, "last_seen_at": nil, "client_version": "", "runtime_report": "",
 		}).Error
 		if err != nil {
 			return err
@@ -215,6 +218,10 @@ func (m *Manager) Revoke(ctx context.Context, ownerID, deviceID int64, password 
 }
 
 func (m *Manager) Beat(ctx context.Context, raw, version string) (Heartbeat, error) {
+	return m.BeatWithReport(ctx, raw, version, nil)
+}
+
+func (m *Manager) BeatWithReport(ctx context.Context, raw, version string, report *agentstatus.Report) (Heartbeat, error) {
 	input, ok := parseToken(credentialPrefix, raw)
 	if !ok {
 		return Heartbeat{}, ErrDenied
@@ -227,8 +234,12 @@ func (m *Manager) Beat(ctx context.Context, raw, version string) (Heartbeat, err
 			return Heartbeat{}, ErrInput
 		}
 	}
+	data, err := agentstatus.Encode(report)
+	if err != nil {
+		return Heartbeat{}, ErrInput
+	}
 	var result Heartbeat
-	err := m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		b, err := lockBinding(tx, input.id, false)
 		if err != nil {
 			return err
@@ -237,10 +248,21 @@ func (m *Manager) Beat(ctx context.Context, raw, version string) (Heartbeat, err
 			return ErrDenied
 		}
 		now := time.Now().UTC().Truncate(time.Microsecond)
-		if err = tx.Model(&b).Updates(map[string]any{"last_seen_at": now, "client_version": version}).Error; err != nil {
+		if report != nil && report.ConfigID > 0 {
+			var count int64
+			if err := tx.Model(&model.FrpConfig{}).Where("id=? AND device_id=?", report.ConfigID, b.DeviceID).Count(&count).Error; err != nil {
+				return err
+			}
+			// A deleted or unrelated version cannot be published, but must
+			// not interrupt the authenticated device's command channel.
+			if count != 1 {
+				data = ""
+			}
+		}
+		if err = tx.Model(&b).Updates(map[string]any{"last_seen_at": now, "client_version": version, "runtime_report": data}).Error; err != nil {
 			return err
 		}
-		result = Heartbeat{DeviceID: b.DeviceID, ReceivedAt: now, ProxyStatusV1: true}
+		result = Heartbeat{DeviceID: b.DeviceID, ReceivedAt: now, ProxyStatusV1: true, RuntimeStatusV1: true}
 		return nil
 	})
 	if err != nil {

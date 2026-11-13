@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"cloudenest_go/internal/agentstatus"
 	"cloudenest_go/internal/frpconfig"
 	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
@@ -147,9 +148,10 @@ func (r *FrpRepo) GetAgentHeartbeat(ctx context.Context, uid int64, admin bool, 
 		Active        bool
 		LastSeenAt    *time.Time
 		ClientVersion string
+		RuntimeReport string
 	}
 	result := r.db.WithContext(ctx).Table("device d").Joins("LEFT JOIN agent_binding b ON b.device_id=d.id").
-		Select("d.user_id AS owner_id,d.status=1 AS enabled,b.device_id AS binding_id,(b.credential_id IS NOT NULL AND b.owner_id=d.user_id AND d.status=1) AS active,b.last_seen_at,COALESCE(b.client_version,'') AS client_version").
+		Select("d.user_id AS owner_id,d.status=1 AS enabled,b.device_id AS binding_id,(b.credential_id IS NOT NULL AND b.owner_id=d.user_id AND d.status=1) AS active,b.last_seen_at,COALESCE(b.client_version,'') AS client_version,COALESCE(b.runtime_report,'') AS runtime_report").
 		Where("d.id=? AND d.retired_at IS NULL", id).Scan(&snapshot)
 	if result.Error != nil {
 		return nil, result.Error
@@ -166,7 +168,12 @@ func (r *FrpRepo) GetAgentHeartbeat(ctx context.Context, uid int64, admin bool, 
 		}
 		return &contract.AgentHeartbeatState{}, nil
 	}
-	return &contract.AgentHeartbeatState{Active: snapshot.Active, LastSeenAt: snapshot.LastSeenAt, ClientVersion: snapshot.ClientVersion}, nil
+	state := &contract.AgentHeartbeatState{Active: snapshot.Active, LastSeenAt: snapshot.LastSeenAt, ClientVersion: snapshot.ClientVersion}
+	if snapshot.Active {
+		// A damaged optional snapshot must not hide the device's online state.
+		state.Runtime, _ = agentstatus.Decode(snapshot.RuntimeReport)
+	}
+	return state, nil
 }
 
 // Serialize legacy Redis-side execution with the first enrollment transaction.

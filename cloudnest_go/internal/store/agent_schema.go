@@ -109,6 +109,13 @@ func CheckAgentSchema(db *gorm.DB) error {
 	if columns != 9 {
 		return fmt.Errorf("agent identity schema missing; run explicit migrate")
 	}
+	var runtimeReport int
+	if err := db.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='agent_binding' AND column_name='runtime_report' AND data_type='varchar' AND character_maximum_length=512 AND is_nullable='NO' AND column_default=''").Scan(&runtimeReport).Error; err != nil {
+		return err
+	}
+	if runtimeReport != 1 {
+		return fmt.Errorf("agent runtime report column invalid; run explicit migrate")
+	}
 	for _, pair := range [][2]string{{"PRIMARY", "device_id"}, {"uq_agent_enrollment_id", "enrollment_id"}, {"uq_agent_credential_id", "credential_id"}} {
 		var count int
 		err := db.Raw("SELECT COUNT(*) FROM (SELECT index_name FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='agent_binding' AND index_name=? GROUP BY index_name HAVING COUNT(*)=1 AND MAX(non_unique)=0 AND MAX(column_name)=?) AS verified", pair[0], pair[1]).Scan(&count).Error

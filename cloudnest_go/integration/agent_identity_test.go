@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"cloudenest_go/internal/agentauth"
+	"cloudenest_go/internal/agentstatus"
 	"cloudenest_go/internal/store"
 	"cloudenest_go/model"
 	mysqldsn "github.com/go-sql-driver/mysql"
@@ -104,6 +105,30 @@ func TestAgentTLSRegistrationRotationAndIsolation(t *testing.T) {
 		}
 	}
 	statusPath := fmt.Sprintf("/api/frp/devices/%d/status", id)
+	var runtimeStatus struct {
+		Item struct {
+			Runtime *agentstatus.Report `json:"runtime"`
+		} `json:"item"`
+	}
+	sample := agentstatus.Report{State: "stopped", ObservedAt: time.Now().UTC()}
+	call("POST", "/api/agent/heartbeat", k, map[string]any{"client_version": "v1.0", "runtime": sample}, 200, &beat)
+	if !beat.RuntimeStatusV1 {
+		t.Fatal("runtime capability missing")
+	}
+	readSample := func(want bool) {
+		t.Helper()
+		runtimeStatus.Item.Runtime = nil
+		call("GET", statusPath, f.alice, nil, 200, &runtimeStatus)
+		if got := runtimeStatus.Item.Runtime; (got != nil) != want || got != nil && !got.ObservedAt.Equal(sample.ObservedAt) {
+			t.Fatal("unexpected runtime snapshot", got)
+		}
+	}
+	readSample(true)
+	httpStatus := f.json(t, "GET", statusPath, f.alice, nil, 200)
+	if strings.Contains(httpStatus.Body.String(), `"runtime"`) {
+		t.Fatal("runtime snapshot exposed over plain HTTP")
+	}
+	call("GET", statusPath, f.bob, nil, 403, nil)
 	call("GET", statusPath, f.alice, nil, 200, &status)
 	if !status.Item.Online || status.Item.Version != "v1.0" {
 		t.Fatal("owner did not see managed heartbeat")
@@ -115,6 +140,11 @@ func TestAgentTLSRegistrationRotationAndIsolation(t *testing.T) {
 	if status.Item.Online {
 		t.Fatal("inactive device stayed online")
 	}
+	readSample(false)
+	sample.ConfigID = 9223372036854775807
+	call("POST", "/api/agent/heartbeat", k, map[string]any{"runtime": sample}, 200, nil)
+	readSample(false)
+	sample.ConfigID = 0
 	call("POST", "/api/agent/heartbeat", k, map[string]string{"client_version": "v1.0"}, 200, &beat)
 	call("GET", statusPath, f.bob, nil, 403, nil)
 	call("POST", statusPath+"/report", f.alice, map[string]any{"online": true}, 403, nil)
@@ -149,7 +179,10 @@ func TestAgentTLSRegistrationRotationAndIsolation(t *testing.T) {
 			t.Fatal("secret in audit")
 		}
 	}
+	call("POST", "/api/agent/heartbeat", k, map[string]any{"runtime": sample}, 200, nil)
+	readSample(true)
 	_, k2 := register()
+	readSample(false)
 	call("POST", "/api/agent/heartbeat", k, map[string]string{}, 401, nil)
 	call("POST", "/api/agent/heartbeat", k2, map[string]string{}, 200, nil)
 	call("POST", revoke, f.bob, password, 404, nil)

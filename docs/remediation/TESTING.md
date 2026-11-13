@@ -362,3 +362,5 @@ Ubuntu push `43393865932` 的 agent-native 日志记录 systemd 将 Agent PID 11
 逐条诊断映射 ID 关联的两项隔离 MySQL race 集成通过（5.169s，`/tmp/cloudnest-g05-mapping-diagnostics.log`）。原配置使用的映射删除并复用端口后，历史仍关联原 ID。跨设备名称省略映射 ID，无密钥时仍可读取汇总快照。构建、普通 race 单元和带集成标签的 vet 通过。真实 Agent 场景新增 HTTPS 历史中的 ID/状态断言。
 
 正式 HTTPS 命令历史关联验证通过。两项本地真实 Agent 集成共 124.570s（61.47s、61.08s），包含 frps 拒绝 TCP 时返回对应映射 ID 和 failed、其余两条 registered，以及凭据撤销和退役后的隧道关闭。原生 Agent 测试包 5.540s，记录于 `/tmp/cloudnest-g05-mapping-diagnostics-native.log`。
+
+逐条诊断映射关联提交 `4a43208` 的 PR `43396704049` 与 push `43396695833` 四项 CI 均通过。自动运行采样的 3 项隔离集成通过（11.620s），覆盖 HTTPS 状态读取、过期隐藏、轮换清除、无效配置归属和旧协议回归。官方 frpc 的两项真实 Agent 集成通过（147.631s），包括普通心跳自动发布三条已注册状态、凭据撤销和设备退役。旧版升级首轮因夹具用新版 enrollment 写入旧表而失败，改用旧结构写入隔离凭据后通过（6.386s），验证现有凭据及配置可发布和读取新快照。`make check test`、旧后端回退的心跳重试和带标签 vet 通过。日志分别为 `/tmp/cloudnest-g05-runtime-heartbeat.log`、`/tmp/cloudnest-g05-runtime-native.log`、`/tmp/cloudnest-g05-runtime-upgrade-final.log`。

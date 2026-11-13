@@ -30,6 +30,7 @@ type Client struct {
 	base, credential string
 	http             *http.Client
 	proxyStatusV1    bool
+	runtimeStatusV1  bool
 }
 type Registration struct {
 	DeviceID   int64  `json:"device_id"`
@@ -133,16 +134,31 @@ func (c *Client) Enroll(ctx context.Context, enrollment string) (Registration, e
 	return out, e
 }
 func (c *Client) Heartbeat(ctx context.Context) error {
+	return c.heartbeat(ctx, nil)
+}
+
+func (c *Client) heartbeat(ctx context.Context, report *RegistrationStatus) error {
 	var out struct {
-		DeviceID      int64 `json:"device_id"`
-		ProxyStatusV1 bool  `json:"proxy_status_v1"`
+		DeviceID        int64 `json:"device_id"`
+		ProxyStatusV1   bool  `json:"proxy_status_v1"`
+		RuntimeStatusV1 bool  `json:"runtime_status_v1"`
 	}
-	status, e := c.post(ctx, "/api/agent/heartbeat", map[string]string{"client_version": "cloudnest-agent-0.3.0"}, &out, 200)
+	body := map[string]any{"client_version": "cloudnest-agent-0.3.0"}
+	if c.runtimeStatusV1 && report != nil {
+		body["runtime"] = report
+	}
+	status, e := c.post(ctx, "/api/agent/heartbeat", body, &out, 200)
+	if report != nil && body["runtime"] != nil && status == 400 {
+		// An older backend may serve this request during a rollback.
+		delete(body, "runtime")
+		status, e = c.post(ctx, "/api/agent/heartbeat", body, &out, 200)
+	}
 	if e == nil {
 		if status != 200 || out.DeviceID <= 0 {
 			return ErrProtocol
 		}
 		c.proxyStatusV1 = out.ProxyStatusV1
+		c.runtimeStatusV1 = out.RuntimeStatusV1
 	}
 	return e
 }

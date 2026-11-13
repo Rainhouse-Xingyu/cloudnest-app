@@ -5,15 +5,21 @@ package integration
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"cloudenest_go/internal/agentauth"
 	"cloudenest_go/internal/agentcommand"
+	"cloudenest_go/internal/agentstatus"
 	"cloudenest_go/internal/service/contract"
 	repo "cloudenest_go/internal/storage/mysql"
 	"cloudenest_go/internal/store"
@@ -71,15 +77,23 @@ func TestFRPUpgradeFromPreLedgerRelease(t *testing.T) {
 	if err := db.Exec("INSERT INTO frp_mapping (device_id,local_port,remote_port,domain,status) VALUES (?,8080,32442,'',1)", device.ID).Error; err != nil {
 		t.Fatal(err)
 	}
+	// Seed the credential in the historical layout. Current enrollment
+	// writes runtime_report and therefore requires the new schema.
+	var public [16]byte
+	var secret [32]byte
+	if _, err := rand.Read(public[:]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rand.Read(secret[:]); err != nil {
+		t.Fatal(err)
+	}
+	credentialID := hex.EncodeToString(public[:])
+	credential := "cna1." + credentialID + "." + base64.RawURLEncoding.EncodeToString(secret[:])
+	digest := sha256.Sum256([]byte(credential))
+	if err := db.Exec("INSERT INTO agent_binding (device_id,owner_id,credential_id,credential_digest) VALUES (?,?,?,?)", device.ID, owner.ID, credentialID, digest[:]).Error; err != nil {
+		t.Fatal(err)
+	}
 	auth := agentauth.New(db)
-	issue, err := auth.Issue(ctx, owner.ID, device.ID, password)
-	if err != nil {
-		t.Fatal(err)
-	}
-	identity, err := auth.Exchange(ctx, issue.Enrollment)
-	if err != nil {
-		t.Fatal(err)
-	}
 	r := repo.NewFrpRepo(db, cfg.FRPKeys)
 	plain := "serverAddr: 127.0.0.1\nserverPort: 7000\nproxies:\n  - name: upgrade\n    type: tcp\n    localIP: 127.0.0.1\n    localPort: 8080\n    remotePort: 32442\n"
 	saved, err := r.CreateConfig(ctx, owner.ID, false, model.FrpConfig{DeviceID: &device.ID, ConfigText: plain})
@@ -114,8 +128,15 @@ func TestFRPUpgradeFromPreLedgerRelease(t *testing.T) {
 	if raw, err := cfg.FRPKeys.OpenConfig(device.ID, history.ID, history.ServerID, history.ServerRevisionID, history.ConfigText); err != nil || raw != plain {
 		t.Fatal("previous configuration cannot be decrypted", err)
 	}
-	if _, err := auth.Beat(ctx, identity.Credential, "cloudnest-agent-0.3.0"); err != nil {
+	if _, err := auth.Beat(ctx, credential, "cloudnest-agent-0.3.0"); err != nil {
 		t.Fatal("previous Agent credential no longer works", err)
+	}
+	report := agentstatus.Report{State: "registered", ConfigID: history.ID, ObservedAt: time.Now().UTC(), Expected: 1, Registered: 1, ProxyStates: []byte{1}}
+	if out, err := auth.BeatWithReport(ctx, credential, "cloudnest-agent-0.3.0", &report); err != nil || !out.RuntimeStatusV1 {
+		t.Fatal("upgraded binding rejected runtime heartbeat", err)
+	}
+	if state, err := r.GetAgentHeartbeat(ctx, owner.ID, false, device.ID); err != nil || state == nil || state.Runtime == nil || state.Runtime.ConfigID != history.ID {
+		t.Fatal("upgraded binding lost runtime snapshot", err)
 	}
 	var commands []model.AgentCommand
 	if err := db.Where("device_id=?", device.ID).Order("id").Find(&commands).Error; err != nil || len(commands) != 6 {
@@ -145,12 +166,12 @@ func TestFRPUpgradeFromPreLedgerRelease(t *testing.T) {
 	}
 	m := agentcommand.New(db, cfg.FRPKeys)
 	for _, row := range commands[:3] {
-		if err := m.Finish(ctx, identity.Credential, row.ID, row.LeaseID, true, "ok"); !errors.Is(err, agentcommand.ErrConflict) {
+		if err := m.Finish(ctx, credential, row.ID, row.LeaseID, true, "ok"); !errors.Is(err, agentcommand.ErrConflict) {
 			t.Fatal("obsolete lease could still acknowledge execution", row.Action, err)
 		}
 	}
 	for _, row := range commands[3:] {
-		if err := m.Finish(ctx, identity.Credential, row.ID, row.LeaseID, true, "ok"); err != nil {
+		if err := m.Finish(ctx, credential, row.ID, row.LeaseID, true, "ok"); err != nil {
 			t.Fatal("preserved command could not complete", row.Action, err)
 		}
 	}

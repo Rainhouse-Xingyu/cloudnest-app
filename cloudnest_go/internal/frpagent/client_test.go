@@ -49,7 +49,17 @@ func TestClientTLSBoundsRedirectAndRedaction(t *testing.T) {
 		case "empty":
 			w.WriteHeader(204)
 		case "proxy-status":
-			_, _ = w.Write([]byte(`{"device_id":1,"proxy_status_v1":true}`))
+			_, _ = w.Write([]byte(`{"device_id":1,"proxy_status_v1":true,"runtime_status_v1":true}`))
+		case "older-backend":
+			var body map[string]json.RawMessage
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Error("invalid heartbeat JSON", err)
+			}
+			if _, exists := body["runtime"]; exists {
+				w.WriteHeader(400)
+				return
+			}
+			_, _ = w.Write([]byte(`{"device_id":1}`))
 		default:
 			_, _ = w.Write([]byte(`{"device_id":1}`))
 		}
@@ -78,12 +88,14 @@ func TestClientTLSBoundsRedirectAndRedaction(t *testing.T) {
 		t.Fatal("assumed capability on older backend")
 	}
 	mode = "proxy-status"
-	if e := c.Heartbeat(ctx); e != nil || !c.proxyStatusV1 {
+	if e := c.Heartbeat(ctx); e != nil || !c.proxyStatusV1 || !c.runtimeStatusV1 {
 		t.Fatal("failed to negotiate per-proxy capability", e)
 	}
-	mode = "ok"
-	if e := c.Heartbeat(ctx); e != nil || c.proxyStatusV1 {
-		t.Fatal("retained stale capability after backend change", e)
+	mode = "older-backend"
+	before := requests
+	sample := &RegistrationStatus{State: "stopped", ObservedAt: time.Now().UTC()}
+	if e := c.heartbeat(ctx, sample); e != nil || c.proxyStatusV1 || c.runtimeStatusV1 || requests != before+2 {
+		t.Fatal("heartbeat did not recover after backend rollback", e)
 	}
 	untrusted, e := NewClient(s.URL, fixtureToken(), nil)
 	if e != nil {

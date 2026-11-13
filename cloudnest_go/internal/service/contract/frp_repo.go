@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"cloudenest_go/internal/agentstatus"
 	"cloudenest_go/model"
 )
 
@@ -45,6 +46,7 @@ type AgentHeartbeatState struct {
 	Active        bool
 	LastSeenAt    *time.Time
 	ClientVersion string
+	Runtime       *agentstatus.Report
 }
 
 // FrpRepository 定义 FRP 模块存储访问能力。

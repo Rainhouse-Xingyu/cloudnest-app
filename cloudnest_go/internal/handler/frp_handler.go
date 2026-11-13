@@ -545,16 +545,19 @@ func (h *FrpHandler) GetDeviceStatus(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"item": gin.H{
-			"online":            item.Online,
-			"last_heartbeat":    item.LastHeartbeat,
-			"last_error":        item.LastError,
-			"client_version":    item.ClientVersion,
-			"updated_at":        item.UpdatedAt,
-			"current_config_id": item.CurrentConfigID,
-		},
-	})
+	payload := gin.H{
+		"online":            item.Online,
+		"last_heartbeat":    item.LastHeartbeat,
+		"last_error":        item.LastError,
+		"client_version":    item.ClientVersion,
+		"updated_at":        item.UpdatedAt,
+		"current_config_id": item.CurrentConfigID,
+	}
+	if c.Request.TLS != nil && item.Runtime != nil {
+		c.Header("Cache-Control", "no-store")
+		payload["runtime"] = item.Runtime
+	}
+	c.JSON(http.StatusOK, gin.H{"item": payload})
 }
 
 // PullNextCommand 客户端拉取下一条待执行命令。

@@ -64,7 +64,12 @@ func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest, retire 
 	if e = os.WriteFile(caPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: resp.TLS.PeerCertificates[0].Raw}), 0600); e != nil {
 		t.Fatal(e)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 95*time.Second)
+	budget := 95 * time.Second
+	checkRuntime := serviceTest == nil && len(retire) == 0
+	if checkRuntime {
+		budget += 35 * time.Second // Allow one ordinary heartbeat after deployment.
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), budget)
 	defer cancel()
 	upstream := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, "agent-tunnel:"+r.URL.Path) })
 	plain := httptest.NewServer(upstream)
@@ -359,6 +364,38 @@ func testAgentNativeTunnels(t *testing.T, serviceTest nativeServiceTest, retire 
 		}
 	}
 	probe()
+	if checkRuntime {
+		until := time.Now().Add(35 * time.Second)
+		for {
+			req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/api/frp/devices/%d/status", base, device), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.Header.Set("Authorization", "Bearer "+f.alice)
+			res, err := httpClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var body struct {
+				Item struct {
+					Runtime *agentstatus.Report `json:"runtime"`
+				} `json:"item"`
+			}
+			err = json.NewDecoder(io.LimitReader(res.Body, 4096)).Decode(&body)
+			res.Body.Close()
+			if err != nil || res.StatusCode != 200 {
+				t.Fatal("runtime status request failed", res.StatusCode, err)
+			}
+			if sample := body.Item.Runtime; sample != nil && sample.ConfigID == cfg.ID && sample.State == "registered" && sample.Registered == 3 && len(sample.ProxyStates) == 1 && sample.ProxyStates[0] == 0x15 {
+				t.Log("ordinary heartbeat published all three registered proxies without a diagnose command")
+				break
+			}
+			if time.Now().After(until) {
+				t.Fatal("automatic runtime snapshot missing")
+			}
+			time.Sleep(250 * time.Millisecond)
+		}
+	}
 	for _, name := range []string{"active.json", "diagnostics.pem"} {
 		if _, err := os.Stat(filepath.Join(statePath, name)); !errors.Is(err, os.ErrNotExist) {
 			t.Fatal("startup retained transient credentials", name, err)
