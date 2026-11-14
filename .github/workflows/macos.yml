@@ -1,0 +1,43 @@
+name: macOS client verification
+on:
+  pull_request:
+    paths:
+      - 'cloudnest_macos/**'
+      - '.github/workflows/macos.yml'
+  push:
+    branches: [cloudnest, 'codex/**']
+    paths:
+      - 'cloudnest_macos/**'
+      - '.github/workflows/macos.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-client-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: macOS client (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-26, xcode-27]
+    defaults:
+      run:
+        working-directory: cloudnest_macos
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - run: sw_vers && xcodebuild -version
+      - run: CLOUDNEST_TEST_KEYCHAIN=1 swift test
+      - name: Build and verify the release app
+        run: |
+          xcodebuild -project CloudNest.xcodeproj -scheme CloudNest -configuration Release \
+            -destination 'generic/platform=macOS' -derivedDataPath "$RUNNER_TEMP/cloudnest" build
+          app="$RUNNER_TEMP/cloudnest/Build/Products/Release/CloudNest.app"
+          codesign --verify --deep --strict "$app"
+          lipo -verify_arch arm64 x86_64 "$app/Contents/MacOS/CloudNest"
