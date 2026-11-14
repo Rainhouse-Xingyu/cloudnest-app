@@ -5,10 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/netip"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
+	"cloudenest_go/internal/agentauth"
+	"cloudenest_go/internal/agentstatus"
 	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
 
@@ -27,7 +32,7 @@ const (
 
 var (
 	// ErrFrpForbidden 表示当前用户无权限访问目标资源。
-	ErrFrpForbidden = errors.New("frp permission denied")
+	ErrFrpForbidden = contract.ErrForbidden
 	// ErrFrpNoMapping 表示设备没有可用映射。
 	ErrFrpNoMapping = errors.New("frp mapping not found")
 	// ErrFrpBadConfig 表示配置参数不合法。
@@ -62,6 +67,7 @@ func NewFrpService(repo contract.FrpRepository, rdb *redis.Client) *FrpService {
 
 // UpdateDeviceInput 表示设备更新输入。
 type UpdateDeviceInput struct {
+	ClientIP   string
 	DeviceName string
 	DeviceIP   string
 	Status     *int8
@@ -69,6 +75,8 @@ type UpdateDeviceInput struct {
 
 // CreateMappingInput 表示映射创建输入。
 type CreateMappingInput struct {
+	ServerID   int64
+	ClientIP   string
 	DeviceID   int64
 	LocalPort  int
 	RemotePort *int
@@ -78,6 +86,7 @@ type CreateMappingInput struct {
 
 // UpdateMappingInput 表示映射更新输入。
 type UpdateMappingInput struct {
+	ClientIP   string
 	LocalPort  *int
 	RemotePort *int
 	Domain     *string
@@ -93,10 +102,13 @@ type DeviceDetailResult struct {
 
 // SaveConfigInput 表示保存配置输入。
 type SaveConfigInput struct {
-	DeviceID   int64
-	ServerAddr string
-	ServerPort int
-	Token      string
+	ServerID         int64
+	ServerRevisionID int64
+	ClientIP         string
+	DeviceID         int64
+	ServerAddr       string
+	ServerPort       int
+	Token            string
 }
 
 // ReportDeviceStatusInput 表示设备状态上报输入。
@@ -117,6 +129,8 @@ type DeviceStatusResult struct {
 	ClientVersion   string
 	UpdatedAt       string
 	CurrentConfigID string
+	Runtime         *agentstatus.Report
+	RuntimeProxies  []agentstatus.ProxyView
 }
 
 // PullCommandResult 表示拉取到的命令。
@@ -139,24 +153,28 @@ type CommandResultInput struct {
 }
 
 // CreateDevice 创建设备并绑定当前用户。
-func (s *FrpService) CreateDevice(ctx context.Context, uid int64, deviceName string, deviceIP string) (model.Device, error) {
+func (s *FrpService) CreateDevice(ctx context.Context, uid int64, deviceName string, deviceIP string, clientIP ...string) (model.Device, error) {
 	device := model.Device{
 		UserID:     uid,
 		DeviceName: strings.TrimSpace(deviceName),
 		DeviceIP:   strings.TrimSpace(deviceIP),
 		Status:     1,
 	}
-	return s.repo.CreateDevice(ctx, device)
+	actor := contract.FrpActor{UserID: uid}
+	if len(clientIP) > 0 {
+		actor.ClientIP = clientIP[0]
+	}
+	return s.repo.CreateDevice(ctx, actor, device)
 }
 
 // ListDevices 查询当前用户可见的设备；管理员可查看全部。
-func (s *FrpService) ListDevices(ctx context.Context, uid int64, isAdmin bool, statusFilter *int8) ([]model.Device, error) {
-	return s.repo.ListDevices(ctx, uid, isAdmin, statusFilter)
+func (s *FrpService) ListDevices(ctx context.Context, uid int64, isAdmin bool, statusFilter *int8, retired ...bool) ([]model.Device, error) {
+	return s.repo.ListDevices(ctx, uid, isAdmin, statusFilter, len(retired) > 0 && retired[0])
 }
 
 // GetDeviceDetail 查询设备详情（含映射数量、最近配置时间）。
-func (s *FrpService) GetDeviceDetail(ctx context.Context, uid int64, isAdmin bool, deviceID int64) (DeviceDetailResult, error) {
-	device, err := s.findDeviceWithPermission(ctx, uid, isAdmin, deviceID)
+func (s *FrpService) GetDeviceDetail(ctx context.Context, uid int64, isAdmin bool, deviceID int64, retired ...bool) (DeviceDetailResult, error) {
+	device, err := s.findDeviceWithPermission(ctx, uid, isAdmin, deviceID, retired...)
 	if err != nil {
 		return DeviceDetailResult{}, err
 	}
@@ -175,11 +193,6 @@ func (s *FrpService) GetDeviceDetail(ctx context.Context, uid int64, isAdmin boo
 
 // UpdateDevice 更新设备名称、IP 和状态。
 func (s *FrpService) UpdateDevice(ctx context.Context, uid int64, isAdmin bool, deviceID int64, req UpdateDeviceInput) (model.Device, error) {
-	device, err := s.findDeviceWithPermission(ctx, uid, isAdmin, deviceID)
-	if err != nil {
-		return model.Device{}, err
-	}
-
 	updates := map[string]interface{}{}
 	if strings.TrimSpace(req.DeviceName) != "" {
 		updates["device_name"] = strings.TrimSpace(req.DeviceName)
@@ -192,41 +205,31 @@ func (s *FrpService) UpdateDevice(ctx context.Context, uid int64, isAdmin bool, 
 	}
 
 	if len(updates) == 0 {
-		return model.Device{}, gorm.ErrInvalidData
+		return model.Device{}, contract.ErrInvalidInput
 	}
 
-	return s.repo.UpdateDevice(ctx, device.ID, updates)
+	return s.repo.UpdateDevice(ctx, contract.FrpActor{UserID: uid, Admin: isAdmin, ClientIP: req.ClientIP}, deviceID, updates)
 }
 
-// DeleteDevice 删除设备及其关联映射。
-func (s *FrpService) DeleteDevice(ctx context.Context, uid int64, isAdmin bool, deviceID int64) (model.Device, error) {
-	device, err := s.findDeviceWithPermission(ctx, uid, isAdmin, deviceID)
-	if err != nil {
-		return model.Device{}, err
+// DeleteDevice retires the device while preserving its history and reservations.
+func (s *FrpService) DeleteDevice(ctx context.Context, uid int64, isAdmin bool, deviceID int64, clientIP ...string) (model.Device, error) {
+	actor := contract.FrpActor{UserID: uid, Admin: isAdmin}
+	if len(clientIP) > 0 {
+		actor.ClientIP = clientIP[0]
 	}
-
-	if err := s.repo.DeleteDevice(ctx, device.ID); err != nil {
-		return model.Device{}, err
-	}
-	return device, nil
+	return s.repo.DeleteDevice(ctx, actor, deviceID)
 }
 
 // CreateMapping 创建映射，支持自动分配 remote_port。
 func (s *FrpService) CreateMapping(ctx context.Context, uid int64, isAdmin bool, req CreateMappingInput) (model.FrpMapping, error) {
-	device, err := s.findDeviceWithPermission(ctx, uid, isAdmin, req.DeviceID)
-	if err != nil {
-		return model.FrpMapping{}, err
-	}
-	if device.Status == 0 {
-		return model.FrpMapping{}, fmt.Errorf("device disabled")
-	}
-
 	status := int8(1)
 	if req.Status != nil {
 		status = *req.Status
 	}
 
 	return s.repo.CreateMapping(ctx, contract.FrpCreateMappingInput{
+		ServerID:   req.ServerID,
+		FrpActor:   contract.FrpActor{UserID: uid, Admin: isAdmin, ClientIP: req.ClientIP},
 		DeviceID:   req.DeviceID,
 		LocalPort:  req.LocalPort,
 		RemotePort: req.RemotePort,
@@ -247,34 +250,9 @@ func (s *FrpService) ListDeviceMappings(ctx context.Context, uid int64, isAdmin 
 
 // UpdateMapping 更新映射信息（端口、域名、状态）。
 func (s *FrpService) UpdateMapping(ctx context.Context, uid int64, isAdmin bool, mappingID int64, req UpdateMappingInput) (model.FrpMapping, error) {
-	mapping, device, err := s.findMappingWithPermission(ctx, uid, isAdmin, mappingID)
-	if err != nil {
-		return model.FrpMapping{}, err
-	}
-	if device.Status == 0 {
-		return model.FrpMapping{}, fmt.Errorf("device disabled")
-	}
-
-	updates := map[string]interface{}{}
-	if req.LocalPort != nil {
-		updates["local_port"] = *req.LocalPort
-	}
-	if req.RemotePort != nil {
-		updates["remote_port"] = *req.RemotePort
-	}
-	if req.Domain != nil {
-		domain := strings.TrimSpace(*req.Domain)
-		updates["domain"] = domain
-	}
-	if req.Status != nil {
-		updates["status"] = *req.Status
-	}
-	if len(updates) == 0 {
-		return model.FrpMapping{}, gorm.ErrInvalidData
-	}
-
 	return s.repo.UpdateMapping(ctx, contract.FrpUpdateMappingInput{
-		MappingID:  mapping.ID,
+		FrpActor:   contract.FrpActor{UserID: uid, Admin: isAdmin, ClientIP: req.ClientIP},
+		MappingID:  mappingID,
 		LocalPort:  req.LocalPort,
 		RemotePort: req.RemotePort,
 		Domain:     req.Domain,
@@ -283,30 +261,41 @@ func (s *FrpService) UpdateMapping(ctx context.Context, uid int64, isAdmin bool,
 }
 
 // DeleteMapping 删除映射。
-func (s *FrpService) DeleteMapping(ctx context.Context, uid int64, isAdmin bool, mappingID int64) (model.FrpMapping, error) {
-	mapping, _, err := s.findMappingWithPermission(ctx, uid, isAdmin, mappingID)
-	if err != nil {
-		return model.FrpMapping{}, err
+func (s *FrpService) DeleteMapping(ctx context.Context, uid int64, isAdmin bool, mappingID int64, clientIP ...string) (model.FrpMapping, error) {
+	actor := contract.FrpActor{UserID: uid, Admin: isAdmin}
+	if len(clientIP) > 0 {
+		actor.ClientIP = clientIP[0]
 	}
-	if err := s.repo.DeleteMapping(ctx, mapping.ID); err != nil {
-		return model.FrpMapping{}, err
-	}
-	return mapping, nil
+	return s.repo.DeleteMapping(ctx, actor, mappingID)
 }
 
 // PreviewConfig 预览某设备的 frpc.yaml 内容（不入库）。
 func (s *FrpService) PreviewConfig(ctx context.Context, uid int64, isAdmin bool, req SaveConfigInput) (string, int64, error) {
+	if req.ServerID != 0 || req.ServerRevisionID != 0 {
+		_, text, err := s.buildServerConfig(ctx, uid, isAdmin, req, true)
+		return text, req.DeviceID, err
+	}
+	if !validFRPScalar(req.Token, 1024) {
+		return "", 0, ErrFrpBadConfig
+	}
+	if req.Token != "" {
+		req.Token = "[redacted]"
+	}
 	return s.buildConfigTextForDevice(ctx, uid, isAdmin, req.DeviceID, req.ServerAddr, req.ServerPort, req.Token)
 }
 
 // SaveConfig 生成并保存设备配置到 frp_config 表。
 func (s *FrpService) SaveConfig(ctx context.Context, uid int64, isAdmin bool, req SaveConfigInput) (model.FrpConfig, error) {
+	if req.ServerID != 0 || req.ServerRevisionID != 0 {
+		cfg, _, err := s.buildServerConfig(ctx, uid, isAdmin, req, false)
+		return cfg, err
+	}
 	text, deviceID, err := s.buildConfigTextForDevice(ctx, uid, isAdmin, req.DeviceID, req.ServerAddr, req.ServerPort, req.Token)
 	if err != nil {
 		return model.FrpConfig{}, err
 	}
 
-	return s.repo.CreateConfig(ctx, model.FrpConfig{DeviceID: &deviceID, ConfigText: text})
+	return s.repo.CreateConfig(ctx, uid, isAdmin, model.FrpConfig{DeviceID: &deviceID, ConfigText: text}, req.ClientIP)
 }
 
 // ListDeviceConfigs 查询设备配置历史（按时间倒序）。
@@ -320,80 +309,20 @@ func (s *FrpService) ListDeviceConfigs(ctx context.Context, uid int64, isAdmin b
 }
 
 // RollbackConfig 将历史配置复制为最新版本，实现回滚。
-func (s *FrpService) RollbackConfig(ctx context.Context, uid int64, isAdmin bool, configID int64) (model.FrpConfig, model.FrpConfig, error) {
-	oldCfg, err := s.repo.GetConfigByID(ctx, configID)
-	if err != nil {
-		return model.FrpConfig{}, model.FrpConfig{}, err
-	}
-	if oldCfg.DeviceID == nil || *oldCfg.DeviceID <= 0 {
-		return model.FrpConfig{}, model.FrpConfig{}, fmt.Errorf("config has no device")
-	}
-
-	if _, err := s.findDeviceWithPermission(ctx, uid, isAdmin, *oldCfg.DeviceID); err != nil {
-		return model.FrpConfig{}, model.FrpConfig{}, err
-	}
-
-	newCfg, err := s.repo.CreateConfig(ctx, model.FrpConfig{DeviceID: oldCfg.DeviceID, ConfigText: oldCfg.ConfigText})
-	if err != nil {
-		return model.FrpConfig{}, model.FrpConfig{}, err
-	}
-
-	return oldCfg, newCfg, nil
-}
-
-// DeployConfig 写入配置下发命令，等待客户端执行。
-func (s *FrpService) DeployConfig(ctx context.Context, uid int64, isAdmin bool, deviceID int64, requestedConfigID *int64) (string, int64, error) {
-	if _, err := s.findDeviceWithPermission(ctx, uid, isAdmin, deviceID); err != nil {
-		return "", 0, err
-	}
-
-	configID, err := s.resolveConfigID(ctx, deviceID, requestedConfigID)
-	if err != nil {
-		return "", 0, err
-	}
-
-	commandID := fmt.Sprintf("deploy-%d-%d", deviceID, time.Now().UnixNano())
-	payload := map[string]interface{}{
-		"command_id": commandID,
-		"action":     "deploy_config",
-		"device_id":  deviceID,
-		"config_id":  configID,
-		"created_at": time.Now().Format(time.RFC3339),
-	}
-	if err := s.enqueueDeviceCommand(ctx, deviceID, payload); err != nil {
-		return "", 0, err
-	}
-
-	return commandID, configID, nil
-}
-
-// ReloadDevice 写入重载命令，等待客户端执行。
-func (s *FrpService) ReloadDevice(ctx context.Context, uid int64, isAdmin bool, deviceID int64) (string, error) {
-	if _, err := s.findDeviceWithPermission(ctx, uid, isAdmin, deviceID); err != nil {
-		return "", err
-	}
-
-	commandID := fmt.Sprintf("reload-%d-%d", deviceID, time.Now().UnixNano())
-	payload := map[string]interface{}{
-		"command_id": commandID,
-		"action":     "reload",
-		"device_id":  deviceID,
-		"created_at": time.Now().Format(time.RFC3339),
-	}
-	if err := s.enqueueDeviceCommand(ctx, deviceID, payload); err != nil {
-		return "", err
-	}
-
-	return commandID, nil
+func (s *FrpService) RollbackConfig(ctx context.Context, uid int64, isAdmin bool, configID int64, clientIP ...string) (model.FrpConfig, model.FrpConfig, error) {
+	return s.repo.RollbackConfig(ctx, uid, isAdmin, configID, clientIP...)
 }
 
 // ReportDeviceStatus 更新设备在线状态与最近心跳。
 func (s *FrpService) ReportDeviceStatus(ctx context.Context, uid int64, isAdmin bool, deviceID int64, req ReportDeviceStatusInput) error {
-	if _, err := s.findDeviceWithPermission(ctx, uid, isAdmin, deviceID); err != nil {
-		return err
-	}
+	return s.repo.WithLegacyDevice(ctx, uid, isAdmin, deviceID, func(op context.Context) error {
+		return s.writeLegacyStatus(op, deviceID, req)
+	})
+}
+func (s *FrpService) writeLegacyStatus(ctx context.Context, deviceID int64, req ReportDeviceStatusInput) error {
 
-	heartbeatAt := time.Now()
+	receivedAt := time.Now().UTC()
+	heartbeatAt := receivedAt
 	if strings.TrimSpace(req.LastHeartbeat) != "" {
 		parsed, parseErr := time.Parse(time.RFC3339, strings.TrimSpace(req.LastHeartbeat))
 		if parseErr != nil {
@@ -416,24 +345,40 @@ func (s *FrpService) ReportDeviceStatus(ctx context.Context, uid int64, isAdmin 
 		"last_heartbeat":    heartbeatAt.Format(time.RFC3339),
 		"last_error":        lastError,
 		"client_version":    strings.TrimSpace(req.ClientVersion),
-		"updated_at":        time.Now().Format(time.RFC3339),
+		"updated_at":        receivedAt.Format(time.RFC3339Nano),
 		"current_config_id": 0,
 	}
 	if req.CurrentConfigID != nil && *req.CurrentConfigID > 0 {
 		values["current_config_id"] = *req.CurrentConfigID
 	}
 
-	if err := s.rdb.HSet(ctx, statusKey, values).Err(); err != nil {
-		return err
-	}
-	_ = s.rdb.Expire(ctx, statusKey, 7*24*time.Hour).Err()
-	return nil
+	_, err := s.rdb.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+		pipe.HSet(ctx, statusKey, values)
+		pipe.Expire(ctx, statusKey, 7*24*time.Hour)
+		return nil
+	})
+	return err
 }
 
 // GetDeviceStatus 查询设备最近状态。
 func (s *FrpService) GetDeviceStatus(ctx context.Context, uid int64, isAdmin bool, deviceID int64) (DeviceStatusResult, error) {
-	if _, err := s.findDeviceWithPermission(ctx, uid, isAdmin, deviceID); err != nil {
+	heartbeat, err := s.repo.GetAgentHeartbeat(ctx, uid, isAdmin, deviceID)
+	if err != nil {
 		return DeviceStatusResult{}, err
+	}
+	if heartbeat != nil {
+		state := DeviceStatusResult{ClientVersion: heartbeat.ClientVersion}
+		if heartbeat.Active && heartbeat.LastSeenAt != nil {
+			received := heartbeat.LastSeenAt.UTC().Format(time.RFC3339Nano)
+			state.LastHeartbeat = &received
+			state.UpdatedAt = received
+			state.Online = freshFRPHeartbeat(*heartbeat.LastSeenAt)
+			if state.Online {
+				state.Runtime = heartbeat.Runtime
+				state.RuntimeProxies = heartbeat.RuntimeProxies
+			}
+		}
+		return state, nil
 	}
 
 	statusKey := frpStatusKeyPrefix + strconv.FormatInt(deviceID, 10)
@@ -446,8 +391,9 @@ func (s *FrpService) GetDeviceStatus(ctx context.Context, uid int64, isAdmin boo
 	}
 
 	lastHeartbeat := data["last_heartbeat"]
+	receivedAt, parseErr := time.Parse(time.RFC3339Nano, data["updated_at"])
 	return DeviceStatusResult{
-		Online:          data["online"] == "1",
+		Online:          data["online"] == "1" && parseErr == nil && freshFRPHeartbeat(receivedAt),
 		LastHeartbeat:   &lastHeartbeat,
 		LastError:       data["last_error"],
 		ClientVersion:   data["client_version"],
@@ -456,11 +402,25 @@ func (s *FrpService) GetDeviceStatus(ctx context.Context, uid int64, isAdmin boo
 	}, nil
 }
 
+func freshFRPHeartbeat(receivedAt time.Time) bool {
+	age := time.Since(receivedAt)
+	return age >= 0 && age < agentauth.HeartbeatTTL
+}
+
 // PullNextCommand 拉取设备下一条待执行命令。
 func (s *FrpService) PullNextCommand(ctx context.Context, uid int64, isAdmin bool, deviceID int64) (*PullCommandResult, error) {
-	if _, err := s.findDeviceWithPermission(ctx, uid, isAdmin, deviceID); err != nil {
+	var result *PullCommandResult
+	err := s.repo.WithLegacyDevice(ctx, uid, isAdmin, deviceID, func(op context.Context) error {
+		var err error
+		result, err = s.pullLegacyCommand(op, deviceID)
+		return err
+	})
+	if err != nil {
 		return nil, err
 	}
+	return result, nil
+}
+func (s *FrpService) pullLegacyCommand(ctx context.Context, deviceID int64) (*PullCommandResult, error) {
 
 	queueKey := frpCommandQueuePrefix + strconv.FormatInt(deviceID, 10)
 	rawToken, err := s.rdb.LPop(ctx, queueKey).Result()
@@ -489,12 +449,18 @@ func (s *FrpService) PullNextCommand(ctx context.Context, uid int64, isAdmin boo
 		return nil, ErrFrpCommandDataNotFound
 	}
 
+	if cmdData["device_id"] != strconv.FormatInt(deviceID, 10) {
+		return nil, ErrFrpInvalidQueuedCommand
+	}
+
 	now := time.Now().Format(time.RFC3339)
-	_ = s.rdb.HSet(ctx, dataKey, map[string]interface{}{
+	if err := s.rdb.HSet(ctx, dataKey, map[string]interface{}{
 		"status":       "delivered",
 		"delivered_at": now,
 		"updated_at":   now,
-	}).Err()
+	}).Err(); err != nil {
+		return nil, err
+	}
 
 	return &PullCommandResult{
 		CommandID:   commandID,
@@ -523,15 +489,24 @@ func (s *FrpService) ReportCommandResult(ctx context.Context, uid int64, isAdmin
 		return 0, "", ErrFrpInvalidCommandData
 	}
 
-	if _, err := s.findDeviceWithPermission(ctx, uid, isAdmin, deviceID); err != nil {
+	var status string
+	err = s.repo.WithLegacyDevice(ctx, uid, isAdmin, deviceID, func(op context.Context) error {
+		var inner error
+		status, inner = s.writeLegacyCommandResult(op, dataKey, req)
+		return inner
+	})
+	if err != nil {
 		return 0, "", err
 	}
+	return deviceID, status, nil
+}
+func (s *FrpService) writeLegacyCommandResult(ctx context.Context, dataKey string, req CommandResultInput) (string, error) {
 
 	executedAt := time.Now()
 	if strings.TrimSpace(req.ExecutedAt) != "" {
 		parsed, pErr := time.Parse(time.RFC3339, strings.TrimSpace(req.ExecutedAt))
 		if pErr != nil {
-			return 0, "", ErrFrpInvalidExecutedAt
+			return "", ErrFrpInvalidExecutedAt
 		}
 		executedAt = parsed
 	}
@@ -560,47 +535,10 @@ func (s *FrpService) ReportCommandResult(ctx context.Context, uid int64, isAdmin
 		"executed_at":    executedAt.Format(time.RFC3339),
 		"updated_at":     time.Now().Format(time.RFC3339),
 	}).Err(); err != nil {
-		return 0, "", err
+		return "", err
 	}
 
-	return deviceID, status, nil
-}
-
-// ListDeviceCommands 查询设备命令历史。
-func (s *FrpService) ListDeviceCommands(ctx context.Context, uid int64, isAdmin bool, deviceID int64, limit int) ([]map[string]string, error) {
-	if _, err := s.findDeviceWithPermission(ctx, uid, isAdmin, deviceID); err != nil {
-		return nil, err
-	}
-
-	historyKey := frpCommandHistoryPrefix + strconv.FormatInt(deviceID, 10)
-	ids, err := s.rdb.LRange(ctx, historyKey, 0, int64(limit-1)).Result()
-	if err != nil {
-		return nil, err
-	}
-
-	items := make([]map[string]string, 0, len(ids))
-	for _, commandID := range ids {
-		dataKey := frpCommandDataKeyPrefix + strings.TrimSpace(commandID)
-		row, hErr := s.rdb.HGetAll(ctx, dataKey).Result()
-		if hErr != nil || len(row) == 0 {
-			continue
-		}
-		items = append(items, map[string]string{
-			"command_id":     row["command_id"],
-			"action":         row["action"],
-			"status":         row["status"],
-			"device_id":      row["device_id"],
-			"config_id":      row["config_id"],
-			"created_at":     row["created_at"],
-			"delivered_at":   row["delivered_at"],
-			"executed_at":    row["executed_at"],
-			"result_message": row["result_message"],
-			"failure_reason": row["failure_reason"],
-			"updated_at":     row["updated_at"],
-		})
-	}
-
-	return items, nil
+	return status, nil
 }
 
 // LogOperation 写入 FRP 关键操作日志。
@@ -619,8 +557,8 @@ func (s *FrpService) LogOperation(ctx context.Context, userID int64, action stri
 }
 
 // findDeviceWithPermission 查询设备并校验当前用户是否有权限访问。
-func (s *FrpService) findDeviceWithPermission(ctx context.Context, userID int64, isAdmin bool, deviceID int64) (model.Device, error) {
-	device, err := s.repo.GetDeviceByID(ctx, deviceID)
+func (s *FrpService) findDeviceWithPermission(ctx context.Context, userID int64, isAdmin bool, deviceID int64, retired ...bool) (model.Device, error) {
+	device, err := s.repo.GetDeviceByID(ctx, deviceID, retired...)
 	if err != nil {
 		return model.Device{}, err
 	}
@@ -657,10 +595,10 @@ func (s *FrpService) buildConfigTextForDevice(ctx context.Context, userID int64,
 	if serverAddr == "" {
 		return "", 0, ErrFrpNeedServer
 	}
-	if serverPort <= 0 {
+	if serverPort == 0 {
 		serverPort = 7000
 	}
-	if serverPort > 65535 {
+	if serverPort < 1 || serverPort > 65535 {
 		return "", 0, ErrFrpBadConfig
 	}
 
@@ -672,28 +610,34 @@ func (s *FrpService) buildConfigTextForDevice(ctx context.Context, userID int64,
 		return "", 0, ErrFrpNoMapping
 	}
 
-	text := generateFRPCYaml(serverAddr, serverPort, token, mappings)
-	return text, deviceID, nil
+	text, err := generateFRPCYaml(serverAddr, serverPort, token, mappings)
+	return text, deviceID, err
 }
 
 // generateFRPCYaml 生成基础 frpc.yaml 文本，支持 tcp/http/https 三类代理。
-func generateFRPCYaml(serverAddr string, serverPort int, token string, mappings []model.FrpMapping) string {
+func generateFRPCYaml(serverAddr string, serverPort int, token string, mappings []model.FrpMapping) (string, error) {
+	if !validFRPHost(serverAddr) || serverPort < 1 || serverPort > 65535 || !validFRPScalar(token, 1024) || len(mappings) == 0 || len(mappings) > 512 {
+		return "", ErrFrpBadConfig
+	}
 	b := strings.Builder{}
 	b.WriteString("serverAddr: ")
-	b.WriteString(serverAddr)
+	b.WriteString(strconv.Quote(serverAddr))
 	b.WriteString("\n")
 	b.WriteString("serverPort: ")
 	b.WriteString(fmt.Sprintf("%d", serverPort))
 	b.WriteString("\n")
-	if strings.TrimSpace(token) != "" {
+	if token != "" {
 		b.WriteString("auth:\n")
 		b.WriteString("  token: ")
-		b.WriteString(token)
+		b.WriteString(strconv.Quote(token))
 		b.WriteString("\n")
 	}
 	b.WriteString("proxies:\n")
 
 	for _, m := range mappings {
+		if m.LocalPort < 1 || m.LocalPort > 65535 || (m.Domain == "" && (m.RemotePort < 1 || m.RemotePort > 65535)) {
+			return "", ErrFrpBadConfig
+		}
 		proxyName := fmt.Sprintf("device_%d_map_%d", m.DeviceID, m.ID)
 		typeName := "tcp"
 		if m.Domain != "" {
@@ -722,12 +666,44 @@ func generateFRPCYaml(serverAddr string, serverPort int, token string, mappings 
 			domain := strings.TrimPrefix(strings.TrimPrefix(m.Domain, "https://"), "http://")
 			b.WriteString("    customDomains:\n")
 			b.WriteString("      - ")
-			b.WriteString(domain)
+			if !validFRPHost(strings.TrimPrefix(domain, "*.")) {
+				return "", ErrFrpBadConfig
+			}
+			b.WriteString(strconv.Quote(domain))
 			b.WriteString("\n")
 		}
 	}
 
-	return b.String()
+	if b.Len() > 32<<10 {
+		return "", ErrFrpBadConfig
+	}
+	return b.String(), nil
+}
+
+// FRP evaluates templates before parsing configuration. Quoting alone cannot
+// stop template expansion, so reject template delimiters in operator input.
+func validFRPScalar(s string, limit int) bool {
+	return len(s) <= limit && utf8.ValidString(s) && !strings.Contains(s, "{{") && !strings.Contains(s, "}}") && strings.IndexFunc(s, unicode.IsControl) < 0
+}
+
+func validFRPHost(host string) bool {
+	if host == "" || !validFRPScalar(host, 253) {
+		return false
+	}
+	if a, err := netip.ParseAddr(host); err == nil {
+		return a.Zone() == ""
+	}
+	for _, label := range strings.Split(strings.TrimSuffix(host, "."), ".") {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, r := range label {
+			if !(r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-') {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // resolveConfigID 解析要下发的配置 ID；如果请求未指定则选择设备最新配置。

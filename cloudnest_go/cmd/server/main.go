@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,6 +20,7 @@ import (
 	"cloudenest_go/internal/aiindex"
 	"cloudenest_go/internal/app"
 	"cloudenest_go/internal/config"
+	"cloudenest_go/internal/frpconfig"
 	"cloudenest_go/internal/indexqueue"
 	storageMaintenance "cloudenest_go/internal/maintenance"
 	"cloudenest_go/internal/pdfextract"
@@ -55,7 +57,7 @@ func main() {
 	if err := applyCLIOverrides(&cfg, args); err != nil {
 		log.Fatalf("启动参数错误: %v", err)
 	}
-	databaseOnly := maintenance.kind == "audit-file-names" || maintenance.kind == "migrate-file-names" || maintenance.kind == "audit-storage-references" || maintenance.kind == "migrate-storage-references" || maintenance.kind == "gc-storage" || maintenance.kind == "prune-read-leases" || maintenance.kind == "audit-transfers" || maintenance.kind == "reconcile-transfers" || maintenance.kind == "set-transfer-limit"
+	databaseOnly := maintenance.kind == "reconcile-frp-reservation" || maintenance.kind == "audit-frp-configs" || maintenance.kind == "encrypt-frp-configs" || maintenance.kind == "audit-file-names" || maintenance.kind == "migrate-file-names" || maintenance.kind == "audit-storage-references" || maintenance.kind == "migrate-storage-references" || maintenance.kind == "gc-storage" || maintenance.kind == "prune-read-leases" || maintenance.kind == "audit-transfers" || maintenance.kind == "reconcile-transfers" || maintenance.kind == "set-transfer-limit"
 	if databaseOnly {
 		err = cfg.ValidateDatabase()
 	} else {
@@ -63,6 +65,15 @@ func main() {
 	}
 	if err != nil {
 		log.Fatalf("配置错误: %v", err)
+	}
+	if cfg.FRPKeyFile != "" {
+		cfg.FRPKeys, err = frpconfig.LoadFile(cfg.FRPKeyFile)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+	if (maintenance.kind == "audit-frp-configs" || maintenance.kind == "encrypt-frp-configs") && cfg.FRPKeys == nil {
+		log.Fatal(frpconfig.ErrUnavailable)
 	}
 	if maintenance.kind == "bootstrap-admin" {
 		if err := store.ValidateBootstrapPassword(os.Getenv("CLOUDNEST_BOOTSTRAP_PASSWORD")); err != nil {
@@ -94,6 +105,23 @@ func main() {
 	}
 	if maintenance.kind != "" {
 		switch maintenance.kind {
+		case "reconcile-frp-reservation":
+			if err = store.CheckAgentSchema(db); err != nil {
+				break
+			}
+			var report storageMysql.FRPReservationReview
+			report, err = storageMysql.NewFrpRepo(db).ReconcileReservation(context.Background(), maintenance.reservationID, maintenance.evidence)
+			if err == nil {
+				err = json.NewEncoder(os.Stdout).Encode(report)
+			}
+		case "audit-frp-configs", "encrypt-frp-configs":
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
+			var report storageMysql.FRPEncryptionReport
+			report, err = storageMysql.NewFrpRepo(db, cfg.FRPKeys).ReencryptConfigs(ctx, maintenance.kind == "audit-frp-configs")
+			if encodeErr := json.NewEncoder(os.Stdout).Encode(report); err == nil {
+				err = encodeErr
+			}
 		case "audit-file-names":
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 			defer cancel()
@@ -189,6 +217,9 @@ func main() {
 	if err := store.CheckFileSchema(db); err != nil {
 		log.Fatal(err)
 	}
+	if err := store.CheckAgentSchema(db); err != nil {
+		log.Fatal(err)
+	}
 	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
 		log.Fatalf("准备数据目录失败: %v", err)
 	}
@@ -251,7 +282,13 @@ func main() {
 			_ = server.Close()
 		}
 	}()
-	serveErr := server.ListenAndServe()
+	var serveErr error
+	if cfg.TLSCertFile != "" {
+		server.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		serveErr = server.ListenAndServeTLS(cfg.TLSCertFile, cfg.TLSKeyFile)
+	} else {
+		serveErr = server.ListenAndServe()
+	}
 	stop()
 	<-workerDone
 	<-indexDone
@@ -365,6 +402,9 @@ func printUsage() {
 	fmt.Println("  cloudnest reconcile-transfers  有界对账/清理已登记且不再使用的候选，需要显式 DATA_DIR")
 	fmt.Println("  cloudnest set-transfer-limit <bytes> 设置当前本地卷的持久临时存储上限")
 	fmt.Println("  cloudnest prune-read-leases    每次最多清理 256 条已过期内部读取租约，不删除文件")
+	fmt.Println("  cloudnest reconcile-frp-reservation <id> [--confirm-decommissioned <evidence>]  核对历史占用，或凭停用证据解除阻挡")
+	fmt.Println("  cloudnest audit-frp-configs     校验配置密文并统计明文/旧密钥记录（只读）")
+	fmt.Println("  cloudnest encrypt-frp-configs   显式加密历史配置或重加密旧密钥版本（先备份并停旧实例）")
 	fmt.Println("  cloudnest migrate              显式应用模型结构（先备份数据库）")
 	fmt.Println("  cloudnest bootstrap-admin      仅初始化空用户表，密码从 CLOUDNEST_BOOTSTRAP_PASSWORD 读取")
 	fmt.Println("")

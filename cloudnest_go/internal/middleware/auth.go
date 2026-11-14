@@ -155,6 +155,7 @@ func checkPathPermission(ctx context.Context, userID int64, method string, path 
 // Explicit authenticated-user capabilities. Keys are Gin route templates, not
 // URL prefixes. Unlisted routes/methods are denied; resource ACLs still apply.
 var defaultUserRoutes = map[string]struct{}{
+	"GET /api/frp/reservations":                    {},
 	"POST /api/auth/logout-all":                    {},
 	"POST /api/auth/logout":                        {},
 	"GET /api/auth/me":                             {},
@@ -203,6 +204,12 @@ var defaultUserRoutes = map[string]struct{}{
 	"GET /api/settings/rate-window":                {},
 	"PUT /api/settings/rate-window":                {},
 	"GET /api/storage/overview":                    {},
+	"POST /api/frp/devices/:id/enrollment":         {},
+	"POST /api/frp/devices/:id/credential/revoke":  {},
+	"POST /api/frp/servers":                        {},
+	"PUT /api/frp/servers/:id":                     {},
+	"GET /api/frp/servers":                         {},
+	"GET /api/frp/servers/:id":                     {},
 	"POST /api/frp/devices":                        {},
 	"GET /api/frp/devices":                         {},
 	"GET /api/frp/devices/:id":                     {},
@@ -222,6 +229,7 @@ var defaultUserRoutes = map[string]struct{}{
 	"GET /api/frp/devices/:id/status":              {},
 	"GET /api/frp/devices/:id/commands/next":       {},
 	"POST /api/frp/commands/:command_id/result":    {},
+	"POST /api/frp/devices/:id/commands":           {},
 	"GET /api/frp/devices/:id/commands":            {},
 	"POST /api/live-photos/bind":                   {},
 	"POST /api/live-photos/auto-bind":              {},

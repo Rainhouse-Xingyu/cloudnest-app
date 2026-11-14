@@ -10,7 +10,7 @@
 - [测试执行方法](TESTING.md)
 - [G01 安全整改与升级边界](G01-SECURITY.md)
 - [现有客户端 API 权限兼容性](CLIENT-API-COMPATIBILITY.md)
-- [设备身份边界设计（G05 待实现）](DEVICE-IDENTITY-DESIGN.md)
+- [设备身份边界设计](DEVICE-IDENTITY-DESIGN.md)
 - [受控账号恢复与会话撤销](ACCOUNT-RECOVERY.md)
 - [G02 文件一致性与递归安全](G02-FILE-CONSISTENCY.md)
 - [只读文件名称约束预检](FILE-NAME-AUDIT.md)
@@ -87,3 +87,28 @@ G04 已提交独立 [草稿 PR #5](https://github.com/Rainhouse-Xingyu/cloudnest
 2026-10-30：静态 WebP 的有界解码与 EXIF 已接入，验证范围及其余格式边界见 [WebP 说明](AI-WEBP.md)。不改变 G04 进行中状态。
 
 2026-10-30：新增可选单主图 HEIC/HEIF 原生解码及实际索引/OCR/缩略图，macOS 真实链路通过；Linux 原生与复杂容器仍待验收，见 [HEIF 记录](AI-HEIF.md)。G04 继续进行中。
+
+- [G05 设备注册、轮换、撤销和心跳](G05-DEVICE-IDENTITY.md)
+- [G05 Go Agent 运行、约束与真实隧道验收](FRP-AGENT.md)
+- [G05 Agent Keychain、状态加密与旧状态迁移](FRP-AGENT-VAULT.md)
+- [G05 注册诊断与持久快照](FRP-AGENT-DIAGNOSTICS.md)
+
+G05 在 [PR #6](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/6) 继续推进，基于 G03。独立身份、配置加密/迁移、持久命令与 Go Agent 已接入。实际 CLI 三种隧道、重启、frps 重连及 Agent SIGKILL 回收/重启通过；监督进程丢失时拒绝重复启动。Agent Keychain 与持久状态加密已接入，已验证 macOS 用户 launchd 自动重启与三条隧道恢复；已移除运行配置中的认证 token，并接入本机注册诊断和持久回执；Linux 用户 systemd 异常恢复、逐映射状态和上游 TCP 可达性已验证。真实公网三隧道及启停、重启、清除和重新部署也通过，纯 HTTP 域名路径仍待确认，见 [公网验收](FRP-PUBLIC-ACCEPTANCE.md)。
+
+- [FRP 配置加密、密钥轮换与历史迁移](FRP-CONFIG-ENCRYPTION.md)
+
+- [FRP 持久命令、配置领取与执行回执](FRP-DURABLE-COMMANDS.md)
+
+G05 已追加映射事务分配、归属锁后复核、规范域名数据库唯一约束及原子审计，见 [映射预留与升级](FRP-MAPPING-RESERVATIONS.md)。全局端口池仍沿用旧 API 范围，服务器登记与运行配置占用已在后续接入，多服务器映射作用域已接入，历史占用对账尚未完成，FRP-004 保持开放。测试及 CI 以 TESTING 中的实际记录为准。
+
+G05 设备更新/删除已移入授权与审计事务，删除改为保留历史和端口预留的退役，支持受归属保护的退役列表/元数据。新增退役撤销/命令取消触发器和 v2 校验例程，见 [退役协议](FRP-DEVICE-RETIREMENT.md)；离线占用确认与释放仍未完成。
+
+G05 新增[服务器登记与版本](FRP-SERVER-REGISTRY.md)：私有服务器凭据修订、固定版本生成、回滚/部署归属校验及两类密文轮换。现有全局端口预留仍保留，运行占用已接入，按服务器分配已接入，历史占用对账尚未完成。用户指定的 G01/G02 正式 Review 留待整个 Goal 完成后读取，执行顺序见[延后审查记录](DEFERRED-REVIEWS.md)。
+
+G05 已加入[停止并清除 Agent 恢复配置](FRP-FORGET-CONFIG.md)的排他命令和持久回执，供后续资源占用释放使用；首次有效成功回执现可原子释放匹配身份代次的运行占用；服务器级映射已接入，历史占用对账继续推进。
+
+2026-11-12：新增[运行配置资源占用](FRP-RUNTIME-RESERVATIONS.md)。部署入队登记与首次清除回执释放使用同一事务，映射删除、普通 stop、超时和凭据变化不再被视为可释放证据。全局映射约束保留，服务器分配与历史 unknown 占用的受控对账仍待完成。
+
+2026-11-13：正值服务器作用域/策略范围分配与复合唯一索引已实现，历史零作用域仍全局重叠。独立公网验收使用操作者准备的测试实例，见 [验收说明](FRP-PUBLIC-ACCEPTANCE.md) 和 TESTING 的实际结果。
+
+G06 在独立集成分支同时接入 G04 与 G05 的代码，保留 AI worker 生命周期、Agent TLS 和两套 Schema 检查。G04/G05 草稿 PR 保持独立，集成分支用于验证合并后的接口、迁移和后续后端改动。

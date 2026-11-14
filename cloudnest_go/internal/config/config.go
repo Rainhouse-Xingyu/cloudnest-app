@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"cloudenest_go/internal/frpconfig"
 )
 
 /*
@@ -15,6 +17,10 @@ Config结构体定义了应用程序的配置项，包括AppPort、MySQLDSN、Re
 Load函数从环境变量加载配置项，并提供默认值。JWTTTL方法计算JWT的过期时间，getEnv和getEnvInt函数用于获取环境变量的值并提供默认值。
 */
 type Config struct {
+	FRPKeyFile             string
+	FRPKeys                *frpconfig.Keyring
+	TLSCertFile            string
+	TLSKeyFile             string
 	TransferMaintenanceDSN string
 	BindAddr               string
 	AppPort                string
@@ -53,6 +59,8 @@ func Load() Config {
 		}
 	}
 	return Config{
+		FRPKeyFile:  os.Getenv("CLOUDNEST_FRP_KEY_FILE"),
+		TLSCertFile: strings.TrimSpace(os.Getenv("CLOUDNEST_TLS_CERT_FILE")), TLSKeyFile: strings.TrimSpace(os.Getenv("CLOUDNEST_TLS_KEY_FILE")),
 		TransferMaintenanceDSN: os.Getenv("TRANSFER_MAINTENANCE_DSN"),
 		BindAddr:               getEnv("APP_BIND_ADDR", ""), TransferTempBytes: transferSeedLimit(),
 		AppPort:            getEnv("APP_PORT", "8080"),
@@ -88,6 +96,9 @@ func (c Config) Validate() error {
 		if math.IsNaN(threshold) || math.IsInf(threshold, 0) || threshold < 0 || threshold > 1 {
 			return fmt.Errorf("AI search thresholds must be finite numbers greater than zero and at most one")
 		}
+	}
+	if (c.TLSCertFile != "" || c.TLSKeyFile != "") && (!filepath.IsAbs(c.TLSCertFile) || !filepath.IsAbs(c.TLSKeyFile)) {
+		return fmt.Errorf("configure both TLS certificate and key with absolute paths")
 	}
 	if c.TransferTempBytes < 0 || c.TransferTempBytes > 4<<40 {
 		return fmt.Errorf("TRANSFER_TEMP_LIMIT_BYTES must be a positive integer no larger than 4 TiB")

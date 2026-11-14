@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 
+	"cloudenest_go/internal/agentauth"
+	"cloudenest_go/internal/agentcommand"
 	"cloudenest_go/internal/blob"
 	"cloudenest_go/internal/config"
 	"cloudenest_go/internal/handler"
@@ -73,7 +75,7 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 	fileRepo := storageMysql.NewFileRepo(db)
 	collaborationRepo := storageMysql.NewCollaborationRepo(db)
 	livePhotoRepo := storageMysql.NewLivePhotoRepo(db)
-	frpRepo := storageMysql.NewFrpRepo(db)
+	frpRepo := storageMysql.NewFrpRepo(db, cfg.FRPKeys)
 	aiRepo := storageMysql.NewAIRepo(db)
 	txRunner := storageMysql.NewTxRunner(db)
 
@@ -135,7 +137,7 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 // NewRouter 统一构建路由与中间件。
 func (c *Container) NewRouter() *gin.Engine {
 	r := gin.New()
-	r.Use(gin.Logger(), middleware.RecoverHTTP())
+	r.Use(gin.LoggerWithConfig(gin.LoggerConfig{SkipQueryString: true}), middleware.RecoverHTTP())
 	r.Use(middleware.ProtectBlobReads(c.Blobs))
 	// Forwarding headers are untrusted until an explicit ingress policy exists.
 	_ = r.SetTrustedProxies(nil)
@@ -144,6 +146,14 @@ func (c *Container) NewRouter() *gin.Engine {
 	r.GET("/api/public/shares/:code", c.FileHandler.PublicShareInfo)
 	r.GET("/api/public/shares/:code/download", c.FileHandler.PublicShareDownload)
 
+	commands := handler.AgentCommandHandler{Commands: agentcommand.New(c.DB, c.Cfg.FRPKeys)}
+	agent := handler.AgentHandler{Identity: agentauth.New(c.DB)}
+	r.POST("/api/agent/enroll", handler.AgentTransport, middleware.AgentEnrollmentRateLimit(c.RDB), agent.Exchange)
+	r.POST("/api/agent/heartbeat", handler.AgentTransport, middleware.AgentCredentialRateLimit(c.RDB), agent.Heartbeat)
+	r.POST("/api/agent/commands/claim", handler.AgentTransport, middleware.AgentCredentialRateLimit(c.RDB), commands.Claim)
+	r.POST("/api/agent/commands/:id/renew", handler.AgentTransport, middleware.AgentCredentialRateLimit(c.RDB), commands.Renew)
+	r.POST("/api/agent/commands/:id/config", handler.AgentTransport, middleware.AgentCredentialRateLimit(c.RDB), commands.Configuration)
+	r.POST("/api/agent/commands/:id/result", handler.AgentTransport, middleware.AgentCredentialRateLimit(c.RDB), commands.Finish)
 	api := r.Group("/api")
 	api.Use(middleware.Authenticate(c.RDB, c.Cfg.JWTSecret, func(ctx context.Context, userID int64) ([]string, error) {
 		return c.AuthzService.ResolveUserPermissions(ctx, userID)
@@ -166,6 +176,8 @@ func (c *Container) NewRouter() *gin.Engine {
 	api.POST("/auth/logout-all", c.AuthHandler.LogoutAll)
 	api.GET("/auth/me", c.AuthHandler.Me)
 
+	api.POST("/frp/devices/:id/enrollment", handler.AgentTransport, middleware.AgentEnrollmentRateLimit(c.RDB), agent.Issue)
+	api.POST("/frp/devices/:id/credential/revoke", handler.AgentTransport, middleware.AgentEnrollmentRateLimit(c.RDB), agent.Revoke)
 	api.GET("/resource/health", func(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, gin.H{"message": "protected resource ok"})
 	})
@@ -218,6 +230,11 @@ func (c *Container) NewRouter() *gin.Engine {
 	api.GET("/settings/rate-window", c.SettingsHandler.GetMyRateWindow)
 	api.PUT("/settings/rate-window", c.SettingsHandler.UpdateMyRateWindow)
 	api.GET("/storage/overview", c.StorageHandler.GetOverview)
+	api.GET("/frp/reservations", handler.AgentTransport, c.FrpHandler.ListReservations)
+	api.POST("/frp/servers", handler.AgentTransport, c.FrpHandler.WriteServer)
+	api.PUT("/frp/servers/:id", handler.AgentTransport, c.FrpHandler.WriteServer)
+	api.GET("/frp/servers", handler.AgentTransport, c.FrpHandler.ListServers)
+	api.GET("/frp/servers/:id", handler.AgentTransport, c.FrpHandler.GetServer)
 	api.POST("/frp/devices", c.FrpHandler.CreateDevice)
 	api.GET("/frp/devices", c.FrpHandler.ListDevices)
 	api.GET("/frp/devices/:id", c.FrpHandler.GetDevice)
@@ -227,17 +244,18 @@ func (c *Container) NewRouter() *gin.Engine {
 	api.GET("/frp/devices/:id/mappings", c.FrpHandler.ListDeviceMappings)
 	api.PUT("/frp/mappings/:id", c.FrpHandler.UpdateMapping)
 	api.DELETE("/frp/mappings/:id", c.FrpHandler.DeleteMapping)
-	api.POST("/frp/configs/preview", c.FrpHandler.PreviewConfig)
-	api.POST("/frp/configs/save", c.FrpHandler.SaveConfig)
+	api.POST("/frp/configs/preview", handler.AgentTransport, c.FrpHandler.PreviewConfig)
+	api.POST("/frp/configs/save", handler.AgentTransport, c.FrpHandler.SaveConfig)
 	api.GET("/frp/devices/:id/configs", c.FrpHandler.ListDeviceConfigs)
 	api.POST("/frp/configs/:id/rollback", c.FrpHandler.RollbackConfig)
-	api.POST("/frp/devices/:id/deploy-config", c.FrpHandler.DeployConfig)
-	api.POST("/frp/devices/:id/reload", c.FrpHandler.ReloadDevice)
+	api.POST("/frp/devices/:id/commands", handler.AgentTransport, commands.Enqueue)
+	api.POST("/frp/devices/:id/deploy-config", handler.AgentTransport, commands.Deploy)
+	api.POST("/frp/devices/:id/reload", handler.AgentTransport, commands.Reload)
 	api.POST("/frp/devices/:id/status/report", c.FrpHandler.ReportDeviceStatus)
 	api.GET("/frp/devices/:id/status", c.FrpHandler.GetDeviceStatus)
 	api.GET("/frp/devices/:id/commands/next", c.FrpHandler.PullNextCommand)
 	api.POST("/frp/commands/:command_id/result", c.FrpHandler.ReportCommandResult)
-	api.GET("/frp/devices/:id/commands", c.FrpHandler.ListDeviceCommands)
+	api.GET("/frp/devices/:id/commands", handler.AgentTransport, commands.List)
 	api.POST("/live-photos/bind", c.LivePhotoHandler.Bind)
 	api.POST("/live-photos/auto-bind", c.LivePhotoHandler.AutoBind)
 	api.DELETE("/live-photos/:id", c.LivePhotoHandler.Unbind)
