@@ -51,7 +51,7 @@
 | FRP-002 P1 | 原仓库没有设备 Agent/frpc 进程管理实现 | 检查 Go cmd 与实际隧道访问 | G05 官方 frpc、白名单 start/stop/reload/diagnose、自动恢复 | 前台 Go Agent 已实现，实际 CLI 三种隧道、正常重启与 frps 重连通过；macOS 用户 LaunchAgent 异常重启已实测，已接入真实注册诊断与不可变快照；Linux 用户 systemd 服务通过异常重启和停止实测；持续逐映射状态、双故障恢复待完成，见 [Agent 记录](FRP-AGENT.md) |
 | FRP-003 P1 | 原 YAML 使用用户 serverAddr/token/domain 原文拼接 | 输入换行/冒号/特殊字符串，运行 frpc verify | G05 typed config 序列化+官方验证，拒绝注入 | 生成器引号/模板防护、Agent 严格白名单及规范 JSON、官方 verify 均已实现；正常特殊 token 和危险配置实际链路已测，代码完成待审 |
 | FRP-004 P1 | 端口冲突先查后写，server 作用域/唯一性与心跳离线任务需核对 | 并发相同端口、设备失联、配置回滚 | G05 唯一索引/端口预留/周期判离线/版本关联 | 已接入事务池锁/归属复核、规范域名数据库唯一约束、审计回滚和有界端口扫描；设备退役/历史保留及命令取消已接入；已追加运行配置占用及首次清除回执释放；多服务器映射作用域已接入，历史占用对账和既有孤立映射治理仍待完成，见 [映射预留](FRP-MAPPING-RESERVATIONS.md) |
-| COLLAB-001 P1 | Workspace 成员管理存在；通用文件 ACL 主要用 owner/file_permission，空间角色链路不完整 | 空间 viewer/editor 对文件 CRUD 矩阵；禁止越级授权 | G06 明确空间/文件权限继承和管理员边界 | 成员管理及文件转授权边界已验证，空间角色到文件 CRUD 的继承待做，见 [协作权限](G06-COLLABORATION.md) |
+| COLLAB-001 P1 | Workspace 成员管理存在；通用文件 ACL 主要用 owner/file_permission，空间角色链路不完整 | 空间 viewer/editor 对文件 CRUD 矩阵；禁止越级授权 | G06 明确空间/文件权限继承和管理员边界 | 新空间角色已接入文件 CRUD，包含撤权、跨空间限制和旧空间兼容，见 [协作权限](G06-COLLABORATION.md) |
 | LIVE-001 P2 | LivePhoto 绑定/解绑/查询存在；并发去重及实际播放未测 | 相同 image/video 并发绑定、跨用户配对与 macOS 播放 | G06/G09 唯一约束/权限与原生预览 | 后端并发、双源权限、审计和迁移已验证，原生预览待 G09，见 [Live Photo](G06-LIVE-PHOTO.md) |
 | LOG-001 P1 | 多处 `_ = logOperation`，写操作可能无审计；SQL 日志策略未配置 | 注入日志写失败/数据库故障；确保无密钥与文件正文泄露 | G06 事务审计或可靠 outbox、结构化脱敏日志 | 账号恢复、永久删除、上传完成/对象修复、版本创建/恢复、FRP 配置/映射/设备写入、创建/撤销分享已事务化；新分享审计及应用访问日志不记录分享码；全局设置、个人时段和 AI 设置写入已事务审计并只记录设置键；其他路径和可靠 outbox 仍待做 |
 | ENG-001 P1 | 原仓库无 Go 测试，Swift 测试仅模板 | 基线 go test 全部 no test files | G00 加真实测试/CI；后续随修复扩展 | 首批单元/真实 API 回归已通过；全业务覆盖待后续 |

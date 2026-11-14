@@ -29,11 +29,10 @@ func (r *AIRepo) Search(ctx context.Context, uid int64, q contract.AISearchQuery
 	base := r.db.WithContext(ctx).
 		Table("file f").
 		Select("f.id, f.filename, f.file_type, f.size, f.parent_id, f.user_id, f.create_time, f.update_time, am.tags, am.description, am.ocr_text").
-		Joins("LEFT JOIN file_permission fp ON fp.file_id = f.id AND fp.user_id = ?", uid).
 		Joins("LEFT JOIN storage s ON s.id = f.storage_id").
 		Joins("LEFT JOIN ai_metadata am ON am.file_id = f.id AND am.source_hash=s.file_hash").
-		Where("f.is_deleted = 0 AND f.is_folder = 0").
-		Where("f.user_id = ? OR fp.permission IN ?", uid, []string{"read", "write"})
+		Where("f.is_deleted = 0 AND f.is_folder = 0")
+	base = fileAccessScope(base, "f", uid, false)
 
 	if q.Keyword != "" {
 		like := "%" + q.Keyword + "%"
@@ -105,13 +104,8 @@ func (r *AIRepo) GetStorageByID(ctx context.Context, storageID int64) (model.Sto
 	return storage, nil
 }
 
-func (r *AIRepo) CountFilePermissionsByLevels(ctx context.Context, fileID int64, userID int64, permissions []string) (int64, error) {
-	var count int64
-	err := r.db.WithContext(ctx).Model(&model.FilePermission{}).Where("file_id = ? AND user_id = ? AND permission IN ?", fileID, userID, permissions).Count(&count).Error
-	if err != nil {
-		return 0, err
-	}
-	return count, nil
+func (r *AIRepo) CanAccessFile(ctx context.Context, uid, id int64, write bool) (bool, error) {
+	return canAccessFileForFileRepo(ctx, r.db, uid, id, write)
 }
 
 func (r *AIRepo) GetAIMetadataByFileID(ctx context.Context, fileID int64) (model.AiMetadata, error) {

@@ -16,7 +16,7 @@ func indexError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, contract.ErrInvalidInput):
 		code, message = http.StatusBadRequest, "invalid index request"
-	case errors.Is(err, contract.ErrNotFound):
+	case errors.Is(err, contract.ErrNotFound), errors.Is(err, contract.ErrForbidden):
 		code, message = http.StatusNotFound, "file not found"
 	case errors.Is(err, contract.ErrConflict):
 		code, message = http.StatusConflict, "index changed; refresh status before rebuilding"

@@ -45,9 +45,8 @@ func (r *FileRepo) SearchFiles(ctx context.Context, uid int64, q contract.FileSe
 	dbq := r.db.WithContext(ctx).
 		Table("file f").
 		Select("f.*").
-		Joins("LEFT JOIN file_permission fp ON fp.file_id = f.id AND fp.user_id = ?", uid).
-		Where("f.is_deleted = 0").
-		Where("f.user_id = ? OR fp.permission IN ?", uid, []string{"read", "write"})
+		Where("f.is_deleted = 0")
+	dbq = fileAccessScope(dbq, "f", uid, false)
 
 	if q.ParentID > 0 {
 		dbq = dbq.Where("f.parent_id = ?", q.ParentID)
@@ -89,23 +88,20 @@ func (r *FileRepo) SearchFiles(ctx context.Context, uid int64, q contract.FileSe
 
 func (r *FileRepo) ListFiles(ctx context.Context, uid int64, parentID int64) ([]model.File, error) {
 	var rows []model.File
-	err := r.db.WithContext(ctx).
-		Table("file f").
-		Select("f.*").
-		Joins("LEFT JOIN file_permission fp ON fp.file_id = f.id AND fp.user_id = ?", uid).
-		Where("f.parent_id = ? AND f.is_deleted = 0", parentID).
-		Where("f.user_id = ? OR fp.permission IN ?", uid, []string{"read", "write"}).
-		Order("f.is_folder DESC, f.filename ASC").
-		Find(&rows).Error
-	if err != nil {
-		return nil, err
+	q := r.db.WithContext(ctx).Table("file f").Select("f.*").
+		Where("f.parent_id=? AND f.is_deleted=0", parentID)
+	if parentID == 0 {
+		q = q.Where("NOT EXISTS (SELECT 1 FROM workspace w WHERE w.root_file_id=f.id)")
 	}
-	return rows, nil
+	err := fileAccessScope(q, "f", uid, false).Order("f.is_folder DESC, f.filename ASC").Find(&rows).Error
+	return rows, err
 }
 
 func (r *FileRepo) ListRecycleBin(ctx context.Context, uid int64) ([]model.File, error) {
 	var rows []model.File
-	if err := r.db.WithContext(ctx).Where("user_id = ? AND is_deleted = 1", uid).Order("update_time DESC").Find(&rows).Error; err != nil {
+	q := r.db.WithContext(ctx).Table("file f").Select("f.*").Where("f.is_deleted=1").
+		Where("f.user_id=? OR EXISTS (SELECT 1 FROM workspace w WHERE w.id=f.workspace_id AND w.root_file_id IS NOT NULL)", uid)
+	if err := fileAccessScope(q, "f", uid, true).Order("f.update_time DESC").Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	return rows, nil
@@ -208,7 +204,14 @@ func (r *FileRepo) CreateFolderRecord(ctx context.Context, uid int64, name strin
 		if err != nil {
 			return err
 		}
+		ws, err := destinationWorkspace(tx, parentID)
+		if err != nil {
+			return err
+		}
 		folder = model.File{UserID: uid, Filename: finalName, ParentID: parentID, IsFolder: 1}
+		if ws.ID != 0 {
+			folder.WorkspaceID = &ws.ID
+		}
 		return tx.Create(&folder).Error
 	})
 	return folder, err
@@ -222,7 +225,7 @@ func (r *FileRepo) RenameFile(ctx context.Context, uid, fileID int64, name strin
 		if err != nil {
 			return err
 		}
-		if err := requireFilePermission(tx, uid, file, true); err != nil {
+		if err := requireMutableWorkspaceEntry(tx, uid, file); err != nil {
 			return err
 		}
 		finalName, err := allocateFileName(tx, file.UserID, file.ParentID, name, file.IsFolder == 1, file.ID, false)
@@ -276,7 +279,7 @@ func (r *FileRepo) SoftDeleteFileWithLivePhotoCleanup(ctx context.Context, uid, 
 		if err != nil {
 			return err
 		}
-		if err := requireFilePermission(tx, uid, file, true); err != nil {
+		if err := requireMutableWorkspaceEntry(tx, uid, file); err != nil {
 			return err
 		}
 		if file.IsFolder == 1 {
@@ -306,13 +309,24 @@ func (r *FileRepo) MoveFiles(ctx context.Context, uid int64, fileIDs []int64, ta
 		if err := requireWriteParent(tx, uid, targetParentID); err != nil {
 			return err
 		}
+		dest, err := destinationWorkspace(tx, targetParentID)
+		if err != nil {
+			return err
+		}
 		roots := make(map[int64]bool)
 		for _, id := range fileIDs {
 			roots[id] = true
 		}
 		for _, node := range nodes {
-			if err := requireFilePermission(tx, uid, node.File, true); err != nil {
+			if err := requireMutableWorkspaceEntry(tx, uid, node.File); err != nil {
 				return err
+			}
+			ws, err := fileWorkspace(tx, node.File)
+			if err != nil {
+				return err
+			}
+			if ws.ID != dest.ID {
+				return contract.ErrForbidden
 			}
 			if node.File.ID == targetParentID {
 				return contract.ErrCannotMoveToDesc
@@ -376,6 +390,10 @@ func (r *FileRepo) CopyFiles(ctx context.Context, uid int64, fileIDs []int64, ta
 		if err := requireWriteParent(tx, uid, targetParentID); err != nil {
 			return err
 		}
+		dest, err := destinationWorkspace(tx, targetParentID)
+		if err != nil {
+			return err
+		}
 		traversal := copyTraversal{remaining: 10000, path: map[int64]bool{}}
 		for _, id := range uniqueInt64ForFileRepo(fileIDs) {
 			if id <= 0 {
@@ -400,7 +418,7 @@ func (r *FileRepo) CopyFiles(ctx context.Context, uid int64, fileIDs []int64, ta
 					return contract.ErrCannotMoveToDesc
 				}
 			}
-			copiedID, err := copyNodeForFileRepo(tx, uid, src, targetParentID, &traversal)
+			copiedID, err := copyNodeForFileRepo(tx, uid, src, targetParentID, dest, &traversal)
 			if err != nil {
 				return err
 			}
@@ -422,8 +440,15 @@ func (r *FileRepo) RestoreFromRecycleBin(ctx context.Context, uid, fileID int64)
 		if err != nil {
 			return err
 		}
-		if restored.UserID != uid {
+		ws, err := fileWorkspace(tx, restored)
+		if err != nil {
+			return err
+		}
+		if ws.ID == 0 && restored.UserID != uid {
 			return contract.ErrForbidden
+		}
+		if err := requireMutableWorkspaceEntry(tx, uid, restored); err != nil {
+			return err
 		}
 		if err := requireWriteParent(tx, uid, restored.ParentID); err != nil {
 			return err
@@ -461,6 +486,9 @@ func (r *FileRepo) PermanentDeleteFromRecycleBin(ctx context.Context, uid int64,
 		for _, node := range nodes {
 			if node.File.UserID != uid {
 				return contract.ErrForbidden
+			}
+			if err := requireMutableWorkspaceEntry(tx, uid, node.File); err != nil {
+				return err
 			}
 		}
 		for _, node := range nodes {
@@ -753,6 +781,10 @@ func (r *FileRepo) CompleteUploadPersist(ctx context.Context, uid int64, parentI
 		if err := requireWriteParent(tx, uid, parentID); err != nil {
 			return err
 		}
+		ws, err := destinationWorkspace(tx, parentID)
+		if err != nil {
+			return err
+		}
 		selected, wasRepaired, err := ensureStorageForFileRepo(tx, fileHash, storagePath, storageRoot, mergedSize)
 		if err != nil {
 			return err
@@ -772,6 +804,9 @@ func (r *FileRepo) CompleteUploadPersist(ctx context.Context, uid int64, parentI
 			FileType:  fileType,
 			Size:      mergedSize,
 			StorageID: &selected.ID,
+		}
+		if ws.ID != 0 {
+			createdFile.WorkspaceID = &ws.ID
 		}
 		if err := tx.Create(&createdFile).Error; err != nil {
 			return err
@@ -906,6 +941,20 @@ func equalShareStorage(a, b *int64) bool {
 
 func (r *FileRepo) CreateShare(ctx context.Context, share model.Share, clientIP string) (model.Share, error) {
 	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var file model.File
+		if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).First(&file, "id=? AND is_deleted=0", *share.FileID).Error; err != nil {
+			return err
+		}
+		ws, err := fileWorkspace(tx, file)
+		if err != nil {
+			return err
+		}
+		if ws.ID != 0 {
+			return contract.ErrForbidden
+		}
+		if err := requireFilePermission(tx, *share.UserID, file, false); err != nil {
+			return err
+		}
 		if err := tx.Create(&share).Error; err != nil {
 			return err
 		}
@@ -1090,32 +1139,10 @@ func uniqueInt64ForFileRepo(input []int64) []int64 {
 }
 
 func canAccessFileForFileRepo(ctx context.Context, db *gorm.DB, userID int64, fileID int64, requireWrite bool) (bool, error) {
-	var f model.File
-	err := db.WithContext(ctx).First(&f, "id = ? AND is_deleted = 0", fileID).Error
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return false, nil
-		}
-		return false, err
-	}
-	if f.UserID == userID {
-		return true, nil
-	}
-
-	permissions := []string{"read", "write"}
-	if requireWrite {
-		permissions = []string{"write"}
-	}
-
 	var count int64
-	err = db.WithContext(ctx).
-		Model(&model.FilePermission{}).
-		Where("file_id = ? AND user_id = ? AND permission IN ?", fileID, userID, permissions).
-		Count(&count).Error
-	if err != nil {
-		return false, err
-	}
-	return count > 0, nil
+	err := fileAccessScope(db.WithContext(ctx).Table("file f"), "f", userID, requireWrite).
+		Where("f.id=? AND f.is_deleted=0", fileID).Count(&count).Error
+	return count == 1, err
 }
 
 func isLivePhotoImageExtForFileRepo(ext string) bool {
@@ -1165,7 +1192,7 @@ type copyTraversal struct {
 	path      map[int64]bool
 }
 
-func copyNodeForFileRepo(tx *gorm.DB, newOwnerID int64, src model.File, targetParentID int64, traversal *copyTraversal) (int64, error) {
+func copyNodeForFileRepo(tx *gorm.DB, newOwnerID int64, src model.File, targetParentID int64, dest model.Workspace, traversal *copyTraversal) (int64, error) {
 	if src.IsFolder != 0 && src.StorageID != nil {
 		return 0, contract.ErrStorageIntegrity
 	}
@@ -1177,6 +1204,13 @@ func copyNodeForFileRepo(tx *gorm.DB, newOwnerID int64, src model.File, targetPa
 	defer delete(traversal.path, src.ID)
 	if err := requireFilePermission(tx, newOwnerID, src, false); err != nil {
 		return 0, err
+	}
+	ws, err := fileWorkspace(tx, src)
+	if err != nil {
+		return 0, err
+	}
+	if ws.ID != 0 && (ws.ID != dest.ID || *ws.RootFileID == src.ID) {
+		return 0, contract.ErrForbidden
 	}
 	finalName, err := allocateFileName(tx, newOwnerID, targetParentID, src.Filename, src.IsFolder == 1, 0, true)
 	if err != nil {
@@ -1191,9 +1225,11 @@ func copyNodeForFileRepo(tx *gorm.DB, newOwnerID int64, src model.File, targetPa
 		FileType:       src.FileType,
 		Size:           src.Size,
 		StorageID:      src.StorageID,
-		WorkspaceID:    src.WorkspaceID,
 		CurrentVersion: 1,
 		IsDeleted:      0,
+	}
+	if dest.ID != 0 {
+		newNode.WorkspaceID = &dest.ID
 	}
 	if err := tx.Create(&newNode).Error; err != nil {
 		return 0, err
@@ -1213,7 +1249,7 @@ func copyNodeForFileRepo(tx *gorm.DB, newOwnerID int64, src model.File, targetPa
 			return 0, err
 		}
 		for _, child := range children {
-			if _, err := copyNodeForFileRepo(tx, newOwnerID, child, newNode.ID, traversal); err != nil {
+			if _, err := copyNodeForFileRepo(tx, newOwnerID, child, newNode.ID, dest, traversal); err != nil {
 				return 0, err
 			}
 		}

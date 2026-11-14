@@ -111,6 +111,13 @@ func allocateFileName(tx *gorm.DB, ownerID, parentID int64, base string, folder 
 }
 
 func requireFilePermission(tx *gorm.DB, uid int64, file model.File, write bool) error {
+	ws, err := fileWorkspace(tx, file)
+	if err != nil {
+		return err
+	}
+	if ws.ID != 0 {
+		return requireWorkspaceRole(tx, uid, ws, write)
+	}
 	if file.UserID == uid {
 		return nil
 	}
@@ -119,7 +126,7 @@ func requireFilePermission(tx *gorm.DB, uid int64, file model.File, write bool) 
 		permissions = []string{"write"}
 	}
 	var grant model.FilePermission
-	err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("file_id = ? AND user_id = ? AND permission IN ?", file.ID, uid, permissions).First(&grant).Error
+	err = tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("file_id = ? AND user_id = ? AND permission IN ?", file.ID, uid, permissions).First(&grant).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return contract.ErrForbidden
 	}

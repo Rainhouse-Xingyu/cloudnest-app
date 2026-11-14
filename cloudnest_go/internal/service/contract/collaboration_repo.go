@@ -12,6 +12,7 @@ type CollaborationWorkspaceListRow struct {
 	ID         int64     `json:"id"`
 	Name       string    `json:"name"`
 	OwnerID    int64     `json:"owner_id"`
+	RootFileID *int64    `json:"root_file_id"`
 	Role       string    `json:"role"`
 	CreateTime time.Time `json:"create_time"`
 }
@@ -81,7 +82,7 @@ type CollaborationRepository interface {
 	ChangeWorkspaceMember(ctx context.Context, change WorkspaceMemberChange) error
 	ListWorkspaceMembers(ctx context.Context, workspaceID int64) ([]CollaborationWorkspaceMemberRow, error)
 	GetActiveFileByID(ctx context.Context, fileID int64) (model.File, error)
-	CountFilePermissionsByLevels(ctx context.Context, fileID int64, userID int64, permissions []string) (int64, error)
+	CanAccessFile(ctx context.Context, userID, fileID int64, write bool) (bool, error)
 	ChangeFilePermission(ctx context.Context, actorID, fileID, targetUserID int64, permission, clientIP string) error
 	ListFilePermissions(ctx context.Context, fileID int64) ([]CollaborationFilePermissionRow, error)
 	CreateFileVersion(ctx context.Context, req CollaborationCreateFileVersionInput) (model.FileVersion, error)

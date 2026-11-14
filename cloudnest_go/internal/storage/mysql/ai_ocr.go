@@ -30,14 +30,12 @@ func (r *AIRepo) PublishOCR(ctx context.Context, uid int64, source model.File, h
 		if current.StorageID == nil || source.StorageID == nil || *current.StorageID != *source.StorageID || current.Filename != source.Filename {
 			return contract.ErrConflict
 		}
-		if current.UserID != uid {
-			var grant model.FilePermission
-			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("file_id=? AND user_id=? AND permission IN ?", current.ID, uid, []string{"read", "write"}).First(&grant).Error; err != nil {
-				if errors.Is(err, gorm.ErrRecordNotFound) {
-					return contract.ErrForbidden
-				}
-				return err
-			}
+		ws, err := fileWorkspace(tx, current)
+		if err != nil {
+			return err
+		}
+		if err := requireFilePermission(tx, uid, current, ws.ID != 0); err != nil {
+			return err
 		}
 		var storage model.Storage
 		if err := tx.First(&storage, *current.StorageID).Error; err != nil {
@@ -46,7 +44,7 @@ func (r *AIRepo) PublishOCR(ctx context.Context, uid int64, source model.File, h
 		if storage.FileHash != hash {
 			return contract.ErrConflict
 		}
-		err := tx.Where("file_id=?", current.ID).Order("id").First(&result).Error
+		err = tx.Where("file_id=?", current.ID).Order("id").First(&result).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			result = model.AiMetadata{FileID: current.ID, SourceHash: hash, Tags: tags, Description: description, OcrText: text}
 			if err := tx.Create(&result).Error; err != nil {

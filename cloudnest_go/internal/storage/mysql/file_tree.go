@@ -116,25 +116,14 @@ func fileReadSnapshot(ctx context.Context, db *gorm.DB, fn func(*gorm.DB) error)
 func requireTreeRead(tx *gorm.DB, uid int64, nodes []fileTreeNode) error {
 	ids := make([]int64, 0, len(nodes))
 	for _, node := range nodes {
-		if node.File.UserID != uid {
-			ids = append(ids, node.File.ID)
-		}
+		ids = append(ids, node.File.ID)
 	}
-	if len(ids) == 0 {
-		return nil
-	}
-	var grants []model.FilePermission
-	if err := tx.Where("file_id IN ? AND user_id = ? AND permission IN ?", ids, uid, []string{"read", "write"}).Find(&grants).Error; err != nil {
+	var count int64
+	if err := fileAccessScope(tx.Table("file f"), "f", uid, false).Where("f.id IN ?", ids).Count(&count).Error; err != nil {
 		return err
 	}
-	allowed := make(map[int64]bool, len(grants))
-	for _, grant := range grants {
-		allowed[grant.FileID] = true
-	}
-	for _, id := range ids {
-		if !allowed[id] {
-			return contract.ErrForbidden
-		}
+	if count != int64(len(ids)) {
+		return contract.ErrForbidden
 	}
 	return nil
 }

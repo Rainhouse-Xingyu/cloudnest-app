@@ -337,28 +337,7 @@ func (s *LivePhotoService) AutoBind(ctx context.Context, uid int64, req LivePhot
 
 // canAccessFile 复用 file + file_permission 的权限模型判断文件访问权限。
 func (s *LivePhotoService) canAccessFile(ctx context.Context, userID int64, fileID int64, requireWrite bool) (bool, error) {
-	f, err := s.repo.GetActiveFileByID(ctx, fileID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return false, nil
-		}
-		return false, err
-	}
-
-	if f.UserID == userID {
-		return true, nil
-	}
-
-	permissions := []string{"read", "write"}
-	if requireWrite {
-		permissions = []string{"write"}
-	}
-
-	count, err := s.repo.CountFilePermissionsByLevels(ctx, fileID, userID, permissions)
-	if err != nil {
-		return false, err
-	}
-	return count > 0, nil
+	return s.repo.CanAccessFile(ctx, userID, fileID, requireWrite)
 }
 
 // loadLivePhotoFiles 校验文件类型并返回图片文件和视频文件。

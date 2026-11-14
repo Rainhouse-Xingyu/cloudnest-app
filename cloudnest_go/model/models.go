@@ -95,6 +95,7 @@ func (StorageGarbage) TableName() string { return "storage_garbage" }
 type Workspace struct {
 	ID         int64     `gorm:"primaryKey;autoIncrement" json:"id"`
 	Name       string    `gorm:"type:varchar(100);not null" json:"name"`
+	RootFileID *int64    `gorm:"type:bigint;uniqueIndex:uq_workspace_root_v1" json:"root_file_id"`
 	OwnerID    int64     `gorm:"not null;index" json:"owner_id"`
 	CreateTime time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP" json:"create_time"`
 }

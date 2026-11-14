@@ -10,12 +10,12 @@ import (
 )
 
 func hybridBase(db *gorm.DB, uid int64) *gorm.DB {
-	return db.Table("file f").
+	q := db.Table("file f").
 		Joins("LEFT JOIN storage s ON s.id=f.storage_id").
 		Joins("LEFT JOIN ai_index_job j ON j.file_id=f.id AND j.status='done' AND j.source_hash=s.file_hash").
 		Joins("LEFT JOIN ai_index_document d ON d.file_id=f.id AND d.generation=j.generation AND d.source_hash=s.file_hash AND d.pipeline=j.pipeline").
-		Where("f.is_deleted=0 AND f.is_folder=0").
-		Where("f.user_id=? OR EXISTS (SELECT 1 FROM file_permission p WHERE p.file_id=f.id AND p.user_id=? AND p.permission IN ('read','write'))", uid, uid)
+		Where("f.is_deleted=0 AND f.is_folder=0")
+	return fileAccessScope(q, "f", uid, false)
 }
 
 // ScanHybrid streams the full authorized candidate set. No prefix LIMIT silently

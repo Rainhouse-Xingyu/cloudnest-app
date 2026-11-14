@@ -587,26 +587,7 @@ func (s *AIService) getReadableFileAndStorage(ctx context.Context, userID int64,
 }
 
 func (s *AIService) canAccessFile(ctx context.Context, userID int64, fileID int64, requireWrite bool) (bool, error) {
-	f, err := s.repo.GetActiveFileByID(ctx, fileID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return false, nil
-		}
-		return false, err
-	}
-	if f.UserID == userID {
-		return true, nil
-	}
-
-	permissions := []string{"read", "write"}
-	if requireWrite {
-		permissions = []string{"write"}
-	}
-	count, err := s.repo.CountFilePermissionsByLevels(ctx, fileID, userID, permissions)
-	if err != nil {
-		return false, err
-	}
-	return count > 0, nil
+	return s.repo.CanAccessFile(ctx, userID, fileID, requireWrite)
 }
 
 func (s *AIService) upsertAIMetadata(ctx context.Context, fileID int64, tags string, desc string, ocrText string) (model.AiMetadata, error) {

@@ -59,7 +59,14 @@ func requireHistoricalSource(tx *gorm.DB, uid int64, file model.File, historical
 		return nil
 	}
 	var source model.File
-	err := tx.Table("file f").Select("f.*").Joins("LEFT JOIN file_permission fp ON fp.file_id=f.id AND fp.user_id=?", uid).Where("f.storage_id=? AND f.is_deleted=0 AND f.is_folder=0", historical.StorageID).Where("f.user_id=? OR fp.permission IN ?", uid, []string{"read", "write"}).Order("f.id").First(&source).Error
+	candidates := fileAccessScope(tx.Table("file f").Select("f.*"), "f", uid, false).
+		Where("f.storage_id=? AND f.is_deleted=0 AND f.is_folder=0", historical.StorageID)
+	if lockSource {
+		// Restoring changes the destination's bytes. An unverified row can only
+		// source a workspace file if the destination is in that same workspace.
+		candidates = candidates.Where("(f.workspace_id <=> ? OR NOT EXISTS (SELECT 1 FROM workspace w WHERE w.id=f.workspace_id AND w.root_file_id IS NOT NULL))", file.WorkspaceID)
+	}
+	err := candidates.Order("f.id").Take(&source).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return contract.ErrForbidden
 	}

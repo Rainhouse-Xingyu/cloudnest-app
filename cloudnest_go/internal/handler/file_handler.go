@@ -876,7 +876,7 @@ func (h *FileHandler) CreateShare(c *gin.Context) {
 			return
 		}
 		msg := strings.ToLower(err.Error())
-		if strings.Contains(msg, "permission denied") {
+		if errors.Is(err, contract.ErrForbidden) || strings.Contains(msg, "permission denied") {
 			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
 			return
 		}

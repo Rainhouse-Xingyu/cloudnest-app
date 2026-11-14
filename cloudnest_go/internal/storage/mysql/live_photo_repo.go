@@ -33,13 +33,8 @@ func (r *LivePhotoRepo) GetActiveFileByID(ctx context.Context, fileID int64) (mo
 	return f, nil
 }
 
-func (r *LivePhotoRepo) CountFilePermissionsByLevels(ctx context.Context, fileID int64, userID int64, permissions []string) (int64, error) {
-	var count int64
-	err := r.db.WithContext(ctx).Model(&model.FilePermission{}).Where("file_id = ? AND user_id = ? AND permission IN ?", fileID, userID, permissions).Count(&count).Error
-	if err != nil {
-		return 0, err
-	}
-	return count, nil
+func (r *LivePhotoRepo) CanAccessFile(ctx context.Context, uid, id int64, write bool) (bool, error) {
+	return canAccessFileForFileRepo(ctx, r.db, uid, id, write)
 }
 
 func lockLivePhotoSources(tx *gorm.DB, uid, imageID, videoID int64) (model.File, model.File, error) {
@@ -165,9 +160,8 @@ func (r *LivePhotoRepo) ListAccessibleLivePhotos(ctx context.Context, uid int64,
 	base := r.db.WithContext(ctx).
 		Table("live_photo lp").
 		Joins("JOIN file fi ON fi.id = lp.image_file_id AND fi.is_deleted = 0").
-		Joins("JOIN file fv ON fv.id = lp.video_file_id AND fv.is_deleted = 0").
-		Where("(fi.user_id = ? OR EXISTS (SELECT 1 FROM file_permission fp WHERE fp.file_id=fi.id AND fp.user_id=? AND fp.permission IN ('read','write')))", uid, uid).
-		Where("(fv.user_id = ? OR EXISTS (SELECT 1 FROM file_permission fp WHERE fp.file_id=fv.id AND fp.user_id=? AND fp.permission IN ('read','write')))", uid, uid)
+		Joins("JOIN file fv ON fv.id = lp.video_file_id AND fv.is_deleted = 0")
+	base = fileAccessScope(fileAccessScope(base, "fi", uid, false), "fv", uid, false)
 
 	if parentID > 0 {
 		base = base.Where("(fi.parent_id = ? OR fv.parent_id = ?)", parentID, parentID)
@@ -215,10 +209,9 @@ func (r *LivePhotoRepo) ListWritableFilesByParent(ctx context.Context, userID in
 	q := r.db.WithContext(ctx).
 		Table("file f").
 		Select("f.*").
-		Joins("LEFT JOIN file_permission fp ON fp.file_id = f.id AND fp.user_id = ? AND fp.permission = ?", userID, "write").
 		Where("f.parent_id = ? AND f.is_deleted = 0 AND f.is_folder = 0", parentID).
-		Where("f.user_id = ? OR fp.id IS NOT NULL", userID).
 		Order("f.filename ASC, f.id ASC")
+	q = fileAccessScope(q, "f", userID, true)
 	if err := q.Find(&rows).Error; err != nil {
 		return nil, err
 	}

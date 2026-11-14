@@ -194,5 +194,8 @@ func CheckFileSchema(db *gorm.DB) error {
 	if err := CheckLivePhotoSchema(db); err != nil {
 		return err
 	}
+	if err := CheckWorkspaceRootSchema(db); err != nil {
+		return err
+	}
 	return CheckAIIndexSchema(db)
 }

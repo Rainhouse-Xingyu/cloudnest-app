@@ -47,7 +47,7 @@ type AIRepository interface {
 	Search(ctx context.Context, uid int64, q AISearchQuery) ([]AISearchRow, int64, error)
 	GetActiveFileByID(ctx context.Context, fileID int64) (model.File, error)
 	GetStorageByID(ctx context.Context, storageID int64) (model.Storage, error)
-	CountFilePermissionsByLevels(ctx context.Context, fileID int64, userID int64, permissions []string) (int64, error)
+	CanAccessFile(ctx context.Context, userID, fileID int64, write bool) (bool, error)
 	GetAIMetadataByFileID(ctx context.Context, fileID int64) (model.AiMetadata, error)
 	CreateAIMetadata(ctx context.Context, row model.AiMetadata) (model.AiMetadata, error)
 	UpdateAIMetadata(ctx context.Context, row model.AiMetadata, tags string, desc string, ocrText string) (model.AiMetadata, error)

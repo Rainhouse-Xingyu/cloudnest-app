@@ -30,6 +30,22 @@ func (r *CollaborationRepo) CreateWorkspace(ctx context.Context, ws *model.Works
 		if err := tx.Create(ws).Error; err != nil {
 			return err
 		}
+		if err := lockFileNamespaces(tx, fileNamespaceKey(ownerID, 0)); err != nil {
+			return err
+		}
+		// An internal name keeps the workspace root independent of display name.
+		name, err := allocateFileName(tx, ownerID, 0, fmt.Sprintf("Workspace %d", ws.ID), true, 0, true)
+		if err != nil {
+			return err
+		}
+		root := model.File{UserID: ownerID, Filename: name, IsFolder: 1, WorkspaceID: &ws.ID}
+		if err := tx.Create(&root).Error; err != nil {
+			return err
+		}
+		ws.RootFileID = &root.ID
+		if err := tx.Model(ws).Update("root_file_id", root.ID).Error; err != nil {
+			return err
+		}
 		row := model.WorkspaceUser{WorkspaceID: ws.ID, UserID: ownerID, Role: "owner"}
 		if err := tx.Create(&row).Error; err != nil {
 			return err
@@ -42,7 +58,7 @@ func (r *CollaborationRepo) ListWorkspaces(ctx context.Context, uid int64) ([]co
 	items := make([]contract.CollaborationWorkspaceListRow, 0)
 	err := r.db.WithContext(ctx).
 		Table("workspace w").
-		Select("w.id, w.name, w.owner_id, wu.role, w.create_time").
+		Select("w.id, w.name, w.owner_id, w.root_file_id, wu.role, w.create_time").
 		Joins("JOIN workspace_user wu ON wu.workspace_id = w.id AND wu.user_id = ?", uid).
 		Order("w.id DESC").
 		Find(&items).Error
@@ -178,16 +194,8 @@ func (r *CollaborationRepo) GetActiveFileByID(ctx context.Context, fileID int64)
 	return f, nil
 }
 
-func (r *CollaborationRepo) CountFilePermissionsByLevels(ctx context.Context, fileID int64, userID int64, permissions []string) (int64, error) {
-	var count int64
-	err := r.db.WithContext(ctx).
-		Model(&model.FilePermission{}).
-		Where("file_id = ? AND user_id = ? AND permission IN ?", fileID, userID, permissions).
-		Count(&count).Error
-	if err != nil {
-		return 0, err
-	}
-	return count, nil
+func (r *CollaborationRepo) CanAccessFile(ctx context.Context, uid, id int64, write bool) (bool, error) {
+	return canAccessFileForFileRepo(ctx, r.db, uid, id, write)
 }
 
 func (r *CollaborationRepo) ChangeFilePermission(ctx context.Context, actorID, fileID, targetUserID int64, permission, clientIP string) error {
@@ -204,6 +212,13 @@ func (r *CollaborationRepo) ChangeFilePermission(ctx context.Context, actorID, f
 			return err
 		}
 		if file.UserID != actorID {
+			return contract.ErrForbidden
+		}
+		ws, err := fileWorkspace(tx, file)
+		if err != nil {
+			return err
+		}
+		if ws.ID != 0 {
 			return contract.ErrForbidden
 		}
 		action := "file_permission_revoke"
@@ -286,11 +301,17 @@ func (r *CollaborationRepo) CreateFileVersion(ctx context.Context, req contract.
 		// A storage ID is not a capability. New bytes still require an active file
 		// owned by this caller; restoring this file's own history uses another path.
 		var source model.File
-		err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("storage_id=? AND user_id=? AND is_deleted=0 AND is_folder=0", req.StorageID, req.UserID).First(&source).Error
+		candidates := tx.Table("file f").Select("f.*").
+			Where("f.storage_id=? AND f.user_id=? AND f.is_deleted=0 AND f.is_folder=0", req.StorageID, req.UserID).
+			Where("(f.workspace_id <=> ? OR NOT EXISTS (SELECT 1 FROM workspace w WHERE w.id=f.workspace_id AND w.root_file_id IS NOT NULL))", file.WorkspaceID)
+		err := fileAccessScope(candidates, "f", req.UserID, false).Clauses(clause.Locking{Strength: "SHARE"}).Order("f.id").Take(&source).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return contract.ErrForbidden
 		}
 		if err != nil {
+			return err
+		}
+		if err := requireFilePermission(tx, req.UserID, source, false); err != nil {
 			return err
 		}
 		var storage model.Storage
