@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/image/bmp"
 	"golang.org/x/image/webp"
 )
 
@@ -141,6 +142,8 @@ func Config(ctx context.Context, source *os.File) (image.Config, string, error) 
 		format, decodeConfig = "png", png.DecodeConfig
 	case n >= 6 && (string(magic[:6]) == "GIF87a" || string(magic[:6]) == "GIF89a"):
 		format, decodeConfig = "gif", gif.DecodeConfig
+	case n >= 2 && string(magic[:2]) == "BM":
+		format, decodeConfig = "bmp", bmp.DecodeConfig
 	case n == 12 && string(magic[:4]) == "RIFF" && string(magic[8:]) == "WEBP":
 		if _, err := readWebP(ctx, source); err != nil {
 			return cfg, "", err
@@ -183,6 +186,8 @@ func Decode(ctx context.Context, source *os.File, cfg image.Config, format strin
 		img, err = png.Decode(limited)
 	case "gif":
 		img, err = gif.Decode(limited) // First frame only, never DecodeAll.
+	case "bmp":
+		img, err = bmp.Decode(limited)
 	case "webp":
 		img, err = webp.Decode(limited) // Static files only; Config rejects animation.
 	default:

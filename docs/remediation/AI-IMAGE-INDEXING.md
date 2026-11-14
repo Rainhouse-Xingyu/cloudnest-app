@@ -1,6 +1,6 @@
 # 图片视觉索引与 EXIF 日历
 
-G04 图片检查点支持 JPEG、PNG、GIF 首帧及静态 WebP：上传事务入队 → 校验并固定源 FD → 有界解码/方向纠正/缩放 → 实际 Ollama 视觉模型 → 文本切块与独立 embedding → 受租约/代次保护的原子发布。文件名不会代替图像内容输入模型。
+G04 图片检查点支持 JPEG、PNG、GIF 首帧、静态 WebP 和 BMP：上传事务入队 → 校验并固定源 FD → 有界解码/方向纠正/缩放 → 实际 Ollama 视觉模型 → 文本切块与独立 embedding → 受租约/代次保护的原子发布。文件名不会代替图像内容输入模型。
 
 ## 图像处理边界
 
@@ -34,8 +34,10 @@ JPEG APP1 和 PNG eXIf 解析有界，最多检查 4096 个标记/块，PNG EXIF
 
 素材来源与完整生成提示见 [图片夹具说明](../../cloudnest_go/integration/testdata/images/README.md)。合成 EXIF 是测试输入，不是现实拍摄事实。这两张图只证明功能链路，不能代表准确率、Recall/MRR 或真实照片分布。
 
-手动 OCR 统一及 GPS/相机有界解析已接入，见 [手动 OCR](AI-MANUAL-OCR.md)。仍需：HEIC/HEIF/WebP、复杂图片/中文和手写评估、模型资源并发压力和完整六类查询评估。G04 和整体 G00–G11 目标均未完成。
+手动 OCR 统一及 GPS/相机有界解析已接入，见 [手动 OCR](AI-MANUAL-OCR.md)。仍需复杂图片、中文和手写评估，以及模型资源并发压力验证；固定查询集的结果见 [TESTING](TESTING.md)。G04 和整体 G00–G11 目标均未完成。
 
 静态 WebP 的容器、EXIF、透明像素和新增验证见 [WebP 说明](AI-WEBP.md)。动画 WebP 仍拒绝。
 
 单主图 HEIC/HEIF 通过 IMAGE_HEIF_HELPER 可选接入，部署、真实验证及原生资源边界见 [HEIF 记录](AI-HEIF.md)。未配置不会伪造索引成功。
+
+BMP 共用相同的大小、像素、权限和读取边界。支持 Go BMP 解码器接受的静态输入，已验证未压缩 24 位样本；未支持的压缩方式会明确失败。BMP 没有本管线认可的拍摄时间，索引保留未知值。

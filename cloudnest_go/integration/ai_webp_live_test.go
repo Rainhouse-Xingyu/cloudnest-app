@@ -16,15 +16,27 @@ func TestAITextLiveWebPUsesPixelsAndRealSemanticSearch(t *testing.T) {
 	if os.Getenv("CLOUDNEST_TEST_AI_MODEL") != "1" {
 		t.Fatal("run real-model script")
 	}
-	f, _ := indexFixture(t)
-	f.cfg.AIOllamaBaseURL = "http://127.0.0.1:11434"
-	f.cfg.AIEmbeddingModel = "qwen3-embedding:0.6b"
-	f.router = fixtureRouter(app.NewContainer(f.cfg, f.db, f.rdb).NewRouter())
 	b, err := os.ReadFile("testdata/images/invoice-synthetic.webp")
 	if err != nil {
 		t.Fatal(err)
 	}
-	file := f.upload(t, f.alice, "snapshot.webp", b)
+	checkLiveInvoiceImage(t, "webp", b)
+}
+
+func TestAITextLiveBMPUsesPixelsAndRealSemanticSearch(t *testing.T) {
+	if os.Getenv("CLOUDNEST_TEST_AI_MODEL") != "1" {
+		t.Fatal("run real-model script")
+	}
+	checkLiveInvoiceImage(t, "bmp", syntheticInvoiceBMP(t))
+}
+
+func checkLiveInvoiceImage(t *testing.T, extension string, b []byte) {
+	t.Helper()
+	f, _ := indexFixture(t)
+	f.cfg.AIOllamaBaseURL = "http://127.0.0.1:11434"
+	f.cfg.AIEmbeddingModel = "qwen3-embedding:0.6b"
+	f.router = fixtureRouter(app.NewContainer(f.cfg, f.db, f.rdb).NewRouter())
+	file := f.upload(t, f.alice, "snapshot."+extension, b)
 	if worked, err := textWorker(t, f, f.cfg.AIOllamaBaseURL).Step(context.Background()); !worked || err != nil {
 		t.Fatal(worked, err)
 	}
@@ -58,12 +70,12 @@ func TestAITextLiveWebPUsesPixelsAndRealSemanticSearch(t *testing.T) {
 	}
 	decode(t, f.json(t, "POST", "/api/ai/search/nl", f.alice, map[string]any{"question": question}, 200), &reply)
 	if len(reply.Items) != 1 || reply.Items[0].ID != file.ID || !strings.Contains(strings.Join(reply.Items[0].Sources, ","), "semantic") {
-		t.Fatal("actual WebP retrieval", reply)
+		t.Fatal("actual image retrieval", extension, reply)
 	}
 	decode(t, f.json(t, "POST", "/api/ai/search/nl", f.bob, map[string]any{"question": question}, 200), &reply)
 	if len(reply.Items) != 0 {
 		t.Fatal("foreign image leaked", reply)
 	}
 	waitNoReadLeases(t, f, *file.StorageID)
-	t.Logf("real WebP indexed: chunks=%d vision=%s digest=%s", len(chunks), doc.VisionModel, doc.VisionDigest)
+	t.Logf("real %s indexed: chunks=%d vision=%s digest=%s", extension, len(chunks), doc.VisionModel, doc.VisionDigest)
 }

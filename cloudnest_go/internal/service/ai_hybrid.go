@@ -490,7 +490,7 @@ func hybridIntent(question string, now time.Time) (contract.AIHybridFilter, stri
 	var f contract.AIHybridFilter
 	imageQuery := strings.Contains(question, "照片") || strings.Contains(question, "图片")
 	if imageQuery {
-		f.FileTypes = []string{"jpg", "jpeg", "png", "gif", "webp", "heic", "heif"}
+		f.FileTypes = []string{"jpg", "jpeg", "png", "gif", "webp", "heic", "heif", "bmp"}
 	}
 	if !imageQuery && (strings.Contains(question, "配置文件") || strings.Contains(question, "设置文件")) {
 		f.FileTypes = []string{"json", "xml", "yaml", "yml", "toml", "ini", "conf", "config", "env", "properties", "txt"}

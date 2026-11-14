@@ -76,7 +76,7 @@ func (r *AIRepo) Search(ctx context.Context, uid int64, q contract.AISearchQuery
 	if q.FileType != "" {
 		switch strings.ToLower(q.FileType) {
 		case "image", "photo", "picture", "照片", "图片":
-			base = base.Where("LOWER(f.file_type) IN ?", []string{"jpg", "jpeg", "png", "gif", "webp", "heic", "heif"})
+			base = base.Where("LOWER(f.file_type) IN ?", []string{"jpg", "jpeg", "png", "gif", "webp", "heic", "heif", "bmp"})
 		case "document", "doc", "文档", "票据", "发票":
 			base = base.Where("LOWER(f.file_type) IN ?", []string{"pdf", "docx", "xlsx", "pptx", "txt", "md", "csv", "json", "xml", "yaml", "yml"})
 		default:

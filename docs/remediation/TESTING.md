@@ -295,3 +295,10 @@ G04 显式技术名条件回归通过。真实 API 与隔离 MySQL/Redis 验证�
 G04 CI 在 Go 1.26.10 上报告可达的标准库公告 GO-2026-6859。Go 1.26.11 下本地 `make check test` 通过，`make vuln` 未发现可达漏洞，仍有 3 个不可达模块公告。未修改扫描规则。工作树内已有的 blob 测试文件移动未纳入提交，完整检出以当前提交 CI 为准。
 
 2026-11-13，明确文档主题条件的 `make check test` 通过。使用原生 Poppler、隔离 MySQL/Redis 的检索专项 45 个顶层测试通过、零跳过（104.305s）。冻结 stress-v2 实际模型评估 **PASS 323.957s**，48 文件、24 查询、6/6 负例为空，11 条实际重排且零回退。指标及局限见 [评估记录](AI-RETRIEVAL-EVALUATION.md)。
+
+## 2026-11-14 G04 BMP 与原版评估复跑
+
+- BMP/WebP 缩略图集成 **通过（包 11.200s）**：验证实际图片、跨用户拒绝；BMP 另验证超出尺寸的头部在解码像素前返回 413。日志 `/tmp/cloudnest-g04-bmp-thumbnail-20261114.log`。
+- 两种格式均通过真实 Ollama 模型的可见文字识别、1024 维向量、语义命中、跨用户不可见及源租约释放验证：BMP 61.80s、WebP 73.33s，包 139.709s。日志 `/tmp/cloudnest-g04-bmp-real-20261114.log`。
+- 原版 v1 固定集未完成。11 月 13 日的尝试停在第 16 个文档，未评估查询；11 月 14 日 09:08 重跑在第 3 个文档 `photo-unknown` 返回 `extraction_limit`，共 2 个文档已索引、0 个查询，未生成本轮相关性指标。保留 `/tmp/cloudnest-g04-evidence-v1-20261113.json` 和 `/tmp/cloudnest-g04-evidence-v1-retry-20261114.json`。本记录不改变已完成的 `stress-v2` 结果。
+- 同时执行 v1 时，首次 `make check test` 的 PDF 子进程溢出测试正确拒绝输出，但 5.70s 超过测试的 5s 断言。错峰重跑 `make -C cloudnest_go check test` 全部通过（PDF 包 6.094s）；保留两次日志 `/tmp/cloudnest-g04-bmp-check-20261114.log`、`/tmp/cloudnest-g04-bmp-check-serial-20261114.log`。
