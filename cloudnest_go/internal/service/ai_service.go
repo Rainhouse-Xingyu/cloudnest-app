@@ -375,7 +375,11 @@ func (s *AIService) AskAssistant(ctx context.Context, question string) (AIAskRes
 }
 
 func (s *AIService) ApplySetting(ctx context.Context, uid int64, key string, value string, description string, clientIP string) error {
-	return s.repo.ApplySettingWithAudit(ctx, uid, key, value, description, clientIP)
+	item, err := normalizeSystemSetting(SettingUpsertItem{SettingKey: key, SettingValue: value, Description: description})
+	if err != nil {
+		return err
+	}
+	return s.repo.ApplySettingWithAudit(ctx, uid, item.SettingKey, item.SettingValue, item.Description, clientIP)
 }
 
 // GetReadableFileAndStorage 获取用户可读文件及其存储记录。

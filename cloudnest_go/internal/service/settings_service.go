@@ -76,41 +76,44 @@ var allowedSystemSettingKeys = map[string]struct{}{
 	"storage_default_quota_bytes":    {},
 }
 
-// GetSettings 返回 system_setting 全量配置（非管理员脱敏）。
+// GetSettings only exposes public setting keys to ordinary users.
 func (s *SettingsService) GetSettings(ctx context.Context, isAdmin bool) ([]model.SystemSetting, error) {
 	rows, err := s.repo.ListSystemSettings(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	for i := range rows {
-		if !isAdmin && isSensitiveSettingKey(rows[i].SettingKey) {
-			rows[i].SettingValue = maskSettingValue(rows[i].SettingValue)
+	if isAdmin {
+		return rows, nil
+	}
+	visible := make([]model.SystemSetting, 0, len(rows))
+	for _, row := range rows {
+		if _, ok := allowedSystemSettingKeys[row.SettingKey]; ok {
+			visible = append(visible, row)
 		}
 	}
-
-	return rows, nil
+	return visible, nil
 }
 
 // UpsertSettings 批量新增/更新系统设置。
-func (s *SettingsService) UpsertSettings(ctx context.Context, items []SettingUpsertItem) error {
+func (s *SettingsService) UpsertSettings(ctx context.Context, uid int64, items []SettingUpsertItem, clientIP string) error {
+	if len(items) == 0 || len(items) > len(allowedSystemSettingKeys) {
+		return gorm.ErrInvalidData
+	}
+	seen := make(map[string]bool, len(items))
 	repoItems := make([]contract.SettingUpsertItem, 0, len(items))
 	for _, item := range items {
-		key := strings.TrimSpace(item.SettingKey)
-		value := strings.TrimSpace(item.SettingValue)
-		desc := strings.TrimSpace(item.Description)
-		if key == "" || value == "" {
-			return gorm.ErrInvalidData
-		}
-		if _, ok := allowedSystemSettingKeys[key]; !ok {
-			return gorm.ErrInvalidField
-		}
-		if err := validateSettingValue(key, value); err != nil {
+		normalized, err := normalizeSystemSetting(item)
+		if err != nil {
 			return err
 		}
-		repoItems = append(repoItems, contract.SettingUpsertItem{SettingKey: key, SettingValue: value, Description: desc})
+		if seen[normalized.SettingKey] {
+			return gorm.ErrInvalidData
+		}
+		seen[normalized.SettingKey] = true
+		repoItems = append(repoItems, normalized)
 	}
-	return s.repo.UpsertSystemSettings(ctx, repoItems)
+	return s.repo.UpsertSystemSettings(ctx, uid, repoItems, "settings_update", clientIP)
 }
 
 // GetPermissionSummary 聚合展示角色、空间角色与文件授权规则。
@@ -192,7 +195,7 @@ func (s *SettingsService) GetMyRateWindow(ctx context.Context, uid int64) (RateW
 }
 
 // UpdateMyRateWindow 更新当前用户高峰时段配置。
-func (s *SettingsService) UpdateMyRateWindow(ctx context.Context, uid int64, enabled bool, start string, end string) error {
+func (s *SettingsService) UpdateMyRateWindow(ctx context.Context, uid int64, enabled bool, start, end, clientIP string) error {
 	enabledKey := "peak_window_enabled_user_" + strconv.FormatInt(uid, 10)
 	startKey := "peak_window_start_user_" + strconv.FormatInt(uid, 10)
 	endKey := "peak_window_end_user_" + strconv.FormatInt(uid, 10)
@@ -204,7 +207,7 @@ func (s *SettingsService) UpdateMyRateWindow(ctx context.Context, uid int64, ena
 		}
 		items = append(items, contract.SettingUpsertItem{SettingKey: startKey, SettingValue: start, Description: "用户自定义高峰开始时刻 HH:MM"}, contract.SettingUpsertItem{SettingKey: endKey, SettingValue: end, Description: "用户自定义高峰结束时刻 HH:MM"})
 	}
-	return s.repo.UpsertSystemSettings(ctx, items)
+	return s.repo.UpsertSystemSettings(ctx, uid, items, "rate_window_update", clientIP)
 }
 
 func (s *SettingsService) readSettingValue(ctx context.Context, key string) (string, error) {
@@ -225,6 +228,22 @@ func boolToFlag(v bool) string {
 		return "1"
 	}
 	return "0"
+}
+
+func normalizeSystemSetting(item SettingUpsertItem) (contract.SettingUpsertItem, error) {
+	key := strings.TrimSpace(item.SettingKey)
+	value := strings.TrimSpace(item.SettingValue)
+	desc := strings.TrimSpace(item.Description)
+	if key == "" || value == "" || len(desc) > 255 {
+		return contract.SettingUpsertItem{}, gorm.ErrInvalidData
+	}
+	if _, ok := allowedSystemSettingKeys[key]; !ok {
+		return contract.SettingUpsertItem{}, gorm.ErrInvalidField
+	}
+	if err := validateSettingValue(key, value); err != nil {
+		return contract.SettingUpsertItem{}, err
+	}
+	return contract.SettingUpsertItem{SettingKey: key, SettingValue: value, Description: desc}, nil
 }
 
 func validateSettingValue(key, value string) error {
@@ -274,20 +293,4 @@ func validateSettingValue(key, value string) error {
 
 func errInvalidSettingValue(key string) error {
 	return errors.New("invalid value for setting_key: " + key)
-}
-
-func isSensitiveSettingKey(key string) bool {
-	k := strings.ToLower(strings.TrimSpace(key))
-	return strings.Contains(k, "token") || strings.Contains(k, "secret") || strings.Contains(k, "password") || strings.Contains(k, "private")
-}
-
-func maskSettingValue(value string) string {
-	v := strings.TrimSpace(value)
-	if v == "" {
-		return ""
-	}
-	if len(v) <= 4 {
-		return "****"
-	}
-	return v[:2] + "****" + v[len(v)-2:]
 }

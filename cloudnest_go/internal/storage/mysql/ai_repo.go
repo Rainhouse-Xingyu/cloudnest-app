@@ -2,11 +2,8 @@ package mysql
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"strings"
 
-	"cloudenest_go/internal/quota"
 	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
 
@@ -23,36 +20,9 @@ func NewAIRepo(db *gorm.DB) *AIRepo {
 }
 
 func (r *AIRepo) ApplySettingWithAudit(ctx context.Context, uid int64, key string, value string, description string, clientIP string) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := quota.LockPolicy(tx, true); err != nil {
-			return err
-		}
-		var row model.SystemSetting
-		err := tx.Where("setting_key = ?", key).First(&row).Error
-		if err != nil {
-			if !errors.Is(err, gorm.ErrRecordNotFound) {
-				return err
-			}
-			row = model.SystemSetting{SettingKey: key, SettingValue: value, Description: description}
-			if err := tx.Create(&row).Error; err != nil {
-				return err
-			}
-		} else {
-			updates := map[string]interface{}{"setting_value": value}
-			if description != "" {
-				updates["description"] = description
-			}
-			if err := tx.Model(&row).Updates(updates).Error; err != nil {
-				return err
-			}
-		}
-
-		detail := fmt.Sprintf("ai_apply_setting key=%s value=%s", key, value)
-		if len(detail) > 500 {
-			detail = detail[:500]
-		}
-		return tx.Create(&model.OperationLog{UserID: &uid, Action: "ai_apply_setting", Status: "success", Detail: detail, ClientIP: clientIP}).Error
-	})
+	return NewSettingsRepo(r.db).UpsertSystemSettings(ctx, uid, []contract.SettingUpsertItem{
+		{SettingKey: key, SettingValue: value, Description: description},
+	}, "ai_apply_setting", clientIP)
 }
 
 func (r *AIRepo) Search(ctx context.Context, uid int64, q contract.AISearchQuery) ([]contract.AISearchRow, int64, error) {

@@ -454,6 +454,7 @@ func (h *AIHandler) ApplySetting(c *gin.Context) {
 		return
 	}
 
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
 	var req ApplySettingByAIRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
@@ -469,6 +470,10 @@ func (h *AIHandler) ApplySetting(c *gin.Context) {
 
 	err := h.Svc.ApplySetting(c.Request.Context(), uid, req.SettingKey, req.SettingValue, req.Description, c.ClientIP())
 	if err != nil {
+		if errors.Is(err, gorm.ErrInvalidData) || errors.Is(err, gorm.ErrInvalidField) || strings.HasPrefix(err.Error(), "invalid value for setting_key:") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid setting key or value"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "save setting failed"})
 		return
 	}
