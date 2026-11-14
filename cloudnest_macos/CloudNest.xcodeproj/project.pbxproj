@@ -1,0 +1,100 @@
+// !$*UTF8*$!
+{
+    archiveVersion = 1;
+    classes = {};
+    objectVersion = 77;
+    objects = {
+        000000000000000000000001 = {
+            isa = PBXProject;
+            attributes = { LastUpgradeCheck = 2630; };
+            buildConfigurationList = 000000000000000000000010;
+            compatibilityVersion = "Xcode 16.0";
+            developmentRegion = en;
+            knownRegions = (en, Base);
+            mainGroup = 000000000000000000000002;
+            productRefGroup = 000000000000000000000003;
+            projectDirPath = "";
+            projectRoot = "";
+            targets = (000000000000000000000004);
+        };
+        000000000000000000000002 = {
+            isa = PBXGroup;
+            children = (000000000000000000000008, 000000000000000000000009, 000000000000000000000003);
+            sourceTree = "<group>";
+        };
+        000000000000000000000003 = {
+            isa = PBXGroup;
+            children = (000000000000000000000005);
+            name = Products;
+            sourceTree = "<group>";
+        };
+        000000000000000000000004 = {
+            isa = PBXNativeTarget;
+            buildConfigurationList = 000000000000000000000011;
+            buildPhases = (000000000000000000000006, 000000000000000000000007);
+            buildRules = ();
+            dependencies = ();
+            fileSystemSynchronizedGroups = (000000000000000000000008, 000000000000000000000009);
+            name = CloudNest;
+            productName = CloudNest;
+            productReference = 000000000000000000000005;
+            productType = "com.apple.product-type.application";
+        };
+        000000000000000000000005 = {
+            isa = PBXFileReference;
+            explicitFileType = wrapper.application;
+            path = CloudNest.app;
+            sourceTree = BUILT_PRODUCTS_DIR;
+        };
+        000000000000000000000006 = {
+            isa = PBXSourcesBuildPhase;
+            buildActionMask = 2147483647;
+            files = ();
+            runOnlyForDeploymentPostprocessing = 0;
+        };
+        000000000000000000000007 = {
+            isa = PBXResourcesBuildPhase;
+            buildActionMask = 2147483647;
+            files = ();
+            runOnlyForDeploymentPostprocessing = 0;
+        };
+        000000000000000000000008 = { isa = PBXFileSystemSynchronizedRootGroup; path = App; sourceTree = "<group>"; };
+        000000000000000000000009 = { isa = PBXFileSystemSynchronizedRootGroup; path = Core; sourceTree = "<group>"; };
+        000000000000000000000010 = {
+            isa = XCConfigurationList;
+            buildConfigurations = (000000000000000000000012, 000000000000000000000013);
+            defaultConfigurationIsVisible = 0;
+            defaultConfigurationName = Release;
+        };
+        000000000000000000000011 = {
+            isa = XCConfigurationList;
+            buildConfigurations = (000000000000000000000014, 000000000000000000000015);
+            defaultConfigurationIsVisible = 0;
+            defaultConfigurationName = Release;
+        };
+        000000000000000000000012 = { isa = XCBuildConfiguration; name = Debug; buildSettings = { ALWAYS_SEARCH_USER_PATHS = NO; SDKROOT = macosx; MACOSX_DEPLOYMENT_TARGET = 26.0; SWIFT_VERSION = 6.0; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; }; };
+        000000000000000000000013 = { isa = XCBuildConfiguration; name = Release; buildSettings = { ALWAYS_SEARCH_USER_PATHS = NO; SDKROOT = macosx; MACOSX_DEPLOYMENT_TARGET = 26.0; SWIFT_VERSION = 6.0; SWIFT_COMPILATION_MODE = wholemodule; }; };
+        000000000000000000000014 = { isa = XCBuildConfiguration; name = Debug; buildSettings = {
+            CODE_SIGN_IDENTITY = "-";
+            GENERATE_INFOPLIST_FILE = YES;
+            INFOPLIST_KEY_CFBundleDisplayName = CloudNest;
+            INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+            PRODUCT_BUNDLE_IDENTIFIER = org.cloudnest.macos;
+            PRODUCT_NAME = CloudNest;
+            MARKETING_VERSION = 0.1.0;
+            CURRENT_PROJECT_VERSION = 1;
+            SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+        }; };
+        000000000000000000000015 = { isa = XCBuildConfiguration; name = Release; buildSettings = {
+            CODE_SIGN_IDENTITY = "-";
+            GENERATE_INFOPLIST_FILE = YES;
+            INFOPLIST_KEY_CFBundleDisplayName = CloudNest;
+            INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+            PRODUCT_BUNDLE_IDENTIFIER = org.cloudnest.macos;
+            PRODUCT_NAME = CloudNest;
+            MARKETING_VERSION = 0.1.0;
+            CURRENT_PROJECT_VERSION = 1;
+        }; };
+    };
+    rootObject = 000000000000000000000001;
+}
