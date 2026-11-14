@@ -259,7 +259,7 @@ func (s *LivePhotoService) AutoBind(ctx context.Context, uid int64, req LivePhot
 	groups := make(map[string]*pairGroup)
 	for _, f := range candidates {
 		ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(f.Filename), "."))
-		key := buildAutoBindKey(f.ParentID, f.Filename)
+		key := buildAutoBindKey(f)
 		if key == "" {
 			continue
 		}
@@ -394,14 +394,14 @@ func (s *LivePhotoService) loadAutoBindCandidates(ctx context.Context, userID in
 		ids := uniqueInt64(req.FileIDs)
 		for _, id := range ids {
 			if id <= 0 {
-				return nil, fmt.Errorf("invalid file id")
+				return nil, contract.ErrInvalidInput
 			}
 			canWrite, err := s.canAccessFile(ctx, userID, id, true)
 			if err != nil {
 				return nil, err
 			}
 			if !canWrite {
-				return nil, fmt.Errorf("permission denied")
+				return nil, ErrLivePhotoPermissionDenied
 			}
 		}
 
@@ -414,7 +414,7 @@ func (s *LivePhotoService) loadAutoBindCandidates(ctx context.Context, userID in
 
 	if req.ParentID != nil {
 		if *req.ParentID < 0 {
-			return nil, fmt.Errorf("invalid parent_id")
+			return nil, contract.ErrInvalidInput
 		}
 		if *req.ParentID > 0 {
 			canWrite, err := s.canAccessFile(ctx, userID, *req.ParentID, true)
@@ -422,7 +422,7 @@ func (s *LivePhotoService) loadAutoBindCandidates(ctx context.Context, userID in
 				return nil, err
 			}
 			if !canWrite {
-				return nil, fmt.Errorf("permission denied")
+				return nil, ErrLivePhotoPermissionDenied
 			}
 		}
 
@@ -446,12 +446,15 @@ func isLivePhotoVideoExt(ext string) bool {
 	return allowed[ext]
 }
 
-func buildAutoBindKey(parentID int64, filename string) string {
-	base := strings.TrimSpace(strings.TrimSuffix(filename, filepath.Ext(filename)))
+func buildAutoBindKey(file model.File) string {
+	base := strings.TrimSpace(strings.TrimSuffix(file.Filename, filepath.Ext(file.Filename)))
 	if base == "" {
 		return ""
 	}
-	return fmt.Sprintf("%d::%s", parentID, strings.ToLower(base))
+	if file.ParentID == 0 {
+		return fmt.Sprintf("0:%d:%s", file.UserID, strings.ToLower(base))
+	}
+	return fmt.Sprintf("%d::%s", file.ParentID, strings.ToLower(base))
 }
 
 func uniqueInt64(input []int64) []int64 {

@@ -574,3 +574,9 @@ G06 的组合基线同时保留 G04 的 AI worker 与 G05 的 TLS、Agent 和 Sc
 组合工作树的 `make -C cloudnest_go check test` 也已通过，包含编译、vet、race 单元测试及原有 blob 测试。日志 `/tmp/cloudnest-g06-share-check-20261114.log`。
 
 G06 公开分享新增 HTTPS 提取码、下载上限和跨链接限流。11 项 MySQL/Redis 集成回归通过（22.524s，race 开启），包括 8 路并发争用最后一次额度、304/416 不扣减、目录 ZIP、旧链接迁移、撤销、过期、回收和下载策略。Go 构建、vet、race 单元测试和仓库检查均通过。日志为 `/tmp/cloudnest-g06-share-and-gc-verified.log`。前一版远端运行 43540231935 的回收测试与分享审计使用相同文件内容，导致全局去重后引用仍存在。两项测试现使用独立内容，原回收断言已在同一数据库的组合回归中通过。首轮迁移测试发现哈希列缺少空默认值，已修正并重新验证。接口和升级步骤见 [G06 公开分享](G06-PUBLIC-SHARES.md)。
+
+## 2026-11-14 G06 Live Photo 绑定
+
+隔离 MySQL/Redis 下 7 项组合回归通过（25.758s，race 开启）。三个 Live Photo 用例验证了 8 路并发只生成一条绑定、双源读写权限、上传与批量自动配对、审计回滚、软删除清除绑定和保留历史数据的显式迁移。同轮验证了三项真实 FRP TLS API 和受保护分享。日志为 `/tmp/cloudnest-g06-live-photo-final-20261114.log`。本地 Go 检查和仓库检查通过。
+
+前一提交 `ed0df5d` 的本地全量回归有三个 FRP 实际服务测试在就绪前退出，另有一项 GC CLI 退出。FRP 三项随后在独立库与本轮组合回归均通过，首次失败原因仍需全量复跑确认。已在测试进程退出时保留标准错误。见 [Live Photo 接口与迁移说明](G06-LIVE-PHOTO.md)。

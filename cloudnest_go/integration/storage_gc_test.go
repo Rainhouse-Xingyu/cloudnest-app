@@ -539,9 +539,13 @@ func TestStorageGCCLIRequiresRootAndExecutesOnlyGuardedFixture(t *testing.T) {
 		if withRoot {
 			cmd.Env = append(cmd.Env, "DATA_DIR="+f.cfg.DataDir)
 		}
-		var stdout bytes.Buffer
+		var stdout, stderr bytes.Buffer
 		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
 		err := cmd.Run()
+		if err != nil {
+			err = fmt.Errorf("%w: %s", err, stderr.String())
+		}
 		return stdout.Bytes(), err
 	}
 	if out, err := run("gc-storage", false); err == nil || len(out) != 0 {

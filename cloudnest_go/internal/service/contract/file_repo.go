@@ -89,6 +89,6 @@ type FileRepository interface {
 	RevokeShare(ctx context.Context, uid int64, code string, clientIP string) error
 	ListOperationLogs(ctx context.Context, uid int64, isAdmin bool, q FileOperationLogQuery) ([]model.OperationLog, int64, error)
 	ExportOperationLogs(ctx context.Context, uid int64, isAdmin bool, q FileOperationLogQuery) ([]model.OperationLog, error)
-	FindLivePhotoAutoBindCandidate(ctx context.Context, parentID int64, excludeID int64, baseName string, needVideo bool) (*model.File, error)
+	FindLivePhotoAutoBindCandidate(ctx context.Context, parentID, ownerID, excludeID int64, baseName string, needVideo bool) (*model.File, error)
 	CreateLivePhotoAutoBindIfAbsent(ctx context.Context, userID int64, imageID int64, videoID int64, clientIP string) error
 }

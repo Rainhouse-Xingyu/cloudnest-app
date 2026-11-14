@@ -950,7 +950,7 @@ func (s *FileService) TryAutoBindLivePhotoForFile(ctx context.Context, userID in
 		matched *model.File
 		err     error
 	)
-	matched, err = s.fileRepo.FindLivePhotoAutoBindCandidate(ctx, file.ParentID, file.ID, base, isImage)
+	matched, err = s.fileRepo.FindLivePhotoAutoBindCandidate(ctx, file.ParentID, file.UserID, file.ID, base, isImage)
 	if err != nil {
 		return err
 	}
@@ -1150,7 +1150,7 @@ func parseHHMMToMinuteInService(v string) (int, bool) {
 }
 
 func isLivePhotoImageExtInService(ext string) bool {
-	images := map[string]bool{"jpg": true, "jpeg": true, "heic": true}
+	images := map[string]bool{"jpg": true, "jpeg": true, "heic": true, "heif": true}
 	return images[ext]
 }
 

@@ -1023,12 +1023,13 @@ func (r *FileRepo) ExportOperationLogs(ctx context.Context, uid int64, isAdmin b
 	return rows, nil
 }
 
-func (r *FileRepo) FindLivePhotoAutoBindCandidate(ctx context.Context, parentID int64, excludeID int64, baseName string, needVideo bool) (*model.File, error) {
+func (r *FileRepo) FindLivePhotoAutoBindCandidate(ctx context.Context, parentID, ownerID, excludeID int64, baseName string, needVideo bool) (*model.File, error) {
 	var siblingFiles []model.File
-	if err := r.db.WithContext(ctx).
-		Where("parent_id = ? AND is_deleted = 0 AND is_folder = 0 AND id <> ?", parentID, excludeID).
-		Order("id ASC").
-		Find(&siblingFiles).Error; err != nil {
+	query := r.db.WithContext(ctx).Where("parent_id = ? AND is_deleted = 0 AND is_folder = 0 AND id <> ?", parentID, excludeID)
+	if parentID == 0 {
+		query = query.Where("user_id = ?", ownerID)
+	}
+	if err := query.Order("id ASC").Find(&siblingFiles).Error; err != nil {
 		return nil, err
 	}
 
@@ -1051,37 +1052,15 @@ func (r *FileRepo) FindLivePhotoAutoBindCandidate(ctx context.Context, parentID 
 }
 
 func (r *FileRepo) CreateLivePhotoAutoBindIfAbsent(ctx context.Context, userID int64, imageID int64, videoID int64, clientIP string) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var exists model.LivePhoto
-		lookupErr := tx.Where("image_file_id = ? OR video_file_id = ?", imageID, videoID).First(&exists).Error
-		if lookupErr == nil {
+	return fileMetadataTransaction(ctx, r.db, func(tx *gorm.DB) error {
+		row, err := insertLivePhoto(tx, userID, imageID, videoID, true)
+		if errors.Is(err, contract.ErrLivePhotoBound) {
 			return nil
 		}
-		if !errors.Is(lookupErr, gorm.ErrRecordNotFound) {
-			return lookupErr
-		}
-
-		row := model.LivePhoto{ImageFileID: imageID, VideoFileID: videoID}
-		if err := tx.Create(&row).Error; err != nil {
-			low := strings.ToLower(err.Error())
-			if strings.Contains(low, "duplicate") || strings.Contains(low, "1062") {
-				return nil
-			}
+		if err != nil {
 			return err
 		}
-
-		detail := fmt.Sprintf("live_photo_id=%d image_file_id=%d video_file_id=%d", row.ID, row.ImageFileID, row.VideoFileID)
-		if len(detail) > 500 {
-			detail = detail[:500]
-		}
-		return tx.Create(&model.OperationLog{
-			UserID:   &userID,
-			FileID:   &row.ImageFileID,
-			Action:   "live_photo_auto_bind",
-			Status:   "success",
-			Detail:   detail,
-			ClientIP: strings.TrimSpace(clientIP),
-		}).Error
+		return writeLivePhotoAudit(tx, userID, row, "live_photo_auto_bind", strings.TrimSpace(clientIP))
 	})
 }
 
@@ -1140,7 +1119,7 @@ func canAccessFileForFileRepo(ctx context.Context, db *gorm.DB, userID int64, fi
 }
 
 func isLivePhotoImageExtForFileRepo(ext string) bool {
-	images := map[string]bool{"jpg": true, "jpeg": true, "heic": true}
+	images := map[string]bool{"jpg": true, "jpeg": true, "heic": true, "heif": true}
 	return images[ext]
 }
 

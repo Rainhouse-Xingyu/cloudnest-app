@@ -24,6 +24,7 @@ var (
 	ErrConflict             = errors.New("conflict")
 	ErrStorageIntegrity     = errors.New("stored content failed integrity verification")
 	ErrInternal             = errors.New("internal error")
+	ErrLivePhotoBound       = errors.New("live photo relation already exists")
 	ErrSharePasscode        = errors.New("share passcode required or invalid")
 	ErrShareExhausted       = errors.New("share download limit reached")
 	ErrShareExpired         = errors.New("share expired")

@@ -3,6 +3,7 @@
 package integration
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -98,6 +99,8 @@ func restartableAgentTLSServer(t *testing.T, f *fixture) (base string, client *h
 		cmd = exec.CommandContext(ctx, bin)
 		cmd.Dir = dir
 		cmd.Env = []string{"CLOUDNEST_FRP_KEY_FILE=" + f.cfg.FRPKeyFile, "APP_BIND_ADDR=127.0.0.1", "APP_PORT=" + port, "DATA_DIR=" + f.cfg.DataDir, "MYSQL_DSN=" + f.cfg.MySQLDSN, "REDIS_ADDR=" + f.cfg.RedisAddr, "JWT_SECRET=" + f.cfg.JWTSecret, "CLOUDNEST_TLS_CERT_FILE=" + certFile, "CLOUDNEST_TLS_KEY_FILE=" + keyFile, "GIN_MODE=release"}
+		var startupStderr bytes.Buffer
+		cmd.Stderr = &startupStderr
 		if err := cmd.Start(); err != nil {
 			cmd = nil
 			stop()
@@ -111,7 +114,7 @@ func restartableAgentTLSServer(t *testing.T, f *fixture) (base string, client *h
 		for time.Now().Before(deadline) {
 			select {
 			case err := <-done:
-				t.Fatalf("TLS server exited before readiness: %v", err)
+				t.Fatalf("TLS server exited before readiness: %v\n%s", err, startupStderr.String())
 			default:
 			}
 			resp, err := client.Get(base + "/api/resource/health")

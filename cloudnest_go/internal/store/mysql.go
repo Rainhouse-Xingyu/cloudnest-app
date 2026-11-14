@@ -78,6 +78,9 @@ func Migrate(db *gorm.DB) error {
 		return fmt.Errorf("migrate schema failed: %w", err)
 	}
 
+	if err := migrateLivePhotoSchema(db); err != nil {
+		return err
+	}
 	if err := prepareMappingSchema(db); err != nil {
 		return err
 	}
@@ -186,6 +189,9 @@ func CheckFileSchema(db *gorm.DB) error {
 		return err
 	}
 	if err := CheckShareSchema(db); err != nil {
+		return err
+	}
+	if err := CheckLivePhotoSchema(db); err != nil {
 		return err
 	}
 	return CheckAIIndexSchema(db)

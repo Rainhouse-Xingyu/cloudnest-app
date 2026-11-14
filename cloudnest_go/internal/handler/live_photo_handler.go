@@ -8,6 +8,7 @@ import (
 
 	"cloudenest_go/internal/middleware"
 	"cloudenest_go/internal/service"
+	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
 
 	"github.com/gin-gonic/gin"
@@ -54,7 +55,7 @@ func (h *LivePhotoHandler) Bind(c *gin.Context) {
 
 	res, err := h.Svc.Bind(c.Request.Context(), uid, req.ImageFileID, req.VideoFileID, c.ClientIP())
 	if err != nil {
-		if errors.Is(err, service.ErrLivePhotoPermissionDenied) {
+		if errors.Is(err, service.ErrLivePhotoPermissionDenied) || errors.Is(err, contract.ErrForbidden) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
 			return
 		}
@@ -62,7 +63,7 @@ func (h *LivePhotoHandler) Bind(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
 			return
 		}
-		if strings.Contains(strings.ToLower(err.Error()), "already exists") {
+		if errors.Is(err, contract.ErrLivePhotoBound) || errors.Is(err, contract.ErrConflict) {
 			c.JSON(http.StatusConflict, gin.H{"error": "live photo relation already exists"})
 			return
 		}
@@ -103,7 +104,7 @@ func (h *LivePhotoHandler) Unbind(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "live photo not found"})
 			return
 		}
-		if errors.Is(err, service.ErrLivePhotoPermissionDenied) {
+		if errors.Is(err, service.ErrLivePhotoPermissionDenied) || errors.Is(err, contract.ErrForbidden) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
 			return
 		}
@@ -129,7 +130,7 @@ func (h *LivePhotoHandler) Detail(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "live photo not found"})
 			return
 		}
-		if errors.Is(err, service.ErrLivePhotoPermissionDenied) {
+		if errors.Is(err, service.ErrLivePhotoPermissionDenied) || errors.Is(err, contract.ErrForbidden) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
 			return
 		}
@@ -210,7 +211,7 @@ func (h *LivePhotoHandler) GetByFileID(c *gin.Context) {
 
 	res, err := h.Svc.GetByFileID(c.Request.Context(), uid, fileID)
 	if err != nil {
-		if errors.Is(err, service.ErrLivePhotoPermissionDenied) {
+		if errors.Is(err, service.ErrLivePhotoPermissionDenied) || errors.Is(err, contract.ErrForbidden) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
 			return
 		}
@@ -256,8 +257,16 @@ func (h *LivePhotoHandler) AutoBind(c *gin.Context) {
 
 	res, err := h.Svc.AutoBind(c.Request.Context(), uid, service.LivePhotoAutoBindInput{ParentID: req.ParentID, FileIDs: req.FileIDs}, c.ClientIP())
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "permission denied") || errors.Is(err, service.ErrLivePhotoPermissionDenied) {
+		if errors.Is(err, service.ErrLivePhotoPermissionDenied) || errors.Is(err, contract.ErrForbidden) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+			return
+		}
+		if errors.Is(err, contract.ErrInvalidInput) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid auto bind parameters"})
+			return
+		}
+		if errors.Is(err, contract.ErrConflict) || errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusConflict, gin.H{"error": "auto bind sources changed; retry"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "auto bind failed"})
@@ -273,25 +282,6 @@ func (h *LivePhotoHandler) AutoBind(c *gin.Context) {
 		"created_items": res.CreatedItems,
 		"skipped_items": res.SkippedItems,
 	})
-}
-
-// isLivePhotoImageExt 判断 Live Photo 支持的图片扩展名。
-func isLivePhotoImageExt(ext string) bool {
-	allowed := map[string]bool{
-		"jpg":  true,
-		"jpeg": true,
-		"heic": true,
-		"heif": true,
-	}
-	return allowed[ext]
-}
-
-// isLivePhotoVideoExt 判断 Live Photo 支持的视频扩展名。
-func isLivePhotoVideoExt(ext string) bool {
-	allowed := map[string]bool{
-		"mov": true,
-	}
-	return allowed[ext]
 }
 
 // toSimpleFileView 返回文件基础信息，便于前端展示。
