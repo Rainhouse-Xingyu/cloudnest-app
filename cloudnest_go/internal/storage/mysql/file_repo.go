@@ -871,14 +871,24 @@ func (r *FileRepo) ResolveValidShare(ctx context.Context, code string) (model.Sh
 	return share, file, nil
 }
 
-func (r *FileRepo) CreateShare(ctx context.Context, uid int64, fileID int64, shareCode string, expireAt *time.Time) (model.Share, error) {
-	fileIDCopy := fileID
-	uidCopy := uid
-	share := model.Share{FileID: &fileIDCopy, UserID: &uidCopy, ShareCode: shareCode, ExpireTime: expireAt}
-	if err := r.db.WithContext(ctx).Create(&share).Error; err != nil {
+func (r *FileRepo) CreateShare(ctx context.Context, uid int64, fileID int64, shareCode string, expireAt *time.Time, clientIP string) (model.Share, error) {
+	share := model.Share{FileID: &fileID, UserID: &uid, ShareCode: shareCode, ExpireTime: expireAt}
+	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&share).Error; err != nil {
+			return err
+		}
+		return writeShareAudit(tx, uid, share, "create_share", clientIP)
+	}); err != nil {
 		return model.Share{}, err
 	}
 	return share, nil
+}
+
+func writeShareAudit(tx *gorm.DB, uid int64, share model.Share, action, clientIP string) error {
+	return tx.Create(&model.OperationLog{
+		UserID: &uid, FileID: share.FileID, Action: action, Status: "success",
+		Detail: fmt.Sprintf("share_id=%d", share.ID), ClientIP: clientIP,
+	}).Error
 }
 
 func (r *FileRepo) CreateOperationLog(ctx context.Context, userID int64, fileID *int64, action string, status string, detail string, clientIP string) error {
@@ -895,15 +905,17 @@ func (r *FileRepo) ListShares(ctx context.Context, uid int64) ([]model.Share, er
 	return shares, nil
 }
 
-func (r *FileRepo) RevokeShare(ctx context.Context, uid int64, code string) error {
-	res := r.db.WithContext(ctx).Where("share_code = ? AND user_id = ?", code, uid).Delete(&model.Share{})
-	if res.Error != nil {
-		return res.Error
-	}
-	if res.RowsAffected == 0 {
-		return gorm.ErrRecordNotFound
-	}
-	return nil
+func (r *FileRepo) RevokeShare(ctx context.Context, uid int64, code, clientIP string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var share model.Share
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&share, "share_code = ? AND user_id = ?", code, uid).Error; err != nil {
+			return err
+		}
+		if err := tx.Delete(&share).Error; err != nil {
+			return err
+		}
+		return writeShareAudit(tx, uid, share, "revoke_share", clientIP)
+	})
 }
 
 func (r *FileRepo) ListOperationLogs(ctx context.Context, uid int64, isAdmin bool, q contract.FileOperationLogQuery) ([]model.OperationLog, int64, error) {

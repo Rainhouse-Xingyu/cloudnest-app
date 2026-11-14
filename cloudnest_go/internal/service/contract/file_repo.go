@@ -83,10 +83,10 @@ type FileRepository interface {
 	UpsertUploadChunkAndRefreshProgress(ctx context.Context, taskID int64, uploadID string, chunkIndex int, chunkSize int64, chunkPath, chunkRoot, sha256, md5, artifactToken string) (ChunkCommit, error)
 	ListDoneUploadChunks(ctx context.Context, uploadID string) ([]model.UploadChunk, error)
 	CompleteUploadPersist(ctx context.Context, uid int64, parentID int64, uploadID string, task model.UploadTask, totalChunks int, storagePath, storageRoot string, mergedSize int64, fileHash, artifactToken string, clientIP string) (UploadCommit, error)
-	CreateShare(ctx context.Context, uid int64, fileID int64, shareCode string, expireAt *time.Time) (model.Share, error)
+	CreateShare(ctx context.Context, uid int64, fileID int64, shareCode string, expireAt *time.Time, clientIP string) (model.Share, error)
 	CreateOperationLog(ctx context.Context, userID int64, fileID *int64, action string, status string, detail string, clientIP string) error
 	ListShares(ctx context.Context, uid int64) ([]model.Share, error)
-	RevokeShare(ctx context.Context, uid int64, code string) error
+	RevokeShare(ctx context.Context, uid int64, code string, clientIP string) error
 	ListOperationLogs(ctx context.Context, uid int64, isAdmin bool, q FileOperationLogQuery) ([]model.OperationLog, int64, error)
 	ExportOperationLogs(ctx context.Context, uid int64, isAdmin bool, q FileOperationLogQuery) ([]model.OperationLog, error)
 	FindLivePhotoAutoBindCandidate(ctx context.Context, parentID int64, excludeID int64, baseName string, needVideo bool) (*model.File, error)

@@ -3,7 +3,9 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"cloudenest_go/internal/agentauth"
 	"cloudenest_go/internal/agentcommand"
@@ -134,10 +136,22 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 	}
 }
 
+// Share codes are bearer credentials, including on failed or unmatched routes.
+func accessLog(p gin.LogFormatterParams) string {
+	path := p.Path
+	if strings.HasPrefix(path, "/api/public/shares/") {
+		path = "/api/public/shares/:code"
+	} else if strings.HasPrefix(path, "/api/shares/") {
+		path = "/api/shares/:code"
+	}
+	return fmt.Sprintf("[GIN] %s | %d | %v | %s | %s %q\n",
+		p.TimeStamp.Format("2006/01/02 - 15:04:05"), p.StatusCode, p.Latency, p.ClientIP, p.Method, path)
+}
+
 // NewRouter 统一构建路由与中间件。
 func (c *Container) NewRouter() *gin.Engine {
 	r := gin.New()
-	r.Use(gin.LoggerWithConfig(gin.LoggerConfig{SkipQueryString: true}), middleware.RecoverHTTP())
+	r.Use(gin.LoggerWithConfig(gin.LoggerConfig{SkipQueryString: true, Formatter: accessLog}), middleware.RecoverHTTP())
 	r.Use(middleware.ProtectBlobReads(c.Blobs))
 	// Forwarding headers are untrusted until an explicit ingress policy exists.
 	_ = r.SetTrustedProxies(nil)

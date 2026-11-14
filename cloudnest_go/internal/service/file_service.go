@@ -708,22 +708,16 @@ func (s *FileService) CreateShare(ctx context.Context, uid int64, fileID int64, 
 		return FileCreateShareResult{}, err
 	}
 
-	fileIDCopy := fileID
-	uidCopy := uid
 	var expireAt *time.Time
 	if finalExpireHours > 0 {
 		t := time.Now().Add(time.Duration(finalExpireHours) * time.Hour)
 		expireAt = &t
 	}
 
-	share := model.Share{FileID: &fileIDCopy, UserID: &uidCopy, ShareCode: shareCode, ExpireTime: expireAt}
-	repoShare, err := s.fileRepo.CreateShare(ctx, uid, fileID, shareCode, expireAt)
+	share, err := s.fileRepo.CreateShare(ctx, uid, fileID, shareCode, expireAt, clientIP)
 	if err != nil {
 		return FileCreateShareResult{}, err
 	}
-	share = repoShare
-
-	_ = s.logOperation(ctx, uid, &fileID, "create_share", "success", fmt.Sprintf("share_code=%s", shareCode), clientIP)
 	return FileCreateShareResult{ShareCode: share.ShareCode, ExpireTime: share.ExpireTime}, nil
 }
 
@@ -734,11 +728,7 @@ func (s *FileService) ListShares(ctx context.Context, uid int64) ([]model.Share,
 
 // RevokeShare 撤销指定分享。
 func (s *FileService) RevokeShare(ctx context.Context, uid int64, code string, clientIP string) error {
-	if err := s.fileRepo.RevokeShare(ctx, uid, code); err != nil {
-		return err
-	}
-	_ = s.logOperation(ctx, uid, nil, "revoke_share", "success", fmt.Sprintf("share_code=%s", code), clientIP)
-	return nil
+	return s.fileRepo.RevokeShare(ctx, uid, code, clientIP)
 }
 
 // GetPublicShareInfo 获取公开分享的分享与文件信息。

@@ -566,3 +566,9 @@ Ubuntu push `43393865932` 的 agent-native 日志记录 systemd 将 Agent PID 11
 自动采样的映射 ID 关联由手动诊断共用原版本解析规则。两项隔离集成通过（5.162s，`/tmp/cloudnest-g05-runtime-mapping-ids.log`），覆盖复用端口、跨用户拒绝和缺少密钥。最终真实 Agent 验收通过（145.912s，`/tmp/cloudnest-g05-runtime-mapping-native.log`）：普通心跳在 HTTPS 状态接口发布三条正确的映射 ID 和 registered，撤销及退役后隧道关闭。Agent 原生包、`make check test` 和带标签 vet 通过。
 
 自动采样加入逐条本地 TCP 状态。race 单元覆盖可连接/拒绝/未授权端口、取消、512 条样本往返及命令回执禁止携带心跳字段。3 项隔离集成通过（9.640s，`/tmp/cloudnest-g05-upstream-integration-final.log`），包括已注册但上游不可达、运行列从 512 扩到 640 且已有样本保留。真实旧版升级演练通过（7.077s，`/tmp/cloudnest-g05-upstream-upgrade.log`）。两项真实 Agent 场景通过（147.153s，`/tmp/cloudnest-g05-upstream-native.log`），状态接口返回三条映射的注册与本地 TCP 状态。TCP 探测关闭连接时，HTTPS 上游夹具可记录握手 EOF。 `make check test` 和带集成标签的 vet 通过。
+
+## 2026-11-14 G06 组合后端与分享审计
+
+G06 的组合基线同时保留 G04 的 AI worker 与 G05 的 TLS、Agent 和 Schema 检查。隔离 MySQL/Redis 下 6 项专项 **通过（17.430s）**：Agent TLS 与命令回执、AI 关键词降级及跨用户隔离、AI 来源字段显式迁移、FRP 作用域历史迁移和漂移拒绝、分享者撤权，以及分享审计。分享专项通过真实 MySQL 触发器模拟审计写入故障，验证创建无残留、撤销失败后原链接仍有效、成功变更只有一条对应审计，操作日志与 HTTP 访问日志均未写入分享码。日志 `/tmp/cloudnest-g06-cross-feature-20261114.log`。旧日志保留；网关和反向代理日志不在本测试范围。提取码、访问次数限制和协作角色矩阵尚未完成。
+
+组合工作树的 `make -C cloudnest_go check test` 也已通过，包含编译、vet、race 单元测试及原有 blob 测试。日志 `/tmp/cloudnest-g06-share-check-20261114.log`。
