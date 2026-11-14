@@ -15,6 +15,7 @@ import (
 	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
 
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
@@ -42,7 +43,6 @@ var (
 	ErrChunkIndexOutOfRange = errors.New("chunk_index out of range")
 	ErrUploadMetaIncomplete = errors.New("upload task metadata incomplete")
 	ErrChunksNotComplete    = errors.New("chunks not fully uploaded")
-	ErrShareExpired         = errors.New("share expired")
 	ErrStorageNotFound      = errors.New("storage record not found")
 	ErrPhysicalFileNotFound = errors.New("physical file not found")
 )
@@ -192,11 +192,10 @@ func (s *FileService) CreateFolder(ctx context.Context, uid int64, name string, 
 		}
 	}
 
-	folder, err := s.fileRepo.CreateFolderRecord(ctx, uid, name, parentID)
+	folder, err := s.fileRepo.CreateFolderRecord(ctx, uid, name, parentID, clientIP)
 	if err != nil {
 		return model.File{}, translateFileMutationError(err)
 	}
-	_ = s.logOperation(ctx, uid, &folder.ID, "create_folder", "success", fmt.Sprintf("parent_id=%d", parentID), clientIP)
 	return folder, nil
 }
 
@@ -223,12 +222,11 @@ func (s *FileService) RenameFile(ctx context.Context, uid int64, fileID int64, n
 		return model.File{}, err
 	}
 
-	renamed, err := s.fileRepo.RenameFile(ctx, uid, f.ID, name)
+	renamed, err := s.fileRepo.RenameFile(ctx, uid, f.ID, name, clientIP)
 	if err != nil {
 		return model.File{}, translateFileMutationError(err)
 	}
 	f = renamed
-	_ = s.logOperation(ctx, uid, &f.ID, "rename", "success", "renamed file", clientIP)
 	return f, nil
 }
 
@@ -260,10 +258,9 @@ func (s *FileService) DeleteFile(ctx context.Context, uid int64, fileID int64, c
 		}
 	}
 
-	if err := s.fileRepo.SoftDeleteFileWithLivePhotoCleanup(ctx, uid, f.ID); err != nil {
+	if err := s.fileRepo.SoftDeleteFileWithLivePhotoCleanup(ctx, uid, f.ID, clientIP); err != nil {
 		return translateFileMutationError(err)
 	}
-	_ = s.logOperation(ctx, uid, &f.ID, "delete", "success", "moved to recycle bin", clientIP)
 	return nil
 }
 
@@ -593,7 +590,7 @@ func (s *FileService) MoveFiles(ctx context.Context, uid int64, fileIDs []int64,
 		return nil, ErrFileInvalidParentID
 	}
 
-	updated, err := s.fileRepo.MoveFiles(ctx, uid, fileIDs, targetParentID)
+	updated, err := s.fileRepo.MoveFiles(ctx, uid, fileIDs, targetParentID, clientIP)
 	if err != nil {
 		switch {
 		case errors.Is(err, contract.ErrForbidden):
@@ -613,7 +610,6 @@ func (s *FileService) MoveFiles(ctx context.Context, uid int64, fileIDs []int64,
 		}
 	}
 
-	_ = s.logOperation(ctx, uid, nil, "move", "success", fmt.Sprintf("count=%d,target_parent=%d", len(updated), targetParentID), clientIP)
 	return updated, nil
 }
 
@@ -623,7 +619,7 @@ func (s *FileService) CopyFiles(ctx context.Context, uid int64, fileIDs []int64,
 		return nil, ErrFileInvalidParentID
 	}
 
-	newIDs, err := s.fileRepo.CopyFiles(ctx, uid, fileIDs, targetParentID)
+	newIDs, err := s.fileRepo.CopyFiles(ctx, uid, fileIDs, targetParentID, clientIP)
 	if err != nil {
 		switch {
 		case errors.Is(err, contract.ErrForbidden):
@@ -635,7 +631,6 @@ func (s *FileService) CopyFiles(ctx context.Context, uid int64, fileIDs []int64,
 		}
 	}
 
-	_ = s.logOperation(ctx, uid, nil, "copy", "success", fmt.Sprintf("count=%d,target_parent=%d", len(newIDs), targetParentID), clientIP)
 	return newIDs, nil
 }
 
@@ -646,7 +641,7 @@ func (s *FileService) ListRecycleBin(ctx context.Context, uid int64) ([]model.Fi
 
 // RestoreFromRecycleBin 恢复回收站条目。
 func (s *FileService) RestoreFromRecycleBin(ctx context.Context, uid int64, fileID int64, clientIP string) (model.File, error) {
-	restored, err := s.fileRepo.RestoreFromRecycleBin(ctx, uid, fileID)
+	restored, err := s.fileRepo.RestoreFromRecycleBin(ctx, uid, fileID, clientIP)
 	if err != nil {
 		switch {
 		case errors.Is(err, contract.ErrRecycleItemNotFound):
@@ -658,7 +653,6 @@ func (s *FileService) RestoreFromRecycleBin(ctx context.Context, uid int64, file
 		}
 	}
 
-	_ = s.logOperation(ctx, uid, &restored.ID, "restore", "success", "restore from recycle bin", clientIP)
 	return restored, nil
 }
 
@@ -680,7 +674,7 @@ func (s *FileService) PermanentDeleteFromRecycleBin(ctx context.Context, uid int
 }
 
 // CreateShare 创建分享链接。
-func (s *FileService) CreateShare(ctx context.Context, uid int64, fileID int64, expireHours *int, clientIP string) (FileCreateShareResult, error) {
+func (s *FileService) CreateShare(ctx context.Context, uid int64, fileID int64, expireHours *int, passcode string, maxDownloads int64, clientIP string) (FileCreateShareResult, error) {
 	canRead, err := s.canAccessFile(ctx, uid, fileID, false)
 	if err != nil {
 		return FileCreateShareResult{}, err
@@ -708,22 +702,30 @@ func (s *FileService) CreateShare(ctx context.Context, uid int64, fileID int64, 
 		return FileCreateShareResult{}, err
 	}
 
-	fileIDCopy := fileID
-	uidCopy := uid
 	var expireAt *time.Time
 	if finalExpireHours > 0 {
 		t := time.Now().Add(time.Duration(finalExpireHours) * time.Hour)
 		expireAt = &t
 	}
 
-	share := model.Share{FileID: &fileIDCopy, UserID: &uidCopy, ShareCode: shareCode, ExpireTime: expireAt}
-	repoShare, err := s.fileRepo.CreateShare(ctx, uid, fileID, shareCode, expireAt)
+	share := model.Share{UserID: &uid, FileID: &fileID, ShareCode: shareCode, ExpireTime: expireAt, MaxDownloads: maxDownloads}
+	if maxDownloads < 0 || maxDownloads > 1_000_000 {
+		return FileCreateShareResult{}, contract.ErrInvalidInput
+	}
+	if passcode != "" {
+		if !validSharePasscode(passcode) {
+			return FileCreateShareResult{}, contract.ErrInvalidInput
+		}
+		hash, err := bcrypt.GenerateFromPassword([]byte(passcode), bcrypt.DefaultCost)
+		if err != nil {
+			return FileCreateShareResult{}, err
+		}
+		share.PasscodeHash = string(hash)
+	}
+	share, err = s.fileRepo.CreateShare(ctx, share, clientIP)
 	if err != nil {
 		return FileCreateShareResult{}, err
 	}
-	share = repoShare
-
-	_ = s.logOperation(ctx, uid, &fileID, "create_share", "success", fmt.Sprintf("share_code=%s", shareCode), clientIP)
 	return FileCreateShareResult{ShareCode: share.ShareCode, ExpireTime: share.ExpireTime}, nil
 }
 
@@ -734,47 +736,50 @@ func (s *FileService) ListShares(ctx context.Context, uid int64) ([]model.Share,
 
 // RevokeShare 撤销指定分享。
 func (s *FileService) RevokeShare(ctx context.Context, uid int64, code string, clientIP string) error {
-	if err := s.fileRepo.RevokeShare(ctx, uid, code); err != nil {
-		return err
-	}
-	_ = s.logOperation(ctx, uid, nil, "revoke_share", "success", fmt.Sprintf("share_code=%s", code), clientIP)
-	return nil
+	return s.fileRepo.RevokeShare(ctx, uid, code, clientIP)
 }
 
 // GetPublicShareInfo 获取公开分享的分享与文件信息。
-func (s *FileService) GetPublicShareInfo(ctx context.Context, code string) (model.Share, model.File, error) {
-	return s.resolveValidShare(ctx, code)
+func (s *FileService) GetPublicShareInfo(ctx context.Context, code, passcode string) (model.Share, model.File, error) {
+	return s.resolveValidShare(ctx, code, passcode)
 }
 
 // ResolvePublicShareDownload 获取公开分享下载目标（文件或目录）。
-func (s *FileService) ResolvePublicShareDownload(ctx context.Context, code string) (model.File, *model.Storage, int64, error) {
-	share, file, err := s.resolveValidShare(ctx, code)
+func (s *FileService) ResolvePublicShareDownload(ctx context.Context, code, passcode string) (model.Share, model.File, *model.Storage, error) {
+	share, file, err := s.resolveValidShare(ctx, code, passcode)
 	if err != nil {
-		return model.File{}, nil, 0, err
+		return model.Share{}, model.File{}, nil, err
+	}
+	if share.MaxDownloads > 0 && share.DownloadCount >= share.MaxDownloads {
+		return model.Share{}, model.File{}, nil, contract.ErrShareExhausted
 	}
 	if file.IsFolder == 1 {
-		return file, nil, *share.UserID, nil
+		return share, file, nil, nil
 	}
 	if file.StorageID == nil {
-		return model.File{}, nil, 0, ErrStorageNotFound
+		return model.Share{}, model.File{}, nil, ErrStorageNotFound
 	}
 
 	storage, storageErr := s.fileRepo.GetStorageByID(ctx, *file.StorageID)
 	if storageErr != nil {
 		if errors.Is(storageErr, gorm.ErrRecordNotFound) {
-			return model.File{}, nil, 0, ErrStorageNotFound
+			return model.Share{}, model.File{}, nil, ErrStorageNotFound
 		}
-		return model.File{}, nil, 0, storageErr
+		return model.Share{}, model.File{}, nil, storageErr
 	}
 	storage, storageErr = blob.Pin(ctx, storage)
 	if storageErr != nil {
-		return model.File{}, nil, 0, storageErr
+		return model.Share{}, model.File{}, nil, storageErr
 	}
 	if _, err := os.Stat(storage.FilePath); err != nil {
-		return model.File{}, nil, 0, ErrPhysicalFileNotFound
+		return model.Share{}, model.File{}, nil, ErrPhysicalFileNotFound
 	}
 
-	return file, &storage, *share.UserID, nil
+	return share, file, &storage, nil
+}
+
+func (s *FileService) AdmitShareDownload(ctx context.Context, share model.Share, file model.File) error {
+	return s.fileRepo.AdmitShareDownload(ctx, share, file)
 }
 
 // CollectBatchDownloadEntries 在一致快照中验证批量下载清单，任何失败均中止。
@@ -901,7 +906,6 @@ func (s *FileService) BatchDeleteFiles(ctx context.Context, uid int64, fileIDs [
 		deletedIDs = append(deletedIDs, fileID)
 	}
 
-	_ = s.logOperation(ctx, uid, nil, "batch_delete", "success", fmt.Sprintf("requested=%d,deleted=%d", len(ids), len(deletedIDs)), clientIP)
 	return deletedIDs, failed
 }
 
@@ -939,7 +943,7 @@ func (s *FileService) TryAutoBindLivePhotoForFile(ctx context.Context, userID in
 		matched *model.File
 		err     error
 	)
-	matched, err = s.fileRepo.FindLivePhotoAutoBindCandidate(ctx, file.ParentID, file.ID, base, isImage)
+	matched, err = s.fileRepo.FindLivePhotoAutoBindCandidate(ctx, file.ParentID, file.UserID, file.ID, base, isImage)
 	if err != nil {
 		return err
 	}
@@ -1015,13 +1019,26 @@ func generateUploadID(userID int64) string {
 	return fmt.Sprintf("u%d_%d", userID, time.Now().UnixNano())
 }
 
-func (s *FileService) resolveValidShare(ctx context.Context, code string) (model.Share, model.File, error) {
+func validSharePasscode(value string) bool {
+	if len(value) < 6 || len(value) > 72 {
+		return false
+	}
+	for _, ch := range value {
+		if ch < '!' || ch > '~' {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *FileService) resolveValidShare(ctx context.Context, code, passcode string) (model.Share, model.File, error) {
 	share, file, err := s.fileRepo.ResolveValidShare(ctx, code)
 	if err != nil {
-		if errors.Is(err, contract.ErrShareExpired) {
-			return model.Share{}, model.File{}, ErrShareExpired
-		}
 		return model.Share{}, model.File{}, err
+	}
+	if share.PasscodeHash != "" && (!validSharePasscode(passcode) ||
+		bcrypt.CompareHashAndPassword([]byte(share.PasscodeHash), []byte(passcode)) != nil) {
+		return model.Share{}, model.File{}, contract.ErrSharePasscode
 	}
 	return share, file, nil
 }
@@ -1126,7 +1143,7 @@ func parseHHMMToMinuteInService(v string) (int, bool) {
 }
 
 func isLivePhotoImageExtInService(ext string) bool {
-	images := map[string]bool{"jpg": true, "jpeg": true, "heic": true}
+	images := map[string]bool{"jpg": true, "jpeg": true, "heic": true, "heif": true}
 	return images[ext]
 }
 

@@ -15,7 +15,7 @@ type LivePhotoBindPair struct {
 // LivePhotoRepository 定义 Live Photo 模块存储访问能力。
 type LivePhotoRepository interface {
 	GetActiveFileByID(ctx context.Context, fileID int64) (model.File, error)
-	CountFilePermissionsByLevels(ctx context.Context, fileID int64, userID int64, permissions []string) (int64, error)
+	CanAccessFile(ctx context.Context, userID, fileID int64, write bool) (bool, error)
 	CreateBindingWithLog(ctx context.Context, uid int64, imageFileID int64, videoFileID int64, clientIP string) (model.LivePhoto, error)
 	GetLivePhotoByID(ctx context.Context, livePhotoID int64) (model.LivePhoto, error)
 	DeleteBindingWithLog(ctx context.Context, uid int64, row model.LivePhoto, clientIP string) error

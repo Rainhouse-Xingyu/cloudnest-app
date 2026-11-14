@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"context"
+	"strings"
 
 	"cloudenest_go/internal/quota"
 	"cloudenest_go/internal/service/contract"
@@ -27,35 +28,40 @@ func (r *SettingsRepo) ListSystemSettings(ctx context.Context) ([]model.SystemSe
 	return rows, nil
 }
 
-func (r *SettingsRepo) UpsertSystemSettings(ctx context.Context, items []contract.SettingUpsertItem) error {
+func (r *SettingsRepo) UpsertSystemSettings(ctx context.Context, uid int64, items []contract.SettingUpsertItem, action, clientIP string) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := quota.LockPolicy(tx, true); err != nil {
 			return err
 		}
+		keys := make([]string, 0, len(items))
 		for _, item := range items {
-			var row model.SystemSetting
-			err := tx.Where("setting_key = ?", item.SettingKey).First(&row).Error
-			if err != nil {
-				if err != gorm.ErrRecordNotFound {
-					return err
-				}
-				row = model.SystemSetting{SettingKey: item.SettingKey, SettingValue: item.SettingValue, Description: item.Description}
-				if err := tx.Create(&row).Error; err != nil {
-					return err
-				}
-				continue
-			}
-
-			updates := map[string]interface{}{"setting_value": item.SettingValue}
-			if item.Description != "" {
-				updates["description"] = item.Description
-			}
-			if err := tx.Model(&row).Updates(updates).Error; err != nil {
+			if err := saveSystemSetting(tx, item); err != nil {
 				return err
 			}
+			keys = append(keys, item.SettingKey)
 		}
-		return nil
+		return tx.Create(&model.OperationLog{
+			UserID: &uid, Action: action, Status: "success", ClientIP: clientIP,
+			Detail: "keys=" + strings.Join(keys, ","),
+		}).Error
 	})
+}
+
+func saveSystemSetting(tx *gorm.DB, item contract.SettingUpsertItem) error {
+	var row model.SystemSetting
+	err := tx.Where("setting_key = ?", item.SettingKey).First(&row).Error
+	if err == gorm.ErrRecordNotFound {
+		row = model.SystemSetting{SettingKey: item.SettingKey, SettingValue: item.SettingValue, Description: item.Description}
+		return tx.Create(&row).Error
+	}
+	if err != nil {
+		return err
+	}
+	updates := map[string]any{"setting_value": item.SettingValue}
+	if item.Description != "" {
+		updates["description"] = item.Description
+	}
+	return tx.Model(&row).Updates(updates).Error
 }
 
 func (r *SettingsRepo) ListRoles(ctx context.Context) ([]model.Role, error) {

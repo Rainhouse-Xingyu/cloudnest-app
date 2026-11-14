@@ -105,3 +105,7 @@ G03 新增 POST upload/pause 与 upload/resume，必须携 expected_epoch，init
 G03 下载新增强 ETag/Repr-Digest，只有精确强 If-Range 才继续旧表示；日期/弱/旧标签回退完整 200。客户端须在 200 时从零开始，206 时核对偏移/总长/标签，最终校验完整摘要，不能只凭状态或 Range 拼接。所有视频/预览/缩略图也受 download 策略；损坏/旧非 SHA-256 元数据拒绝而不自动升级，缩略图改为私有禁止存储缓存。路由和 File DTO 未变，iOS 源码冻结，新 macOS 持久化续传尚待实现；详见 [下载身份与兼容边界](DOWNLOAD-INTEGRITY.md)。
 
 G03 ZIP 保持普通/批量内嵌/公开分享结构和下载路由，但损坏源现在拒绝整个包（完整性 409、缺失 404），不省略条目或重封坏内容。ZIP 同上传共享临时卷，507 也可能发生在打包中；活动归档超限 409/Retry-After: 1，登记不可用 503。批量下载 JSON 上限 16 KiB/超限 413，需分批选择；旧正常请求与 ZIP 命名/字节内容有回归，iOS 未改。详见 [归档协议](ARCHIVE-TRANSFERS.md)。
+
+## G05 持久命令接口升级
+
+现有冻结的 iOS FRP 源码未调用 deploy-config、reload 或命令接口，本批未扩展旧客户端。管理端新增 POST /api/frp/devices/:id/commands，普通默认权限允许、自定义权限账号需明确授权；资源级所有权检查仍执行。既有 deploy-config/reload 入口要求 HTTPS、有效设备注册及 32 位小写十六进制 Idempotency-Key，reload 还需 JSON 空对象。新历史列表来自 MySQL，状态和字段见 [命令协议](FRP-DURABLE-COMMANDS.md)。新 macOS 和 Agent 必须实现相应契约，不能继续用用户 JWT 执行设备命令。

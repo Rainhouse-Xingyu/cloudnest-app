@@ -12,8 +12,8 @@
 | SEC-006 P1 | `internal/middleware/auth.go:defaultAllowPath` 除两个排除项外放行全部 `/api/`，不区分方法 | 为新路径挂测试 handler，无权限用户也会获准 | G01 显式业务方法/路由模板清单，新增路由默认拒绝；资源级授权仍必需 | 已修：显式路由与即时权限读取，待审 |
 | SEC-007 P1 | `internal/auth/jwt.go:ParseToken` 不强制 exp，也未检查 user_id/subject 一致性 | 用测试密钥签无 exp/零 ID/不匹配 subject token | G01 必须过期时间及合法身份声明 | 已修：必需 exp/身份校验，待审 |
 | SEC-008 P1 | `auth_service.go:Logout` 忽略 Redis 删除错误；角色/禁用状态来自历史 JWT | Redis 断开后注销；登录后撤销角色/禁用再访问 | G01 注销错误传播、会话撤销/用户状态检查 | 已修：注销错误传播、实时身份与权限，待审 |
-| SEC-009 P1 | `app/container.go` FRP 上报/拉命令同用户 JWT 入口 | 用用户身份调用设备命令 API；无独立设备认证模型 | G05 设备 enrollment、独立凭据哈希/轮换/撤销与权限范围 | G01 已记录 [边界设计](DEVICE-IDENTITY-DESIGN.md)，G05 代码与实测待做 |
-| SEC-010 P1 | `service/frp_service.go:generateFRPCYaml/SaveConfig` 明文 token 拼入配置并持久化 | 隔离环境读取配置记录/响应；不要记录真实 token | G05 加密敏感配置、脱敏响应、最小 Agent 权限 | G01 已记录设计，明文风险仍在，G05 实施待做 |
+| SEC-009 P1 | `app/container.go` FRP 上报/拉命令同用户 JWT 入口 | 用用户身份调用设备命令 API；无独立设备认证模型 | G05 设备 enrollment、独立凭据哈希/轮换/撤销与权限范围 | 已登记设备接入独立身份与持久命令，旧 JWT 执行入口已拒绝。实际 Go Agent 已验证三种隧道及重连；未登记设备兼容路径仍待迁移，见 [G05 记录](G05-DEVICE-IDENTITY.md) |
+| SEC-010 P1 | `service/frp_service.go:generateFRPCYaml/SaveConfig` 明文 token 拼入配置并持久化 | 隔离环境读取配置记录/响应；不要记录真实 token | G05 加密敏感配置、脱敏响应、最小 Agent 权限 | 服务端 TLS/脱敏、AES-GCM、显式迁移/轮换与活动租约配置领取已实现。Agent 已接入 Keychain/外部密钥与身份/日志加密、显式迁移；frpc 认证 token 改由继承匿名管道传入，不写运行配置；映射参数缓存、历史备份及生产迁移仍待治理，SEC-010 保持开放 |
 | SEC-011 P1 | iOS `Shared/Managers/SessionManager.swift` 用 UserDefaults 存 token | 检查保存/读取路径 | G07 新 macOS 用 Keychain；冻结旧 iOS 开发 | 已确认，待做 |
 | SEC-012 P1 | `cmd/server/main.go` 用 `gin.Run` 无显式 HTTP 超时；上传入口缺少请求体总限额 | 慢请求/超大 multipart；需受限资源测试 | G01/G03 显式服务器超时、请求/分片尺寸上限、登录速率限制 | G01 请求头/空闲超时及登录体积/限流已修；G03 已补齐有界流式 multipart、共享并发准入、实际 TCP 读取期限及服务读取超时；分片/合并临时卷预算已追加；ZIP/缓存预算与慢请求规模压测待做 |
 | SEC-013 P1 | G01 初版自定义权限覆盖默认路由，导致 GET auth/me、POST auth/logout 被拒绝 | 真实 API 用户仅授予 GET files，me 返回 403；注销同受影响 | 在完整身份认证后独立允许精确方法/自身会话路由，业务与管理员权限不扩大 | 修复前已复现；修复后集成测试通过 |
@@ -40,20 +40,20 @@
 | FILE-017 P1 | 永久删除删除 operation_log，元数据删除与审计不原子 | 历史审计保留、审计写入失败、混合所有者及仍活动子项 | 保留历史，完整树只允许本人已删除记录，新审计同事务提交 | 其他所有者 403、活动子项 409；错误注入完整回滚，保留历史与客户端 IP 回归通过；显式托管对象 GC 已追加，旧对象不自动清理 |
 | FILE-009 P2 | 文件搜索多列 LIKE、ListFiles/目录递归无分页/批量规划 | 数据规模测试、EXPLAIN、查询计数 | G02/G10 索引/游标分页/批量目录查询 | 结构已确认，性能未测 |
 | FILE-010 P2 | Go `sendFileWithRateLimit` 已 ServeContent/io.Copy/固定缓冲；客户端 NetworkClient 使用 data(for:) | 大文件峰值内存测试 | G03/G08 新客户端 URLSession 文件下载任务；不重写已流式 Go 普通下载 | 后端整文件内存假设未成立；性能未测 |
-| FILE-011 P1 | Share 模型及 CreateShare 只有 code/expiry，无提取码/访问次数约束 | 查看真实字段/API | G06 提取码哈希/访问计数、限速、撤销/到期测试 | 缺功能 |
+| FILE-011 P1 | Share 模型及 CreateShare 只有 code/expiry，无提取码/访问次数约束 | 查看真实字段/API | G06 提取码哈希/访问计数、限速、撤销/到期测试 | 已接入 HTTPS 提取码、下载次数、按 IP 限流和显式升级检查，见 [G06 公开分享](G06-PUBLIC-SHARES.md) |
 | FILE-012 P1 | 文件版本只创建/列出，没有专用恢复/上传完整协议；客户端可传 size | 版本覆盖/恢复与配额一致性测试 | G01 先保护 storage_id；G02 版本引用/恢复协议 | 上传/复制初始引用、旧当前快照、历史下载、追加式恢复和事务审计已实现；配额已接入；AI 增量更新已在 G04 接入；版本专用上传票据仍待后续 |
 | AI-001 P1 | `triggerAsyncAutoAnalyze` 内存 goroutine，AiTask 仅写状态记录 | 上传后杀进程重启；任务无恢复 worker | G04 事务 outbox、持久任务、租约/超时/重试/诊断 | 进行中：原子入队、租约/重领/退避/结果隔离已实现；服务 worker/独立 blob 读取与文本处理已接入；状态/游标历史回填/代次 CAS 批量重建 API 已实现，真实服务重建通过；版本/复制/回收恢复/扩展名增量入队及其事务回滚已接入 |
 | AI-002 P1 | `service/ai_service.go:NLSearch` 解析条件后调用 `storage/mysql/ai_repo.go:Search` 的 LIKE；无 embedding/vector | 执行语义同义查询/带无关干扰的评估集 | G04 独立 embedding、chunk、向量索引、混合检索/文件级 ACL/片段 | 已接入实际文本 embedding 与精确扫描/关键词融合、权限和代次复核、片段及降级；10k 向量扫描通过，DOCX/XLSX/PPTX 有界解析/实际模型链路已实现；PDF/扫描页真实 OCR 已接入；JPEG/PNG/GIF 真实视觉已接入；六类合成评估已执行且初始基线失败，候选阈值/配置类型/查询指令整改后 v1 门槛通过；可选实际重排使已暴露 v1 发票族 R@5 从 75% 提升到 100%，stress-v2 负例仅 1/6 为空且一次超时，完整质量验收待做 |
 | AI-003 P1 | `buildAutoAnalyzeResult` 忽略 OCR/模型错误并写“分析完成”；照片标签描述请求仅文本 | 关闭 Ollama 上传图片；查看任务状态和描述 | G04 区分提取/OCR/视觉失败、真实视觉输入、可诊断降级 | 原上传后吞错入口已移除，文本实际解析/embedding 失败持久记录并重试；PDF 扫描页已接真实视觉 OCR 与失败拒绝；JPEG/PNG/GIF 场景描述及手动 OCR 统一已经接入；其余格式/复杂 OCR 与峰值资源验证待做 |
 | AI-004 P1 | `os.ReadFile` 图片全量载入，PDF/OpenXML 提取有上限但无完整资源预算 | 大图/损坏 PDF/压缩炸弹，受限容器观察资源 | G04 文档解析隔离、页/像素/展开字节限额和取消 | Office 部分已补 ZIP/展开/XML/节点/输出/并发限制及对抗测试；PDF 已改原生子进程及有界输出/Linux AS 限额/macOS RSS watchdog；图像解析已统一到共享预算；完整沙箱与恶意样本峰值实测待做 |
 | AI-005 P2 | `handler/ai_handler.go` 与 `service/ai_service.go` 重复提取/模型 helper | 函数清单对比；调用图核对 | G04 统一 provider/parser 接口，保留单一实现与测试 | Office 已统一到新 parser，删除旧正则提取及 handler 未用副本；PDF 索引/摘要已共用新 parser/OCR，旧进程内 PDF 依赖已移除；旧图片 OCR 已统一；其余旧生成/问答 helper 仍待评审 |
-| FRP-001 P1 | `PullNextCommand` LPop 后更新状态，没有租约回收任务 | 领取后 Agent 崩溃；队列命令丢失/卡 running | G05 持久命令/ACK/幂等/超时重发/终态约束 | 已确认，待做 |
-| FRP-002 P1 | 仓库没有设备 Agent/frpc 进程管理实现 | 检查 Go cmd 与 Swift 调用，不存在可启动 Agent | G05 官方 frpc、白名单 start/stop/reload/diagnose、自动恢复 | 缺功能；未测隧道 |
-| FRP-003 P1 | YAML 使用用户 serverAddr/token/domain 原文拼接 | 输入换行/冒号/特殊字符串，运行 frpc verify | G05 typed config 序列化+官方验证，拒绝注入 | 已确认，待修 |
-| FRP-004 P1 | 端口冲突先查后写，server 作用域/唯一性与心跳离线任务需核对 | 并发相同端口、设备失联、配置回滚 | G05 唯一索引/端口预留/周期判离线/版本关联 | 部分实现，未验收 |
-| COLLAB-001 P1 | Workspace 成员管理存在；通用文件 ACL 主要用 owner/file_permission，空间角色链路不完整 | 空间 viewer/editor 对文件 CRUD 矩阵；禁止越级授权 | G06 明确空间/文件权限继承和管理员边界 | 待完整矩阵验证 |
-| LIVE-001 P2 | LivePhoto 绑定/解绑/查询存在；并发去重及实际播放未测 | 相同 image/video 并发绑定、跨用户配对与 macOS 播放 | G06/G09 唯一约束/权限与原生预览 | 静态审查，未验收 |
-| LOG-001 P1 | 多处 `_ = logOperation`，写操作可能无审计；SQL 日志策略未配置 | 注入日志写失败/数据库故障；确保无密钥与文件正文泄露 | G06 事务审计或可靠 outbox、结构化脱敏日志 | 账号恢复、永久删除、上传完成/对象修复、版本创建/恢复已事务化；其他路径和可靠 outbox 仍待做 |
+| FRP-001 P1 | `PullNextCommand` LPop 后更新状态，没有租约回收任务 | 领取后 Agent 崩溃；队列命令丢失/卡 running | G05 持久命令/ACK/幂等/超时重发/终态约束 | 新设备使用 MySQL 命令/租约，Agent 持久保存结果后 ACK，丢回执/新租约不重复执行已有结果；旧未登记设备路径及完整崩溃恢复仍待验收 |
+| FRP-002 P1 | 原仓库没有设备 Agent/frpc 进程管理实现 | 检查 Go cmd 与实际隧道访问 | G05 官方 frpc、白名单 start/stop/reload/diagnose、自动恢复 | 前台 Go Agent 已实现，实际 CLI 三种隧道、正常重启与 frps 重连通过；macOS 用户 LaunchAgent 异常重启已实测，已接入真实注册诊断与不可变快照；Linux 用户 systemd 服务通过异常重启和停止实测；持续逐映射状态、双故障恢复待完成，见 [Agent 记录](FRP-AGENT.md) |
+| FRP-003 P1 | 原 YAML 使用用户 serverAddr/token/domain 原文拼接 | 输入换行/冒号/特殊字符串，运行 frpc verify | G05 typed config 序列化+官方验证，拒绝注入 | 生成器引号/模板防护、Agent 严格白名单及规范 JSON、官方 verify 均已实现；正常特殊 token 和危险配置实际链路已测，代码完成待审 |
+| FRP-004 P1 | 端口冲突先查后写，server 作用域/唯一性与心跳离线任务需核对 | 并发相同端口、设备失联、配置回滚 | G05 唯一索引/端口预留/周期判离线/版本关联 | 已接入事务池锁/归属复核、规范域名数据库唯一约束、审计回滚和有界端口扫描；设备退役/历史保留及命令取消已接入；已追加运行配置占用及首次清除回执释放；多服务器映射作用域已接入，历史占用对账和既有孤立映射治理仍待完成，见 [映射预留](FRP-MAPPING-RESERVATIONS.md) |
+| COLLAB-001 P1 | Workspace 成员管理存在；通用文件 ACL 主要用 owner/file_permission，空间角色链路不完整 | 空间 viewer/editor 对文件 CRUD 矩阵；禁止越级授权 | G06 明确空间/文件权限继承和管理员边界 | 新空间角色已接入文件 CRUD，包含撤权、跨空间限制和旧空间兼容，见 [协作权限](G06-COLLABORATION.md) |
+| LIVE-001 P2 | LivePhoto 绑定/解绑/查询存在；并发去重及实际播放未测 | 相同 image/video 并发绑定、跨用户配对与 macOS 播放 | G06/G09 唯一约束/权限与原生预览 | 后端并发、双源权限、审计和迁移已验证，原生预览待 G09，见 [Live Photo](G06-LIVE-PHOTO.md) |
+| LOG-001 P1 | 多处 `_ = logOperation`，写操作可能无审计；SQL 日志策略未配置 | 注入日志写失败/数据库故障；确保无密钥与文件正文泄露 | G06 事务审计或可靠 outbox、结构化脱敏日志 | 账号恢复、永久删除、上传完成/对象修复、版本创建/恢复、FRP 配置/映射/设备写入、创建/撤销分享已事务化；新分享审计及应用访问日志不记录分享码；全局设置、个人时段和 AI 设置写入已事务审计并只记录设置键；其他路径和可靠 outbox 仍待做 |
 | ENG-001 P1 | 原仓库无 Go 测试，Swift 测试仅模板 | 基线 go test 全部 no test files | G00 加真实测试/CI；后续随修复扩展 | 首批单元/真实 API 回归已通过；全业务覆盖待后续 |
 | ENG-002 P2 | 已跟踪 dist/main/*.o/xcuserdata | `git ls-files`；检查工作树文件仍在 | G00 取消跟踪并 ignore；历史 patch 需独立核对后归档 | 当前产物已取消跟踪 |
 | ENG-003 P2 | file handler 2165 行、service 1193 行；已有契约与仓储可复用 | 逐功能调用链审查和单元边界 | G02–G06 随业务拆模块，不全盘重写 | 待做 |
@@ -104,3 +104,11 @@ AI-002 后续：可选有界重排已接入，保留原 RRF 分数与未评分�
 AI-006 P1：固定六类开发集真实基线 Recall@5=72.08%，配置查询前五无正确项，六条无答案查询均产生无关结果。根因包含弱双字词全额 RRF 投票、0.25 初始语义门槛偏宽、缺少配置类型约束。现加入配置阈值、类型/日历与查询指令整改，v1 全量门槛通过；发票类 R@5 75%、合同/评测误匹配和非盲测局限仍未关闭；保留原始失败报告，不改标签/门槛掩盖结果。详见 AI-RETRIEVAL-EVALUATION。
 
 2026-10-30：新增可选单主图 HEIC/HEIF 原生解码及实际索引/OCR/缩略图，macOS 真实链路通过；Linux 原生与复杂容器仍待验收，见 [HEIF 记录](AI-HEIF.md)。G04 继续进行中。
+
+2026-11-07，FRP 服务器管理已接入私有稳定端点、不可变加密修订、CAS 更新、生成策略校验、配置关联认证和历史轮换。FRP-004 仍开放：全局预留未放宽，按服务器分配、运行配置占用和离线确认释放尚未实现；详见 [服务器登记边界](FRP-SERVER-REGISTRY.md)。这不是生产凭据或生产迁移的验收。
+
+FRP-004 后续进展：Agent 0.3.0 的 `forget_config` 已提供排他队列、持久清除与身份代次绑定的成功回执。普通 stop 仍保留配置。尚未将该回执接入端口占用/释放事务，未解决旧凭据或离线设备的未知占用；问题继续开放。
+
+2026-11-12，FRP-004 运行配置子项：新增每命令/凭据代次持久占用、映射删除/更新后的保留、原子入队及首次 forget 回执释放，重复旧回执不影响新部署。全局映射唯一约束未放宽。旧配置迁移为 unknown 记录并提供只读查询，解除流程与服务器级映射仍待实现，因此问题继续开放，见 [运行占用协议](FRP-RUNTIME-RESERVATIONS.md)。
+
+2026-11-13：FRP-004 已接入正值服务器映射作用域、服务器策略范围分配、HTTP/S 不占无关 TCP 端口及复合唯一索引；历史零作用域仍与全部服务器重叠。旧表迁移保留和并发专项已验证；历史 unknown/旧身份对账、离线策略和真实旧库升级仍待完成。公网测试的初次 TCP 注册被手工测试映射占用拒绝，实际复测结果见 TESTING。

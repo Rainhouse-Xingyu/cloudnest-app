@@ -45,7 +45,7 @@ type AdminRepository interface {
 // SettingsRepository 定义设置模块存储访问能力。
 type SettingsRepository interface {
 	ListSystemSettings(ctx context.Context) ([]model.SystemSetting, error)
-	UpsertSystemSettings(ctx context.Context, items []SettingUpsertItem) error
+	UpsertSystemSettings(ctx context.Context, uid int64, items []SettingUpsertItem, action, clientIP string) error
 	ListRoles(ctx context.Context) ([]model.Role, error)
 	ListUserRoles(ctx context.Context, uid int64, all bool) ([]UserRoleRow, error)
 	ListWorkspaceRoles(ctx context.Context, uid int64, all bool) ([]model.WorkspaceUser, error)

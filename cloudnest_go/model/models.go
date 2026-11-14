@@ -2,6 +2,8 @@ package model
 
 import (
 	"time"
+
+	"gorm.io/gorm"
 )
 
 // User 用户表
@@ -93,6 +95,7 @@ func (StorageGarbage) TableName() string { return "storage_garbage" }
 type Workspace struct {
 	ID         int64     `gorm:"primaryKey;autoIncrement" json:"id"`
 	Name       string    `gorm:"type:varchar(100);not null" json:"name"`
+	RootFileID *int64    `gorm:"type:bigint;uniqueIndex:uq_workspace_root_v1" json:"root_file_id"`
 	OwnerID    int64     `gorm:"not null;index" json:"owner_id"`
 	CreateTime time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP" json:"create_time"`
 }
@@ -260,12 +263,13 @@ func (WorkspaceUser) TableName() string {
 
 // Device 设备表
 type Device struct {
-	ID         int64     `gorm:"primaryKey;autoIncrement" json:"id"`
-	UserID     int64     `gorm:"not null;index" json:"user_id"`
-	DeviceName string    `gorm:"type:varchar(100)" json:"device_name"`
-	DeviceIP   string    `gorm:"type:varchar(50);column:device_ip" json:"device_ip"`
-	Status     int8      `gorm:"type:tinyint;default:1" json:"status"`
-	CreateTime time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP" json:"create_time"`
+	RetiredAt  gorm.DeletedAt `gorm:"column:retired_at;type:datetime(6);index" json:"retired_at"`
+	ID         int64          `gorm:"primaryKey;autoIncrement" json:"id"`
+	UserID     int64          `gorm:"not null;index" json:"user_id"`
+	DeviceName string         `gorm:"type:varchar(100)" json:"device_name"`
+	DeviceIP   string         `gorm:"type:varchar(50);column:device_ip" json:"device_ip"`
+	Status     int8           `gorm:"type:tinyint;default:1" json:"status"`
+	CreateTime time.Time      `gorm:"type:datetime;default:CURRENT_TIMESTAMP" json:"create_time"`
 }
 
 func (Device) TableName() string {
@@ -274,10 +278,11 @@ func (Device) TableName() string {
 
 // FrpMapping FRP映射
 type FrpMapping struct {
+	ServerID   int64     `gorm:"not null;default:0;index" json:"server_id"`
 	ID         int64     `gorm:"primaryKey;autoIncrement" json:"id"`
 	DeviceID   int64     `gorm:"not null" json:"device_id"`
 	LocalPort  int       `gorm:"not null" json:"local_port"`
-	RemotePort int       `gorm:"not null;unique" json:"remote_port"`
+	RemotePort int       `gorm:"not null" json:"remote_port"`
 	Domain     string    `gorm:"type:varchar(100)" json:"domain"`
 	Status     int8      `gorm:"type:tinyint;default:1" json:"status"`
 	CreateTime time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP" json:"create_time"`
@@ -289,10 +294,12 @@ func (FrpMapping) TableName() string {
 
 // FrpConfig FRP配置
 type FrpConfig struct {
-	ID         int64     `gorm:"primaryKey;autoIncrement" json:"id"`
-	DeviceID   *int64    `gorm:"type:bigint" json:"device_id"`
-	ConfigText string    `gorm:"type:text" json:"config_text"`
-	CreateTime time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP" json:"create_time"`
+	ServerID         int64     `gorm:"not null;default:0;index" json:"server_id"`
+	ServerRevisionID int64     `gorm:"not null;default:0;index" json:"server_revision_id"`
+	ID               int64     `gorm:"primaryKey;autoIncrement" json:"id"`
+	DeviceID         *int64    `gorm:"type:bigint" json:"device_id"`
+	ConfigText       string    `gorm:"type:text" json:"-"`
+	CreateTime       time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP" json:"create_time"`
 }
 
 func (FrpConfig) TableName() string {
@@ -331,12 +338,15 @@ func (AiTask) TableName() string {
 
 // Share 分享
 type Share struct {
-	ID         int64      `gorm:"primaryKey;autoIncrement" json:"id"`
-	FileID     *int64     `gorm:"type:bigint" json:"file_id"`
-	UserID     *int64     `gorm:"type:bigint" json:"user_id"`
-	ShareCode  string     `gorm:"type:varchar(20);unique" json:"share_code"`
-	ExpireTime *time.Time `gorm:"type:datetime" json:"expire_time"`
-	CreateTime time.Time  `gorm:"type:datetime;default:CURRENT_TIMESTAMP" json:"create_time"`
+	ID            int64      `gorm:"primaryKey;autoIncrement" json:"id"`
+	FileID        *int64     `gorm:"type:bigint" json:"file_id"`
+	UserID        *int64     `gorm:"type:bigint" json:"user_id"`
+	ShareCode     string     `gorm:"type:varchar(20);unique" json:"share_code"`
+	PasscodeHash  string     `gorm:"type:varchar(60);not null;default:''" json:"-"`
+	MaxDownloads  int64      `gorm:"not null;default:0" json:"max_downloads"`
+	DownloadCount int64      `gorm:"not null;default:0" json:"download_count"`
+	ExpireTime    *time.Time `gorm:"type:datetime" json:"expire_time"`
+	CreateTime    time.Time  `gorm:"type:datetime;default:CURRENT_TIMESTAMP" json:"create_time"`
 }
 
 func (Share) TableName() string {

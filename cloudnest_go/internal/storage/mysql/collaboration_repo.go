@@ -25,13 +25,32 @@ func NewCollaborationRepo(db *gorm.DB) *CollaborationRepo {
 	return &CollaborationRepo{db: db}
 }
 
-func (r *CollaborationRepo) CreateWorkspace(ctx context.Context, ws *model.Workspace, ownerID int64) error {
+func (r *CollaborationRepo) CreateWorkspace(ctx context.Context, ws *model.Workspace, ownerID int64, clientIP string) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(ws).Error; err != nil {
 			return err
 		}
+		if err := lockFileNamespaces(tx, fileNamespaceKey(ownerID, 0)); err != nil {
+			return err
+		}
+		// An internal name keeps the workspace root independent of display name.
+		name, err := allocateFileName(tx, ownerID, 0, fmt.Sprintf("Workspace %d", ws.ID), true, 0, true)
+		if err != nil {
+			return err
+		}
+		root := model.File{UserID: ownerID, Filename: name, IsFolder: 1, WorkspaceID: &ws.ID}
+		if err := tx.Create(&root).Error; err != nil {
+			return err
+		}
+		ws.RootFileID = &root.ID
+		if err := tx.Model(ws).Update("root_file_id", root.ID).Error; err != nil {
+			return err
+		}
 		row := model.WorkspaceUser{WorkspaceID: ws.ID, UserID: ownerID, Role: "owner"}
-		return tx.Create(&row).Error
+		if err := tx.Create(&row).Error; err != nil {
+			return err
+		}
+		return workspaceAudit(tx, ownerID, "workspace_create", fmt.Sprintf("workspace_id=%d", ws.ID), clientIP)
 	})
 }
 
@@ -39,7 +58,7 @@ func (r *CollaborationRepo) ListWorkspaces(ctx context.Context, uid int64) ([]co
 	items := make([]contract.CollaborationWorkspaceListRow, 0)
 	err := r.db.WithContext(ctx).
 		Table("workspace w").
-		Select("w.id, w.name, w.owner_id, wu.role, w.create_time").
+		Select("w.id, w.name, w.owner_id, w.root_file_id, wu.role, w.create_time").
 		Joins("JOIN workspace_user wu ON wu.workspace_id = w.id AND wu.user_id = ?", uid).
 		Order("w.id DESC").
 		Find(&items).Error
@@ -76,22 +95,79 @@ func (r *CollaborationRepo) GetUserByUsername(ctx context.Context, username stri
 	return user, nil
 }
 
-func (r *CollaborationRepo) UpsertWorkspaceMember(ctx context.Context, workspaceID int64, targetUserID int64, role string) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var row model.WorkspaceUser
-		err := tx.Where("workspace_id = ? AND user_id = ?", workspaceID, targetUserID).First(&row).Error
+func (r *CollaborationRepo) ChangeWorkspaceMember(ctx context.Context, change contract.WorkspaceMemberChange) error {
+	if change.Role != "" && !contract.ValidWorkspaceMemberRole(change.Role) {
+		return contract.ErrInvalidInput
+	}
+	return fileMetadataTransaction(ctx, r.db, func(tx *gorm.DB) error {
+		// Serialize all membership decisions for this workspace, including
+		// a change that removes the authority of another pending request.
+		var workspace model.Workspace
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&workspace, change.WorkspaceID).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return contract.ErrForbidden
+		}
 		if err != nil {
-			if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		actorRole := "owner"
+		if workspace.OwnerID != change.ActorID {
+			var actor model.WorkspaceUser
+			err := tx.First(&actor, "workspace_id=? AND user_id=?", workspace.ID, change.ActorID).Error
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return contract.ErrForbidden
+			}
+			if err != nil {
 				return err
 			}
-			newRow := model.WorkspaceUser{WorkspaceID: workspaceID, UserID: targetUserID, Role: role}
-			return tx.Create(&newRow).Error
+			if actor.Role != "admin" || change.Role == "admin" {
+				return contract.ErrForbidden
+			}
+			actorRole = actor.Role
 		}
-		if row.Role == "owner" {
-			return errors.New("cannot change owner role")
+
+		var target model.WorkspaceUser
+		err = tx.First(&target, "workspace_id=? AND user_id=?", workspace.ID, change.TargetID).Error
+		exists := err == nil
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
 		}
-		return tx.Model(&row).Update("role", role).Error
+		if change.TargetID == workspace.OwnerID || target.Role == "owner" || (actorRole == "admin" && target.Role == "admin") {
+			return contract.ErrForbidden
+		}
+		action := "workspace_member_upsert"
+		switch {
+		case change.Role == "":
+			if !exists {
+				return gorm.ErrRecordNotFound
+			}
+			action = "workspace_member_remove"
+			err = tx.Delete(&target).Error
+		case !exists:
+			if change.UpdateOnly {
+				return gorm.ErrRecordNotFound
+			}
+			var user model.User
+			if err := tx.First(&user, "id=? AND status=1", change.TargetID).Error; err != nil {
+				return err
+			}
+			err = tx.Create(&model.WorkspaceUser{WorkspaceID: workspace.ID, UserID: change.TargetID, Role: change.Role}).Error
+		default:
+			if change.UpdateOnly {
+				action = "workspace_member_role_update"
+			}
+			err = tx.Model(&target).Update("role", change.Role).Error
+		}
+		if err != nil {
+			return err
+		}
+		detail := fmt.Sprintf("workspace_id=%d actor_role=%s target_user=%d role=%s", workspace.ID, actorRole, change.TargetID, change.Role)
+		return workspaceAudit(tx, change.ActorID, action, detail, change.ClientIP)
 	})
+}
+
+func workspaceAudit(tx *gorm.DB, uid int64, action, detail, clientIP string) error {
+	return tx.Create(&model.OperationLog{UserID: &uid, Action: action, Status: "success", Detail: detail, ClientIP: clientIP}).Error
 }
 
 func (r *CollaborationRepo) ListWorkspaceMembers(ctx context.Context, workspaceID int64) ([]contract.CollaborationWorkspaceMemberRow, error) {
@@ -109,19 +185,6 @@ func (r *CollaborationRepo) ListWorkspaceMembers(ctx context.Context, workspaceI
 	return rows, nil
 }
 
-func (r *CollaborationRepo) UpdateWorkspaceMemberRole(ctx context.Context, workspaceID int64, targetUserID int64, role string) error {
-	return r.db.WithContext(ctx).
-		Model(&model.WorkspaceUser{}).
-		Where("workspace_id = ? AND user_id = ?", workspaceID, targetUserID).
-		Update("role", role).Error
-}
-
-func (r *CollaborationRepo) DeleteWorkspaceMember(ctx context.Context, workspaceID int64, targetUserID int64) error {
-	return r.db.WithContext(ctx).
-		Where("workspace_id = ? AND user_id = ?", workspaceID, targetUserID).
-		Delete(&model.WorkspaceUser{}).Error
-}
-
 func (r *CollaborationRepo) GetActiveFileByID(ctx context.Context, fileID int64) (model.File, error) {
 	var f model.File
 	err := r.db.WithContext(ctx).First(&f, "id = ? AND is_deleted = 0", fileID).Error
@@ -131,30 +194,62 @@ func (r *CollaborationRepo) GetActiveFileByID(ctx context.Context, fileID int64)
 	return f, nil
 }
 
-func (r *CollaborationRepo) CountFilePermissionsByLevels(ctx context.Context, fileID int64, userID int64, permissions []string) (int64, error) {
-	var count int64
-	err := r.db.WithContext(ctx).
-		Model(&model.FilePermission{}).
-		Where("file_id = ? AND user_id = ? AND permission IN ?", fileID, userID, permissions).
-		Count(&count).Error
-	if err != nil {
-		return 0, err
-	}
-	return count, nil
+func (r *CollaborationRepo) CanAccessFile(ctx context.Context, uid, id int64, write bool) (bool, error) {
+	return canAccessFileForFileRepo(ctx, r.db, uid, id, write)
 }
 
-func (r *CollaborationRepo) UpsertFilePermission(ctx context.Context, fileID int64, targetUserID int64, permission string) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var row model.FilePermission
-		err := tx.Where("file_id = ? AND user_id = ?", fileID, targetUserID).First(&row).Error
+func (r *CollaborationRepo) ChangeFilePermission(ctx context.Context, actorID, fileID, targetUserID int64, permission, clientIP string) error {
+	if permission != "" && permission != "read" && permission != "write" {
+		return contract.ErrInvalidInput
+	}
+	return fileMetadataTransaction(ctx, r.db, func(tx *gorm.DB) error {
+		var file model.File
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&file, "id=? AND is_deleted=0", fileID).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return contract.ErrForbidden
+		}
 		if err != nil {
-			if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		if file.UserID != actorID {
+			return contract.ErrForbidden
+		}
+		ws, err := fileWorkspace(tx, file)
+		if err != nil {
+			return err
+		}
+		if ws.ID != 0 {
+			return contract.ErrForbidden
+		}
+		action := "file_permission_revoke"
+		if permission == "" {
+			result := tx.Where("file_id=? AND user_id=?", fileID, targetUserID).Delete(&model.FilePermission{})
+			if result.Error != nil || result.RowsAffected == 0 {
+				return result.Error
+			}
+		} else {
+			action = "file_permission_upsert"
+			var user model.User
+			if err := tx.First(&user, "id=? AND status=1", targetUserID).Error; err != nil {
 				return err
 			}
-			newRow := model.FilePermission{FileID: fileID, UserID: targetUserID, Permission: permission}
-			return tx.Create(&newRow).Error
+			var existing int64
+			query := tx.Model(&model.FilePermission{}).Where("file_id=? AND user_id=?", fileID, targetUserID)
+			if err := query.Count(&existing).Error; err != nil {
+				return err
+			}
+			if existing == 0 {
+				err = tx.Create(&model.FilePermission{FileID: fileID, UserID: targetUserID, Permission: permission}).Error
+			} else {
+				// Historical duplicate grants are retained but all are downgraded together.
+				err = tx.Model(&model.FilePermission{}).Where("file_id=? AND user_id=?", fileID, targetUserID).Update("permission", permission).Error
+			}
+			if err != nil {
+				return err
+			}
 		}
-		return tx.Model(&row).Update("permission", permission).Error
+		detail := fmt.Sprintf("file_id=%d target_user=%d permission=%s", fileID, targetUserID, permission)
+		return tx.Create(&model.OperationLog{UserID: &actorID, FileID: &fileID, Action: action, Status: "success", Detail: detail, ClientIP: clientIP}).Error
 	})
 }
 
@@ -171,10 +266,6 @@ func (r *CollaborationRepo) ListFilePermissions(ctx context.Context, fileID int6
 		return nil, err
 	}
 	return rows, nil
-}
-
-func (r *CollaborationRepo) DeleteFilePermission(ctx context.Context, fileID int64, targetUserID int64) error {
-	return r.db.WithContext(ctx).Where("file_id = ? AND user_id = ?", fileID, targetUserID).Delete(&model.FilePermission{}).Error
 }
 
 func (r *CollaborationRepo) CreateFileVersion(ctx context.Context, req contract.CollaborationCreateFileVersionInput) (model.FileVersion, error) {
@@ -210,11 +301,17 @@ func (r *CollaborationRepo) CreateFileVersion(ctx context.Context, req contract.
 		// A storage ID is not a capability. New bytes still require an active file
 		// owned by this caller; restoring this file's own history uses another path.
 		var source model.File
-		err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("storage_id=? AND user_id=? AND is_deleted=0 AND is_folder=0", req.StorageID, req.UserID).First(&source).Error
+		candidates := tx.Table("file f").Select("f.*").
+			Where("f.storage_id=? AND f.user_id=? AND f.is_deleted=0 AND f.is_folder=0", req.StorageID, req.UserID).
+			Where("(f.workspace_id <=> ? OR NOT EXISTS (SELECT 1 FROM workspace w WHERE w.id=f.workspace_id AND w.root_file_id IS NOT NULL))", file.WorkspaceID)
+		err := fileAccessScope(candidates, "f", req.UserID, false).Clauses(clause.Locking{Strength: "SHARE"}).Order("f.id").Take(&source).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return contract.ErrForbidden
 		}
 		if err != nil {
+			return err
+		}
+		if err := requireFilePermission(tx, req.UserID, source, false); err != nil {
 			return err
 		}
 		var storage model.Storage
@@ -334,10 +431,6 @@ func (r *CollaborationRepo) ListFileVersions(ctx context.Context, fileID int64) 
 		return nil, err
 	}
 	return rows, nil
-}
-
-func (r *CollaborationRepo) CreateOperationLog(ctx context.Context, row model.OperationLog) error {
-	return r.db.WithContext(ctx).Create(&row).Error
 }
 
 func (r *CollaborationRepo) versionOwner(ctx context.Context, uid, fileID int64) (int64, error) {

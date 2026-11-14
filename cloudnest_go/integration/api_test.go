@@ -44,7 +44,7 @@ type fixture struct {
 	aliceID, bobID int64
 }
 
-func newFixture(t *testing.T) *fixture {
+func disposableConfig(t *testing.T) config.Config {
 	t.Helper()
 	dsn := os.Getenv("CLOUDNEST_TEST_MYSQL_DSN")
 	parsed, err := mysqldriver.ParseDSN(dsn)
@@ -60,7 +60,13 @@ func newFixture(t *testing.T) *fixture {
 	if err != nil || host != "127.0.0.1" {
 		t.Fatal("test Redis must be on loopback")
 	}
-	cfg := config.Config{MySQLDSN: dsn, RedisAddr: redisAddr, JWTSecret: "test-only-signing-secret-with-at-least-32-bytes", JWTExpireHours: 1, DataDir: t.TempDir(), AIOllamaBaseURL: "http://127.0.0.1:1", AITimeoutSec: 1}
+	return config.Config{MySQLDSN: dsn, RedisAddr: redisAddr, JWTSecret: "test-only-signing-secret-with-at-least-32-bytes", JWTExpireHours: 1, DataDir: t.TempDir(), AIOllamaBaseURL: "http://127.0.0.1:1", AITimeoutSec: 1}
+}
+
+func newFixture(t *testing.T) *fixture {
+	t.Helper()
+	cfg := disposableConfig(t)
+	dsn := cfg.MySQLDSN
 	// Observe the schema before opening the application connection. In the first
 	// test this database is empty; NewMySQL must not create any tables.
 	probe, err := sql.Open("mysql", dsn)
@@ -134,6 +140,13 @@ func newFixture(t *testing.T) *fixture {
 			f.bobID = user.ID
 		}
 	}
+	// Isolated fixtures retain business history for migration tests, but runtime
+	// holds from their synthetic Agents must not leak into later fixture users.
+	t.Cleanup(func() {
+		if err := db.Where("owner_id IN ?", []int64{f.aliceID, f.bobID}).Delete(&model.FrpReservation{}).Error; err != nil {
+			t.Error(err)
+		}
+	})
 	return f
 }
 
@@ -173,7 +186,12 @@ func decode(t *testing.T, w *httptest.ResponseRecorder, dest any) {
 
 func (f *fixture) upload(t *testing.T, token, filename string, payload []byte) model.File {
 	t.Helper()
-	resp := f.json(t, "POST", "/api/files/upload/init", token, map[string]any{"filename": filename, "total_size": len(payload), "chunk_size": len(payload), "total_chunks": 1}, http.StatusOK)
+	return f.uploadTo(t, token, filename, payload, 0)
+}
+
+func (f *fixture) uploadTo(t *testing.T, token, filename string, payload []byte, parentID int64) model.File {
+	t.Helper()
+	resp := f.json(t, "POST", "/api/files/upload/init", token, map[string]any{"filename": filename, "total_size": len(payload), "chunk_size": len(payload), "total_chunks": 1, "parent_id": parentID}, http.StatusOK)
 	var init struct {
 		UploadID string `json:"upload_id"`
 	}
@@ -199,7 +217,7 @@ func (f *fixture) upload(t *testing.T, token, filename string, payload []byte) m
 		t.Fatal(err)
 	}
 	f.request(t, "POST", "/api/files/upload/chunk", token, w.FormDataContentType(), &body, http.StatusOK)
-	resp = f.json(t, "POST", "/api/files/upload/complete", token, map[string]any{"upload_id": init.UploadID}, http.StatusOK)
+	resp = f.json(t, "POST", "/api/files/upload/complete", token, map[string]any{"upload_id": init.UploadID, "parent_id": parentID}, http.StatusOK)
 	var completed struct {
 		Item model.File `json:"item"`
 	}

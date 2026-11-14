@@ -28,7 +28,7 @@ func clearDownloadIdentity(h http.Header) {
 
 // storage is authorized metadata for a pinned immutable source. Generated
 // archives/thumbnails pass nil and are hashed through the exact served FD.
-func (h *FileHandler) sendFileWithRateLimit(c *gin.Context, path, name string, rate int64, storage *model.Storage) error {
+func (h *FileHandler) sendFileWithRateLimit(c *gin.Context, path, name string, rate int64, storage *model.Storage, admit func(context.Context) error) error {
 	if rate <= 0 {
 		return contract.ErrRatePolicy
 	}
@@ -84,10 +84,10 @@ func (h *FileHandler) sendFileWithRateLimit(c *gin.Context, path, name string, r
 			return err
 		}
 	}
-	return h.serveFileIdentity(c, file, digest, name, rate)
+	return h.serveFileIdentity(c, file, digest, name, rate, admit)
 }
 
-func (h *FileHandler) sendArchiveWithRateLimit(c *gin.Context, a *transfer.Handle, name string, rate int64) error {
+func (h *FileHandler) sendArchiveWithRateLimit(c *gin.Context, a *transfer.Handle, name string, rate int64, admit func(context.Context) error) error {
 	file, digest, err := a.ArchiveReader()
 	if err != nil {
 		return err
@@ -95,7 +95,7 @@ func (h *FileHandler) sendArchiveWithRateLimit(c *gin.Context, a *transfer.Handl
 	original := c.Request
 	c.Request = c.Request.Clone(a.Context())
 	defer func() { c.Request = original }()
-	err = h.serveFileIdentity(c, file, digest, name, rate)
+	err = h.serveFileIdentity(c, file, digest, name, rate, admit)
 	if err != nil {
 		if cause := context.Cause(a.Context()); cause != nil {
 			return cause
@@ -104,7 +104,7 @@ func (h *FileHandler) sendArchiveWithRateLimit(c *gin.Context, a *transfer.Handl
 	return err
 }
 
-func (h *FileHandler) serveFileIdentity(c *gin.Context, file *os.File, digest, name string, rate int64) error {
+func (h *FileHandler) serveFileIdentity(c *gin.Context, file *os.File, digest, name string, rate int64, admit func(context.Context) error) error {
 	if rate <= 0 {
 		return contract.ErrRatePolicy
 	}
@@ -131,7 +131,7 @@ func (h *FileHandler) serveFileIdentity(c *gin.Context, file *os.File, digest, n
 		req.Header.Del("Range")
 	}
 	original := c.Writer
-	writer := &pacedResponseWriter{ResponseWriter: original, pacer: transferPacer{ctx: c.Request.Context(), rate: rate, start: time.Now()}}
+	writer := &pacedResponseWriter{ResponseWriter: original, admitDownload: admit, pacer: transferPacer{ctx: c.Request.Context(), rate: rate, start: time.Now()}}
 	c.Writer = writer
 	defer func() { c.Writer = original }()
 	http.ServeContent(writer, req, sanitizeFileName(name), stat.ModTime(), file)

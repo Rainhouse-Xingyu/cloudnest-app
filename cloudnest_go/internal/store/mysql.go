@@ -61,8 +61,14 @@ func Migrate(db *gorm.DB) error {
 		&model.SystemSetting{},
 		&model.LivePhoto{},
 		&model.Device{},
-		&model.FrpMapping{},
+		&model.AgentBinding{},
+		&model.AgentCommand{},
+		&model.FrpMappingPool{},
+		&model.FrpReservation{},
+		&model.FrpReservationSchema{},
 		&model.FrpConfig{},
+		&model.FrpServer{},
+		&model.FrpServerRevision{},
 		&model.AiMetadata{},
 		&model.AiTask{},
 		&model.AIIndexJob{},
@@ -72,6 +78,21 @@ func Migrate(db *gorm.DB) error {
 		return fmt.Errorf("migrate schema failed: %w", err)
 	}
 
+	if err := migrateLivePhotoSchema(db); err != nil {
+		return err
+	}
+	if err := prepareMappingSchema(db); err != nil {
+		return err
+	}
+	if err := installReservationSchema(db); err != nil {
+		return err
+	}
+	if err := upgradeScopedMappingSchema(db); err != nil {
+		return err
+	}
+	if err := installAgentTriggers(db); err != nil {
+		return fmt.Errorf("agent identity migration: %w", err)
+	}
 	return db.Clauses(clause.OnConflict{DoNothing: true}).Create(&model.StorageQuotaPolicy{ID: 1}).Error
 }
 
@@ -165,6 +186,15 @@ func CheckFileSchema(db *gorm.DB) error {
 		return err
 	}
 	if err := CheckTransferSchema(db); err != nil {
+		return err
+	}
+	if err := CheckShareSchema(db); err != nil {
+		return err
+	}
+	if err := CheckLivePhotoSchema(db); err != nil {
+		return err
+	}
+	if err := CheckWorkspaceRootSchema(db); err != nil {
 		return err
 	}
 	return CheckAIIndexSchema(db)

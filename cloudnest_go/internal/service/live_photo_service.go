@@ -259,7 +259,7 @@ func (s *LivePhotoService) AutoBind(ctx context.Context, uid int64, req LivePhot
 	groups := make(map[string]*pairGroup)
 	for _, f := range candidates {
 		ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(f.Filename), "."))
-		key := buildAutoBindKey(f.ParentID, f.Filename)
+		key := buildAutoBindKey(f)
 		if key == "" {
 			continue
 		}
@@ -337,28 +337,7 @@ func (s *LivePhotoService) AutoBind(ctx context.Context, uid int64, req LivePhot
 
 // canAccessFile 复用 file + file_permission 的权限模型判断文件访问权限。
 func (s *LivePhotoService) canAccessFile(ctx context.Context, userID int64, fileID int64, requireWrite bool) (bool, error) {
-	f, err := s.repo.GetActiveFileByID(ctx, fileID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return false, nil
-		}
-		return false, err
-	}
-
-	if f.UserID == userID {
-		return true, nil
-	}
-
-	permissions := []string{"read", "write"}
-	if requireWrite {
-		permissions = []string{"write"}
-	}
-
-	count, err := s.repo.CountFilePermissionsByLevels(ctx, fileID, userID, permissions)
-	if err != nil {
-		return false, err
-	}
-	return count > 0, nil
+	return s.repo.CanAccessFile(ctx, userID, fileID, requireWrite)
 }
 
 // loadLivePhotoFiles 校验文件类型并返回图片文件和视频文件。
@@ -394,14 +373,14 @@ func (s *LivePhotoService) loadAutoBindCandidates(ctx context.Context, userID in
 		ids := uniqueInt64(req.FileIDs)
 		for _, id := range ids {
 			if id <= 0 {
-				return nil, fmt.Errorf("invalid file id")
+				return nil, contract.ErrInvalidInput
 			}
 			canWrite, err := s.canAccessFile(ctx, userID, id, true)
 			if err != nil {
 				return nil, err
 			}
 			if !canWrite {
-				return nil, fmt.Errorf("permission denied")
+				return nil, ErrLivePhotoPermissionDenied
 			}
 		}
 
@@ -414,7 +393,7 @@ func (s *LivePhotoService) loadAutoBindCandidates(ctx context.Context, userID in
 
 	if req.ParentID != nil {
 		if *req.ParentID < 0 {
-			return nil, fmt.Errorf("invalid parent_id")
+			return nil, contract.ErrInvalidInput
 		}
 		if *req.ParentID > 0 {
 			canWrite, err := s.canAccessFile(ctx, userID, *req.ParentID, true)
@@ -422,7 +401,7 @@ func (s *LivePhotoService) loadAutoBindCandidates(ctx context.Context, userID in
 				return nil, err
 			}
 			if !canWrite {
-				return nil, fmt.Errorf("permission denied")
+				return nil, ErrLivePhotoPermissionDenied
 			}
 		}
 
@@ -446,12 +425,15 @@ func isLivePhotoVideoExt(ext string) bool {
 	return allowed[ext]
 }
 
-func buildAutoBindKey(parentID int64, filename string) string {
-	base := strings.TrimSpace(strings.TrimSuffix(filename, filepath.Ext(filename)))
+func buildAutoBindKey(file model.File) string {
+	base := strings.TrimSpace(strings.TrimSuffix(file.Filename, filepath.Ext(file.Filename)))
 	if base == "" {
 		return ""
 	}
-	return fmt.Sprintf("%d::%s", parentID, strings.ToLower(base))
+	if file.ParentID == 0 {
+		return fmt.Sprintf("0:%d:%s", file.UserID, strings.ToLower(base))
+	}
+	return fmt.Sprintf("%d::%s", file.ParentID, strings.ToLower(base))
 }
 
 func uniqueInt64(input []int64) []int64 {

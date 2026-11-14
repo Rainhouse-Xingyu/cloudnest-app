@@ -38,6 +38,7 @@ func (h *SettingsHandler) GetSettings(c *gin.Context) {
 	isAdmin, _ := c.Get(middleware.ContextIsAdminKey)
 	isAdminBool, _ := isAdmin.(bool)
 
+	c.Header("Cache-Control", "no-store")
 	rows, err := h.Svc.GetSettings(c.Request.Context(), isAdminBool)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
@@ -55,6 +56,7 @@ func (h *SettingsHandler) UpsertSettings(c *gin.Context) {
 		return
 	}
 
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<10)
 	var req upsertSettingsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
@@ -74,10 +76,10 @@ func (h *SettingsHandler) UpsertSettings(c *gin.Context) {
 		})
 	}
 
-	err := h.Svc.UpsertSettings(c.Request.Context(), items)
+	err := h.Svc.UpsertSettings(c.Request.Context(), c.GetInt64(middleware.ContextUserIDKey), items, c.ClientIP())
 	if err != nil {
 		if err == gorm.ErrInvalidData {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "setting_key and setting_value are required"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid settings batch"})
 			return
 		}
 		if err == gorm.ErrInvalidField {
@@ -164,7 +166,7 @@ func (h *SettingsHandler) UpdateMyRateWindow(c *gin.Context) {
 		}
 	}
 
-	err := h.Svc.UpdateMyRateWindow(c.Request.Context(), uid, enabled, start, end)
+	err := h.Svc.UpdateMyRateWindow(c.Request.Context(), uid, enabled, start, end, c.ClientIP())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "save rate window failed"})
 		return

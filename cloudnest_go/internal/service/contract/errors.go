@@ -4,6 +4,10 @@ import "errors"
 
 // 业务层统一错误定义，handler 层可据此映射 HTTP 状态码。
 var (
+	ErrFrpMappingBusy       = errors.New("mapping operation busy")
+	ErrFrpMappingConflict   = errors.New("mapping port or domain already exists")
+	ErrFrpPortExhausted     = errors.New("remote port pool exhausted")
+	ErrFrpDeviceDisabled    = errors.New("device disabled")
 	ErrRatePolicy           = errors.New("transfer rate policy unavailable")
 	ErrTransferSpace        = errors.New("temporary storage capacity unavailable")
 	ErrTransferBusy         = errors.New("transfer already in progress")
@@ -20,6 +24,9 @@ var (
 	ErrConflict             = errors.New("conflict")
 	ErrStorageIntegrity     = errors.New("stored content failed integrity verification")
 	ErrInternal             = errors.New("internal error")
+	ErrLivePhotoBound       = errors.New("live photo relation already exists")
+	ErrSharePasscode        = errors.New("share passcode required or invalid")
+	ErrShareExhausted       = errors.New("share download limit reached")
 	ErrShareExpired         = errors.New("share expired")
 	ErrTargetNotFound       = errors.New("target not found")
 	ErrTargetNotFolder      = errors.New("target is not folder")

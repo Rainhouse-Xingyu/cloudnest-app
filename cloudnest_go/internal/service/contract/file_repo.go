@@ -2,7 +2,6 @@ package contract
 
 import (
 	"context"
-	"time"
 
 	"cloudenest_go/model"
 )
@@ -56,6 +55,7 @@ type UploadCommit struct {
 type FileRepository interface {
 	SearchFiles(ctx context.Context, uid int64, q FileSearchQuery) ([]model.File, int64, error)
 	ResolveValidShare(ctx context.Context, code string) (model.Share, model.File, error)
+	AdmitShareDownload(ctx context.Context, share model.Share, file model.File) error
 	CollectBatchDownloadEntries(ctx context.Context, uid int64, fileIDs []int64) ([]BatchDownloadEntry, error)
 	ListFiles(ctx context.Context, uid int64, parentID int64) ([]model.File, error)
 	ListRecycleBin(ctx context.Context, uid int64) ([]model.File, error)
@@ -67,13 +67,13 @@ type FileRepository interface {
 	CollectFolderZipEntries(ctx context.Context, uid, rootID int64) ([]FolderZipEntry, error)
 	GetSystemSettingByKey(ctx context.Context, key string) (model.SystemSetting, error)
 	GetTransferRateSettings(ctx context.Context, uid int64) ([]model.SystemSetting, error)
-	CreateFolderRecord(ctx context.Context, uid int64, name string, parentID int64) (model.File, error)
-	RenameFile(ctx context.Context, uid, fileID int64, name string) (model.File, error)
+	CreateFolderRecord(ctx context.Context, uid int64, name string, parentID int64, clientIP string) (model.File, error)
+	RenameFile(ctx context.Context, uid, fileID int64, name string, clientIP string) (model.File, error)
 	CountActiveChildren(ctx context.Context, parentID int64) (int64, error)
-	SoftDeleteFileWithLivePhotoCleanup(ctx context.Context, uid, fileID int64) error
-	MoveFiles(ctx context.Context, uid int64, fileIDs []int64, targetParentID int64) ([]int64, error)
-	CopyFiles(ctx context.Context, uid int64, fileIDs []int64, targetParentID int64) ([]int64, error)
-	RestoreFromRecycleBin(ctx context.Context, uid int64, fileID int64) (model.File, error)
+	SoftDeleteFileWithLivePhotoCleanup(ctx context.Context, uid, fileID int64, clientIP string) error
+	MoveFiles(ctx context.Context, uid int64, fileIDs []int64, targetParentID int64, clientIP string) ([]int64, error)
+	CopyFiles(ctx context.Context, uid int64, fileIDs []int64, targetParentID int64, clientIP string) ([]int64, error)
+	RestoreFromRecycleBin(ctx context.Context, uid int64, fileID int64, clientIP string) (model.File, error)
 	PermanentDeleteFromRecycleBin(ctx context.Context, uid int64, fileID int64, clientIP string) error
 	GetUploadTaskByUploadID(ctx context.Context, uid int64, uploadID string) (model.UploadTask, error)
 	GetUploadTaskAndUploadedChunkIndexes(ctx context.Context, userID int64, uploadID string) (model.UploadTask, []int, error)
@@ -83,12 +83,12 @@ type FileRepository interface {
 	UpsertUploadChunkAndRefreshProgress(ctx context.Context, taskID int64, uploadID string, chunkIndex int, chunkSize int64, chunkPath, chunkRoot, sha256, md5, artifactToken string) (ChunkCommit, error)
 	ListDoneUploadChunks(ctx context.Context, uploadID string) ([]model.UploadChunk, error)
 	CompleteUploadPersist(ctx context.Context, uid int64, parentID int64, uploadID string, task model.UploadTask, totalChunks int, storagePath, storageRoot string, mergedSize int64, fileHash, artifactToken string, clientIP string) (UploadCommit, error)
-	CreateShare(ctx context.Context, uid int64, fileID int64, shareCode string, expireAt *time.Time) (model.Share, error)
+	CreateShare(ctx context.Context, share model.Share, clientIP string) (model.Share, error)
 	CreateOperationLog(ctx context.Context, userID int64, fileID *int64, action string, status string, detail string, clientIP string) error
 	ListShares(ctx context.Context, uid int64) ([]model.Share, error)
-	RevokeShare(ctx context.Context, uid int64, code string) error
+	RevokeShare(ctx context.Context, uid int64, code string, clientIP string) error
 	ListOperationLogs(ctx context.Context, uid int64, isAdmin bool, q FileOperationLogQuery) ([]model.OperationLog, int64, error)
 	ExportOperationLogs(ctx context.Context, uid int64, isAdmin bool, q FileOperationLogQuery) ([]model.OperationLog, error)
-	FindLivePhotoAutoBindCandidate(ctx context.Context, parentID int64, excludeID int64, baseName string, needVideo bool) (*model.File, error)
+	FindLivePhotoAutoBindCandidate(ctx context.Context, parentID, ownerID, excludeID int64, baseName string, needVideo bool) (*model.File, error)
 	CreateLivePhotoAutoBindIfAbsent(ctx context.Context, userID int64, imageID int64, videoID int64, clientIP string) error
 }

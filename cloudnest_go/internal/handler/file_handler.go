@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/csv"
 	"encoding/hex"
@@ -27,7 +26,6 @@ import (
 	"cloudenest_go/model"
 
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
@@ -35,7 +33,6 @@ import (
 type FileHandler struct {
 	Transfers *transfer.Manager
 	Blobs     *blob.Manager
-	RDB       *redis.Client
 	Cfg       config.Config
 	Svc       *service.FileService
 }
@@ -77,7 +74,9 @@ type BatchDownloadRequest struct {
 }
 
 type CreateShareRequest struct {
-	ExpireHours *int `json:"expire_hours"`
+	ExpireHours  *int   `json:"expire_hours"`
+	Passcode     string `json:"passcode"`
+	MaxDownloads int64  `json:"max_downloads"`
 }
 
 type OperationLogQuery struct {
@@ -103,10 +102,6 @@ type FileSearchQuery struct {
 const (
 	defaultDataDir = "data"
 	storageSubDir  = "storage"
-
-	shareRateWindow        = 60 * time.Second
-	shareInfoRateLimit     = 60
-	shareDownloadRateLimit = 20
 )
 
 func (h *FileHandler) List(c *gin.Context) {
@@ -467,7 +462,7 @@ func (h *FileHandler) Download(c *gin.Context) {
 		writeFileMutationError(c, err, "download policy unavailable")
 		return
 	}
-	if err := h.sendFileWithRateLimit(c, storage.FilePath, f.Filename, rate, &storage); err != nil {
+	if err := h.sendFileWithRateLimit(c, storage.FilePath, f.Filename, rate, &storage, nil); err != nil {
 		writeDownloadError(c, err)
 		return
 	}
@@ -491,7 +486,7 @@ func (h *FileHandler) DownloadVersion(c *gin.Context) {
 		writeFileMutationError(c, err, "download policy unavailable")
 		return
 	}
-	if err := h.sendFileWithRateLimit(c, storage.FilePath, file.Filename, rate, &storage); err != nil {
+	if err := h.sendFileWithRateLimit(c, storage.FilePath, file.Filename, rate, &storage, nil); err != nil {
 		writeDownloadError(c, err)
 	}
 }
@@ -536,7 +531,7 @@ func (h *FileHandler) DownloadFolderZip(c *gin.Context) {
 	defer releaseArchive(archive)
 
 	zipName := sanitizeFileName(folder.Filename) + ".zip"
-	if err := h.sendArchiveWithRateLimit(c, archive, zipName, rate); err != nil {
+	if err := h.sendArchiveWithRateLimit(c, archive, zipName, rate, nil); err != nil {
 		writeDownloadError(c, err)
 		return
 	}
@@ -615,7 +610,7 @@ func (h *FileHandler) BatchDownload(c *gin.Context) {
 		return
 	}
 	defer releaseArchive(archive)
-	if err := h.sendArchiveWithRateLimit(c, archive, "batch_download.zip", rate); err != nil {
+	if err := h.sendArchiveWithRateLimit(c, archive, "batch_download.zip", rate, nil); err != nil {
 		writeDownloadError(c, err)
 		return
 	}
@@ -657,7 +652,7 @@ func (h *FileHandler) StreamVideo(c *gin.Context) {
 		return
 	}
 	c.Header("Content-Disposition", fmt.Sprintf("inline; filename=%q", sanitizeFileName(f.Filename)))
-	if err := h.sendFileWithRateLimit(c, storage.FilePath, f.Filename, rate, &storage); err != nil {
+	if err := h.sendFileWithRateLimit(c, storage.FilePath, f.Filename, rate, &storage, nil); err != nil {
 		writeDownloadError(c, err)
 	}
 }
@@ -717,7 +712,7 @@ func (h *FileHandler) Thumbnail(c *gin.Context) {
 	}
 	defer thumb.Close()
 	c.Header("Content-Disposition", "inline")
-	if err := h.serveFileIdentity(c, thumb.File, thumb.Digest, "thumbnail.jpg", rate); err != nil {
+	if err := h.serveFileIdentity(c, thumb.File, thumb.Digest, "thumbnail.jpg", rate, nil); err != nil {
 		writeDownloadError(c, err)
 	}
 }
@@ -828,7 +823,7 @@ func (h *FileHandler) Preview(c *gin.Context) {
 
 	if isInlinePreviewExt(ext) {
 		c.Header("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", sanitizeFileName(f.Filename)))
-		if err := h.sendFileWithRateLimit(c, storage.FilePath, f.Filename, rate, &storage); err != nil {
+		if err := h.sendFileWithRateLimit(c, storage.FilePath, f.Filename, rate, &storage, nil); err != nil {
 			writeDownloadError(c, err)
 		}
 		return
@@ -842,7 +837,7 @@ func (h *FileHandler) Preview(c *gin.Context) {
 		}
 		// 提示前端当前使用的是 Office 基础预览策略。
 		c.Header("X-Preview-Strategy", "office-inline")
-		if err := h.sendFileWithRateLimit(c, storage.FilePath, f.Filename, rate, &storage); err != nil {
+		if err := h.sendFileWithRateLimit(c, storage.FilePath, f.Filename, rate, &storage, nil); err != nil {
 			writeDownloadError(c, err)
 		}
 		return
@@ -861,6 +856,7 @@ func (h *FileHandler) CreateShare(c *gin.Context) {
 	}
 
 	var req CreateShareRequest
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
 	if err := c.ShouldBindJSON(&req); err != nil {
 		if !errors.Is(err, io.EOF) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
@@ -868,10 +864,19 @@ func (h *FileHandler) CreateShare(c *gin.Context) {
 		}
 	}
 
-	res, err := h.Svc.CreateShare(c.Request.Context(), uid, fileID, req.ExpireHours, c.ClientIP())
+	if req.Passcode != "" && c.Request.TLS == nil {
+		c.JSON(http.StatusUpgradeRequired, gin.H{"error": "HTTPS required for share passcode"})
+		return
+	}
+
+	res, err := h.Svc.CreateShare(c.Request.Context(), uid, fileID, req.ExpireHours, req.Passcode, req.MaxDownloads, c.ClientIP())
 	if err != nil {
+		if errors.Is(err, contract.ErrInvalidInput) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid passcode or max_downloads"})
+			return
+		}
 		msg := strings.ToLower(err.Error())
-		if strings.Contains(msg, "permission denied") {
+		if errors.Is(err, contract.ErrForbidden) || strings.Contains(msg, "permission denied") {
 			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
 			return
 		}
@@ -888,9 +893,11 @@ func (h *FileHandler) CreateShare(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"share_code":  res.ShareCode,
-		"expire_time": res.ExpireTime,
-		"access_url":  fmt.Sprintf("/api/public/shares/%s", res.ShareCode),
+		"share_code":        res.ShareCode,
+		"expire_time":       res.ExpireTime,
+		"requires_passcode": req.Passcode != "",
+		"max_downloads":     req.MaxDownloads,
+		"access_url":        fmt.Sprintf("/api/public/shares/%s", res.ShareCode),
 	})
 }
 
@@ -904,7 +911,16 @@ func (h *FileHandler) ListShares(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"items": shares})
+	type shareItem struct {
+		model.Share
+		RequiresPasscode bool `json:"requires_passcode"`
+	}
+	items := make([]shareItem, 0, len(shares))
+	for _, share := range shares {
+		items = append(items, shareItem{Share: share, RequiresPasscode: share.PasscodeHash != ""})
+	}
+	c.Header("Cache-Control", privateDownloadCache)
+	c.JSON(http.StatusOK, gin.H{"items": items})
 }
 
 // ListOperationLogs 查询操作日志，默认仅返回当前用户，管理员可通过 all=1 查看全部。
@@ -1058,25 +1074,25 @@ func (h *FileHandler) RevokeShare(c *gin.Context) {
 // PublicShareInfo 公开查看分享信息（无需登录）。
 func (h *FileHandler) PublicShareInfo(c *gin.Context) {
 	shareCode := strings.TrimSpace(c.Param("code"))
-	ok, err := h.checkShareAccessRateLimit(c.Request.Context(), shareCode, c.ClientIP(), "info", shareInfoRateLimit)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "rate limiter error"})
-		return
-	}
-	if !ok {
-		c.JSON(http.StatusTooManyRequests, gin.H{"error": "too many requests"})
-		return
-	}
+	c.Header("Cache-Control", privateDownloadCache)
+	c.Header("Referrer-Policy", "no-referrer")
 
-	share, file, err := h.Svc.GetPublicShareInfo(c.Request.Context(), shareCode)
+	if len(c.Request.Header.Values("X-Share-Passcode")) != 0 && c.Request.TLS == nil {
+		c.JSON(http.StatusUpgradeRequired, gin.H{"error": "HTTPS required for share passcode"})
+		return
+	}
+	share, file, err := h.Svc.GetPublicShareInfo(c.Request.Context(), shareCode, sharePasscode(c))
 	if err != nil {
 		h.handleShareError(c, err)
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"share_code":  share.ShareCode,
-		"expire_time": share.ExpireTime,
+		"share_code":        share.ShareCode,
+		"expire_time":       share.ExpireTime,
+		"requires_passcode": share.PasscodeHash != "",
+		"max_downloads":     share.MaxDownloads,
+		"download_count":    share.DownloadCount,
 		"file": gin.H{
 			"id":          file.ID,
 			"filename":    file.Filename,
@@ -1091,17 +1107,14 @@ func (h *FileHandler) PublicShareInfo(c *gin.Context) {
 // PublicShareDownload 通过分享码下载文件或目录压缩包（无需登录）。
 func (h *FileHandler) PublicShareDownload(c *gin.Context) {
 	shareCode := strings.TrimSpace(c.Param("code"))
-	ok, err := h.checkShareAccessRateLimit(c.Request.Context(), shareCode, c.ClientIP(), "download", shareDownloadRateLimit)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "rate limiter error"})
-		return
-	}
-	if !ok {
-		c.JSON(http.StatusTooManyRequests, gin.H{"error": "too many requests"})
-		return
-	}
+	c.Header("Cache-Control", privateDownloadCache)
+	c.Header("Referrer-Policy", "no-referrer")
 
-	file, storage, creatorID, err := h.Svc.ResolvePublicShareDownload(c.Request.Context(), shareCode)
+	if len(c.Request.Header.Values("X-Share-Passcode")) != 0 && c.Request.TLS == nil {
+		c.JSON(http.StatusUpgradeRequired, gin.H{"error": "HTTPS required for share passcode"})
+		return
+	}
+	share, file, storage, err := h.Svc.ResolvePublicShareDownload(c.Request.Context(), shareCode, sharePasscode(c))
 	if err != nil {
 		if errors.Is(err, service.ErrStorageNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "storage record not found"})
@@ -1120,22 +1133,25 @@ func (h *FileHandler) PublicShareDownload(c *gin.Context) {
 		writeFileMutationError(c, err, "download policy unavailable")
 		return
 	}
+	admit := func(ctx context.Context) error {
+		return h.Svc.AdmitShareDownload(ctx, share, file)
+	}
 	if file.IsFolder == 1 {
-		archive, err := h.createFolderZip(c.Request.Context(), creatorID, file)
+		archive, err := h.createFolderZip(c.Request.Context(), *share.UserID, file)
 		if err != nil {
 			writeFileMutationError(c, err, "create zip failed")
 			return
 		}
 		defer releaseArchive(archive)
-		if err := h.sendArchiveWithRateLimit(c, archive, sanitizeFileName(file.Filename)+".zip", rate); err != nil {
-			writeDownloadError(c, err)
+		if err := h.sendArchiveWithRateLimit(c, archive, sanitizeFileName(file.Filename)+".zip", rate, admit); err != nil {
+			h.handleShareDownloadError(c, err)
 			return
 		}
 		return
 	}
 
-	if err := h.sendFileWithRateLimit(c, storage.FilePath, file.Filename, rate, storage); err != nil {
-		writeDownloadError(c, err)
+	if err := h.sendFileWithRateLimit(c, storage.FilePath, file.Filename, rate, storage, admit); err != nil {
+		h.handleShareDownloadError(c, err)
 		return
 	}
 }
@@ -1435,29 +1451,37 @@ func readTextFileWithLimit(path string, limit int64) (string, bool, error) {
 	return string(buf[:n]), false, nil
 }
 
-func generateShareCode(length int) (string, error) {
-	const alphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
-	if length <= 0 {
-		length = 10
+func sharePasscode(c *gin.Context) string {
+	values := c.Request.Header.Values("X-Share-Passcode")
+	if len(values) != 1 {
+		return ""
 	}
-	b := make([]byte, length)
-	randBytes := make([]byte, length)
-	if _, err := rand.Read(randBytes); err != nil {
-		return "", err
-	}
-	for i := 0; i < length; i++ {
-		b[i] = alphabet[int(randBytes[i])%len(alphabet)]
-	}
-	return string(b), nil
+	return values[0]
 }
 
-func (h *FileHandler) resolveValidShare(ctx context.Context, code string) (model.Share, model.File, error) {
-	// 兼容旧调用路径，当前实现已委托给 service。
-	return h.Svc.GetPublicShareInfo(ctx, code)
+func (h *FileHandler) handleShareDownloadError(c *gin.Context, err error) {
+	if errors.Is(err, contract.ErrShareExhausted) || errors.Is(err, contract.ErrShareExpired) || errors.Is(err, gorm.ErrRecordNotFound) {
+		clearDownloadIdentity(c.Writer.Header())
+		c.Writer.Header().Del("Content-Disposition")
+		c.Writer.Header().Del("Content-Range")
+		c.Writer.Header().Del("Content-Length")
+		c.Writer.Header().Del("Content-Type")
+		h.handleShareError(c, err)
+		return
+	}
+	writeDownloadError(c, err)
 }
 
 func (h *FileHandler) handleShareError(c *gin.Context, err error) {
-	if errors.Is(err, service.ErrShareExpired) {
+	if errors.Is(err, contract.ErrSharePasscode) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "share passcode required or invalid", "code": "share_passcode_required"})
+		return
+	}
+	if errors.Is(err, contract.ErrShareExhausted) {
+		c.JSON(http.StatusGone, gin.H{"error": "share download limit reached", "code": "share_download_limit"})
+		return
+	}
+	if errors.Is(err, contract.ErrShareExpired) {
 		c.JSON(http.StatusGone, gin.H{"error": "share expired"})
 		return
 	}
@@ -1500,35 +1524,6 @@ func parseFlexibleTime(raw string) (time.Time, error) {
 		}
 	}
 	return time.Time{}, fmt.Errorf("invalid time format")
-}
-
-// checkShareAccessRateLimit 对公开分享接口做限流，防止短时间被刷。
-func (h *FileHandler) checkShareAccessRateLimit(ctx context.Context, shareCode string, clientIP string, action string, maxInWindow int) (bool, error) {
-	if h.RDB == nil {
-		return true, nil
-	}
-	shareCode = strings.TrimSpace(shareCode)
-	clientIP = strings.TrimSpace(clientIP)
-	action = strings.TrimSpace(action)
-	if shareCode == "" || action == "" || maxInWindow <= 0 {
-		return true, nil
-	}
-	if clientIP == "" {
-		clientIP = "unknown"
-	}
-
-	key := fmt.Sprintf("share:rate:%s:%s:%s", action, shareCode, clientIP)
-	count, err := h.RDB.Incr(ctx, key).Result()
-	if err != nil {
-		return false, err
-	}
-	if count == 1 {
-		if err := h.RDB.Expire(ctx, key, shareRateWindow).Err(); err != nil {
-			return false, err
-		}
-	}
-
-	return count <= int64(maxInWindow), nil
 }
 
 func writeFileMutationError(c *gin.Context, err error, fallback string) {

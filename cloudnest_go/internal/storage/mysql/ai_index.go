@@ -27,14 +27,13 @@ func indexStatusBase(db *gorm.DB) *gorm.DB {
 
 func (r *AIRepo) ListIndex(ctx context.Context, uid, after int64, limit int) ([]contract.AIIndexStatus, error) {
 	rows := []contract.AIIndexStatus{}
-	err := indexStatusBase(r.db.WithContext(ctx)).Where("f.user_id=? AND f.id>?", uid, after).Order("f.id").Limit(limit).Scan(&rows).Error
+	err := fileAccessScope(indexStatusBase(r.db.WithContext(ctx)).Where("f.user_id=? AND f.id>?", uid, after), "f", uid, false).Order("f.id").Limit(limit).Scan(&rows).Error
 	return rows, err
 }
 
 func (r *AIRepo) IndexStatus(ctx context.Context, uid, id int64) (contract.AIIndexStatus, error) {
 	var row contract.AIIndexStatus
-	err := indexStatusBase(r.db.WithContext(ctx)).Where("f.id=?", id).
-		Where("f.user_id=? OR EXISTS (SELECT 1 FROM file_permission p WHERE p.file_id=f.id AND p.user_id=? AND p.permission IN ('read','write'))", uid, uid).Scan(&row).Error
+	err := fileAccessScope(indexStatusBase(r.db.WithContext(ctx)).Where("f.id=?", id), "f", uid, false).Scan(&row).Error
 	if err == nil && row.FileID == 0 {
 		err = contract.ErrNotFound
 	}
@@ -52,6 +51,9 @@ func (r *AIRepo) RebuildIndex(ctx context.Context, uid int64, items []contract.A
 				if errors.Is(err, gorm.ErrRecordNotFound) {
 					return contract.ErrNotFound
 				}
+				return err
+			}
+			if err := requireFilePermission(tx, uid, f, true); err != nil {
 				return err
 			}
 		}

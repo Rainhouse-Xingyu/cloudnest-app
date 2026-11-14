@@ -12,6 +12,7 @@ type CollaborationWorkspaceListRow struct {
 	ID         int64     `json:"id"`
 	Name       string    `json:"name"`
 	OwnerID    int64     `json:"owner_id"`
+	RootFileID *int64    `json:"root_file_id"`
 	Role       string    `json:"role"`
 	CreateTime time.Time `json:"create_time"`
 }
@@ -56,24 +57,35 @@ type CollaborationFileVersionRow struct {
 	CreateTime     time.Time `json:"create_time"`
 }
 
+type WorkspaceMemberChange struct {
+	WorkspaceID, ActorID, TargetID int64
+	Role, ClientIP                 string
+	UpdateOnly                     bool
+}
+
+func ValidWorkspaceMemberRole(role string) bool {
+	switch role {
+	case "admin", "member", "viewer", "editor":
+		return true
+	default:
+		return false
+	}
+}
+
 // CollaborationRepository 定义协作模块存储访问能力。
 type CollaborationRepository interface {
-	CreateWorkspace(ctx context.Context, ws *model.Workspace, ownerID int64) error
+	CreateWorkspace(ctx context.Context, ws *model.Workspace, ownerID int64, clientIP string) error
 	ListWorkspaces(ctx context.Context, uid int64) ([]CollaborationWorkspaceListRow, error)
 	GetWorkspaceMember(ctx context.Context, workspaceID int64, userID int64) (model.WorkspaceUser, error)
 	GetUserByID(ctx context.Context, userID int64) (model.User, error)
 	GetUserByUsername(ctx context.Context, username string) (model.User, error)
-	UpsertWorkspaceMember(ctx context.Context, workspaceID int64, targetUserID int64, role string) error
+	ChangeWorkspaceMember(ctx context.Context, change WorkspaceMemberChange) error
 	ListWorkspaceMembers(ctx context.Context, workspaceID int64) ([]CollaborationWorkspaceMemberRow, error)
-	UpdateWorkspaceMemberRole(ctx context.Context, workspaceID int64, targetUserID int64, role string) error
-	DeleteWorkspaceMember(ctx context.Context, workspaceID int64, targetUserID int64) error
 	GetActiveFileByID(ctx context.Context, fileID int64) (model.File, error)
-	CountFilePermissionsByLevels(ctx context.Context, fileID int64, userID int64, permissions []string) (int64, error)
-	UpsertFilePermission(ctx context.Context, fileID int64, targetUserID int64, permission string) error
+	CanAccessFile(ctx context.Context, userID, fileID int64, write bool) (bool, error)
+	ChangeFilePermission(ctx context.Context, actorID, fileID, targetUserID int64, permission, clientIP string) error
 	ListFilePermissions(ctx context.Context, fileID int64) ([]CollaborationFilePermissionRow, error)
-	DeleteFilePermission(ctx context.Context, fileID int64, targetUserID int64) error
 	CreateFileVersion(ctx context.Context, req CollaborationCreateFileVersionInput) (model.FileVersion, error)
 	RestoreFileVersion(ctx context.Context, uid, fileID int64, version, baseVersion int, clientIP string) (model.FileVersion, error)
 	ListFileVersions(ctx context.Context, fileID int64) ([]CollaborationFileVersionRow, error)
-	CreateOperationLog(ctx context.Context, row model.OperationLog) error
 }

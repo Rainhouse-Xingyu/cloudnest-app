@@ -2,7 +2,6 @@ package handler
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"os"
 	"strconv"
@@ -71,13 +70,12 @@ func (h *CollaborationHandler) CreateWorkspace(c *gin.Context) {
 	}
 
 	ws := model.Workspace{Name: req.Name, OwnerID: uid}
-	err := h.Svc.CreateWorkspace(c.Request.Context(), &ws, uid)
+	err := h.Svc.CreateWorkspace(c.Request.Context(), &ws, uid, c.ClientIP())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "create workspace failed"})
 		return
 	}
 
-	_ = h.Svc.LogOperation(c.Request.Context(), uid, nil, "workspace_create", "success", fmt.Sprintf("workspace_id=%d", ws.ID), c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{"item": ws})
 }
 
@@ -108,50 +106,28 @@ func (h *CollaborationHandler) AddWorkspaceMember(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
 		return
 	}
-	req.Role = normalizeWorkspaceRole(req.Role)
-	if req.Role == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "role should be owner/admin/member"})
+	role := strings.ToLower(strings.TrimSpace(req.Role))
+	if !contract.ValidWorkspaceMemberRole(role) {
+		writeWorkspaceMemberError(c, contract.ErrInvalidInput)
 		return
 	}
-
-	if req.Role == "owner" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot assign owner role"})
-		return
-	}
-
-	role, inWorkspace, err := h.Svc.GetWorkspaceRole(c.Request.Context(), workspaceID, uid)
+	actorRole, member, err := h.Svc.GetWorkspaceRole(c.Request.Context(), workspaceID, uid)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+		writeWorkspaceMemberError(c, err)
 		return
 	}
-	if !inWorkspace || !canManageWorkspace(role) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+	if !member || (actorRole != "owner" && actorRole != "admin") {
+		writeWorkspaceMemberError(c, contract.ErrForbidden)
 		return
 	}
-
-	targetUser, err := h.Svc.ResolveTargetUser(c.Request.Context(), req.UserID, req.Username)
+	target, err := h.Svc.ResolveTargetUser(c.Request.Context(), req.UserID, req.Username)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "target user not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+		writeWorkspaceMemberError(c, err)
 		return
 	}
-
-	err = h.Svc.UpsertWorkspaceMember(c.Request.Context(), workspaceID, targetUser.ID, req.Role)
-	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "cannot change owner") {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "cannot change owner role"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "save workspace member failed"})
-		return
-	}
-
-	detail := fmt.Sprintf("workspace_id=%d actor_role=%s target_user=%d role=%s", workspaceID, role, targetUser.ID, req.Role)
-	_ = h.Svc.LogOperation(c.Request.Context(), uid, nil, "workspace_member_upsert", "success", detail, c.ClientIP())
-	c.JSON(http.StatusOK, gin.H{"message": "member updated"})
+	h.changeWorkspaceMember(c, contract.WorkspaceMemberChange{
+		WorkspaceID: workspaceID, ActorID: uid, TargetID: target.ID, Role: role, ClientIP: c.ClientIP(),
+	}, "member updated")
 }
 
 // ListWorkspaceMembers 查询空间成员列表。
@@ -201,44 +177,14 @@ func (h *CollaborationHandler) UpdateWorkspaceMemberRole(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
 		return
 	}
-	req.Role = normalizeWorkspaceRole(req.Role)
-	if req.Role == "" || req.Role == "owner" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "role should be admin/member"})
+	role := strings.ToLower(strings.TrimSpace(req.Role))
+	if !contract.ValidWorkspaceMemberRole(role) {
+		writeWorkspaceMemberError(c, contract.ErrInvalidInput)
 		return
 	}
-
-	role, inWorkspace, err := h.Svc.GetWorkspaceRole(c.Request.Context(), workspaceID, uid)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-	if !inWorkspace || !canManageWorkspace(role) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-		return
-	}
-
-	target, err := h.Svc.GetWorkspaceMember(c.Request.Context(), workspaceID, targetUserID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "workspace member not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-	if target.Role == "owner" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot change owner role"})
-		return
-	}
-
-	if err := h.Svc.UpdateWorkspaceMemberRole(c.Request.Context(), &target, req.Role); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "update member role failed"})
-		return
-	}
-
-	detail := fmt.Sprintf("workspace_id=%d actor_role=%s target_user=%d role=%s", workspaceID, role, targetUserID, req.Role)
-	_ = h.Svc.LogOperation(c.Request.Context(), uid, nil, "workspace_member_role_update", "success", detail, c.ClientIP())
-	c.JSON(http.StatusOK, gin.H{"message": "member role updated"})
+	h.changeWorkspaceMember(c, contract.WorkspaceMemberChange{
+		WorkspaceID: workspaceID, ActorID: uid, TargetID: targetUserID, Role: role, ClientIP: c.ClientIP(), UpdateOnly: true,
+	}, "member role updated")
 }
 
 // RemoveWorkspaceMember 移除空间成员。
@@ -255,38 +201,30 @@ func (h *CollaborationHandler) RemoveWorkspaceMember(c *gin.Context) {
 		return
 	}
 
-	role, inWorkspace, err := h.Svc.GetWorkspaceRole(c.Request.Context(), workspaceID, uid)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+	h.changeWorkspaceMember(c, contract.WorkspaceMemberChange{
+		WorkspaceID: workspaceID, ActorID: uid, TargetID: targetUserID, ClientIP: c.ClientIP(),
+	}, "member removed")
+}
+
+func (h *CollaborationHandler) changeWorkspaceMember(c *gin.Context, change contract.WorkspaceMemberChange, message string) {
+	if err := h.Svc.ChangeWorkspaceMember(c.Request.Context(), change); err != nil {
+		writeWorkspaceMemberError(c, err)
 		return
 	}
-	if !inWorkspace || !canManageWorkspace(role) {
+	c.JSON(http.StatusOK, gin.H{"message": message})
+}
+
+func writeWorkspaceMemberError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, contract.ErrForbidden):
 		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-		return
+	case errors.Is(err, contract.ErrInvalidInput):
+		c.JSON(http.StatusBadRequest, gin.H{"error": "role should be admin/member/viewer/editor"})
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": "workspace member or target user not found"})
+	default:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "workspace membership operation failed"})
 	}
-
-	target, err := h.Svc.GetWorkspaceMember(c.Request.Context(), workspaceID, targetUserID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "workspace member not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-	if target.Role == "owner" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot remove owner"})
-		return
-	}
-
-	if err := h.Svc.DeleteWorkspaceMember(c.Request.Context(), &target); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "remove member failed"})
-		return
-	}
-
-	detail := fmt.Sprintf("workspace_id=%d actor_role=%s target_user=%d", workspaceID, role, targetUserID)
-	_ = h.Svc.LogOperation(c.Request.Context(), uid, nil, "workspace_member_remove", "success", detail, c.ClientIP())
-	c.JSON(http.StatusOK, gin.H{"message": "member removed"})
 }
 
 // GrantFilePermission 邀请指定用户协作文件，支持 read/write 权限。
@@ -309,13 +247,13 @@ func (h *CollaborationHandler) GrantFilePermission(c *gin.Context) {
 		return
 	}
 
-	canWrite, err := h.Svc.CanAccessFile(c.Request.Context(), uid, fileID, true)
+	owner, err := h.Svc.OwnsFile(c.Request.Context(), uid, fileID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+		writeFilePermissionError(c, err)
 		return
 	}
-	if !canWrite {
-		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+	if !owner {
+		writeFilePermissionError(c, contract.ErrForbidden)
 		return
 	}
 
@@ -333,14 +271,10 @@ func (h *CollaborationHandler) GrantFilePermission(c *gin.Context) {
 		return
 	}
 
-	err = h.Svc.UpsertFilePermission(c.Request.Context(), fileID, targetUser.ID, req.Permission)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "save file permission failed"})
+	if err := h.Svc.ChangeFilePermission(c.Request.Context(), uid, fileID, targetUser.ID, req.Permission, c.ClientIP()); err != nil {
+		writeFilePermissionError(c, err)
 		return
 	}
-
-	detail := fmt.Sprintf("file_id=%d target_user=%d permission=%s", fileID, targetUser.ID, req.Permission)
-	_ = h.Svc.LogOperation(c.Request.Context(), uid, &fileID, "file_permission_upsert", "success", detail, c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{"message": "file permission updated"})
 }
 
@@ -386,24 +320,22 @@ func (h *CollaborationHandler) RevokeFilePermission(c *gin.Context) {
 		return
 	}
 
-	canWrite, err := h.Svc.CanAccessFile(c.Request.Context(), uid, fileID, true)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+	if err := h.Svc.ChangeFilePermission(c.Request.Context(), uid, fileID, targetUserID, "", c.ClientIP()); err != nil {
+		writeFilePermissionError(c, err)
 		return
 	}
-	if !canWrite {
-		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-		return
-	}
-
-	if err := h.Svc.RevokeFilePermission(c.Request.Context(), fileID, targetUserID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "revoke file permission failed"})
-		return
-	}
-
-	detail := fmt.Sprintf("file_id=%d target_user=%d", fileID, targetUserID)
-	_ = h.Svc.LogOperation(c.Request.Context(), uid, &fileID, "file_permission_revoke", "success", detail, c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{"message": "file permission revoked"})
+}
+
+func writeFilePermissionError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, contract.ErrForbidden):
+		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": "target user not found"})
+	default:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "file permission operation failed"})
+	}
 }
 
 // CreateFileVersion 保存新版本，采用“基于上一版本提交”的协作策略。
@@ -528,16 +460,6 @@ func (h *CollaborationHandler) ListFileVersions(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"items": rows})
 }
 
-func normalizeWorkspaceRole(role string) string {
-	r := strings.ToLower(strings.TrimSpace(role))
-	switch r {
-	case "owner", "admin", "member":
-		return r
-	default:
-		return ""
-	}
-}
-
 func normalizeFilePermission(p string) string {
 	v := strings.ToLower(strings.TrimSpace(p))
 	switch v {
@@ -546,8 +468,4 @@ func normalizeFilePermission(p string) string {
 	default:
 		return ""
 	}
-}
-
-func canManageWorkspace(role string) bool {
-	return role == "owner" || role == "admin"
 }

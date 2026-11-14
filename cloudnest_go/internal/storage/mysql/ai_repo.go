@@ -2,11 +2,8 @@ package mysql
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"strings"
 
-	"cloudenest_go/internal/quota"
 	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
 
@@ -23,47 +20,19 @@ func NewAIRepo(db *gorm.DB) *AIRepo {
 }
 
 func (r *AIRepo) ApplySettingWithAudit(ctx context.Context, uid int64, key string, value string, description string, clientIP string) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := quota.LockPolicy(tx, true); err != nil {
-			return err
-		}
-		var row model.SystemSetting
-		err := tx.Where("setting_key = ?", key).First(&row).Error
-		if err != nil {
-			if !errors.Is(err, gorm.ErrRecordNotFound) {
-				return err
-			}
-			row = model.SystemSetting{SettingKey: key, SettingValue: value, Description: description}
-			if err := tx.Create(&row).Error; err != nil {
-				return err
-			}
-		} else {
-			updates := map[string]interface{}{"setting_value": value}
-			if description != "" {
-				updates["description"] = description
-			}
-			if err := tx.Model(&row).Updates(updates).Error; err != nil {
-				return err
-			}
-		}
-
-		detail := fmt.Sprintf("ai_apply_setting key=%s value=%s", key, value)
-		if len(detail) > 500 {
-			detail = detail[:500]
-		}
-		return tx.Create(&model.OperationLog{UserID: &uid, Action: "ai_apply_setting", Status: "success", Detail: detail, ClientIP: clientIP}).Error
-	})
+	return NewSettingsRepo(r.db).UpsertSystemSettings(ctx, uid, []contract.SettingUpsertItem{
+		{SettingKey: key, SettingValue: value, Description: description},
+	}, "ai_apply_setting", clientIP)
 }
 
 func (r *AIRepo) Search(ctx context.Context, uid int64, q contract.AISearchQuery) ([]contract.AISearchRow, int64, error) {
 	base := r.db.WithContext(ctx).
 		Table("file f").
 		Select("f.id, f.filename, f.file_type, f.size, f.parent_id, f.user_id, f.create_time, f.update_time, am.tags, am.description, am.ocr_text").
-		Joins("LEFT JOIN file_permission fp ON fp.file_id = f.id AND fp.user_id = ?", uid).
 		Joins("LEFT JOIN storage s ON s.id = f.storage_id").
 		Joins("LEFT JOIN ai_metadata am ON am.file_id = f.id AND am.source_hash=s.file_hash").
-		Where("f.is_deleted = 0 AND f.is_folder = 0").
-		Where("f.user_id = ? OR fp.permission IN ?", uid, []string{"read", "write"})
+		Where("f.is_deleted = 0 AND f.is_folder = 0")
+	base = fileAccessScope(base, "f", uid, false)
 
 	if q.Keyword != "" {
 		like := "%" + q.Keyword + "%"
@@ -135,13 +104,8 @@ func (r *AIRepo) GetStorageByID(ctx context.Context, storageID int64) (model.Sto
 	return storage, nil
 }
 
-func (r *AIRepo) CountFilePermissionsByLevels(ctx context.Context, fileID int64, userID int64, permissions []string) (int64, error) {
-	var count int64
-	err := r.db.WithContext(ctx).Model(&model.FilePermission{}).Where("file_id = ? AND user_id = ? AND permission IN ?", fileID, userID, permissions).Count(&count).Error
-	if err != nil {
-		return 0, err
-	}
-	return count, nil
+func (r *AIRepo) CanAccessFile(ctx context.Context, uid, id int64, write bool) (bool, error) {
+	return canAccessFileForFileRepo(ctx, r.db, uid, id, write)
 }
 
 func (r *AIRepo) GetAIMetadataByFileID(ctx context.Context, fileID int64) (model.AiMetadata, error) {
