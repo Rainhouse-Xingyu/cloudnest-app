@@ -24,6 +24,8 @@ var (
 	ErrConflict             = errors.New("conflict")
 	ErrStorageIntegrity     = errors.New("stored content failed integrity verification")
 	ErrInternal             = errors.New("internal error")
+	ErrSharePasscode        = errors.New("share passcode required or invalid")
+	ErrShareExhausted       = errors.New("share download limit reached")
 	ErrShareExpired         = errors.New("share expired")
 	ErrTargetNotFound       = errors.New("target not found")
 	ErrTargetNotFolder      = errors.New("target is not folder")

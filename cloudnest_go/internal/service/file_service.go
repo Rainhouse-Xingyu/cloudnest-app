@@ -15,6 +15,7 @@ import (
 	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
 
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
@@ -42,7 +43,6 @@ var (
 	ErrChunkIndexOutOfRange = errors.New("chunk_index out of range")
 	ErrUploadMetaIncomplete = errors.New("upload task metadata incomplete")
 	ErrChunksNotComplete    = errors.New("chunks not fully uploaded")
-	ErrShareExpired         = errors.New("share expired")
 	ErrStorageNotFound      = errors.New("storage record not found")
 	ErrPhysicalFileNotFound = errors.New("physical file not found")
 )
@@ -680,7 +680,7 @@ func (s *FileService) PermanentDeleteFromRecycleBin(ctx context.Context, uid int
 }
 
 // CreateShare 创建分享链接。
-func (s *FileService) CreateShare(ctx context.Context, uid int64, fileID int64, expireHours *int, clientIP string) (FileCreateShareResult, error) {
+func (s *FileService) CreateShare(ctx context.Context, uid int64, fileID int64, expireHours *int, passcode string, maxDownloads int64, clientIP string) (FileCreateShareResult, error) {
 	canRead, err := s.canAccessFile(ctx, uid, fileID, false)
 	if err != nil {
 		return FileCreateShareResult{}, err
@@ -714,7 +714,21 @@ func (s *FileService) CreateShare(ctx context.Context, uid int64, fileID int64, 
 		expireAt = &t
 	}
 
-	share, err := s.fileRepo.CreateShare(ctx, uid, fileID, shareCode, expireAt, clientIP)
+	share := model.Share{UserID: &uid, FileID: &fileID, ShareCode: shareCode, ExpireTime: expireAt, MaxDownloads: maxDownloads}
+	if maxDownloads < 0 || maxDownloads > 1_000_000 {
+		return FileCreateShareResult{}, contract.ErrInvalidInput
+	}
+	if passcode != "" {
+		if !validSharePasscode(passcode) {
+			return FileCreateShareResult{}, contract.ErrInvalidInput
+		}
+		hash, err := bcrypt.GenerateFromPassword([]byte(passcode), bcrypt.DefaultCost)
+		if err != nil {
+			return FileCreateShareResult{}, err
+		}
+		share.PasscodeHash = string(hash)
+	}
+	share, err = s.fileRepo.CreateShare(ctx, share, clientIP)
 	if err != nil {
 		return FileCreateShareResult{}, err
 	}
@@ -732,39 +746,46 @@ func (s *FileService) RevokeShare(ctx context.Context, uid int64, code string, c
 }
 
 // GetPublicShareInfo 获取公开分享的分享与文件信息。
-func (s *FileService) GetPublicShareInfo(ctx context.Context, code string) (model.Share, model.File, error) {
-	return s.resolveValidShare(ctx, code)
+func (s *FileService) GetPublicShareInfo(ctx context.Context, code, passcode string) (model.Share, model.File, error) {
+	return s.resolveValidShare(ctx, code, passcode)
 }
 
 // ResolvePublicShareDownload 获取公开分享下载目标（文件或目录）。
-func (s *FileService) ResolvePublicShareDownload(ctx context.Context, code string) (model.File, *model.Storage, int64, error) {
-	share, file, err := s.resolveValidShare(ctx, code)
+func (s *FileService) ResolvePublicShareDownload(ctx context.Context, code, passcode string) (model.Share, model.File, *model.Storage, error) {
+	share, file, err := s.resolveValidShare(ctx, code, passcode)
 	if err != nil {
-		return model.File{}, nil, 0, err
+		return model.Share{}, model.File{}, nil, err
+	}
+	if share.MaxDownloads > 0 && share.DownloadCount >= share.MaxDownloads {
+		return model.Share{}, model.File{}, nil, contract.ErrShareExhausted
 	}
 	if file.IsFolder == 1 {
-		return file, nil, *share.UserID, nil
+		return share, file, nil, nil
 	}
 	if file.StorageID == nil {
-		return model.File{}, nil, 0, ErrStorageNotFound
+		return model.Share{}, model.File{}, nil, ErrStorageNotFound
 	}
 
 	storage, storageErr := s.fileRepo.GetStorageByID(ctx, *file.StorageID)
 	if storageErr != nil {
 		if errors.Is(storageErr, gorm.ErrRecordNotFound) {
-			return model.File{}, nil, 0, ErrStorageNotFound
+			return model.Share{}, model.File{}, nil, ErrStorageNotFound
 		}
-		return model.File{}, nil, 0, storageErr
+		return model.Share{}, model.File{}, nil, storageErr
 	}
 	storage, storageErr = blob.Pin(ctx, storage)
 	if storageErr != nil {
-		return model.File{}, nil, 0, storageErr
+		return model.Share{}, model.File{}, nil, storageErr
 	}
 	if _, err := os.Stat(storage.FilePath); err != nil {
-		return model.File{}, nil, 0, ErrPhysicalFileNotFound
+		return model.Share{}, model.File{}, nil, ErrPhysicalFileNotFound
 	}
 
-	return file, &storage, *share.UserID, nil
+	return share, file, &storage, nil
+}
+
+func (s *FileService) AdmitShareDownload(ctx context.Context, share model.Share, file model.File) error {
+	return s.fileRepo.AdmitShareDownload(ctx, share, file)
 }
 
 // CollectBatchDownloadEntries 在一致快照中验证批量下载清单，任何失败均中止。
@@ -1005,13 +1026,26 @@ func generateUploadID(userID int64) string {
 	return fmt.Sprintf("u%d_%d", userID, time.Now().UnixNano())
 }
 
-func (s *FileService) resolveValidShare(ctx context.Context, code string) (model.Share, model.File, error) {
+func validSharePasscode(value string) bool {
+	if len(value) < 6 || len(value) > 72 {
+		return false
+	}
+	for _, ch := range value {
+		if ch < '!' || ch > '~' {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *FileService) resolveValidShare(ctx context.Context, code, passcode string) (model.Share, model.File, error) {
 	share, file, err := s.fileRepo.ResolveValidShare(ctx, code)
 	if err != nil {
-		if errors.Is(err, contract.ErrShareExpired) {
-			return model.Share{}, model.File{}, ErrShareExpired
-		}
 		return model.Share{}, model.File{}, err
+	}
+	if share.PasscodeHash != "" && (!validSharePasscode(passcode) ||
+		bcrypt.CompareHashAndPassword([]byte(share.PasscodeHash), []byte(passcode)) != nil) {
+		return model.Share{}, model.File{}, contract.ErrSharePasscode
 	}
 	return share, file, nil
 }

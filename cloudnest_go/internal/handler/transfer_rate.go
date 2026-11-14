@@ -70,9 +70,10 @@ func (p *transferPacer) wait(n int) error {
 
 type pacedResponseWriter struct {
 	gin.ResponseWriter
-	pacer        transferPacer
-	err          error
-	writeTimeout time.Duration // zero uses the production default; shorter unit-test transports are explicit
+	pacer         transferPacer
+	err           error
+	admitDownload func(context.Context) error
+	writeTimeout  time.Duration // zero uses the production default; shorter unit-test transports are explicit
 }
 
 const downloadWriteTimeout = 30 * time.Second
@@ -139,6 +140,16 @@ func (w *pacedResponseWriter) finish() error {
 }
 
 func (w *pacedResponseWriter) WriteHeader(status int) {
+	if w.admitDownload != nil && (status == http.StatusOK || status == http.StatusPartialContent) {
+		// ServeContent has selected a body response. Admit it before any headers
+		// or bytes reach the client, including for zero-length files.
+		admit := w.admitDownload
+		w.admitDownload = nil
+		if err := admit(w.pacer.ctx); err != nil {
+			w.err = err
+			return
+		}
+	}
 	if status >= 400 {
 		clearDownloadIdentity(w.Header())
 		w.Header().Del("Content-Disposition")

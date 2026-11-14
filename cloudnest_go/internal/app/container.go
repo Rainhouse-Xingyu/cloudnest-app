@@ -126,7 +126,7 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 
 		AuthHandler:          &handler.AuthHandler{Svc: authService},
 		AdminHandler:         &handler.AdminHandler{Svc: adminService},
-		FileHandler:          &handler.FileHandler{Transfers: transfer.NewManager(db, cfg), Blobs: blobs, RDB: rdb, Cfg: cfg, Svc: fileService},
+		FileHandler:          &handler.FileHandler{Transfers: transfer.NewManager(db, cfg), Blobs: blobs, Cfg: cfg, Svc: fileService},
 		SettingsHandler:      &handler.SettingsHandler{Svc: settingsService},
 		StorageHandler:       &handler.StorageHandler{Svc: storageService},
 		CollaborationHandler: &handler.CollaborationHandler{Svc: collaborationService},
@@ -157,8 +157,8 @@ func (c *Container) NewRouter() *gin.Engine {
 	_ = r.SetTrustedProxies(nil)
 
 	r.POST("/api/auth/login", middleware.LoginRateLimit(c.RDB), c.AuthHandler.Login)
-	r.GET("/api/public/shares/:code", c.FileHandler.PublicShareInfo)
-	r.GET("/api/public/shares/:code/download", c.FileHandler.PublicShareDownload)
+	r.GET("/api/public/shares/:code", middleware.PublicShareRateLimit(c.RDB, false), c.FileHandler.PublicShareInfo)
+	r.GET("/api/public/shares/:code/download", middleware.PublicShareRateLimit(c.RDB, true), c.FileHandler.PublicShareDownload)
 
 	commands := handler.AgentCommandHandler{Commands: agentcommand.New(c.DB, c.Cfg.FRPKeys)}
 	agent := handler.AgentHandler{Identity: agentauth.New(c.DB)}

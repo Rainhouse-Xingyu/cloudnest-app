@@ -38,6 +38,13 @@ func LoginRateLimit(rdb *redis.Client) gin.HandlerFunc {
 	return peerLimit(rdb, "auth:login-rate", loginAttemptLimit, "login")
 }
 
+func PublicShareRateLimit(rdb *redis.Client, download bool) gin.HandlerFunc {
+	if download {
+		return peerLimit(rdb, "share:download-rate", 20, "share download")
+	}
+	return peerLimit(rdb, "share:info-rate", 60, "share access")
+}
+
 func AgentEnrollmentRateLimit(rdb *redis.Client) gin.HandlerFunc {
 	return peerLimit(rdb, "agent:enroll-rate", 30, "registration")
 }

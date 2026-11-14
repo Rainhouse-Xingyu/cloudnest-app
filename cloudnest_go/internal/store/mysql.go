@@ -185,5 +185,8 @@ func CheckFileSchema(db *gorm.DB) error {
 	if err := CheckTransferSchema(db); err != nil {
 		return err
 	}
+	if err := CheckShareSchema(db); err != nil {
+		return err
+	}
 	return CheckAIIndexSchema(db)
 }

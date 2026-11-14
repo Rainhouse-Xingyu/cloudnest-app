@@ -337,12 +337,15 @@ func (AiTask) TableName() string {
 
 // Share 分享
 type Share struct {
-	ID         int64      `gorm:"primaryKey;autoIncrement" json:"id"`
-	FileID     *int64     `gorm:"type:bigint" json:"file_id"`
-	UserID     *int64     `gorm:"type:bigint" json:"user_id"`
-	ShareCode  string     `gorm:"type:varchar(20);unique" json:"share_code"`
-	ExpireTime *time.Time `gorm:"type:datetime" json:"expire_time"`
-	CreateTime time.Time  `gorm:"type:datetime;default:CURRENT_TIMESTAMP" json:"create_time"`
+	ID            int64      `gorm:"primaryKey;autoIncrement" json:"id"`
+	FileID        *int64     `gorm:"type:bigint" json:"file_id"`
+	UserID        *int64     `gorm:"type:bigint" json:"user_id"`
+	ShareCode     string     `gorm:"type:varchar(20);unique" json:"share_code"`
+	PasscodeHash  string     `gorm:"type:varchar(60);not null;default:''" json:"-"`
+	MaxDownloads  int64      `gorm:"not null;default:0" json:"max_downloads"`
+	DownloadCount int64      `gorm:"not null;default:0" json:"download_count"`
+	ExpireTime    *time.Time `gorm:"type:datetime" json:"expire_time"`
+	CreateTime    time.Time  `gorm:"type:datetime;default:CURRENT_TIMESTAMP" json:"create_time"`
 }
 
 func (Share) TableName() string {

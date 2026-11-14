@@ -141,8 +141,9 @@ func TestStorageGCTwoGracePeriodsAndDurableTombstone(t *testing.T) {
 
 func TestStorageGCRetainsRecycleUnknownVersionsAndActiveReaders(t *testing.T) {
 	f := newFixture(t)
-	a := f.upload(t, f.alice, "retain-a.txt", []byte("shared bytes"))
-	b := f.upload(t, f.alice, "retain-b.txt", []byte("shared bytes"))
+	payload := []byte("deduplicated GC payload for " + t.Name())
+	a := f.upload(t, f.alice, "retain-a.txt", payload)
+	b := f.upload(t, f.alice, "retain-b.txt", payload)
 	waitNoReadLeases(t, f, *a.StorageID)
 	if *a.StorageID != *b.StorageID {
 		t.Fatal("fixture not deduplicated")
@@ -175,7 +176,7 @@ func TestStorageGCRetainsRecycleUnknownVersionsAndActiveReaders(t *testing.T) {
 	if r := gcRun(t, f); r.Scanned != 0 {
 		t.Fatal("active reader ignored")
 	}
-	gcBytes(t, s.FilePath, []byte("shared bytes"))
+	gcBytes(t, s.FilePath, payload)
 	if err := reader.Close(); err != nil {
 		t.Fatal(err)
 	}

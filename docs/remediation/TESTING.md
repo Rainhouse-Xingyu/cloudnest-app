@@ -572,3 +572,5 @@ Ubuntu push `43393865932` 的 agent-native 日志记录 systemd 将 Agent PID 11
 G06 的组合基线同时保留 G04 的 AI worker 与 G05 的 TLS、Agent 和 Schema 检查。隔离 MySQL/Redis 下 6 项专项 **通过（17.430s）**：Agent TLS 与命令回执、AI 关键词降级及跨用户隔离、AI 来源字段显式迁移、FRP 作用域历史迁移和漂移拒绝、分享者撤权，以及分享审计。分享专项通过真实 MySQL 触发器模拟审计写入故障，验证创建无残留、撤销失败后原链接仍有效、成功变更只有一条对应审计，操作日志与 HTTP 访问日志均未写入分享码。日志 `/tmp/cloudnest-g06-cross-feature-20261114.log`。旧日志保留；网关和反向代理日志不在本测试范围。提取码、访问次数限制和协作角色矩阵尚未完成。
 
 组合工作树的 `make -C cloudnest_go check test` 也已通过，包含编译、vet、race 单元测试及原有 blob 测试。日志 `/tmp/cloudnest-g06-share-check-20261114.log`。
+
+G06 公开分享新增 HTTPS 提取码、下载上限和跨链接限流。11 项 MySQL/Redis 集成回归通过（22.524s，race 开启），包括 8 路并发争用最后一次额度、304/416 不扣减、目录 ZIP、旧链接迁移、撤销、过期、回收和下载策略。Go 构建、vet、race 单元测试和仓库检查均通过。日志为 `/tmp/cloudnest-g06-share-and-gc-verified.log`。前一版远端运行 43540231935 的回收测试与分享审计使用相同文件内容，导致全局去重后引用仍存在。两项测试现使用独立内容，原回收断言已在同一数据库的组合回归中通过。首轮迁移测试发现哈希列缺少空默认值，已修正并重新验证。接口和升级步骤见 [G06 公开分享](G06-PUBLIC-SHARES.md)。

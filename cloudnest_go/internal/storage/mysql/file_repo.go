@@ -837,8 +837,12 @@ func (r *FileRepo) ResolveValidShare(ctx context.Context, code string) (model.Sh
 		return model.Share{}, model.File{}, gorm.ErrRecordNotFound
 	}
 
+	return resolveValidShare(r.db.WithContext(ctx).Where("share_code = ?", code), r.db.WithContext(ctx))
+}
+
+func resolveValidShare(lookup, db *gorm.DB) (model.Share, model.File, error) {
 	var share model.Share
-	if err := r.db.WithContext(ctx).Where("share_code = ?", code).First(&share).Error; err != nil {
+	if err := lookup.First(&share).Error; err != nil {
 		return model.Share{}, model.File{}, err
 	}
 	if share.ExpireTime != nil && time.Now().After(*share.ExpireTime) {
@@ -849,7 +853,7 @@ func (r *FileRepo) ResolveValidShare(ctx context.Context, code string) (model.Sh
 	}
 
 	var file model.File
-	if err := r.db.WithContext(ctx).First(&file, "id = ? AND is_deleted = 0", *share.FileID).Error; err != nil {
+	if err := db.First(&file, "id = ? AND is_deleted = 0", *share.FileID).Error; err != nil {
 		return model.Share{}, model.File{}, err
 	}
 
@@ -857,10 +861,10 @@ func (r *FileRepo) ResolveValidShare(ctx context.Context, code string) (model.Sh
 		return model.Share{}, model.File{}, gorm.ErrRecordNotFound
 	}
 	var creator model.User
-	if err := r.db.WithContext(ctx).First(&creator, "id = ? AND status = 1", *share.UserID).Error; err != nil {
+	if err := db.First(&creator, "id = ? AND status = 1", *share.UserID).Error; err != nil {
 		return model.Share{}, model.File{}, err
 	}
-	canRead, err := canAccessFileForFileRepo(ctx, r.db, *share.UserID, file.ID, false)
+	canRead, err := canAccessFileForFileRepo(db.Statement.Context, db, *share.UserID, file.ID, false)
 	if err != nil {
 		return model.Share{}, model.File{}, err
 	}
@@ -871,13 +875,41 @@ func (r *FileRepo) ResolveValidShare(ctx context.Context, code string) (model.Sh
 	return share, file, nil
 }
 
-func (r *FileRepo) CreateShare(ctx context.Context, uid int64, fileID int64, shareCode string, expireAt *time.Time, clientIP string) (model.Share, error) {
-	share := model.Share{FileID: &fileID, UserID: &uid, ShareCode: shareCode, ExpireTime: expireAt}
+// Lock the share through admission so concurrent downloads cannot both spend the
+// last slot, and revocation serializes with admission.
+func (r *FileRepo) AdmitShareDownload(ctx context.Context, verified model.Share, source model.File) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		share, file, err := resolveValidShare(tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", verified.ID), tx)
+		if err != nil {
+			return err
+		}
+		if share.PasscodeHash != verified.PasscodeHash || file.ID != source.ID ||
+			file.IsFolder != source.IsFolder || !equalShareStorage(file.StorageID, source.StorageID) || *share.UserID != *verified.UserID {
+			return gorm.ErrRecordNotFound
+		}
+		if share.MaxDownloads == 0 {
+			return nil
+		}
+		if share.DownloadCount >= share.MaxDownloads {
+			return contract.ErrShareExhausted
+		}
+		return tx.Model(&share).UpdateColumn("download_count", gorm.Expr("download_count + 1")).Error
+	}, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+}
+
+func equalShareStorage(a, b *int64) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+func (r *FileRepo) CreateShare(ctx context.Context, share model.Share, clientIP string) (model.Share, error) {
 	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&share).Error; err != nil {
 			return err
 		}
-		return writeShareAudit(tx, uid, share, "create_share", clientIP)
+		return writeShareAudit(tx, *share.UserID, share, "create_share", clientIP)
 	}); err != nil {
 		return model.Share{}, err
 	}

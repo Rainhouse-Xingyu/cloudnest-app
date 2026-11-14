@@ -16,7 +16,7 @@ import (
 
 func TestShareAuditIsAtomicAndRedactsBearerCodes(t *testing.T) {
 	f := newFixture(t)
-	file := f.upload(t, f.alice, "share-audit.txt", []byte("shared bytes"))
+	file := f.upload(t, f.alice, "share-audit.txt", []byte("share audit payload for "+t.Name()))
 	var access bytes.Buffer
 	old := gin.DefaultWriter
 	gin.DefaultWriter = &access

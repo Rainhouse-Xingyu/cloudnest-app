@@ -40,7 +40,7 @@
 | FILE-017 P1 | 永久删除删除 operation_log，元数据删除与审计不原子 | 历史审计保留、审计写入失败、混合所有者及仍活动子项 | 保留历史，完整树只允许本人已删除记录，新审计同事务提交 | 其他所有者 403、活动子项 409；错误注入完整回滚，保留历史与客户端 IP 回归通过；显式托管对象 GC 已追加，旧对象不自动清理 |
 | FILE-009 P2 | 文件搜索多列 LIKE、ListFiles/目录递归无分页/批量规划 | 数据规模测试、EXPLAIN、查询计数 | G02/G10 索引/游标分页/批量目录查询 | 结构已确认，性能未测 |
 | FILE-010 P2 | Go `sendFileWithRateLimit` 已 ServeContent/io.Copy/固定缓冲；客户端 NetworkClient 使用 data(for:) | 大文件峰值内存测试 | G03/G08 新客户端 URLSession 文件下载任务；不重写已流式 Go 普通下载 | 后端整文件内存假设未成立；性能未测 |
-| FILE-011 P1 | Share 模型及 CreateShare 只有 code/expiry，无提取码/访问次数约束 | 查看真实字段/API | G06 提取码哈希/访问计数、限速、撤销/到期测试 | 缺功能 |
+| FILE-011 P1 | Share 模型及 CreateShare 只有 code/expiry，无提取码/访问次数约束 | 查看真实字段/API | G06 提取码哈希/访问计数、限速、撤销/到期测试 | 已接入 HTTPS 提取码、下载次数、按 IP 限流和显式升级检查，见 [G06 公开分享](G06-PUBLIC-SHARES.md) |
 | FILE-012 P1 | 文件版本只创建/列出，没有专用恢复/上传完整协议；客户端可传 size | 版本覆盖/恢复与配额一致性测试 | G01 先保护 storage_id；G02 版本引用/恢复协议 | 上传/复制初始引用、旧当前快照、历史下载、追加式恢复和事务审计已实现；配额已接入；AI 增量更新已在 G04 接入；版本专用上传票据仍待后续 |
 | AI-001 P1 | `triggerAsyncAutoAnalyze` 内存 goroutine，AiTask 仅写状态记录 | 上传后杀进程重启；任务无恢复 worker | G04 事务 outbox、持久任务、租约/超时/重试/诊断 | 进行中：原子入队、租约/重领/退避/结果隔离已实现；服务 worker/独立 blob 读取与文本处理已接入；状态/游标历史回填/代次 CAS 批量重建 API 已实现，真实服务重建通过；版本/复制/回收恢复/扩展名增量入队及其事务回滚已接入 |
 | AI-002 P1 | `service/ai_service.go:NLSearch` 解析条件后调用 `storage/mysql/ai_repo.go:Search` 的 LIKE；无 embedding/vector | 执行语义同义查询/带无关干扰的评估集 | G04 独立 embedding、chunk、向量索引、混合检索/文件级 ACL/片段 | 已接入实际文本 embedding 与精确扫描/关键词融合、权限和代次复核、片段及降级；10k 向量扫描通过，DOCX/XLSX/PPTX 有界解析/实际模型链路已实现；PDF/扫描页真实 OCR 已接入；JPEG/PNG/GIF 真实视觉已接入；六类合成评估已执行且初始基线失败，候选阈值/配置类型/查询指令整改后 v1 门槛通过；可选实际重排使已暴露 v1 发票族 R@5 从 75% 提升到 100%，stress-v2 负例仅 1/6 为空且一次超时，完整质量验收待做 |

@@ -104,6 +104,7 @@ func TestTransferRateGlobalPeakSurvivesPersonalDisable(t *testing.T) {
 func TestTransferRateInvalidConfigurationRejectsEveryDownload(t *testing.T) {
 	f := newFixture(t)
 	resetRateSettings(t, f)
+	t.Cleanup(func() { resetRateSettings(t, f) })
 	file := f.upload(t, f.alice, "private.bin", []byte("private-content"))
 	var folder struct {
 		Item model.File `json:"item"`

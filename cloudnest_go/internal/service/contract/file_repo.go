@@ -2,7 +2,6 @@ package contract
 
 import (
 	"context"
-	"time"
 
 	"cloudenest_go/model"
 )
@@ -56,6 +55,7 @@ type UploadCommit struct {
 type FileRepository interface {
 	SearchFiles(ctx context.Context, uid int64, q FileSearchQuery) ([]model.File, int64, error)
 	ResolveValidShare(ctx context.Context, code string) (model.Share, model.File, error)
+	AdmitShareDownload(ctx context.Context, share model.Share, file model.File) error
 	CollectBatchDownloadEntries(ctx context.Context, uid int64, fileIDs []int64) ([]BatchDownloadEntry, error)
 	ListFiles(ctx context.Context, uid int64, parentID int64) ([]model.File, error)
 	ListRecycleBin(ctx context.Context, uid int64) ([]model.File, error)
@@ -83,7 +83,7 @@ type FileRepository interface {
 	UpsertUploadChunkAndRefreshProgress(ctx context.Context, taskID int64, uploadID string, chunkIndex int, chunkSize int64, chunkPath, chunkRoot, sha256, md5, artifactToken string) (ChunkCommit, error)
 	ListDoneUploadChunks(ctx context.Context, uploadID string) ([]model.UploadChunk, error)
 	CompleteUploadPersist(ctx context.Context, uid int64, parentID int64, uploadID string, task model.UploadTask, totalChunks int, storagePath, storageRoot string, mergedSize int64, fileHash, artifactToken string, clientIP string) (UploadCommit, error)
-	CreateShare(ctx context.Context, uid int64, fileID int64, shareCode string, expireAt *time.Time, clientIP string) (model.Share, error)
+	CreateShare(ctx context.Context, share model.Share, clientIP string) (model.Share, error)
 	CreateOperationLog(ctx context.Context, userID int64, fileID *int64, action string, status string, detail string, clientIP string) error
 	ListShares(ctx context.Context, uid int64) ([]model.Share, error)
 	RevokeShare(ctx context.Context, uid int64, code string, clientIP string) error
