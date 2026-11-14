@@ -191,7 +191,7 @@ func (r *FileRepo) GetTransferRateSettings(ctx context.Context, uid int64) ([]mo
 	return rows, err
 }
 
-func (r *FileRepo) CreateFolderRecord(ctx context.Context, uid int64, name string, parentID int64) (model.File, error) {
+func (r *FileRepo) CreateFolderRecord(ctx context.Context, uid int64, name string, parentID int64, clientIP string) (model.File, error) {
 	var folder model.File
 	err := fileMetadataTransaction(ctx, r.db, func(tx *gorm.DB) error {
 		if err := lockFileNamespaces(tx, fileNamespaceKey(uid, parentID)); err != nil {
@@ -212,12 +212,15 @@ func (r *FileRepo) CreateFolderRecord(ctx context.Context, uid int64, name strin
 		if ws.ID != 0 {
 			folder.WorkspaceID = &ws.ID
 		}
-		return tx.Create(&folder).Error
+		if err := tx.Create(&folder).Error; err != nil {
+			return err
+		}
+		return writeFileAudit(tx, uid, &folder.ID, "create_folder", fmt.Sprintf("parent_id=%d", parentID), clientIP)
 	})
 	return folder, err
 }
 
-func (r *FileRepo) RenameFile(ctx context.Context, uid, fileID int64, name string) (model.File, error) {
+func (r *FileRepo) RenameFile(ctx context.Context, uid, fileID int64, name string, clientIP string) (model.File, error) {
 	var file model.File
 	err := fileMetadataTransaction(ctx, r.db, func(tx *gorm.DB) error {
 		var err error
@@ -253,10 +256,12 @@ func (r *FileRepo) RenameFile(ctx context.Context, uid, fileID int64, name strin
 			file.FileType = fileType
 			// Extraction dispatch depends on the suffix, not only the blob hash.
 			if oldExt != newExt {
-				return indexqueue.Enqueue(tx, file.ID, true)
+				if err := indexqueue.Enqueue(tx, file.ID, true); err != nil {
+					return err
+				}
 			}
 		}
-		return nil
+		return writeFileAudit(tx, uid, &file.ID, "rename", "renamed file", clientIP)
 	})
 	return file, err
 }
@@ -273,7 +278,7 @@ func (r *FileRepo) CountActiveChildren(ctx context.Context, parentID int64) (int
 	return childCount, nil
 }
 
-func (r *FileRepo) SoftDeleteFileWithLivePhotoCleanup(ctx context.Context, uid, fileID int64) error {
+func (r *FileRepo) SoftDeleteFileWithLivePhotoCleanup(ctx context.Context, uid, fileID int64, clientIP string) error {
 	return fileMetadataTransaction(ctx, r.db, func(tx *gorm.DB) error {
 		file, err := lockFileWithNamespace(tx, fileID, 0, true)
 		if err != nil {
@@ -294,11 +299,14 @@ func (r *FileRepo) SoftDeleteFileWithLivePhotoCleanup(ctx context.Context, uid, 
 		if err := tx.Model(&file).Update("is_deleted", 1).Error; err != nil {
 			return err
 		}
-		return tx.Where("image_file_id = ? OR video_file_id = ?", fileID, fileID).Delete(&model.LivePhoto{}).Error
+		if err := tx.Where("image_file_id = ? OR video_file_id = ?", fileID, fileID).Delete(&model.LivePhoto{}).Error; err != nil {
+			return err
+		}
+		return writeFileAudit(tx, uid, &fileID, "delete", "moved to recycle bin", clientIP)
 	})
 }
 
-func (r *FileRepo) MoveFiles(ctx context.Context, uid int64, fileIDs []int64, targetParentID int64) ([]int64, error) {
+func (r *FileRepo) MoveFiles(ctx context.Context, uid int64, fileIDs []int64, targetParentID int64, clientIP string) ([]int64, error) {
 	var updated []int64
 	err := fileMetadataTransaction(ctx, r.db, func(tx *gorm.DB) error {
 		updated = nil
@@ -363,12 +371,12 @@ func (r *FileRepo) MoveFiles(ctx context.Context, uid int64, fileIDs []int64, ta
 			}
 			updated = append(updated, src.ID)
 		}
-		return nil
+		return writeFileAudit(tx, uid, nil, "move", fmt.Sprintf("count=%d,target_parent=%d", len(updated), targetParentID), clientIP)
 	})
 	return updated, err
 }
 
-func (r *FileRepo) CopyFiles(ctx context.Context, uid int64, fileIDs []int64, targetParentID int64) ([]int64, error) {
+func (r *FileRepo) CopyFiles(ctx context.Context, uid int64, fileIDs []int64, targetParentID int64, clientIP string) ([]int64, error) {
 	var newIDs []int64
 	err := fileMetadataTransaction(ctx, r.db, func(tx *gorm.DB) error {
 		if err := quota.Begin(tx, uid); err != nil {
@@ -424,12 +432,15 @@ func (r *FileRepo) CopyFiles(ctx context.Context, uid int64, fileIDs []int64, ta
 			}
 			newIDs = append(newIDs, copiedID)
 		}
-		return quota.Refresh(tx, uid, true)
+		if err := quota.Refresh(tx, uid, true); err != nil {
+			return err
+		}
+		return writeFileAudit(tx, uid, nil, "copy", fmt.Sprintf("count=%d,target_parent=%d", len(newIDs), targetParentID), clientIP)
 	})
 	return newIDs, err
 }
 
-func (r *FileRepo) RestoreFromRecycleBin(ctx context.Context, uid, fileID int64) (model.File, error) {
+func (r *FileRepo) RestoreFromRecycleBin(ctx context.Context, uid, fileID int64, clientIP string) (model.File, error) {
 	var restored model.File
 	err := fileMetadataTransaction(ctx, r.db, func(tx *gorm.DB) error {
 		var err error
@@ -462,9 +473,11 @@ func (r *FileRepo) RestoreFromRecycleBin(ctx context.Context, uid, fileID int64)
 		}
 		restored.Filename, restored.IsDeleted = finalName, 0
 		if restored.IsFolder == 0 {
-			return indexqueue.Enqueue(tx, restored.ID, true)
+			if err := indexqueue.Enqueue(tx, restored.ID, true); err != nil {
+				return err
+			}
 		}
-		return nil
+		return writeFileAudit(tx, uid, &restored.ID, "restore", "restore from recycle bin", clientIP)
 	})
 	return restored, err
 }
@@ -970,6 +983,10 @@ func writeShareAudit(tx *gorm.DB, uid int64, share model.Share, action, clientIP
 		UserID: &uid, FileID: share.FileID, Action: action, Status: "success",
 		Detail: fmt.Sprintf("share_id=%d", share.ID), ClientIP: clientIP,
 	}).Error
+}
+
+func writeFileAudit(tx *gorm.DB, uid int64, fileID *int64, action, detail, clientIP string) error {
+	return tx.Create(&model.OperationLog{UserID: &uid, FileID: fileID, Action: action, Status: "success", Detail: detail, ClientIP: clientIP}).Error
 }
 
 func (r *FileRepo) CreateOperationLog(ctx context.Context, userID int64, fileID *int64, action string, status string, detail string, clientIP string) error {

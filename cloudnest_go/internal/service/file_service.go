@@ -192,11 +192,10 @@ func (s *FileService) CreateFolder(ctx context.Context, uid int64, name string, 
 		}
 	}
 
-	folder, err := s.fileRepo.CreateFolderRecord(ctx, uid, name, parentID)
+	folder, err := s.fileRepo.CreateFolderRecord(ctx, uid, name, parentID, clientIP)
 	if err != nil {
 		return model.File{}, translateFileMutationError(err)
 	}
-	_ = s.logOperation(ctx, uid, &folder.ID, "create_folder", "success", fmt.Sprintf("parent_id=%d", parentID), clientIP)
 	return folder, nil
 }
 
@@ -223,12 +222,11 @@ func (s *FileService) RenameFile(ctx context.Context, uid int64, fileID int64, n
 		return model.File{}, err
 	}
 
-	renamed, err := s.fileRepo.RenameFile(ctx, uid, f.ID, name)
+	renamed, err := s.fileRepo.RenameFile(ctx, uid, f.ID, name, clientIP)
 	if err != nil {
 		return model.File{}, translateFileMutationError(err)
 	}
 	f = renamed
-	_ = s.logOperation(ctx, uid, &f.ID, "rename", "success", "renamed file", clientIP)
 	return f, nil
 }
 
@@ -260,10 +258,9 @@ func (s *FileService) DeleteFile(ctx context.Context, uid int64, fileID int64, c
 		}
 	}
 
-	if err := s.fileRepo.SoftDeleteFileWithLivePhotoCleanup(ctx, uid, f.ID); err != nil {
+	if err := s.fileRepo.SoftDeleteFileWithLivePhotoCleanup(ctx, uid, f.ID, clientIP); err != nil {
 		return translateFileMutationError(err)
 	}
-	_ = s.logOperation(ctx, uid, &f.ID, "delete", "success", "moved to recycle bin", clientIP)
 	return nil
 }
 
@@ -593,7 +590,7 @@ func (s *FileService) MoveFiles(ctx context.Context, uid int64, fileIDs []int64,
 		return nil, ErrFileInvalidParentID
 	}
 
-	updated, err := s.fileRepo.MoveFiles(ctx, uid, fileIDs, targetParentID)
+	updated, err := s.fileRepo.MoveFiles(ctx, uid, fileIDs, targetParentID, clientIP)
 	if err != nil {
 		switch {
 		case errors.Is(err, contract.ErrForbidden):
@@ -613,7 +610,6 @@ func (s *FileService) MoveFiles(ctx context.Context, uid int64, fileIDs []int64,
 		}
 	}
 
-	_ = s.logOperation(ctx, uid, nil, "move", "success", fmt.Sprintf("count=%d,target_parent=%d", len(updated), targetParentID), clientIP)
 	return updated, nil
 }
 
@@ -623,7 +619,7 @@ func (s *FileService) CopyFiles(ctx context.Context, uid int64, fileIDs []int64,
 		return nil, ErrFileInvalidParentID
 	}
 
-	newIDs, err := s.fileRepo.CopyFiles(ctx, uid, fileIDs, targetParentID)
+	newIDs, err := s.fileRepo.CopyFiles(ctx, uid, fileIDs, targetParentID, clientIP)
 	if err != nil {
 		switch {
 		case errors.Is(err, contract.ErrForbidden):
@@ -635,7 +631,6 @@ func (s *FileService) CopyFiles(ctx context.Context, uid int64, fileIDs []int64,
 		}
 	}
 
-	_ = s.logOperation(ctx, uid, nil, "copy", "success", fmt.Sprintf("count=%d,target_parent=%d", len(newIDs), targetParentID), clientIP)
 	return newIDs, nil
 }
 
@@ -646,7 +641,7 @@ func (s *FileService) ListRecycleBin(ctx context.Context, uid int64) ([]model.Fi
 
 // RestoreFromRecycleBin 恢复回收站条目。
 func (s *FileService) RestoreFromRecycleBin(ctx context.Context, uid int64, fileID int64, clientIP string) (model.File, error) {
-	restored, err := s.fileRepo.RestoreFromRecycleBin(ctx, uid, fileID)
+	restored, err := s.fileRepo.RestoreFromRecycleBin(ctx, uid, fileID, clientIP)
 	if err != nil {
 		switch {
 		case errors.Is(err, contract.ErrRecycleItemNotFound):
@@ -658,7 +653,6 @@ func (s *FileService) RestoreFromRecycleBin(ctx context.Context, uid int64, file
 		}
 	}
 
-	_ = s.logOperation(ctx, uid, &restored.ID, "restore", "success", "restore from recycle bin", clientIP)
 	return restored, nil
 }
 
@@ -912,7 +906,6 @@ func (s *FileService) BatchDeleteFiles(ctx context.Context, uid int64, fileIDs [
 		deletedIDs = append(deletedIDs, fileID)
 	}
 
-	_ = s.logOperation(ctx, uid, nil, "batch_delete", "success", fmt.Sprintf("requested=%d,deleted=%d", len(ids), len(deletedIDs)), clientIP)
 	return deletedIDs, failed
 }
 

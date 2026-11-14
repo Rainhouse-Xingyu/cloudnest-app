@@ -67,13 +67,13 @@ type FileRepository interface {
 	CollectFolderZipEntries(ctx context.Context, uid, rootID int64) ([]FolderZipEntry, error)
 	GetSystemSettingByKey(ctx context.Context, key string) (model.SystemSetting, error)
 	GetTransferRateSettings(ctx context.Context, uid int64) ([]model.SystemSetting, error)
-	CreateFolderRecord(ctx context.Context, uid int64, name string, parentID int64) (model.File, error)
-	RenameFile(ctx context.Context, uid, fileID int64, name string) (model.File, error)
+	CreateFolderRecord(ctx context.Context, uid int64, name string, parentID int64, clientIP string) (model.File, error)
+	RenameFile(ctx context.Context, uid, fileID int64, name string, clientIP string) (model.File, error)
 	CountActiveChildren(ctx context.Context, parentID int64) (int64, error)
-	SoftDeleteFileWithLivePhotoCleanup(ctx context.Context, uid, fileID int64) error
-	MoveFiles(ctx context.Context, uid int64, fileIDs []int64, targetParentID int64) ([]int64, error)
-	CopyFiles(ctx context.Context, uid int64, fileIDs []int64, targetParentID int64) ([]int64, error)
-	RestoreFromRecycleBin(ctx context.Context, uid int64, fileID int64) (model.File, error)
+	SoftDeleteFileWithLivePhotoCleanup(ctx context.Context, uid, fileID int64, clientIP string) error
+	MoveFiles(ctx context.Context, uid int64, fileIDs []int64, targetParentID int64, clientIP string) ([]int64, error)
+	CopyFiles(ctx context.Context, uid int64, fileIDs []int64, targetParentID int64, clientIP string) ([]int64, error)
+	RestoreFromRecycleBin(ctx context.Context, uid int64, fileID int64, clientIP string) (model.File, error)
 	PermanentDeleteFromRecycleBin(ctx context.Context, uid int64, fileID int64, clientIP string) error
 	GetUploadTaskByUploadID(ctx context.Context, uid int64, uploadID string) (model.UploadTask, error)
 	GetUploadTaskAndUploadedChunkIndexes(ctx context.Context, userID int64, uploadID string) (model.UploadTask, []int, error)
