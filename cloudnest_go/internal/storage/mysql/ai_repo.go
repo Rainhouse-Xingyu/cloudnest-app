@@ -60,7 +60,8 @@ func (r *AIRepo) Search(ctx context.Context, uid int64, q contract.AISearchQuery
 		Table("file f").
 		Select("f.id, f.filename, f.file_type, f.size, f.parent_id, f.user_id, f.create_time, f.update_time, am.tags, am.description, am.ocr_text").
 		Joins("LEFT JOIN file_permission fp ON fp.file_id = f.id AND fp.user_id = ?", uid).
-		Joins("LEFT JOIN ai_metadata am ON am.file_id = f.id").
+		Joins("LEFT JOIN storage s ON s.id = f.storage_id").
+		Joins("LEFT JOIN ai_metadata am ON am.file_id = f.id AND am.source_hash=s.file_hash").
 		Where("f.is_deleted = 0 AND f.is_folder = 0").
 		Where("f.user_id = ? OR fp.permission IN ?", uid, []string{"read", "write"})
 
@@ -75,7 +76,7 @@ func (r *AIRepo) Search(ctx context.Context, uid int64, q contract.AISearchQuery
 	if q.FileType != "" {
 		switch strings.ToLower(q.FileType) {
 		case "image", "photo", "picture", "照片", "图片":
-			base = base.Where("LOWER(f.file_type) IN ?", []string{"jpg", "jpeg", "png", "gif", "webp", "heic", "heif"})
+			base = base.Where("LOWER(f.file_type) IN ?", []string{"jpg", "jpeg", "png", "gif", "webp", "heic", "heif", "bmp"})
 		case "document", "doc", "文档", "票据", "发票":
 			base = base.Where("LOWER(f.file_type) IN ?", []string{"pdf", "docx", "xlsx", "pptx", "txt", "md", "csv", "json", "xml", "yaml", "yml"})
 		default:

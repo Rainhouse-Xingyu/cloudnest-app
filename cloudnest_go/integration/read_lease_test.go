@@ -4,7 +4,6 @@ package integration
 
 import (
 	"bytes"
-	"cloudenest_go/internal/app"
 	"context"
 	"errors"
 	"fmt"
@@ -18,6 +17,7 @@ import (
 	"time"
 
 	"cloudenest_go/internal/blob"
+	"cloudenest_go/internal/indexqueue"
 	"cloudenest_go/internal/middleware"
 	"cloudenest_go/internal/service"
 	storageMysql "cloudenest_go/internal/storage/mysql"
@@ -426,56 +426,75 @@ func TestReadLeaseMiddlewarePreservesMetadataAndNotFoundResponses(t *testing.T) 
 	}
 }
 
-type failingLeaseTransport func(*http.Request) (*http.Response, error)
-
-func (f failingLeaseTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
-
-func TestReadLeaseBackgroundAnalysisOutlivesHTTPAndReleasesLease(t *testing.T) {
-	f := newFixture(t)
+func TestReadLeaseIndexWorkerOutlivesHTTPAndReleasesLease(t *testing.T) {
+	f, _ := indexFixture(t)
 	entered := make(chan context.Context, 1)
 	release := make(chan struct{})
-	var notify, unblock sync.Once
-	container := app.NewContainer(f.cfg, f.db, f.rdb)
-	container.FileHandler.HTTPClient = &http.Client{Transport: failingLeaseTransport(func(req *http.Request) (*http.Response, error) {
-		notify.Do(func() { entered <- req.Context() })
-		select {
-		case <-release:
-		case <-req.Context().Done():
-		}
-		// This transport deliberately fails. It observes retention during a real
-		// local file read and never fabricates OCR/model output or AI success.
-		return nil, errors.New("injected model transport failure")
-	})}
-	f.router = fixtureRouter(container.NewRouter())
+	var unblock sync.Once
 	defer unblock.Do(func() { close(release) })
 	var payload bytes.Buffer
 	if err := png.Encode(&payload, image.NewRGBA(image.Rect(0, 0, 1, 1))); err != nil {
 		t.Fatal(err)
 	}
-	uploadID := fixturePendingUpload(t, f, f.alice, "background-lease.png", payload.Bytes())
-	w := completeUploadRecorder(f, f.alice, uploadID)
-	if w.Code != 200 {
-		t.Fatal("completion:", w.Code, w.Body.String())
-	}
-	var result struct {
-		Item model.File `json:"item"`
-	}
-	decode(t, w, &result)
+	file := f.upload(t, f.alice, "background-lease.png", payload.Bytes())
+	// Upload HTTP has returned. A separately owned worker now reads the actual
+	// object and pauses at its processor boundary. No model output is fabricated.
+	worker := indexqueue.NewWorker(f.db, blob.NewManager(f.db), func(ctx context.Context, j model.AIIndexJob) (func(*gorm.DB) error, error) {
+		var stored model.File
+		if err := f.db.WithContext(ctx).First(&stored, j.FileID).Error; err != nil {
+			return nil, err
+		}
+		in, _, err := blob.OpenPinnedStorage(ctx, model.Storage{ID: *stored.StorageID})
+		if err != nil {
+			return nil, err
+		}
+		if err := in.Close(); err != nil {
+			return nil, err
+		}
+		entered <- ctx
+		select {
+		case <-release:
+		case <-ctx.Done():
+		}
+		return nil, &indexqueue.Failure{Code: "model_unavailable", Retryable: true}
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { _, err := worker.Step(ctx); done <- err }()
 	defer func() {
 		unblock.Do(func() { close(release) })
-		f.waitAnalysis(t, result.Item.ID)
-		waitNoReadLeases(t, f, *result.Item.StorageID)
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(6 * time.Second):
+			t.Error("worker did not stop")
+		}
+		waitNoReadLeases(t, f, *file.StorageID)
 	}()
 	select {
-	case ctx := <-entered:
-		if err := blob.Check(ctx); err != nil {
-			t.Fatal("HTTP completion canceled background scope:", err)
+	case readerCtx := <-entered:
+		if err := blob.Check(readerCtx); err != nil {
+			t.Fatal("HTTP completion canceled independent index scope", err)
 		}
 	case <-time.After(3 * time.Second):
-		t.Fatal("background reader did not reach model failure boundary")
+		t.Fatal("index worker did not reach processor boundary")
 	}
-	if leaseCount(t, f, *result.Item.StorageID) != 1 {
-		t.Fatal("background physical read lacks independent lease")
+	if leaseCount(t, f, *file.StorageID) != 1 {
+		t.Fatal("index worker physical read lacks independent lease")
 	}
 	unblock.Do(func() { close(release) })
+	select {
+	case err := <-done:
+		done <- err // leave completion for deferred shutdown check
+		if err == nil {
+			t.Fatal("processor failure reported success")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("index worker did not finish failure")
+	}
+	job := readIndex(t, f, file.ID)
+	if job.Status != "retry" || job.ErrorCode != "model_unavailable" {
+		t.Fatalf("processor failure not durable: %+v", job)
+	}
+	waitNoReadLeases(t, f, *file.StorageID)
 }

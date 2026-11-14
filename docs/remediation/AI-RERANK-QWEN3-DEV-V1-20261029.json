@@ -1,0 +1,1169 @@
+{
+  "completed": true,
+  "model": "Qwen/Qwen3-Reranker-0.6B",
+  "revision": "e61197ed45024b0ed8a2d74b80b4d909f1255473",
+  "dataset_name": "v1",
+  "weights_sha256": "27cd75a405b9c1b46b59abfd88aaa209e6fed2a1972cde9b70e7659537c5e65b",
+  "manifest_sha256": "2cc46826ef494188d63fd1b6ac1e1a65c7ea62feaa24b23a05641f156a86d759",
+  "script_sha256": "3bf704b619a85293dfc121e1f1db3afa8953563b1449f1d2c42c4ad9bc66b312",
+  "platform": "Darwin/arm64",
+  "device": "mps",
+  "document_count": 18,
+  "query_count": 13,
+  "model_file_sha256": {
+    "config.json": "d479c427a9ca5295218063d4f9aca4f297ab4ac27487cca7af42c84643d51ef0",
+    "generation_config.json": "81051cd3f6e77013827148d0b8a6ead93f8ac390d5ab805f849199f0af6a08db",
+    "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+    "tokenizer_config.json": "253153d0738ceb4c668d2eff957714dd2bea0b56de772a9fdccd96cbf517e6a0",
+    "vocab.json": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+    "merges.txt": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"
+  },
+  "limitations": [
+    "Reduced text-only development subset; not the full API/visual/ACL benchmark.",
+    "No heldout queries used; no corpus labels changed.",
+    "Binary model score is not a calibrated probability of real-world relevance.",
+    "A single local run is not a latency or resource SLA.",
+    "Known previous-month/config-extension fixture filters are applied before scoring; this is not SQL execution."
+  ],
+  "queries": [
+    {
+      "id": "migration-1",
+      "query": "找出讨论数据库迁移方案的文档。",
+      "fixture_filters": [],
+      "candidate_count": 18,
+      "relevant_text_ids": [
+        "migration-plan",
+        "migration-runbook",
+        "shared-migration"
+      ],
+      "results": [
+        {
+          "document": "migration-plan",
+          "score": 0.9991306662559509,
+          "relevant": true
+        },
+        {
+          "document": "shared-migration",
+          "score": 0.9801293015480042,
+          "relevant": true
+        },
+        {
+          "document": "migration-runbook",
+          "score": 0.32423534989356995,
+          "relevant": true
+        },
+        {
+          "document": "meeting-notes",
+          "score": 0.21337716281414032,
+          "relevant": false
+        },
+        {
+          "document": "config-production",
+          "score": 0.04603390023112297,
+          "relevant": false
+        },
+        {
+          "document": "ip-explanation",
+          "score": 0.008711382746696472,
+          "relevant": false
+        },
+        {
+          "document": "contract-older",
+          "score": 0.007999752648174763,
+          "relevant": false
+        },
+        {
+          "document": "invoice-receipt",
+          "score": 0.006003595422953367,
+          "relevant": false
+        },
+        {
+          "document": "contract-service",
+          "score": 0.00439941231161356,
+          "relevant": false
+        },
+        {
+          "document": "laptop-review",
+          "score": 0.004331501666456461,
+          "relevant": false
+        },
+        {
+          "document": "permissions-settings",
+          "score": 0.0026939138770103455,
+          "relevant": false
+        },
+        {
+          "document": "exercise",
+          "score": 0.002251847181469202,
+          "relevant": false
+        },
+        {
+          "document": "config-staging",
+          "score": 0.001867565792053938,
+          "relevant": false
+        },
+        {
+          "document": "permissions-guide",
+          "score": 0.0011879053199663758,
+          "relevant": false
+        },
+        {
+          "document": "travel-notes",
+          "score": 0.001124757225625217,
+          "relevant": false
+        },
+        {
+          "document": "contract-purchase",
+          "score": 0.0010242064017802477,
+          "relevant": false
+        },
+        {
+          "document": "contract-current",
+          "score": 0.0005792916053906083,
+          "relevant": false
+        },
+        {
+          "document": "recipe",
+          "score": 0.00010190105240326375,
+          "relevant": false
+        }
+      ],
+      "batch_seconds": [
+        1.964962124999147,
+        0.7793101249844767,
+        0.830212916014716,
+        0.7514652079553343,
+        0.4145521249738522
+      ]
+    },
+    {
+      "id": "migration-2",
+      "query": "数据搬到新库前的备份、切换和回滚步骤",
+      "fixture_filters": [],
+      "candidate_count": 18,
+      "relevant_text_ids": [
+        "migration-plan",
+        "migration-runbook",
+        "shared-migration"
+      ],
+      "results": [
+        {
+          "document": "migration-plan",
+          "score": 0.9979493021965027,
+          "relevant": true
+        },
+        {
+          "document": "migration-runbook",
+          "score": 0.9967523813247681,
+          "relevant": true
+        },
+        {
+          "document": "shared-migration",
+          "score": 0.995354413986206,
+          "relevant": true
+        },
+        {
+          "document": "config-production",
+          "score": 0.013636833056807518,
+          "relevant": false
+        },
+        {
+          "document": "config-staging",
+          "score": 0.0035657361149787903,
+          "relevant": false
+        },
+        {
+          "document": "meeting-notes",
+          "score": 0.0034296035300940275,
+          "relevant": false
+        },
+        {
+          "document": "permissions-settings",
+          "score": 0.003004342783242464,
+          "relevant": false
+        },
+        {
+          "document": "contract-older",
+          "score": 0.0015854304656386375,
+          "relevant": false
+        },
+        {
+          "document": "contract-purchase",
+          "score": 0.001124757225625217,
+          "relevant": false
+        },
+        {
+          "document": "invoice-receipt",
+          "score": 0.0010566838318482041,
+          "relevant": false
+        },
+        {
+          "document": "contract-service",
+          "score": 0.0007672924548387527,
+          "relevant": false
+        },
+        {
+          "document": "ip-explanation",
+          "score": 0.0007379194721579552,
+          "relevant": false
+        },
+        {
+          "document": "exercise",
+          "score": 0.0005274784052744508,
+          "relevant": false
+        },
+        {
+          "document": "laptop-review",
+          "score": 0.0004583129193633795,
+          "relevant": false
+        },
+        {
+          "document": "travel-notes",
+          "score": 0.0004477008187677711,
+          "relevant": false
+        },
+        {
+          "document": "contract-current",
+          "score": 0.0002453694469295442,
+          "relevant": false
+        },
+        {
+          "document": "permissions-guide",
+          "score": 0.00021152883709874004,
+          "relevant": false
+        },
+        {
+          "document": "recipe",
+          "score": 5.1041904953308403e-05,
+          "relevant": false
+        }
+      ],
+      "batch_seconds": [
+        0.7925029170000926,
+        0.7671242090291344,
+        0.929497542034369,
+        0.7133157500065863,
+        0.3729058330063708
+      ]
+    },
+    {
+      "id": "permissions-1",
+      "query": "寻找和 Spring Boot 权限管理相关的资料。",
+      "fixture_filters": [],
+      "candidate_count": 18,
+      "relevant_text_ids": [
+        "permissions-guide",
+        "permissions-settings"
+      ],
+      "results": [
+        {
+          "document": "permissions-guide",
+          "score": 0.9994683861732483,
+          "relevant": true
+        },
+        {
+          "document": "permissions-settings",
+          "score": 0.986151397228241,
+          "relevant": true
+        },
+        {
+          "document": "config-production",
+          "score": 0.006097561679780483,
+          "relevant": false
+        },
+        {
+          "document": "config-staging",
+          "score": 0.00234134029597044,
+          "relevant": false
+        },
+        {
+          "document": "contract-service",
+          "score": 0.0006312433979474008,
+          "relevant": false
+        },
+        {
+          "document": "invoice-receipt",
+          "score": 0.0005792916053906083,
+          "relevant": false
+        },
+        {
+          "document": "ip-explanation",
+          "score": 0.00034599160426296294,
+          "relevant": false
+        },
+        {
+          "document": "meeting-notes",
+          "score": 0.0002959570847451687,
+          "relevant": false
+        },
+        {
+          "document": "contract-older",
+          "score": 0.0002673825656529516,
+          "relevant": false
+        },
+        {
+          "document": "exercise",
+          "score": 9.242111991625279e-05,
+          "relevant": false
+        },
+        {
+          "document": "contract-current",
+          "score": 9.206083632307127e-05,
+          "relevant": false
+        },
+        {
+          "document": "contract-purchase",
+          "score": 5.649792728945613e-05,
+          "relevant": false
+        },
+        {
+          "document": "laptop-review",
+          "score": 5.562205478781834e-05,
+          "relevant": false
+        },
+        {
+          "document": "travel-notes",
+          "score": 2.8520929845399223e-05,
+          "relevant": false
+        },
+        {
+          "document": "shared-migration",
+          "score": 2.2386469936463982e-05,
+          "relevant": false
+        },
+        {
+          "document": "migration-runbook",
+          "score": 1.812919435906224e-05,
+          "relevant": false
+        },
+        {
+          "document": "recipe",
+          "score": 1.4567269317922182e-05,
+          "relevant": false
+        },
+        {
+          "document": "migration-plan",
+          "score": 6.695537649648031e-06,
+          "relevant": false
+        }
+      ],
+      "batch_seconds": [
+        0.7319177919998765,
+        0.6994692499865778,
+        0.7823129590251483,
+        0.6795062499586493,
+        0.374376333958935
+      ]
+    },
+    {
+      "id": "permissions-2",
+      "query": "Java Web 应用如何用 Spring Security 做角色和资源授权",
+      "fixture_filters": [],
+      "candidate_count": 18,
+      "relevant_text_ids": [
+        "permissions-guide",
+        "permissions-settings"
+      ],
+      "results": [
+        {
+          "document": "permissions-settings",
+          "score": 0.9702399373054504,
+          "relevant": true
+        },
+        {
+          "document": "permissions-guide",
+          "score": 0.9678993225097656,
+          "relevant": true
+        },
+        {
+          "document": "config-staging",
+          "score": 0.0089854272082448,
+          "relevant": false
+        },
+        {
+          "document": "config-production",
+          "score": 0.0017409834545105696,
+          "relevant": false
+        },
+        {
+          "document": "meeting-notes",
+          "score": 0.0005072812200523913,
+          "relevant": false
+        },
+        {
+          "document": "ip-explanation",
+          "score": 0.0003432999656070024,
+          "relevant": false
+        },
+        {
+          "document": "invoice-receipt",
+          "score": 0.00018814204668160528,
+          "relevant": false
+        },
+        {
+          "document": "contract-service",
+          "score": 0.0001740054285619408,
+          "relevant": false
+        },
+        {
+          "document": "migration-runbook",
+          "score": 0.00011866794375237077,
+          "relevant": false
+        },
+        {
+          "document": "exercise",
+          "score": 5.5405220336979255e-05,
+          "relevant": false
+        },
+        {
+          "document": "contract-older",
+          "score": 4.683887891587801e-05,
+          "relevant": false
+        },
+        {
+          "document": "travel-notes",
+          "score": 4.683887891587801e-05,
+          "relevant": false
+        },
+        {
+          "document": "contract-current",
+          "score": 4.133539187023416e-05,
+          "relevant": false
+        },
+        {
+          "document": "laptop-review",
+          "score": 3.898307841154747e-05,
+          "relevant": false
+        },
+        {
+          "document": "contract-purchase",
+          "score": 2.1953486793790944e-05,
+          "relevant": false
+        },
+        {
+          "document": "shared-migration",
+          "score": 1.5147554222494364e-05,
+          "relevant": false
+        },
+        {
+          "document": "recipe",
+          "score": 9.895331459119916e-06,
+          "relevant": false
+        },
+        {
+          "document": "migration-plan",
+          "score": 3.2377615752920974e-06,
+          "relevant": false
+        }
+      ],
+      "batch_seconds": [
+        0.7414849170017987,
+        0.6518375420127995,
+        0.7715793329989538,
+        0.6880466669681482,
+        0.3583466249983758
+      ]
+    },
+    {
+      "id": "contracts-1",
+      "query": "合同有哪些？",
+      "fixture_filters": [
+        "previous_month_upload"
+      ],
+      "candidate_count": 4,
+      "relevant_text_ids": [
+        "contract-service",
+        "contract-purchase"
+      ],
+      "results": [
+        {
+          "document": "contract-purchase",
+          "score": 0.2829881012439728,
+          "relevant": true
+        },
+        {
+          "document": "contract-service",
+          "score": 0.2240554541349411,
+          "relevant": true
+        },
+        {
+          "document": "meeting-notes",
+          "score": 0.11838507652282715,
+          "relevant": false
+        },
+        {
+          "document": "invoice-receipt",
+          "score": 0.01590638980269432,
+          "relevant": false
+        }
+      ],
+      "batch_seconds": [
+        0.6743714170297608
+      ]
+    },
+    {
+      "id": "contracts-2",
+      "query": "正式协议",
+      "fixture_filters": [
+        "previous_month_upload"
+      ],
+      "candidate_count": 4,
+      "relevant_text_ids": [
+        "contract-service",
+        "contract-purchase"
+      ],
+      "results": [
+        {
+          "document": "contract-service",
+          "score": 0.22000707685947418,
+          "relevant": true
+        },
+        {
+          "document": "meeting-notes",
+          "score": 0.13660837709903717,
+          "relevant": false
+        },
+        {
+          "document": "contract-purchase",
+          "score": 0.06853748857975006,
+          "relevant": true
+        },
+        {
+          "document": "invoice-receipt",
+          "score": 0.020332351326942444,
+          "relevant": false
+        }
+      ],
+      "batch_seconds": [
+        0.5734927910380065
+      ]
+    },
+    {
+      "id": "config-1",
+      "query": "找到包含服务器 IP 地址的配置文件。",
+      "fixture_filters": [
+        "configuration_extensions"
+      ],
+      "candidate_count": 5,
+      "relevant_text_ids": [
+        "config-production",
+        "config-staging"
+      ],
+      "results": [
+        {
+          "document": "config-staging",
+          "score": 0.9777138829231262,
+          "relevant": true
+        },
+        {
+          "document": "config-production",
+          "score": 0.6477982997894287,
+          "relevant": true
+        },
+        {
+          "document": "permissions-settings",
+          "score": 0.013742320239543915,
+          "relevant": false
+        },
+        {
+          "document": "migration-runbook",
+          "score": 0.01196109689772129,
+          "relevant": false
+        },
+        {
+          "document": "contract-purchase",
+          "score": 0.002269468503072858,
+          "relevant": false
+        }
+      ],
+      "batch_seconds": [
+        0.6777740840334445,
+        0.31554120796499774
+      ]
+    },
+    {
+      "id": "config-2",
+      "query": "服务器部署时填写网络主机地址的设置文件",
+      "fixture_filters": [
+        "configuration_extensions"
+      ],
+      "candidate_count": 5,
+      "relevant_text_ids": [
+        "config-production",
+        "config-staging"
+      ],
+      "results": [
+        {
+          "document": "config-staging",
+          "score": 0.9814534187316895,
+          "relevant": true
+        },
+        {
+          "document": "config-production",
+          "score": 0.622459352016449,
+          "relevant": true
+        },
+        {
+          "document": "permissions-settings",
+          "score": 0.006097561679780483,
+          "relevant": false
+        },
+        {
+          "document": "migration-runbook",
+          "score": 0.0016103573143482208,
+          "relevant": false
+        },
+        {
+          "document": "contract-purchase",
+          "score": 0.00015236754552461207,
+          "relevant": false
+        }
+      ],
+      "batch_seconds": [
+        0.7056260840035975,
+        0.2216980829834938
+      ]
+    },
+    {
+      "id": "invoice-1",
+      "query": "帮我查找之前上传的电脑购买发票。",
+      "fixture_filters": [],
+      "candidate_count": 18,
+      "relevant_text_ids": [
+        "invoice-receipt"
+      ],
+      "results": [
+        {
+          "document": "invoice-receipt",
+          "score": 0.9669140577316284,
+          "relevant": true
+        },
+        {
+          "document": "contract-purchase",
+          "score": 0.7826625108718872,
+          "relevant": false
+        },
+        {
+          "document": "laptop-review",
+          "score": 0.04177388176321983,
+          "relevant": false
+        },
+        {
+          "document": "meeting-notes",
+          "score": 0.00838045310229063,
+          "relevant": false
+        },
+        {
+          "document": "migration-runbook",
+          "score": 0.004609571769833565,
+          "relevant": false
+        },
+        {
+          "document": "contract-older",
+          "score": 0.002378123579546809,
+          "relevant": false
+        },
+        {
+          "document": "contract-current",
+          "score": 0.0007208379684016109,
+          "relevant": false
+        },
+        {
+          "document": "contract-service",
+          "score": 0.0007096703629940748,
+          "relevant": false
+        },
+        {
+          "document": "shared-migration",
+          "score": 0.0004936049226671457,
+          "relevant": false
+        },
+        {
+          "document": "config-production",
+          "score": 0.00039821304380893707,
+          "relevant": false
+        },
+        {
+          "document": "config-staging",
+          "score": 0.00037118542240932584,
+          "relevant": false
+        },
+        {
+          "document": "permissions-settings",
+          "score": 0.0003353501087985933,
+          "relevant": false
+        },
+        {
+          "document": "ip-explanation",
+          "score": 0.0001500056532677263,
+          "relevant": false
+        },
+        {
+          "document": "permissions-guide",
+          "score": 0.00010720879799919203,
+          "relevant": false
+        },
+        {
+          "document": "migration-plan",
+          "score": 6.085040149628185e-05,
+          "relevant": false
+        },
+        {
+          "document": "travel-notes",
+          "score": 5.990705540170893e-05,
+          "relevant": false
+        },
+        {
+          "document": "recipe",
+          "score": 4.6656281483592466e-05,
+          "relevant": false
+        },
+        {
+          "document": "exercise",
+          "score": 3.321418626001105e-05,
+          "relevant": false
+        }
+      ],
+      "batch_seconds": [
+        0.7254745420068502,
+        0.7280964580131695,
+        0.6763696670532227,
+        0.5943645410006866,
+        0.3503025840036571
+      ]
+    },
+    {
+      "id": "invoice-2",
+      "query": "购买笔记本电脑后用于报销的凭证",
+      "fixture_filters": [],
+      "candidate_count": 18,
+      "relevant_text_ids": [
+        "invoice-receipt"
+      ],
+      "results": [
+        {
+          "document": "invoice-receipt",
+          "score": 0.9985561966896057,
+          "relevant": true
+        },
+        {
+          "document": "contract-purchase",
+          "score": 0.9977127313613892,
+          "relevant": false
+        },
+        {
+          "document": "laptop-review",
+          "score": 0.9032942056655884,
+          "relevant": false
+        },
+        {
+          "document": "meeting-notes",
+          "score": 0.10594827681779861,
+          "relevant": false
+        },
+        {
+          "document": "contract-service",
+          "score": 0.049222107976675034,
+          "relevant": false
+        },
+        {
+          "document": "contract-older",
+          "score": 0.04885777086019516,
+          "relevant": false
+        },
+        {
+          "document": "shared-migration",
+          "score": 0.009633651934564114,
+          "relevant": false
+        },
+        {
+          "document": "contract-current",
+          "score": 0.004101928789168596,
+          "relevant": false
+        },
+        {
+          "document": "ip-explanation",
+          "score": 0.0025909794494509697,
+          "relevant": false
+        },
+        {
+          "document": "migration-runbook",
+          "score": 0.0019877739250659943,
+          "relevant": false
+        },
+        {
+          "document": "travel-notes",
+          "score": 0.001124757225625217,
+          "relevant": false
+        },
+        {
+          "document": "config-production",
+          "score": 0.0009110511164180934,
+          "relevant": false
+        },
+        {
+          "document": "config-staging",
+          "score": 0.0008761798962950706,
+          "relevant": false
+        },
+        {
+          "document": "permissions-settings",
+          "score": 0.0008693673880770802,
+          "relevant": false
+        },
+        {
+          "document": "exercise",
+          "score": 0.0006771941552869976,
+          "relevant": false
+        },
+        {
+          "document": "permissions-guide",
+          "score": 0.00023322319611907005,
+          "relevant": false
+        },
+        {
+          "document": "recipe",
+          "score": 0.0001753699325490743,
+          "relevant": false
+        },
+        {
+          "document": "migration-plan",
+          "score": 8.252359111793339e-05,
+          "relevant": false
+        }
+      ],
+      "batch_seconds": [
+        0.6517712919740006,
+        0.6269245830480941,
+        0.7064836249919608,
+        0.532568083028309,
+        0.2835563750122674
+      ]
+    },
+    {
+      "id": "negative-1",
+      "query": "寻找水稻基因测序实验报告",
+      "fixture_filters": [],
+      "candidate_count": 18,
+      "relevant_text_ids": [],
+      "results": [
+        {
+          "document": "contract-service",
+          "score": 0.008315778337419033,
+          "relevant": false
+        },
+        {
+          "document": "shared-migration",
+          "score": 0.004038591403514147,
+          "relevant": false
+        },
+        {
+          "document": "exercise",
+          "score": 0.0028671580366790295,
+          "relevant": false
+        },
+        {
+          "document": "contract-older",
+          "score": 0.0028009265661239624,
+          "relevant": false
+        },
+        {
+          "document": "meeting-notes",
+          "score": 0.0025509123224765062,
+          "relevant": false
+        },
+        {
+          "document": "ip-explanation",
+          "score": 0.0025114631280303,
+          "relevant": false
+        },
+        {
+          "document": "laptop-review",
+          "score": 0.001687509473413229,
+          "relevant": false
+        },
+        {
+          "document": "invoice-receipt",
+          "score": 0.001356401713564992,
+          "relevant": false
+        },
+        {
+          "document": "travel-notes",
+          "score": 0.0012255673063918948,
+          "relevant": false
+        },
+        {
+          "document": "migration-runbook",
+          "score": 0.0010733063099905849,
+          "relevant": false
+        },
+        {
+          "document": "contract-current",
+          "score": 0.0009547315421514213,
+          "relevant": false
+        },
+        {
+          "document": "contract-purchase",
+          "score": 0.000823138456325978,
+          "relevant": false
+        },
+        {
+          "document": "config-production",
+          "score": 0.0006118339370004833,
+          "relevant": false
+        },
+        {
+          "document": "migration-plan",
+          "score": 0.0003301527176517993,
+          "relevant": false
+        },
+        {
+          "document": "permissions-settings",
+          "score": 0.0002694791182875633,
+          "relevant": false
+        },
+        {
+          "document": "permissions-guide",
+          "score": 0.00020662978931795806,
+          "relevant": false
+        },
+        {
+          "document": "recipe",
+          "score": 0.00010472555732121691,
+          "relevant": false
+        },
+        {
+          "document": "config-staging",
+          "score": 9.4612616521772e-05,
+          "relevant": false
+        }
+      ],
+      "batch_seconds": [
+        0.6616625000024214,
+        0.6314082500175573,
+        0.675770583038684,
+        0.5405223750276491,
+        0.31938333302969113
+      ]
+    },
+    {
+      "id": "negative-2",
+      "query": "火星探测器轨道计算手册",
+      "fixture_filters": [],
+      "candidate_count": 18,
+      "relevant_text_ids": [],
+      "results": [
+        {
+          "document": "exercise",
+          "score": 0.0032224839087575674,
+          "relevant": false
+        },
+        {
+          "document": "invoice-receipt",
+          "score": 0.001810210756957531,
+          "relevant": false
+        },
+        {
+          "document": "shared-migration",
+          "score": 0.001489517162553966,
+          "relevant": false
+        },
+        {
+          "document": "contract-older",
+          "score": 0.0011879053199663758,
+          "relevant": false
+        },
+        {
+          "document": "contract-service",
+          "score": 0.0010733063099905849,
+          "relevant": false
+        },
+        {
+          "document": "ip-explanation",
+          "score": 0.0010005043586716056,
+          "relevant": false
+        },
+        {
+          "document": "meeting-notes",
+          "score": 0.000947308843024075,
+          "relevant": false
+        },
+        {
+          "document": "contract-current",
+          "score": 0.000755405577365309,
+          "relevant": false
+        },
+        {
+          "document": "contract-purchase",
+          "score": 0.0004655268567148596,
+          "relevant": false
+        },
+        {
+          "document": "migration-runbook",
+          "score": 0.00043733438360504806,
+          "relevant": false
+        },
+        {
+          "document": "laptop-review",
+          "score": 0.00039204175118356943,
+          "relevant": false
+        },
+        {
+          "document": "travel-notes",
+          "score": 0.00037118542240932584,
+          "relevant": false
+        },
+        {
+          "document": "permissions-settings",
+          "score": 0.00023231418163049966,
+          "relevant": false
+        },
+        {
+          "document": "config-production",
+          "score": 0.0001039106646203436,
+          "relevant": false
+        },
+        {
+          "document": "recipe",
+          "score": 7.752412784611806e-05,
+          "relevant": false
+        },
+        {
+          "document": "permissions-guide",
+          "score": 7.368592923739925e-05,
+          "relevant": false
+        },
+        {
+          "document": "migration-plan",
+          "score": 5.967351171420887e-05,
+          "relevant": false
+        },
+        {
+          "document": "config-staging",
+          "score": 5.761218926636502e-05,
+          "relevant": false
+        }
+      ],
+      "batch_seconds": [
+        0.6655169580481015,
+        0.6138963329722174,
+        0.6803635410033166,
+        0.5280640830169432,
+        0.28714274999219924
+      ]
+    },
+    {
+      "id": "negative-3",
+      "query": "梵高油画修复过程记录",
+      "fixture_filters": [],
+      "candidate_count": 18,
+      "relevant_text_ids": [],
+      "results": [
+        {
+          "document": "meeting-notes",
+          "score": 0.01590638980269432,
+          "relevant": false
+        },
+        {
+          "document": "exercise",
+          "score": 0.00948571227490902,
+          "relevant": false
+        },
+        {
+          "document": "contract-service",
+          "score": 0.006338920909911394,
+          "relevant": false
+        },
+        {
+          "document": "invoice-receipt",
+          "score": 0.0037362203001976013,
+          "relevant": false
+        },
+        {
+          "document": "ip-explanation",
+          "score": 0.0034564093220978975,
+          "relevant": false
+        },
+        {
+          "document": "contract-older",
+          "score": 0.0028228326700627804,
+          "relevant": false
+        },
+        {
+          "document": "travel-notes",
+          "score": 0.0026730059180408716,
+          "relevant": false
+        },
+        {
+          "document": "contract-current",
+          "score": 0.0023596605751663446,
+          "relevant": false
+        },
+        {
+          "document": "shared-migration",
+          "score": 0.002269468503072858,
+          "relevant": false
+        },
+        {
+          "document": "laptop-review",
+          "score": 0.0014779429184272885,
+          "relevant": false
+        },
+        {
+          "document": "permissions-settings",
+          "score": 0.0005484791472554207,
+          "relevant": false
+        },
+        {
+          "document": "config-production",
+          "score": 0.0005152656231075525,
+          "relevant": false
+        },
+        {
+          "document": "contract-purchase",
+          "score": 0.0004619057581294328,
+          "relevant": false
+        },
+        {
+          "document": "recipe",
+          "score": 0.00034734528162516654,
+          "relevant": false
+        },
+        {
+          "document": "permissions-guide",
+          "score": 0.0003017925482708961,
+          "relevant": false
+        },
+        {
+          "document": "migration-plan",
+          "score": 0.00028685404686257243,
+          "relevant": false
+        },
+        {
+          "document": "migration-runbook",
+          "score": 0.00023050670279189944,
+          "relevant": false
+        },
+        {
+          "document": "config-staging",
+          "score": 0.00013982206291984767,
+          "relevant": false
+        }
+      ],
+      "batch_seconds": [
+        0.7080357910017483,
+        0.7019254579790868,
+        0.7278223340399563,
+        0.5586075419560075,
+        0.34457470901543275
+      ]
+    }
+  ],
+  "torch_version": "2.12.1",
+  "transformers_version": "4.57.6",
+  "load_seconds": 1.143177458026912,
+  "token_ids": {
+    "yes": 9693,
+    "no": 2152
+  }
+}

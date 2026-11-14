@@ -74,7 +74,7 @@ func completedBlob(t *testing.T, f *fixture, w *httptest.ResponseRecorder) model
 		Item model.File `json:"item"`
 	}
 	decode(t, w, &result)
-	f.waitAnalysis(t, result.Item.ID)
+	f.assertIndexQueued(t, result.Item.ID)
 	return result.Item
 }
 
