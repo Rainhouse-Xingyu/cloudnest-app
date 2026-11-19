@@ -40,4 +40,4 @@ jobs:
             -destination 'generic/platform=macOS' -derivedDataPath "$RUNNER_TEMP/cloudnest" build
           app="$RUNNER_TEMP/cloudnest/Build/Products/Release/CloudNest.app"
           codesign --verify --deep --strict "$app"
-          lipo -verify_arch arm64 x86_64 "$app/Contents/MacOS/CloudNest"
+          lipo "$app/Contents/MacOS/CloudNest" -verify_arch arm64 x86_64
