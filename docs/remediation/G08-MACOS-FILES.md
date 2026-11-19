@@ -6,4 +6,6 @@ G08 在独立的 `cloudnest_macos/` 中接入 Go 文件 API。原生 Table 支�
 
 真实后端联调通过临时 MySQL、Redis 和 HTTPS Go 路由验证客户端，入口为 `python3 scripts/test-macos-backend.py`，依赖 Homebrew 的 `mysql@8.4`、`redis` 和项目 Go/Swift 工具链。数据库使用随机本地端口、独立临时目录和专用测试账户，进程在测试结束时退出。TLS 测试客户端使用本次服务器证书作为独立信任锚。
 
-当前正在验证目录创建、重名冲突、改名、跨用户拒绝、批量删除部分成功、回收站恢复及退出后清空文件列表。测试结果以 PR 的精确提交检查为准。上传下载任务、进度/暂停/恢复、拖拽、Quick Look、移动/复制和客户端持久恢复仍需补齐。G08 保持进行中。
+提交 5ae810b 的 [双平台 CI 44640208599](https://github.com/Rainhouse-Xingyu/cloudnest-app/actions/runs/44640208599) 已通过目录创建、重名冲突、改名、跨用户拒绝、批量删除部分成功、回收站恢复及退出后清空文件列表，另有默认/自定义权限会话联调。macOS 26.7.2 / Xcode 26.6 和 macOS 27.0.1 / Xcode 27.1 均通过基础 Swift 回归、真实 Go 联调、Universal Release、签名及双架构检查。上传下载任务、进度/暂停/恢复、拖拽、Quick Look、移动/复制和客户端持久恢复仍需补齐。G08 保持进行中。
+
+CI 应用包已从 artifact 14584934079 下载，外层归档 SHA-256 与 GitHub 摘要一致，解包后再次通过签名校验。在本机 macOS 27.2.1 启动后，确认进程运行并创建 900×590 的可见窗口。原生 UI 工具连续两次超时，当前进程的 Accessibility 与 Screen Capture preflight 均为 false，因此登录表单和文件界面的实际交互/视觉验收仍待完成。此次只将进程和窗口创建记为本机运行证据。
