@@ -39,6 +39,7 @@ def run():
                 processes.append(subprocess.Popen([
                     mysqld, '--no-defaults', f'--datadir={data}', f'--socket={mysql_socket}',
                     f'--port={mysql_port}', '--bind-address=127.0.0.1', '--mysqlx=0',
+                    '--log-bin-trust-function-creators=1',
                     f'--pid-file={directory / "mysql.pid"}',
                 ], stdout=mysql_log, stderr=subprocess.STDOUT))
                 processes.append(subprocess.Popen([
