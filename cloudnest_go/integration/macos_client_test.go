@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"cloudenest_go/model"
@@ -35,6 +36,12 @@ func TestMacOSClientSession(t *testing.T) {
 	if err := os.WriteFile(certificatePath, server.Certificate().Raw, 0600); err != nil {
 		t.Fatal(err)
 	}
+	response := f.json(t, "POST", "/api/files/folders", f.bob,
+		map[string]any{"name": "Other-user-folder"}, 200)
+	var otherFolder struct {
+		Item model.File `json:"item"`
+	}
+	decode(t, response, &otherFolder)
 	packagePath, err := filepath.Abs("../../cloudnest_macos")
 	if err != nil {
 		t.Fatal(err)
@@ -59,14 +66,15 @@ func TestMacOSClientSession(t *testing.T) {
 				}
 			}
 			command := exec.Command("swift", "test", "--package-path", packagePath,
-				"--filter", "realBackendSessionLifecycle")
+				"--filter", "realBackend")
 			command.Env = append(os.Environ(),
 				"CLOUDNEST_SWIFT_ORIGIN="+server.URL,
 				"CLOUDNEST_SWIFT_REDIRECT_ORIGIN="+redirectServer.URL,
 				"CLOUDNEST_SWIFT_USERNAME="+user.Username,
 				"CLOUDNEST_SWIFT_PASSWORD=disposable-fixture-password",
 				"CLOUDNEST_SWIFT_CERTIFICATE="+certificatePath,
-				"CLOUDNEST_SWIFT_RESTRICTED="+tc.restricted)
+				"CLOUDNEST_SWIFT_RESTRICTED="+tc.restricted,
+				"CLOUDNEST_SWIFT_FORBIDDEN_FILE="+strconv.FormatInt(otherFolder.Item.ID, 10))
 			output, err := command.CombinedOutput()
 			t.Log(string(output))
 			if err != nil {

@@ -17,7 +17,6 @@ struct CloudNestApp: App {
         .commands {
             CommandMenu("服务器") {
                 Button("刷新连接状态") { Task { await session.refresh() } }
-                    .keyboardShortcut("r")
                     .disabled(!session.hasSavedSession || session.busy)
                 Button("退出登录") { Task { await session.signOut() } }
                     .disabled(!session.hasSavedSession || session.busy)
@@ -32,15 +31,24 @@ struct CloudNestApp: App {
 }
 
 private enum Page: String, CaseIterable, Identifiable {
+    case files = "我的文件"
+    case recycleBin = "回收站"
     case connection = "服务器连接"
     case account = "账户"
     var id: Self { self }
-    var icon: String { self == .connection ? "network" : "person.crop.circle" }
+    var icon: String {
+        switch self {
+        case .files: "folder"
+        case .recycleBin: "trash"
+        case .connection: "network"
+        case .account: "person.crop.circle"
+        }
+    }
 }
 
 struct WorkspaceWindow: View {
     let session: SessionState
-    @State private var selection: Page? = .connection
+    @State private var selection: Page? = .files
 
     var body: some View {
         if session.hasSavedSession {
@@ -54,6 +62,12 @@ struct WorkspaceWindow: View {
             } detail: {
                 Group {
                     switch selection ?? .connection {
+                    case .files:
+                        FileBrowserView(session: session, recycleBin: false)
+                            .id(session.account?.id)
+                    case .recycleBin:
+                        FileBrowserView(session: session, recycleBin: true)
+                            .id(session.account?.id)
                     case .connection:
                         ConnectionDetails(session: session)
                     case .account:
@@ -74,13 +88,16 @@ struct WorkspaceWindow: View {
                 }
                 .navigationTitle((selection ?? .connection).rawValue)
                 .toolbar {
-                    ToolbarItem {
-                        Button {
-                            Task { await session.refresh() }
-                        } label: {
-                            Label("刷新连接状态", systemImage: "arrow.clockwise")
+                    if selection == .connection || selection == .account {
+                        ToolbarItem {
+                            Button {
+                                Task { await session.refresh() }
+                            } label: {
+                                Label("刷新连接状态", systemImage: "arrow.clockwise")
+                            }
+                            .keyboardShortcut("r")
+                            .disabled(session.busy)
                         }
-                        .disabled(session.busy)
                     }
                 }
             }

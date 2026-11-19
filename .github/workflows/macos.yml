@@ -56,3 +56,11 @@ jobs:
           echo "Built architectures: $architectures"
           [[ " $architectures " == *" arm64 "* ]]
           [[ " $architectures " == *" x86_64 "* ]]
+      - name: Package the verified app for native UI testing
+        run: ditto -c -k --sequesterRsrc --keepParent "$RUNNER_TEMP/cloudnest/Build/Products/Release/CloudNest.app" "$RUNNER_TEMP/CloudNest.zip"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: CloudNest-${{ matrix.runner }}-${{ github.sha }}
+          path: ${{ runner.temp }}/CloudNest.zip
+          retention-days: 7
+          if-no-files-found: error

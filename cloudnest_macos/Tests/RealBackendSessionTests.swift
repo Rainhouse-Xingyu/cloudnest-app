@@ -3,7 +3,7 @@ import Security
 import Testing
 @testable import CloudNestCore
 
-private final class FixtureTLSDelegate: NSObject, URLSessionDelegate, URLSessionTaskDelegate, @unchecked Sendable {
+final class FixtureTLSDelegate: NSObject, URLSessionDelegate, URLSessionTaskDelegate, @unchecked Sendable {
     let certificate: SecCertificate
 
     init(der: Data) throws {

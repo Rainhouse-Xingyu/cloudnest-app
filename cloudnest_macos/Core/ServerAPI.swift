@@ -27,6 +27,7 @@ struct ServerOrigin: Equatable, Sendable {
 
 enum ServerError: LocalizedError, Equatable {
     case invalidAddress, invalidResponse, signInRejected, unauthorized, forbidden, rateLimited, unavailable
+    case invalidOperation, notFound, conflict, capacityExceeded
 
     var errorDescription: String? {
         switch self {
@@ -36,6 +37,10 @@ enum ServerError: LocalizedError, Equatable {
         case .unauthorized: "会话已失效，请重新登录。"
         case .forbidden: "当前账户没有权限执行此操作。"
         case .rateLimited: "请求过于频繁，请稍后再试。"
+        case .invalidOperation: "操作参数无效，请检查名称及目标目录。"
+        case .notFound: "项目已被移动或删除，请刷新目录。"
+        case .conflict: "项目已发生变化或目标中已有同名项目，请刷新后重试。"
+        case .capacityExceeded: "服务器存储空间或传输额度不足。"
         case .unavailable: "服务器暂时不可用，请检查连接后重试。"
         }
     }
@@ -97,7 +102,7 @@ struct ServerAPI: Sendable {
 
     func login(_ origin: ServerOrigin, username: String, password: String) async throws -> LoginResponse {
         let body = try JSONEncoder().encode(Credentials(username: username, password: password))
-        let result: LoginResponse = try await request(origin, "api/auth/login", body: body)
+        let result: LoginResponse = try await request(origin, "api/auth/login", body: body, method: "POST")
         guard result.tokenType.caseInsensitiveCompare("Bearer") == .orderedSame,
               !result.token.isEmpty, result.token.utf8.count <= 8192,
               result.token.utf8.allSatisfy({ (33...126).contains($0) }),
@@ -119,10 +124,12 @@ struct ServerAPI: Sendable {
         let _: Message = try await request(origin, "api/resource/health", token: token)
     }
 
-    private func request<T: Decodable>(_ origin: ServerOrigin, _ path: String, token: String? = nil,
-                                      body: Data? = nil, method: String = "GET") async throws -> T {
-        var req = URLRequest(url: origin.endpoint(path), cachePolicy: .reloadIgnoringLocalCacheData)
-        req.httpMethod = body == nil ? method : "POST"
+    func request<T: Decodable>(_ origin: ServerOrigin, _ path: String, token: String? = nil,
+                                      body: Data? = nil, method: String = "GET",
+                                      query: [URLQueryItem] = [], maximumBytes: Int = 64 * 1024) async throws -> T {
+        let url = origin.endpoint(path).appending(queryItems: query)
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
+        req.httpMethod = method
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         if let token { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         if let body {
@@ -133,6 +140,10 @@ struct ServerAPI: Sendable {
         guard let response = response as? HTTPURLResponse else { throw ServerError.invalidResponse }
         switch response.statusCode {
         case 200: break
+        case 400, 413, 422: throw ServerError.invalidOperation
+        case 404: throw ServerError.notFound
+        case 409: throw ServerError.conflict
+        case 507: throw ServerError.capacityExceeded
         case 401: throw path == "api/auth/login" ? ServerError.signInRejected : ServerError.unauthorized
         case 403: throw ServerError.forbidden
         case 429: throw ServerError.rateLimited
@@ -141,7 +152,7 @@ struct ServerAPI: Sendable {
         }
         var data = Data()
         for try await byte in bytes {
-            guard data.count < 64 * 1024 else { throw ServerError.invalidResponse }
+            guard data.count < maximumBytes else { throw ServerError.invalidResponse }
             data.append(byte)
         }
         do {
