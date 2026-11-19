@@ -57,7 +57,7 @@ private final class FixtureTLSDelegate: NSObject, URLSessionDelegate, URLSession
     #expect(state.account?.username == username)
     let expected: SessionState.Connection = env["CLOUDNEST_SWIFT_RESTRICTED"] == "1" ? .restricted : .connected
     #expect(state.connection == expected)
-    let saved = try #require(vault.read())
+    let saved = try #require(try vault.read())
 
     let reopened = SessionState(api: api, vault: vault)
     await reopened.restore()
