@@ -10,7 +10,7 @@ private final class FixtureTLSDelegate: NSObject, URLSessionDelegate, URLSession
         certificate = try #require(SecCertificateCreateWithData(nil, der as CFData))
     }
 
-    func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge,
+    func urlSession(_ session: URLSession, task: URLSessionTask, didReceive challenge: URLAuthenticationChallenge,
                     completionHandler: @escaping @Sendable (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
         guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
               let trust = challenge.protectionSpace.serverTrust,
@@ -44,7 +44,14 @@ private final class FixtureTLSDelegate: NSObject, URLSessionDelegate, URLSession
     configuration.timeoutIntervalForResource = 30
     let transport = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
     defer { transport.invalidateAndCancel() }
-    let api = ServerAPI(session: transport)
+    let api = ServerAPI(session: transport, delegate: delegate)
+    let redirectOrigin = try ServerOrigin(#require(env["CLOUDNEST_SWIFT_REDIRECT_ORIGIN"]))
+    do {
+        _ = try await api.login(redirectOrigin, username: username, password: password)
+        Issue.record("A redirected login was accepted")
+    } catch {
+        #expect(error as? ServerError == .invalidResponse)
+    }
     let vault = KeychainSessionVault(service: "org.cloudnest.macos.real-test.\(UUID())")
     defer { try? vault.clear() }
     let state = SessionState(api: api, vault: vault)

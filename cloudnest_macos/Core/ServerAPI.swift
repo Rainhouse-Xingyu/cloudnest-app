@@ -77,6 +77,7 @@ struct ServerAPI: Sendable {
     private struct Profile: Decodable { let user: Account }
     private struct Message: Decodable { let message: String }
     private let session: URLSession
+    private let requestDelegate: any URLSessionTaskDelegate
 
     init(configuration: URLSessionConfiguration = .ephemeral) {
         configuration.httpCookieStorage = nil
@@ -84,11 +85,14 @@ struct ServerAPI: Sendable {
         configuration.urlCache = nil
         configuration.timeoutIntervalForRequest = 15
         configuration.timeoutIntervalForResource = 30
-        session = URLSession(configuration: configuration, delegate: NoRedirect(), delegateQueue: nil)
+        let delegate = NoRedirect()
+        requestDelegate = delegate
+        session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
     }
 
-    init(session: URLSession) {
+    init(session: URLSession, delegate: any URLSessionTaskDelegate) {
         self.session = session
+        requestDelegate = delegate
     }
 
     func login(_ origin: ServerOrigin, username: String, password: String) async throws -> LoginResponse {
@@ -125,7 +129,7 @@ struct ServerAPI: Sendable {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
             req.httpBody = body
         }
-        let (bytes, response) = try await session.bytes(for: req)
+        let (bytes, response) = try await session.bytes(for: req, delegate: requestDelegate)
         guard let response = response as? HTTPURLResponse else { throw ServerError.invalidResponse }
         switch response.statusCode {
         case 200: break

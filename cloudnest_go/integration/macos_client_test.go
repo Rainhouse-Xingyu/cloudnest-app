@@ -3,6 +3,7 @@
 package integration
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -21,6 +22,15 @@ func TestMacOSClientSession(t *testing.T) {
 	f := newFixture(t)
 	server := httptest.NewTLSServer(f.router)
 	defer server.Close()
+	redirectServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/auth/login" {
+			t.Error("Swift followed the credential-bearing redirect")
+			w.WriteHeader(http.StatusTeapot)
+			return
+		}
+		http.Redirect(w, r, "/redirected", http.StatusTemporaryRedirect)
+	}))
+	defer redirectServer.Close()
 	certificatePath := filepath.Join(t.TempDir(), "server.der")
 	if err := os.WriteFile(certificatePath, server.Certificate().Raw, 0600); err != nil {
 		t.Fatal(err)
@@ -52,6 +62,7 @@ func TestMacOSClientSession(t *testing.T) {
 				"--filter", "realBackendSessionLifecycle")
 			command.Env = append(os.Environ(),
 				"CLOUDNEST_SWIFT_ORIGIN="+server.URL,
+				"CLOUDNEST_SWIFT_REDIRECT_ORIGIN="+redirectServer.URL,
 				"CLOUDNEST_SWIFT_USERNAME="+user.Username,
 				"CLOUDNEST_SWIFT_PASSWORD=disposable-fixture-password",
 				"CLOUDNEST_SWIFT_CERTIFICATE="+certificatePath,
