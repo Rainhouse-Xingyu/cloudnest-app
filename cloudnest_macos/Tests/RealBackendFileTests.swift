@@ -39,7 +39,8 @@ import Testing
     #expect(browser.items.first?.filename == "Renamed")
     #expect(browser.items.first?.modified != nil)
 
-    let otherID = try #require(Int64(try #require(env["CLOUDNEST_SWIFT_FORBIDDEN_FILE"])))
+    let otherValue = try #require(env["CLOUDNEST_SWIFT_FORBIDDEN_FILE"])
+    let otherID = try #require(Int64(otherValue))
     let result = try await state.trashFiles(ids: [child.id, otherID])
     #expect(result.deletedIDs == [child.id])
     #expect(result.failed.keys.contains(String(otherID)))
