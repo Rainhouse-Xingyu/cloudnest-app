@@ -87,6 +87,10 @@ struct ServerAPI: Sendable {
         session = URLSession(configuration: configuration, delegate: NoRedirect(), delegateQueue: nil)
     }
 
+    init(session: URLSession) {
+        self.session = session
+    }
+
     func login(_ origin: ServerOrigin, username: String, password: String) async throws -> LoginResponse {
         let body = try JSONEncoder().encode(Credentials(username: username, password: password))
         let result: LoginResponse = try await request(origin, "api/auth/login", body: body)
