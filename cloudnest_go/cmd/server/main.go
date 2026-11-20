@@ -57,7 +57,7 @@ func main() {
 	if err := applyCLIOverrides(&cfg, args); err != nil {
 		log.Fatalf("启动参数错误: %v", err)
 	}
-	databaseOnly := maintenance.kind == "reconcile-frp-reservation" || maintenance.kind == "audit-frp-configs" || maintenance.kind == "encrypt-frp-configs" || maintenance.kind == "audit-file-names" || maintenance.kind == "migrate-file-names" || maintenance.kind == "audit-storage-references" || maintenance.kind == "migrate-storage-references" || maintenance.kind == "gc-storage" || maintenance.kind == "prune-read-leases" || maintenance.kind == "audit-transfers" || maintenance.kind == "reconcile-transfers" || maintenance.kind == "set-transfer-limit"
+	databaseOnly := maintenance.kind == "audit-mysql-time" || maintenance.kind == "reconcile-frp-reservation" || maintenance.kind == "audit-frp-configs" || maintenance.kind == "encrypt-frp-configs" || maintenance.kind == "audit-file-names" || maintenance.kind == "migrate-file-names" || maintenance.kind == "audit-storage-references" || maintenance.kind == "migrate-storage-references" || maintenance.kind == "gc-storage" || maintenance.kind == "prune-read-leases" || maintenance.kind == "audit-transfers" || maintenance.kind == "reconcile-transfers" || maintenance.kind == "set-transfer-limit"
 	if databaseOnly {
 		err = cfg.ValidateDatabase()
 	} else {
@@ -105,6 +105,19 @@ func main() {
 	}
 	if maintenance.kind != "" {
 		switch maintenance.kind {
+		case "audit-mysql-time":
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
+			var report store.MySQLTimeAudit
+			report, err = store.AuditMySQLTime(ctx, db)
+			if err == nil {
+				encoder := json.NewEncoder(os.Stdout)
+				encoder.SetIndent("", "  ")
+				err = encoder.Encode(report)
+				if err == nil && report.Truncated {
+					err = store.ErrMySQLTimeAuditTruncated
+				}
+			}
 		case "reconcile-frp-reservation":
 			if err = store.CheckAgentSchema(db); err != nil {
 				break
