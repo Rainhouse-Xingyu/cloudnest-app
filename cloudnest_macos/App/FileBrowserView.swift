@@ -1,15 +1,22 @@
 import SwiftUI
 import AppKit
+import QuickLook
 
 struct FileBrowserView: View {
     let transfers: TransferManager
+    let session: SessionState
     @State private var browser: FileBrowserState
     @State private var showingInspector = false
     @State private var naming: NameAction?
     @State private var confirmingTrash = false
+    @State private var destination: FileDestinationAction?
+    @State private var previewRequest: UUID?
+    @State private var previewURL: URL?
+    @State private var previewGeneration = UUID()
 
     init(session: SessionState, transfers: TransferManager, recycleBin: Bool) {
         self.transfers = transfers
+        self.session = session
         _browser = State(initialValue: FileBrowserState(session: session, recycleBin: recycleBin))
     }
 
@@ -39,7 +46,8 @@ struct FileBrowserView: View {
                 selectionMenu(ids)
             } primaryAction: { ids in
                 if ids.count == 1, let item = browser.items.first(where: { ids.contains($0.id) }) {
-                    Task { await browser.open(item) }
+                    if item.isDirectory { Task { await browser.open(item) } }
+                    else { preparePreview(item) }
                 }
             }
             .dropDestination(for: URL.self) { urls, _ in
@@ -57,6 +65,20 @@ struct FileBrowserView: View {
                     ContentUnavailableView(browser.recycleBin ? "回收站为空" : "此文件夹为空",
                                            systemImage: browser.recycleBin ? "trash" : "folder")
                 }
+            }
+            if let id = previewRequest, let job = transfers.records[id], job.phase != .completed {
+                HStack {
+                    if job.phase.isActive { ProgressView().controlSize(.small) }
+                    Text(job.error ?? "正在准备预览，可在传输中查看进度")
+                    Spacer()
+                    Button("取消预览") {
+                        previewGeneration = UUID()
+                        previewRequest = nil
+                        Task { await transfers.cancel(id) }
+                    }
+                }
+                .foregroundStyle(.secondary)
+                .padding(12)
             }
             if let error = transfers.error {
                 Label(error, systemImage: "exclamationmark.circle")
@@ -116,6 +138,12 @@ struct FileBrowserView: View {
             FileInspector(items: browser.selectedItems)
                 .inspectorColumnWidth(min: 220, ideal: 260, max: 350)
         }
+        .quickLookPreview($previewURL)
+        .sheet(item: $destination) { action in
+            FileDestinationSheet(session: session, action: action) { target in
+                Task { await browser.relocate(ids: action.ids, parentID: target, copy: action.copy) }
+            }
+        }
         .sheet(item: $naming) { action in
             FileNameSheet(action: action) { name in
                 Task {
@@ -130,8 +158,35 @@ struct FileBrowserView: View {
             Button("移入回收站", role: .destructive) { Task { await browser.trashSelected() } }
         }
         .task { await browser.reload() }
+        .onChange(of: previewRequest.flatMap { transfers.records[$0]?.phase }) {
+            guard let id = previewRequest, transfers.records[id]?.phase == .completed else { return }
+            let generation = previewGeneration
+            Task {
+                do {
+                    let url = try await transfers.resultURL(id)
+                    guard generation == previewGeneration, previewRequest == id else { return }
+                    previewURL = url
+                    previewRequest = nil
+                } catch { transfers.report(error) }
+            }
+        }
         .onChange(of: transfers.jobs.filter { $0.direction == .upload && $0.phase == .completed }.count) {
             Task { await browser.reload() }
+        }
+    }
+
+    private func preparePreview(_ item: FileItem) {
+        let generation = UUID()
+        previewGeneration = generation
+        let previous = previewRequest
+        previewRequest = nil
+        Task {
+            if let previous { await transfers.cancel(previous) }
+            do {
+                let id = try await transfers.enqueuePreview(item)
+                if generation == previewGeneration { previewRequest = id }
+                else { await transfers.cancel(id) }
+            } catch { transfers.report(error) }
         }
     }
 
@@ -177,6 +232,11 @@ struct FileBrowserView: View {
                 guard response == .OK, let directory = panel.url else { return }
                 Task {
                     for item in items {
+                        guard item.filename != ".", item.filename != "..",
+                              URL(fileURLWithPath: item.filename).lastPathComponent == item.filename else {
+                            transfers.report(ServerError.invalidResponse)
+                            continue
+                        }
                         let name = item.isDirectory ? "\(item.filename).zip" : item.filename
                         do { try await transfers.enqueueDownload(item, destination: directory.appending(path: name)) }
                         catch { transfers.report(error) }
@@ -210,10 +270,13 @@ struct FileBrowserView: View {
                 .disabled(ids.count != 1)
             } else {
                 Button("下载…") { chooseDownloads(browser.items.filter { ids.contains($0.id) }) }
+                Button("移动到…") { destination = FileDestinationAction(ids: ids.sorted(), copy: false) }
+                Button("复制到…") { destination = FileDestinationAction(ids: ids.sorted(), copy: true) }
                 if ids.count == 1, let item = browser.items.first(where: { ids.contains($0.id) }) {
                     if item.isDirectory {
                         Button("打开") { Task { await browser.open(item) } }
                     }
+                    if !item.isDirectory { Button("快速查看") { preparePreview(item) } }
                     Button("重新命名") { naming = .rename(item) }
                 }
                 Button("移入回收站", role: .destructive) {

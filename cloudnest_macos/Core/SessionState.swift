@@ -151,6 +151,12 @@ final class SessionState {
         }
     }
 
+    func relocateFiles(ids: [Int64], parentID: Int64, copy: Bool) async throws {
+        try await withSession { origin, token in
+            try await api.relocateFiles(origin, token: token, ids: ids, parentID: parentID, copy: copy)
+        }
+    }
+
     var transferIdentity: TransferIdentity? {
         guard let origin, let account, saved != nil else { return nil }
         return TransferIdentity(server: origin.url.absoluteString, userID: account.id)

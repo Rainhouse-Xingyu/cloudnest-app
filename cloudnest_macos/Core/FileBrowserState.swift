@@ -76,6 +76,10 @@ final class FileBrowserState {
         await mutate { try await self.session.restoreFile(id: item.id) }
     }
 
+    func relocate(ids: [Int64], parentID: Int64, copy: Bool) async {
+        await mutate { try await self.session.relocateFiles(ids: ids, parentID: parentID, copy: copy) }
+    }
+
     private func load(folders next: [FileItem]) async {
         guard !busy else { return }
         busy = true

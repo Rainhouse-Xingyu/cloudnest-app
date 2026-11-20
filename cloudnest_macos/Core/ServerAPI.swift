@@ -162,7 +162,7 @@ struct ServerAPI: Sendable {
         }
     }
     func downloadResponse(_ origin: ServerOrigin, token: String, fileID: Int64, archive: Bool,
-                          start: Int64?, end: Int64?, etag: String?) async throws -> (URLSession.AsyncBytes, HTTPURLResponse) {
+                          start: Int64?, end: Int64?, etag: String?) async throws -> (DownloadStream, HTTPURLResponse) {
         let path = archive ? "api/files/\(fileID)/download-zip" : "api/files/\(fileID)/download"
         var request = URLRequest(url: origin.endpoint(path), cachePolicy: .reloadIgnoringLocalCacheData)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -171,10 +171,15 @@ struct ServerAPI: Sendable {
             request.setValue("bytes=\(start)-\(end)", forHTTPHeaderField: "Range")
             if let etag { request.setValue(etag, forHTTPHeaderField: "If-Range") }
         }
-        let (bytes, response) = try await transferSession.bytes(for: request, delegate: requestDelegate)
-        guard let response = response as? HTTPURLResponse else { throw ServerError.invalidResponse }
-        if ![200, 206, 416].contains(response.statusCode) { try validateStatus(response.statusCode) }
-        return (bytes, response)
+        let stream = DownloadStream(configuration: transferSession.configuration, policy: requestDelegate)
+        do {
+            let response = try await stream.start(request)
+            if ![200, 206, 416].contains(response.statusCode) { try validateStatus(response.statusCode) }
+            return (stream, response)
+        } catch {
+            stream.cancel()
+            throw error
+        }
     }
 
     private func validateStatus(_ status: Int, login: Bool = false) throws {

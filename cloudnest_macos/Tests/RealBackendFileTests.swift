@@ -59,6 +59,26 @@ import Testing
     await browser.navigate(to: 0)
     #expect(browser.parentID == 0)
     #expect(browser.items.contains { $0.id == folder.id })
+    let targetName = "Destination-\(UUID())"
+    await browser.createFolder(name: targetName)
+    let destination = try #require(browser.items.first { $0.filename == targetName })
+    try await state.relocateFiles(ids: [folder.id], parentID: destination.id, copy: true)
+    let copied = try await state.listFiles(parentID: destination.id, recycleBin: false)
+    #expect(copied.count == 1)
+    #expect(copied.first?.id != folder.id)
+    #expect(copied.first?.filename == folder.filename)
+    do {
+        try await state.relocateFiles(ids: [folder.id], parentID: destination.id, copy: false)
+        Issue.record("A conflicting move was accepted")
+    } catch { #expect(error as? ServerError == .conflict) }
+    try await state.renameFile(id: folder.id, name: "Moved-\(UUID())")
+    try await state.relocateFiles(ids: [folder.id], parentID: destination.id, copy: false)
+    let moved = try await state.listFiles(parentID: destination.id, recycleBin: false)
+    #expect(moved.contains { $0.id == folder.id })
+    do {
+        try await state.relocateFiles(ids: [otherID], parentID: destination.id, copy: true)
+        Issue.record("A cross-user copy was accepted")
+    } catch { #expect(error as? ServerError == .forbidden) }
     await state.signOut()
     await browser.reload()
     #expect(browser.items.isEmpty)

@@ -19,9 +19,9 @@ struct CloudNestApp: App {
                     await session.restore()
                     await transfers.restore()
                 }
-                .onChange(of: session.transferIdentity) { Task { await transfers.synchronizeIdentity() } }
         }
         .defaultSize(width: 900, height: 590)
+        .onChange(of: session.transferIdentity) { Task { await transfers.synchronizeIdentity() } }
         .commands {
             CommandMenu("服务器") {
                 Button("刷新连接状态") { Task { await session.refresh() } }

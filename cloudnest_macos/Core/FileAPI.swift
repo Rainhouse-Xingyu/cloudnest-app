@@ -46,6 +46,14 @@ extension ServerAPI {
     }
     private struct RenameInput: Encodable { let name: String }
     private struct SelectionInput: Encodable { let file_ids: [Int64] }
+    private struct RelocateInput: Encodable {
+        let file_ids: [Int64]
+        let target_parent_id: Int64
+    }
+    private struct RelocateResponse: Decodable {
+        let updated_ids: [Int64]?
+        let new_ids: [Int64]?
+    }
 
     func files(_ origin: ServerOrigin, token: String, parentID: Int64, recycleBin: Bool) async throws -> [FileItem] {
         let path = recycleBin ? "api/files/recycle-bin" : "api/files"
@@ -79,4 +87,13 @@ extension ServerAPI {
     func restoreFile(_ origin: ServerOrigin, token: String, id: Int64) async throws {
         let _: FileResponse = try await request(origin, "api/files/\(id)/restore", token: token, method: "POST")
     }
+    func relocateFiles(_ origin: ServerOrigin, token: String, ids: [Int64], parentID: Int64, copy: Bool) async throws {
+        let action = copy ? "copy" : "move"
+        let body = try JSONEncoder().encode(RelocateInput(file_ids: ids, target_parent_id: parentID))
+        let result: RelocateResponse = try await request(origin, "api/files/\(action)", token: token, body: body, method: "POST")
+        guard let affected = copy ? result.new_ids : result.updated_ids, affected.allSatisfy({ $0 > 0 }) else {
+            throw ServerError.invalidResponse
+        }
+    }
+
 }

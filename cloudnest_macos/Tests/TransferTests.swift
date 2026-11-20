@@ -99,3 +99,36 @@ private func transferFixture(name: String = "out.bin", total: Int64 = 0) -> Tran
     let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
     #expect(json["token"] == nil)
 }
+
+private final class StreamFixtureProtocol: URLProtocol, @unchecked Sendable {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil,
+                                       headerFields: ["Content-Length": "65536"])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(repeating: 7, count: 65536))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
+private final class StreamFixturePolicy: NSObject, URLSessionTaskDelegate {}
+
+@Test func cancellingDownloadReleasesAnUnacknowledgedBlock() async throws {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [StreamFixtureProtocol.self]
+    let stream = DownloadStream(configuration: configuration, policy: StreamFixturePolicy())
+    defer { stream.cancel() }
+    let response = try await stream.start(URLRequest(url: URL(string: "https://stream.test/file")!))
+    #expect(response.statusCode == 200)
+    var iterator = stream.chunks.makeAsyncIterator()
+    let chunk = try #require(try await iterator.next())
+    #expect(!chunk.data.isEmpty)
+    stream.cancel()
+    // Cancel must release the delegate even when the consumer still owns a block.
+    do {
+        _ = try await iterator.next()
+        Issue.record("The cancelled stream completed without its cancellation error")
+    } catch { #expect(error is CancellationError) }
+}

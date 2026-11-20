@@ -61,6 +61,7 @@ final class TransferManager {
     func enqueueUpload(_ url: URL, parentID: Int64) async throws -> UUID {
         try await ensureStore()
         let context = try session.transferContext()
+        error = nil
         let name = url.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, parentID >= 0 else { throw ServerError.invalidOperation }
         let bookmark = try await disk.bookmark(url)
@@ -76,6 +77,7 @@ final class TransferManager {
     func enqueueDownload(_ file: FileItem, destination: URL) async throws -> UUID {
         try await ensureStore()
         let context = try session.transferContext()
+        error = nil
         let name = destination.lastPathComponent
         guard !name.isEmpty, name != ".", name != "..", file.id > 0 else { throw ServerError.invalidOperation }
         let bookmark = try await disk.bookmark(destination.deletingLastPathComponent())
@@ -85,6 +87,15 @@ final class TransferManager {
         try await persist(job)
         await schedule()
         return job.id
+    }
+
+    func enqueuePreview(_ file: FileItem) async throws -> UUID {
+        guard !file.isDirectory, file.filename != ".", file.filename != "..",
+              URL(fileURLWithPath: file.filename).lastPathComponent == file.filename else { throw ServerError.invalidResponse }
+        let folder = directory.appending(path: "previews/\(UUID())", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true,
+                                                attributes: [.posixPermissions: 0o700])
+        return try await enqueueDownload(file, destination: folder.appending(path: file.filename))
     }
 
     func resume(_ id: UUID) async {
@@ -295,11 +306,11 @@ final class TransferManager {
             var (bytes, response) = try await context.api.downloadResponse(context.origin, token: context.token,
                 fileID: fileID, archive: job.isArchive, start: full ? nil : start, end: full ? nil : end, etag: job.etag)
             if response.statusCode == 416 {
-                bytes.task.cancel()
+                bytes.cancel()
                 (bytes, response) = try await context.api.downloadResponse(context.origin, token: context.token,
                     fileID: fileID, archive: job.isArchive, start: nil, end: nil, etag: nil)
             }
-            defer { bytes.task.cancel() }
+            defer { bytes.cancel() }
             let plan = try DownloadPlan(response: response, record: job, requestedStart: start, requestedEnd: end)
             if plan.replaces {
                 try await disk.resetDownload(job.id)
@@ -314,18 +325,21 @@ final class TransferManager {
             var received: Int64 = 0
             var buffer = Data()
             let probeOnly = probe && !plan.replaces
-            for try await byte in bytes {
-                guard received < plan.length else { throw TransferError.invalidDownload }
-                received += 1
-                if received % (64 * 1024) == 0 {
-                    try Task.checkCancellation()
-                    await Task.yield()
-                }
-                if !probeOnly { buffer.append(byte) }
-                if buffer.count == TransferDisk.downloadChunkSize {
-                    try Task.checkCancellation()
-                    try await storeDownloadChunk(&job, data: buffer, generation: generation)
-                    buffer.removeAll(keepingCapacity: true)
+            for try await chunk in bytes.chunks {
+                defer { chunk.acknowledge() }
+                try Task.checkCancellation()
+                guard Int64(chunk.data.count) <= plan.length - received else { throw TransferError.invalidDownload }
+                received += Int64(chunk.data.count)
+                if probeOnly { continue }
+                var offset = 0
+                while offset < chunk.data.count {
+                    let count = min(TransferDisk.downloadChunkSize - buffer.count, chunk.data.count - offset)
+                    buffer.append(chunk.data.subdata(in: offset..<(offset + count)))
+                    offset += count
+                    if buffer.count == TransferDisk.downloadChunkSize {
+                        try await storeDownloadChunk(&job, data: buffer, generation: generation)
+                        buffer.removeAll(keepingCapacity: true)
+                    }
                 }
             }
             guard received == plan.length else { throw TransferError.invalidDownload }
@@ -386,6 +400,7 @@ final class TransferManager {
                 job.epoch = status.epoch
                 if status.status == 1 {
                     let file = try await context.api.completeUpload(context, id: uploadID, epoch: status.epoch, parentID: job.parentID)
+                    guard file.id > 0, file.size == job.totalBytes else { throw ServerError.invalidResponse }
                     job.resultFileID = file.id
                     job.confirmedBytes = job.totalBytes
                     job.phase = .completed
