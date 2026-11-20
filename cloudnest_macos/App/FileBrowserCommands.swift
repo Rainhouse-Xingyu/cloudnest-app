@@ -19,7 +19,15 @@ private struct FileBrowserActionsKey: FocusedValueKey {
     typealias Value = FileBrowserActions
 }
 
+private struct FileTableActionsKey: FocusedValueKey {
+    typealias Value = FileBrowserActions
+}
+
 extension FocusedValues {
+    var fileTableActions: FileBrowserActions? {
+        get { self[FileTableActionsKey.self] }
+        set { self[FileTableActionsKey.self] = newValue }
+    }
     var fileBrowserActions: FileBrowserActions? {
         get { self[FileBrowserActionsKey.self] }
         set { self[FileBrowserActionsKey.self] = newValue }
@@ -28,6 +36,7 @@ extension FocusedValues {
 
 struct FileBrowserCommands: Commands {
     @FocusedValue(\.fileBrowserActions) private var actions
+    @FocusedValue(\.fileTableActions) private var tableActions
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
@@ -51,8 +60,9 @@ struct FileBrowserCommands: Commands {
             Button("复制到…") { actions?.copy?() }
                 .disabled(actions?.copy == nil)
             Divider()
-            Button("移入回收站") { actions?.trash?() }
-                .disabled(actions?.trash == nil)
+            Button("移入回收站") { tableActions?.trash?() }
+                .keyboardShortcut(.delete, modifiers: .command)
+                .disabled(tableActions?.trash == nil)
             Button("恢复所选项目") { actions?.restore?() }
                 .disabled(actions?.restore == nil)
         }

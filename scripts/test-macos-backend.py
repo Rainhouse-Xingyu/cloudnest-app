@@ -72,8 +72,11 @@ GRANT ALL PRIVILEGES ON cloudnest_test.* TO 'cloudnest_test'@'127.0.0.1';
                     CLOUDNEST_TEST_MYSQL_DSN=f'cloudnest_test:cloudnest-disposable-test@tcp(127.0.0.1:{mysql_port})/cloudnest_test?charset=utf8mb4&parseTime=True&loc=UTC',
                     CLOUDNEST_TEST_REDIS_ADDR=f'127.0.0.1:{redis_port}',
                 )
-                subprocess.run(['go', 'test', '-tags=integration', '-count=1', '-timeout=10m', '-v',
-                                './integration', '-run', '^TestMacOSClientSession$'],
+                ui_fixture = os.environ.get('CLOUDNEST_NATIVE_UI_FIXTURE_DIR')
+                test = '^TestMacOSNativeUIFixture$' if ui_fixture else '^TestMacOSClientSession$'
+                timeout = '25m' if ui_fixture else '10m'
+                subprocess.run(['go', 'test', '-tags=integration', '-count=1', f'-timeout={timeout}', '-v',
+                                './integration', '-run', test],
                                cwd=ROOT / 'cloudnest_go', env=environment, check=True)
             except BaseException:
                 for log in (mysql_log, redis_log):

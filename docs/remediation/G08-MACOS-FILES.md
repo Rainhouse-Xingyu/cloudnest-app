@@ -69,3 +69,21 @@ macOS 队列以已写入本地检查点的任务 UUID 为键。初始化响应�
 本机已从 Homebrew 官方 registry 下载依赖瓶包并逐一核对 SHA-256，在当前账户的独立临时前缀中重定位，未写入原 Homebrew 或全局配置。测试脚本新增可选 `CLOUDNEST_TEST_MYSQL_PREFIX`、`CLOUDNEST_TEST_REDIS_BINARY`，未提供时继续使用 Homebrew；MySQL 初始化和运行均显式传入 basedir，数据、端口和进程仍为每轮临时实例。本机 macOS 27.2.1/Xcode 27.2、MySQL 8.4.13/Redis 8.10.3 的串行真实 TLS/Go 联调已通过：文件操作约 0.11s、初始化丢响应约 0.39s、会话约 0.03s、既有传输约 17.38s、新预览约 0.58s。默认账户执行全部五项，受限账户只执行会话；Go 外层测试约 25.46s，测试进程已退出并回收临时服务。修正后的双平台 CI 继续按新提交核验。
 
 之后将双预览改为同时入队，确认同一队列可以并行准备两个副本。精确新测试本机复跑通过：既有传输约 17.27s，双预览/独立释放/大小变化约 0.42s，外层集成约 26.02s。该次复跑针对新增加的并行路径；仍不替代原生 Quick Look 窗口、多窗口菜单路由及大规模资源验收。
+
+088dc2b 的 [原生 CI 44688926198](https://github.com/Rainhouse-Xingyu/cloudnest-app/actions/runs/44688926198) 与 [后端 CI 44688926195](https://github.com/Rainhouse-Xingyu/cloudnest-app/actions/runs/44688926195) 已全部通过，串行共享账户用例仍包含内部双预览并发。此为本轮后续 GUI 修正前的精确提交证据。
+
+## 原生界面连接真实后端的验收入口
+
+`TestMacOSNativeUIFixture` 在独立临时数据库中创建专用账户、目录及 78 字节文本文件，提供 loopback HTTPS Go 路由。设置 `CLOUDNEST_NATIVE_UI_FIXTURE_DIR` 后，测试脚本运行该有界验收服务，收到目录中的 `stop` 文件后退出；20 分钟未结束会自动停止。清单、证书和源文件位于私有临时目录，未设该变量时仍运行既有自动联调。
+
+`python3 scripts/build-macos-native-ui.py <fixture目录>/fixture.json` 构建独立的验收应用，参数须替换为服务报告的确切清单路径。它使用当前仓库的 WorkspaceWindow 视图定义及其他 App/Core 源码，测试入口注入仅信任本次固定证书的 URLSession。该入口位于 NativeUITestSupport，未加入产品 App/Core 目标；产品 TLS 配置没有引入测试开关。每次构建使用独立 bundle ID、Keychain 服务及专用任务目录；CI 只构建该验收入口，交互仍由本机真实 UI 操作验证。
+
+运行步骤：在第一终端用 `mktemp -d /tmp/cloudnest-native-ui-XXXXXXXX` 建立目录，以该路径设置 `CLOUDNEST_NATIVE_UI_FIXTURE_DIR` 后执行 `python3 scripts/test-macos-backend.py`。服务报告 ready 后，在第二终端以确切的 fixture.json 路径执行构建脚本，打开输出的验收应用，使用私有清单中的本地地址与专用账户登录。验收结束先退出登录，再在该目录创建 `stop` 文件，等待服务进程退出。依赖可用上述独立 MySQL/Redis 路径覆盖，默认仍采用 Homebrew。
+
+本次本机 GUI 已通过：登录；Table 双击目录与面包屑；Command-Shift-N 新建目录；两个窗口在根目录/子目录分别创建正确位置的目录；Return 改名及名称输入框 Return 确认；Command-Option-I 检查器；Command-Shift-U 原生 OpenPanel 上传和 Command-Option-D 原生 SavePanel 下载。上传/下载的 46 字节文本逐字节一致，SHA-256 为 `785ba42e19d09b551e7a96a4d7c90afcc2d1de04bd59fb0103727e15372ba59b`，两条普通任务均为 completed。
+
+空格实际打开系统 Quick Look 并显示来自真实 Go 服务的文本；关闭后文件系统核对只剩 `.format-v1` 标记，没有残留副本。文件菜单的复制和移动在真实目录中生效，原件保留、副本先出现在复制目标，再从源目录消失并出现在移动目标。删除确认、回收站展示和恢复回原列表也已通过。
+
+GUI 暴露 Command-Delete 在 onKeyPress 中未触发的问题；本批改由原生菜单键等价项处理，并单独通过 Table focused value 提供动作。修正构建中，Table 的 Command-Backspace 打开确认框；搜索框获得焦点后同键仅清空搜索文本，原选中文件保留，文件菜单的“移入回收站”禁用。该修正与验收入口等待本批精确提交 CI。批量拖拽、多选排序、错误/中断与暂停恢复 GUI、深色和窗口尺寸、速度及资源等仍需后续验收，G08 继续进行中。
+
+早期验收构建复用了旧 Keychain 服务，ad-hoc 重建后触发系统访问提示；自动工具禁止操作 SecurityAgent，已请求用户拒绝旧测试提示，后续构建改用上述独立标识并正常完成验收。旧实例的提示清理仍待用户处理。另在真实界面观察并用临时数据库 SQL 确认 7 小时时间偏移，已登记 TIME-001；这是后端默认时间值与连接时区不一致，尚未修改历史数据或声称修复。

@@ -60,12 +60,9 @@ struct FileBrowserView: View {
             .onDeleteCommand {
                 if !browser.recycleBin && !browser.selectedItems.isEmpty { confirmingTrash = true }
             }
-            .onKeyPress(keys: [.space, .return, .delete]) { press in
+            .focusedValue(\.fileTableActions, fileActions)
+            .onKeyPress(keys: [.space, .return]) { press in
                 guard !browser.recycleBin, !browser.busy else { return .ignored }
-                if press.key == .delete, press.modifiers == .command, !browser.selectedItems.isEmpty {
-                    confirmingTrash = true
-                    return .handled
-                }
                 guard press.modifiers.isEmpty, browser.selectedItems.count == 1,
                       let item = browser.selectedItems.first else { return .ignored }
                 if press.key == .space, !item.isDirectory {
