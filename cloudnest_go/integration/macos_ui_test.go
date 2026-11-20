@@ -3,7 +3,11 @@
 package integration
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"io"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -38,7 +42,16 @@ func TestMacOSNativeUIFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	f := newFixture(t)
-	server := httptest.NewTLSServer(f.router)
+	slow := os.Getenv("CLOUDNEST_NATIVE_UI_SLOW_TRANSFERS") == "1"
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if slow && r.URL.Path == "/api/files/upload/chunk" {
+			r.Body = nativeUIReadCloser{ReadCloser: r.Body, context: r.Context()}
+		}
+		if slow && strings.HasSuffix(r.URL.Path, "/download") {
+			w = &nativeUIWriter{ResponseWriter: w, context: r.Context()}
+		}
+		f.router.ServeHTTP(w, r)
+	}))
 	defer server.Close()
 	certificate := filepath.Join(absolute, "server.der")
 	if err := os.WriteFile(certificate, server.Certificate().Raw, 0600); err != nil {
@@ -55,6 +68,11 @@ func TestMacOSNativeUIFixture(t *testing.T) {
 	source := filepath.Join(absolute, "Upload from Finder.txt")
 	if err := os.WriteFile(source, []byte("Uploaded through the native macOS file panel.\n"), 0600); err != nil {
 		t.Fatal(err)
+	}
+	if slow {
+		if err := os.WriteFile(filepath.Join(absolute, "Speed acceptance.bin"), bytes.Repeat([]byte{0x6e}, 9*1024*1024+173), 0600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	manifest := map[string]any{
 		"origin": server.URL, "certificate": certificate, "username": user.Username,
@@ -85,4 +103,54 @@ func TestMacOSNativeUIFixture(t *testing.T) {
 			return
 		}
 	}
+}
+
+// Slow only this disposable fixture. Production transfer limits and routes do
+// not depend on this environment variable or these wrappers.
+func nativeUIPace(ctx context.Context) error {
+	select {
+	case <-time.After(50 * time.Millisecond):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+type nativeUIReadCloser struct {
+	io.ReadCloser
+	context context.Context
+}
+
+func (r nativeUIReadCloser) Read(p []byte) (int, error) {
+	if err := nativeUIPace(r.context); err != nil {
+		return 0, err
+	}
+	return r.ReadCloser.Read(p[:min(len(p), 64<<10)])
+}
+
+type nativeUIWriter struct {
+	http.ResponseWriter
+	context context.Context
+}
+
+func (w *nativeUIWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+func (w *nativeUIWriter) Write(p []byte) (int, error) {
+	total := 0
+	for len(p) > 0 {
+		if err := nativeUIPace(w.context); err != nil {
+			return total, err
+		}
+		count := min(len(p), 64<<10)
+		n, err := w.ResponseWriter.Write(p[:count])
+		total += n
+		p = p[n:]
+		http.NewResponseController(w.ResponseWriter).Flush()
+		if err != nil {
+			return total, err
+		}
+		if n != count {
+			return total, io.ErrShortWrite
+		}
+	}
+	return total, nil
 }

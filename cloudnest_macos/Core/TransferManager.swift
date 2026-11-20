@@ -18,12 +18,19 @@ final class TransferManager {
     private var store: TransferStore?
     private var active: [UUID: Task<Void, Never>] = [:]
     private var generations: [UUID: UUID] = [:]
+    private var telemetry: [UUID: TransferTelemetry] = [:]
     private var controls: Set<UUID> = []
     private var scheduling = false
     private var restoration: Task<Void, Never>?
 
     var jobs: [TransferRecord] {
         records.values.filter { $0.identity == session.transferIdentity && $0.previewID == nil }.sorted { $0.createdAt > $1.createdAt }
+    }
+
+    func activity(_ id: UUID) -> TransferTelemetry.Snapshot? {
+        guard let record = records[id], record.phase == .running,
+              record.identity == session.transferIdentity else { return nil }
+        return telemetry[id]?.snapshot()
     }
 
     init(session: SessionState, directory: URL = TransferStore.defaultDirectory,
@@ -156,6 +163,7 @@ final class TransferManager {
 
     private func removePreview(_ id: UUID) async {
         abandonedPreviews.insert(id)
+        telemetry[id]?.stop()
         records[id]?.phase = .cancelling
         active[id]?.cancel()
         await active[id]?.value
@@ -193,6 +201,7 @@ final class TransferManager {
             await dismissPreview(job.id)
         }
         for (id, task) in active where records[id]?.identity != session.transferIdentity {
+            telemetry[id]?.stop()
             task.cancel()
             if var job = records[id] {
                 job.phase = .paused
@@ -279,6 +288,7 @@ final class TransferManager {
                 }
                 let generation = UUID()
                 generations[job.id] = generation
+                telemetry[job.id] = TransferTelemetry()
                 let id = job.id
                 active[id] = Task { await self.run(id, context: context, generation: generation) }
             } catch {
@@ -304,10 +314,12 @@ final class TransferManager {
             }
             session.observeTransferFailure(error, identity: context.identity)
         }
+        if generations[id] == generation { telemetry[id]?.stop() }
         await disk.closeDownload(id)
         if generations[id] == generation {
             active[id] = nil
             generations[id] = nil
+            telemetry[id] = nil
         }
         await schedule()
     }
@@ -322,6 +334,7 @@ final class TransferManager {
             try await checkpoint(job, generation: generation)
         }
         guard let source = job.source else { throw TransferError.invalidCheckpoint }
+        telemetry[job.id]?.transition(to: .checking)
         var status: UploadStatus
         if let id = job.uploadID {
             status = try await context.api.uploadProgress(context, id: id)
@@ -352,16 +365,19 @@ final class TransferManager {
             $0 + min(Int64(source.chunkSize), source.size - Int64($1 * source.chunkSize))
         }
         try await checkpoint(job, generation: generation)
+        telemetry[job.id]?.transition(to: .transferring)
         if status.status == 0 {
             let url = try await disk.resolve(job.bookmark)
             for index in source.chunks.indices where !uploaded.contains(index) {
                 try Task.checkCancellation()
                 let data = try await disk.uploadChunk(url, source: source, index: index)
-                try await context.api.uploadChunk(context, id: uploadID, epoch: job.epoch, index: index, data: data)
+                try await context.api.uploadChunk(context, id: uploadID, epoch: job.epoch, index: index, data: data,
+                                                   telemetry: telemetry[job.id])
                 job.confirmedBytes += Int64(data.count)
                 try await checkpoint(job, generation: generation)
             }
         }
+        telemetry[job.id]?.transition(to: .confirming)
         let result = try await context.api.completeUpload(context, id: uploadID, epoch: job.epoch, parentID: job.parentID)
         guard result.id > 0, result.size == source.size else { throw ServerError.invalidResponse }
         job.resultFileID = result.id
@@ -377,6 +393,7 @@ final class TransferManager {
         let access = directory.startAccessingSecurityScopedResource()
         defer { if access { directory.stopAccessingSecurityScopedResource() } }
         try await disk.openDownload(job, directory: directory)
+        telemetry[job.id]?.transition(to: .transferring)
         var done = false
         while !done {
             try Task.checkCancellation()
@@ -396,6 +413,7 @@ final class TransferManager {
             let plan = try DownloadPlan(response: response, record: job, requestedStart: start, requestedEnd: end)
             if job.previewID != nil { try await previews.validate(job.id, total: plan.total) }
             if plan.replaces {
+                if (telemetry[job.id]?.snapshot().bodyBytes ?? 0) > 0 { telemetry[job.id]?.restartRepresentation() }
                 try await disk.resetDownload(job.id)
                 job.confirmedBytes = 0
                 job.downloadedChunks = []
@@ -414,6 +432,7 @@ final class TransferManager {
                 guard Int64(chunk.data.count) <= plan.length - received else { throw TransferError.invalidDownload }
                 received += Int64(chunk.data.count)
                 if probeOnly { continue }
+                telemetry[job.id]?.record(bytes: Int64(chunk.data.count))
                 var offset = 0
                 while offset < chunk.data.count {
                     let count = min(TransferDisk.downloadChunkSize - buffer.count, chunk.data.count - offset)
@@ -431,6 +450,7 @@ final class TransferManager {
         }
         // Publication name is saved before the atomic link. Retrying a crash
         // reuses a link to the same staging inode and preserves existing files.
+        telemetry[job.id]?.transition(to: .verifying)
         var suffix = 0
         while true {
             job.resultName = job.resultName ?? TransferDisk.availableName(job.name, suffix: suffix)
@@ -465,6 +485,7 @@ final class TransferManager {
               job.previewID == nil,
               !controls.contains(id), job.phase != .completed, job.phase != .cancelled else { return }
         controls.insert(id)
+        telemetry[id]?.stop()
         defer { controls.remove(id) }
         job.phase = cancel ? .cancelling : .pausing
         job.cancelRequested = cancel

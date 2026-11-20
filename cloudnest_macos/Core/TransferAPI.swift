@@ -68,7 +68,8 @@ extension ServerAPI {
         guard result.status == 3 else { throw ServerError.invalidResponse }
     }
 
-    func uploadChunk(_ context: TransferContext, id: String, epoch: Int64, index: Int, data: Data) async throws {
+    func uploadChunk(_ context: TransferContext, id: String, epoch: Int64, index: Int, data: Data,
+                     telemetry: TransferTelemetry? = nil) async throws {
         let boundary = "CloudNest-\(UUID())"
         var body = Data()
         let fields = [("upload_id", id), ("chunk_index", String(index)),
@@ -81,7 +82,7 @@ extension ServerAPI {
         body.append(Data("\r\n--\(boundary)--\r\n".utf8))
         let _: ChunkReceipt = try await request(context.origin, "api/files/upload/chunk", token: context.token,
                                                 body: body, method: "POST", headers: ["X-Upload-Epoch": String(epoch)],
-                                                contentType: "multipart/form-data; boundary=\(boundary)", transfer: true)
+                                                contentType: "multipart/form-data; boundary=\(boundary)", transfer: true, telemetry: telemetry)
     }
 
     func completeUpload(_ context: TransferContext, id: String, epoch: Int64, parentID: Int64) async throws -> FileItem {

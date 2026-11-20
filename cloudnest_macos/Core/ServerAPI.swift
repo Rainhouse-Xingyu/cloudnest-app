@@ -134,7 +134,7 @@ struct ServerAPI: Sendable {
                                       body: Data? = nil, method: String = "GET",
                                       query: [URLQueryItem] = [], maximumBytes: Int = 64 * 1024,
                                       headers: [String: String] = [:], contentType: String = "application/json",
-                                      transfer: Bool = false) async throws -> T {
+                                      transfer: Bool = false, telemetry: TransferTelemetry? = nil) async throws -> T {
         let url = origin.endpoint(path).appending(queryItems: query)
         var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
         req.httpMethod = method
@@ -146,7 +146,10 @@ struct ServerAPI: Sendable {
         }
         for (name, value) in headers { req.setValue(value, forHTTPHeaderField: name) }
         let transport = transfer ? transferSession : session
-        let (bytes, response) = try await transport.bytes(for: req, delegate: requestDelegate)
+        let delegate: any URLSessionTaskDelegate
+        if let telemetry { delegate = UploadProgressDelegate(policy: requestDelegate, telemetry: telemetry) }
+        else { delegate = requestDelegate }
+        let (bytes, response) = try await transport.bytes(for: req, delegate: delegate)
         defer { bytes.task.cancel() }
         guard let response = response as? HTTPURLResponse else { throw ServerError.invalidResponse }
         try validateStatus(response.statusCode, login: path == "api/auth/login")

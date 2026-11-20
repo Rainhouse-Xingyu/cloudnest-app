@@ -4,8 +4,11 @@ package integration
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -29,7 +32,73 @@ func TestMacOSClientSession(t *testing.T) {
 	}
 	f := newFixture(t)
 	var lostInitializations sync.Map
+	var telemetryGates sync.Map
+	gateFor := func(key string) *nativeTelemetryGate {
+		value, _ := telemetryGates.LoadOrStore(key, &nativeTelemetryGate{done: make(chan struct{})})
+		return value.(*nativeTelemetryGate)
+	}
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Test-only scheduling at the real router boundary. Authentication,
+		// multipart processing and file writes still run in the shipping router.
+		// Gates prove body flow independently of acknowledged durable progress.
+		if marker := r.Header.Get("X-CloudNest-Test-Telemetry"); strings.HasPrefix(marker, "native-rate-") {
+			if r.URL.Path == "/api/auth/me" && r.URL.Query().Get("test_transfer_release") != "" {
+				receipt := httptest.NewRecorder()
+				f.router.ServeHTTP(receipt, r)
+				if receipt.Code == http.StatusOK {
+					gateFor(marker + ":" + r.URL.Query().Get("test_transfer_release")).release()
+				}
+				copyNativeReceipt(w, receipt)
+				return
+			}
+			if r.URL.Path == "/api/files/upload/chunk" {
+				// The production handler streams MultipartReader rather than
+				// populating Request.Form. Inspect a bounded test-only copy.
+				body, err := io.ReadAll(io.LimitReader(r.Body, (5<<20)+1))
+				if err != nil || len(body) > 5<<20 {
+					t.Error("invalid telemetry fixture chunk body")
+					w.WriteHeader(400)
+					return
+				}
+				r.Body.Close()
+				r.Body = io.NopCloser(bytes.NewReader(body))
+				_, parameters, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+				if err != nil {
+					t.Error(err)
+					w.WriteHeader(400)
+					return
+				}
+				parts := multipart.NewReader(bytes.NewReader(body), parameters["boundary"])
+				index := ""
+				for {
+					part, err := parts.NextPart()
+					if err != nil {
+						break
+					}
+					if part.FormName() == "chunk_index" {
+						value, _ := io.ReadAll(io.LimitReader(part, 16))
+						index = string(value)
+						break
+					}
+				}
+				if index == "" {
+					t.Error("missing telemetry fixture chunk index")
+					w.WriteHeader(400)
+					return
+				}
+				receipt := httptest.NewRecorder()
+				f.router.ServeHTTP(receipt, r)
+				if receipt.Code == http.StatusOK && !gateFor(marker+":upload-"+index).wait(r.Context()) {
+					return
+				}
+				copyNativeReceipt(w, receipt)
+				return
+			}
+			if strings.HasSuffix(r.URL.Path, "/download") && strings.HasPrefix(r.Header.Get("Range"), "bytes=4194304-") {
+				f.router.ServeHTTP(&nativeTelemetryWriter{ResponseWriter: w, gate: gateFor(marker + ":download"), context: r.Context()}, r)
+				return
+			}
+		}
 		if r.URL.Path == "/api/files/upload/init" {
 			body, err := io.ReadAll(io.LimitReader(r.Body, (16<<10)+1))
 			if err != nil {
@@ -134,6 +203,60 @@ func TestMacOSClientSession(t *testing.T) {
 			}
 		})
 	}
+}
+
+type nativeTelemetryGate struct {
+	done chan struct{}
+	once sync.Once
+}
+
+func (g *nativeTelemetryGate) release() { g.once.Do(func() { close(g.done) }) }
+func (g *nativeTelemetryGate) wait(ctx context.Context) bool {
+	select {
+	case <-g.done:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+func copyNativeReceipt(w http.ResponseWriter, receipt *httptest.ResponseRecorder) {
+	for key, values := range receipt.Header() {
+		w.Header()[key] = values
+	}
+	w.WriteHeader(receipt.Code)
+	w.Write(receipt.Body.Bytes())
+}
+
+type nativeTelemetryWriter struct {
+	http.ResponseWriter
+	gate    *nativeTelemetryGate
+	context context.Context
+	sent    int
+}
+
+func (w *nativeTelemetryWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+func (w *nativeTelemetryWriter) Flush()                      { http.NewResponseController(w.ResponseWriter).Flush() }
+func (w *nativeTelemetryWriter) Write(p []byte) (int, error) {
+	const prefix = 32 << 10
+	n := 0
+	if w.sent < prefix {
+		count := min(len(p), prefix-w.sent)
+		written, err := w.ResponseWriter.Write(p[:count])
+		w.sent += written
+		n = written
+		w.Flush()
+		if err != nil {
+			return n, err
+		}
+		p = p[written:]
+	}
+	if w.sent >= prefix && !w.gate.wait(w.context) {
+		return n, w.context.Err()
+	}
+	written, err := w.ResponseWriter.Write(p)
+	w.sent += written
+	return n + written, err
 }
 
 func fixtureNativeVersionHistory(t *testing.T, f *fixture, name string, original, current []byte) model.File {

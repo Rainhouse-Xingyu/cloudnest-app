@@ -15,7 +15,9 @@ struct TransferListView: View {
                             Text("历史版本 \(version)").font(.caption).foregroundStyle(.secondary)
                         }
                         if job.phase == .running {
-                            ProgressView(value: Double(job.confirmedBytes), total: Double(max(1, job.totalBytes)))
+                            TimelineView(.periodic(from: .now, by: 1)) { _ in
+                                activity(job)
+                            }
                         }
                         Text(status(job))
                             .font(.callout)
@@ -48,6 +50,30 @@ struct TransferListView: View {
         .task { await transfers.restore() }
     }
 
+    @ViewBuilder private func activity(_ job: TransferRecord) -> some View {
+        let activity = transfers.activity(job.id)
+        if job.totalBytes > 0 {
+            ProgressView(value: Double(job.confirmedBytes), total: Double(job.totalBytes))
+        } else {
+            ProgressView().controlSize(.small)
+        }
+        HStack {
+            Text(activity?.stage.title ?? "正在准备文件")
+            Spacer()
+            if activity?.stage == .transferring {
+                if let rate = activity?.bytesPerSecond {
+                    Text("\(TransferTelemetry.formattedRate(rate)) /s")
+                        .monospacedDigit()
+                } else {
+                    Text("正在测量速度")
+                }
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .help("最近 5 秒的传输速度。已确认进度需等待服务器回执或本地保存，因此可能滞后。")
+    }
+
     @ViewBuilder private func actions(_ job: TransferRecord) -> some View {
         switch job.phase {
         case .queued, .running:
@@ -76,7 +102,7 @@ struct TransferListView: View {
         let progress = "\(job.confirmedBytes.formatted(.byteCount(style: .file))) / \(job.totalBytes.formatted(.byteCount(style: .file)))"
         switch job.phase {
         case .queued: return "等待传输"
-        case .running: return job.totalBytes == 0 ? "正在准备文件" : progress
+        case .running: return job.totalBytes == 0 ? "尚无已确认数据" : "已确认 \(progress)"
         case .pausing: return "正在暂停"
         case .paused: return "已暂停 · \(progress)"
         case .cancelling: return "正在取消"
