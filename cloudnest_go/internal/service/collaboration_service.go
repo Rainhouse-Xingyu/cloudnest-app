@@ -115,6 +115,10 @@ func (s *CollaborationService) ListFileVersions(ctx context.Context, fileID int6
 	return s.repo.ListFileVersions(ctx, fileID)
 }
 
+func (s *CollaborationService) ReadFileVersionHistory(ctx context.Context, uid, fileID int64) (contract.CollaborationFileVersionHistory, error) {
+	return s.repo.ReadFileVersionHistory(ctx, uid, fileID)
+}
+
 func normalizeWorkspaceRole(role string) string {
 	r := strings.ToLower(strings.TrimSpace(role))
 	switch r {

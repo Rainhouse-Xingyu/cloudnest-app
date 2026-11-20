@@ -115,3 +115,4 @@ G06 在独立集成分支同时接入 G04 与 G05 的代码，保留 AI worker �
 
 - [G07 原生 macOS 骨架与真实会话联调](G07-MACOS-FOUNDATION.md)
 - [MySQL 新连接时间协议与历史迁移边界](MYSQL-TIMESTAMPS.md)
+- [macOS 版本历史、固定版本下载与追加式恢复](MACOS-VERSIONS.md)

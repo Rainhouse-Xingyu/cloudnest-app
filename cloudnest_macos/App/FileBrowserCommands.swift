@@ -6,6 +6,7 @@ struct FileBrowserActions {
     var upload: (() -> Void)?
     var download: (() -> Void)?
     var preview: (() -> Void)?
+    var versions: (() -> Void)?
     var rename: (() -> Void)?
     var move: (() -> Void)?
     var copy: (() -> Void)?
@@ -55,6 +56,8 @@ struct FileBrowserCommands: Commands {
                 .disabled(actions?.preview == nil)
             Button("重新命名…") { actions?.rename?() }
                 .disabled(actions?.rename == nil)
+            Button("版本历史…") { actions?.versions?() }
+                .disabled(actions?.versions == nil)
             Button("移动到…") { actions?.move?() }
                 .disabled(actions?.move == nil)
             Button("复制到…") { actions?.copy?() }

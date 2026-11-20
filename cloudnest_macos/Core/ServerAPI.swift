@@ -162,8 +162,11 @@ struct ServerAPI: Sendable {
         }
     }
     func downloadResponse(_ origin: ServerOrigin, token: String, fileID: Int64, archive: Bool,
-                          start: Int64?, end: Int64?, etag: String?) async throws -> (DownloadStream, HTTPURLResponse) {
-        let path = archive ? "api/files/\(fileID)/download-zip" : "api/files/\(fileID)/download"
+                          version: Int? = nil, start: Int64?, end: Int64?, etag: String?) async throws -> (DownloadStream, HTTPURLResponse) {
+        guard fileID > 0, version.map({ $0 > 0 && !archive }) ?? true else { throw ServerError.invalidOperation }
+        let path: String
+        if let version { path = "api/files/\(fileID)/versions/\(version)/download" }
+        else { path = archive ? "api/files/\(fileID)/download-zip" : "api/files/\(fileID)/download" }
         var request = URLRequest(url: origin.endpoint(path), cachePolicy: .reloadIgnoringLocalCacheData)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")

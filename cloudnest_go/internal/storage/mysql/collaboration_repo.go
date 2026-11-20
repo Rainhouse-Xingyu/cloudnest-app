@@ -419,8 +419,38 @@ func (r *CollaborationRepo) RestoreFileVersion(ctx context.Context, uid, fileID 
 }
 
 func (r *CollaborationRepo) ListFileVersions(ctx context.Context, fileID int64) ([]contract.CollaborationFileVersionRow, error) {
+	return listFileVersions(r.db.WithContext(ctx), fileID)
+}
+
+func (r *CollaborationRepo) ReadFileVersionHistory(ctx context.Context, uid, fileID int64) (contract.CollaborationFileVersionHistory, error) {
+	var history contract.CollaborationFileVersionHistory
+	if uid <= 0 || fileID <= 0 {
+		return history, contract.ErrForbidden
+	}
+	err := fileReadSnapshot(ctx, r.db, func(tx *gorm.DB) error {
+		var file model.File
+		if err := tx.First(&file, "id=? AND is_deleted=0", fileID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return contract.ErrForbidden
+			}
+			return err
+		}
+		if err := requireTreeRead(tx, uid, []fileTreeNode{{File: file}}); err != nil {
+			return err
+		}
+		rows, err := listFileVersions(tx, fileID)
+		if err != nil {
+			return err
+		}
+		history = contract.CollaborationFileVersionHistory{FileID: file.ID, CurrentVersion: file.CurrentVersion, Items: rows}
+		return nil
+	})
+	return history, err
+}
+
+func listFileVersions(db *gorm.DB, fileID int64) ([]contract.CollaborationFileVersionRow, error) {
 	rows := make([]contract.CollaborationFileVersionRow, 0)
-	err := r.db.WithContext(ctx).
+	err := db.
 		Table("file_version fv").
 		Select("fv.id, fv.version, fv.storage_id, fv.size, fv.file_type, fv.source_verified, fv.comment, fv.create_user, u.username, fv.create_time").
 		Joins("LEFT JOIN user u ON u.id = fv.create_user").

@@ -116,3 +116,5 @@ FRP-004 后续进展：Agent 0.3.0 的 `forget_config` 已提供排他队列、�
 TIME-001 P2（新连接修复，历史迁移进行中）：2026-11-20 原生 UI 的临时 MySQL 实例为 `time_zone=SYSTEM`、`system_time_zone=MST`，`NOW()` 比 `UTC_TIMESTAMP()` 少 7 小时。`CURRENT_TIMESTAMP` 生成的文件 create_time/update_time 存为本地朴素值，`loc=UTC` 连接再按 UTC 解读，导致客户端再次减去 7 小时。本机原生文件面板显示 23:39，而列表对应时间显示 16:39；SQL 原值及实测见 G08-MACOS-FILES。NewMySQL 现保留 DSN loc 并为每条物理连接设置匹配的固定 session time_zone，冲突/DST 配置拒绝；-07:00 临时 MySQL 的连接池/列表默认时间/固定东八区及 Agent 跨时区租约已回归。历史值没有转换；来源明确的迁移工具与副本演练仍待完成，不能关闭本项，见 [时间协议](MYSQL-TIMESTAMPS.md)。
 
 TIME-001 后续：只读 `audit-mysql-time` 已在 68d4c8b 双平台与完整后端 CI 通过；本批增加 `plan-mysql-time`，以明确单元格、原时区及证据形成绑定库身份/原值/目标值/UTC 时刻和 SHA-256 的计划。混合来源、夏令时缺失/重复与偏移、微秒/NULL/零日期、TIMESTAMP 和主键类型等已有回归。没有执行历史 UPDATE；事务应用、回执、CAS 回滚及副本恢复演练仍待完成，不能据只读规划关闭本项。
+
+MAC-002 P2（版本界面接入待审）：原生客户端此前仅在 Inspector 显示当前版本数字，未调用历史列表/历史下载/追加恢复。本批接入三项真实 API、同一授权快照的当前版本基线、固定历史下载与降级拒绝检查点、恢复确认及冲突后刷新；真实 TLS/Go 联调已通过，详见 [版本界面](MACOS-VERSIONS.md)。原生窗口读取 cgWindowNotFound，交互/视觉验收仍待完成；专用版本上传票据、速度显示、分页和资源验收仍开放，不能据本批关闭 G08。

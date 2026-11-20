@@ -53,11 +53,15 @@ actor TransferStore {
                 }
             }
             let confirmedChunks = record.confirmedBytes == 0 ? 0 : 1 + (record.confirmedBytes - 1) / Int64(TransferDisk.downloadChunkSize)
-            if record.direction == .download {
+            if record.direction.isDownload {
                 guard record.fileID.map({ $0 > 0 }) ?? false,
                       Int64(record.downloadedChunks.count) == confirmedChunks,
                       record.downloadedChunks.allSatisfy(Self.validHash) else { throw TransferError.invalidCheckpoint }
             }
+            if let version = record.fileVersion {
+                guard version > 0, record.direction == .versionDownload, !record.isArchive,
+                      record.versionSize.map({ $0 >= 0 && $0 == record.totalBytes }) ?? true else { throw TransferError.invalidCheckpoint }
+            } else if record.versionSize != nil || record.direction == .versionDownload { throw TransferError.invalidCheckpoint }
             revisions[id] = record.revision
             return record
         }

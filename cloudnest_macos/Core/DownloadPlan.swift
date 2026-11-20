@@ -44,5 +44,11 @@ struct DownloadPlan: Sendable {
             }
             self.total = total
         }
+        if record.fileVersion != nil {
+            guard record.versionSize.map({ $0 == total }) ?? true,
+                  record.etag.map({ $0 == etag && record.totalBytes == total }) ?? true else {
+                throw TransferError.invalidDownload
+            }
+        }
     }
 }

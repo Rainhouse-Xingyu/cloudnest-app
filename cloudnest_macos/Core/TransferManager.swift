@@ -97,6 +97,26 @@ final class TransferManager {
         return job.id
     }
 
+    @discardableResult
+    func enqueueVersionDownload(_ file: FileItem, version: FileVersionItem, destination: URL) async throws -> UUID {
+        try await ensureStore()
+        let context = try session.transferContext()
+        error = nil
+        guard !file.isDirectory, file.id > 0, version.id > 0, version.version > 0,
+              version.size.map({ $0 >= 0 }) ?? true else { throw ServerError.invalidOperation }
+        let name = destination.lastPathComponent
+        guard !name.isEmpty, name != ".", name != ".." else { throw ServerError.invalidOperation }
+        let bookmark = try await disk.bookmark(destination.deletingLastPathComponent())
+        var job = TransferRecord(id: UUID(), createdAt: Date(), identity: context.identity, direction: .versionDownload,
+                                 name: name, bookmark: bookmark, parentID: 0, fileID: file.id,
+                                 isArchive: false, totalBytes: version.size ?? 0)
+        job.fileVersion = version.version
+        job.versionSize = version.size
+        try await persist(job)
+        await schedule()
+        return job.id
+    }
+
     func enqueuePreview(_ file: FileItem) async throws -> UUID {
         try await ensureStore()
         let context = try session.transferContext()
@@ -199,7 +219,7 @@ final class TransferManager {
 
     func resultURL(_ id: UUID) async throws -> URL {
         guard let job = records[id], job.identity == session.transferIdentity,
-              job.direction == .download, job.phase == .completed, let name = job.resultName else {
+              job.direction.isDownload, job.phase == .completed, let name = job.resultName else {
             throw TransferError.invalidCheckpoint
         }
         return try await disk.resolve(job.bookmark).appending(path: name)
@@ -273,7 +293,7 @@ final class TransferManager {
             guard let job = records[id] else { throw TransferError.invalidCheckpoint }
             switch job.direction {
             case .upload: try await runUpload(job, context: context, generation: generation)
-            case .download: try await runDownload(job, context: context, generation: generation)
+            case .download, .versionDownload: try await runDownload(job, context: context, generation: generation)
             }
         } catch {
             if generations[id] == generation, var job = records[id], job.phase == .running {
@@ -366,11 +386,11 @@ final class TransferManager {
             let end = probe ? 0 : start + Int64(TransferDisk.downloadChunkSize) - 1
             let full = job.etag == nil && job.totalBytes == 0 && !job.isArchive
             var (bytes, response) = try await context.api.downloadResponse(context.origin, token: context.token,
-                fileID: fileID, archive: job.isArchive, start: full ? nil : start, end: full ? nil : end, etag: job.etag)
+                fileID: fileID, archive: job.isArchive, version: job.fileVersion, start: full ? nil : start, end: full ? nil : end, etag: job.etag)
             if response.statusCode == 416 {
                 bytes.cancel()
                 (bytes, response) = try await context.api.downloadResponse(context.origin, token: context.token,
-                    fileID: fileID, archive: job.isArchive, start: nil, end: nil, etag: nil)
+                    fileID: fileID, archive: job.isArchive, version: job.fileVersion, start: nil, end: nil, etag: nil)
             }
             defer { bytes.cancel() }
             let plan = try DownloadPlan(response: response, record: job, requestedStart: start, requestedEnd: end)
@@ -491,7 +511,7 @@ final class TransferManager {
                     job.epoch = paused.epoch
                 } else if status.status != 2 { throw ServerError.conflict }
             }
-            if job.direction == .download {
+            if job.direction.isDownload {
                 let directory = try await disk.resolve(job.bookmark)
                 let access = directory.startAccessingSecurityScopedResource()
                 defer { if access { directory.stopAccessingSecurityScopedResource() } }

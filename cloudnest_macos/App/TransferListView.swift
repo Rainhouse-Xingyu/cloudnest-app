@@ -11,6 +11,9 @@ struct TransferListView: View {
                     Image(systemName: job.direction == .upload ? "arrow.up.doc" : "arrow.down.doc")
                     VStack(alignment: .leading, spacing: 6) {
                         Text(job.resultName ?? job.name).lineLimit(1)
+                        if let version = job.fileVersion {
+                            Text("历史版本 \(version)").font(.caption).foregroundStyle(.secondary)
+                        }
                         if job.phase == .running {
                             ProgressView(value: Double(job.confirmedBytes), total: Double(max(1, job.totalBytes)))
                         }
@@ -54,7 +57,7 @@ struct TransferListView: View {
             Button(job.cancelRequested ? "重试取消" : "继续") { Task { await transfers.resume(job.id) } }
             Button("取消", role: .destructive) { Task { await transfers.cancel(job.id) } }
         case .completed:
-            if job.direction == .download {
+            if job.direction.isDownload {
                 Button("在 Finder 中显示") {
                     Task {
                         do { NSWorkspace.shared.activateFileViewerSelecting([try await transfers.resultURL(job.id)]) }

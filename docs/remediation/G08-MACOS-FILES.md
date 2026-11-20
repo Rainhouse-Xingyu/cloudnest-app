@@ -105,3 +105,11 @@ c982061 的双平台原生 CI [44692850987](https://github.com/Rainhouse-Xingyu/
 后续追加只读 `plan-mysql-time`，按明确行 ID、列、原时区和证据生成每项 before/after、UTC 时刻、解析偏移、字段定义及全计划 SHA-256，绑定具体库 UUID/目标连接约定。最多 200 项，缺失/重复源时间、非法偏移、目标歧义、零日期/越界、TIMESTAMP 或非整数主键等拒绝，不改数据/结构/审计。混合来源、微秒/NULL、未选中行保持和严格 stdin 的本机回归已执行；最终提交 CI 继续核验。该批没有执行或回滚命令，TIME-001 和整个 Goal 保持进行中，详见 MYSQL-TIMESTAMPS。
 
 该批本机完整时间/Agent 专项八项通过（10.234s）；追加区分零日期与 NULL 后，两项规划回归再次通过（3.940s），包含真实宽松旧写入、当前 SQL mode 恢复和原记录不变验证。Go 普通 race、make check、仓库检查和 diff 检查通过；CLI 帮助已列出两条只读时间命令。最终精确提交的远端结果以 PR 为准。
+
+fc7ff63 的双平台原生 [44752195341](https://github.com/Rainhouse-Xingyu/cloudnest-app/actions/runs/44752195341) 与完整后端 [44752195235](https://github.com/Rainhouse-Xingyu/cloudnest-app/actions/runs/44752195235) 已全通过，普通集成 404.410s、独立网络 97.948s、AI 50.790s。历史执行/回执/CAS 回滚仍未实现。
+
+## 原生版本历史接入
+
+本批加入文件菜单/右键/Inspector 的版本历史窗口，以及持久历史下载和基于确认时 base_version 的追加式恢复。后端列表附加 file_id/current_version，并在同一授权只读快照内读取；保留旧 items。历史任务使用 versionDownload 类型，旧客户端明确拒绝该任务，避免忽略版本字段后错取当前文件；普通任务兼容。首次大小/ETag 固定，暂停重建后仍访问指定版本，恢复冲突不自动换基线重试。
+
+两项 Go API 验证、22 项普通 Swift 测试和新真实后端用例已通过；9 MiB + 173 字节历史任务在当前版本变化后仍能继续取得原字节，旧恢复确认被拒绝，刷新后恢复生成新版本并验证内容。独立验收入口编译/签名通过，但本机窗口读取返回 cgWindowNotFound，未执行成功 GUI 交互；测试实例及私有服务已停止。精确提交 CI 待推送核验，详见 [版本说明](MACOS-VERSIONS.md)。G08 仍有版本上传、速度显示、旧缓存、批量/异常 GUI 和资源验收，整个 Goal 保持进行中。

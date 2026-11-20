@@ -88,6 +88,7 @@ func TestMacOSClientSession(t *testing.T) {
 		Item model.File `json:"item"`
 	}
 	decode(t, response, &otherFolder)
+	versioned := fixtureNativeVersionHistory(t, f, "Native version history.bin", bytes.Repeat([]byte{0x31}, 9*1024*1024+173), []byte("Current version for native history\n"))
 	packagePath, err := filepath.Abs("../../cloudnest_macos")
 	if err != nil {
 		t.Fatal(err)
@@ -111,8 +112,12 @@ func TestMacOSClientSession(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			filter := os.Getenv("CLOUDNEST_SWIFT_TEST_FILTER")
+			if filter == "" {
+				filter = "realBackend"
+			}
 			command := exec.Command("swift", "test", "--package-path", packagePath,
-				"--filter", "realBackend")
+				"--filter", filter)
 			command.Env = append(os.Environ(),
 				"CLOUDNEST_SWIFT_ORIGIN="+server.URL,
 				"CLOUDNEST_SWIFT_REDIRECT_ORIGIN="+redirectServer.URL,
@@ -120,6 +125,7 @@ func TestMacOSClientSession(t *testing.T) {
 				"CLOUDNEST_SWIFT_PASSWORD=disposable-fixture-password",
 				"CLOUDNEST_SWIFT_CERTIFICATE="+certificatePath,
 				"CLOUDNEST_SWIFT_RESTRICTED="+tc.restricted,
+				"CLOUDNEST_SWIFT_VERSION_FILE="+strconv.FormatInt(versioned.ID, 10),
 				"CLOUDNEST_SWIFT_FORBIDDEN_FILE="+strconv.FormatInt(otherFolder.Item.ID, 10))
 			output, err := command.CombinedOutput()
 			t.Log(string(output))
@@ -128,4 +134,19 @@ func TestMacOSClientSession(t *testing.T) {
 			}
 		})
 	}
+}
+
+func fixtureNativeVersionHistory(t *testing.T, f *fixture, name string, original, current []byte) model.File {
+	t.Helper()
+	file := f.upload(t, f.alice, name, original)
+	source := f.upload(t, f.alice, "Source for "+name, current)
+	if source.StorageID == nil {
+		t.Fatal("missing fixture storage")
+	}
+	f.json(t, "POST", "/api/files/"+strconv.FormatInt(file.ID, 10)+"/versions", f.alice,
+		map[string]any{"storage_id": *source.StorageID, "size": source.Size, "base_version": 1, "comment": "Native history fixture replacement"}, 200)
+	if err := f.db.First(&file, file.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	return file
 }

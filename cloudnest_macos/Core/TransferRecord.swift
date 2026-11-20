@@ -13,7 +13,10 @@ struct UploadSource: Codable, Sendable {
 }
 
 struct TransferRecord: Codable, Identifiable, Sendable {
-    enum Direction: String, Codable { case upload, download }
+    enum Direction: String, Codable {
+        case upload, download, versionDownload
+        var isDownload: Bool { self != .upload }
+    }
     enum Phase: String, Codable {
         case queued, running, pausing, paused, cancelling, cancelled, failed, completed
         var isActive: Bool { self == .running || self == .pausing || self == .cancelling }
@@ -44,6 +47,10 @@ struct TransferRecord: Codable, Identifiable, Sendable {
     var error: String?
     // Preview tasks are transient and never written to the durable journal.
     var previewID: UUID?
+    // versionDownload is deliberately a new enum value: older clients must
+    // refuse this journal rather than ignore these fields and fetch current bytes.
+    var fileVersion: Int?
+    var versionSize: Int64?
 }
 
 enum TransferError: LocalizedError, Equatable {

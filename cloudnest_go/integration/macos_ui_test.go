@@ -51,6 +51,7 @@ func TestMacOSNativeUIFixture(t *testing.T) {
 	id := fixturePendingUpload(t, f, f.alice, "Preview.txt", []byte("CloudNest native preview acceptance.\nThis copy came from the real Go backend.\n"))
 	seed := completedBlob(t, f, completeUploadRecorder(f, f.alice, id))
 	fixtureFolder(t, f, f.alice, "Fixture folder", 0)
+	versioned := fixtureNativeVersionHistory(t, f, "Version history.txt", []byte("Original native version.\n"), []byte("Replacement native version.\n"))
 	source := filepath.Join(absolute, "Upload from Finder.txt")
 	if err := os.WriteFile(source, []byte("Uploaded through the native macOS file panel.\n"), 0600); err != nil {
 		t.Fatal(err)
@@ -58,6 +59,7 @@ func TestMacOSNativeUIFixture(t *testing.T) {
 	manifest := map[string]any{
 		"origin": server.URL, "certificate": certificate, "username": user.Username,
 		"password": "disposable-fixture-password", "directory": absolute, "seed_file_id": seed.ID, "upload_source": source,
+		"version_file_id": versioned.ID,
 	}
 	data, err := json.Marshal(manifest)
 	if err != nil {

@@ -141,6 +141,18 @@ final class SessionState {
         }
     }
 
+    func fileVersions(fileID: Int64) async throws -> FileVersionHistory {
+        try await withSession { origin, token in
+            try await api.fileVersions(origin, token: token, fileID: fileID)
+        }
+    }
+
+    func restoreVersion(fileID: Int64, version: Int, baseVersion: Int) async throws -> RestoredFileVersion {
+        try await withSession { origin, token in
+            try await api.restoreVersion(origin, token: token, fileID: fileID, version: version, baseVersion: baseVersion)
+        }
+    }
+
     private func withSession<T: Sendable>(_ operation: (ServerOrigin, String) async throws -> T) async throws -> T {
         guard let saved, let origin, account != nil else { throw ServerError.unauthorized }
         do {

@@ -441,23 +441,13 @@ func (h *CollaborationHandler) ListFileVersions(c *gin.Context) {
 		return
 	}
 
-	canRead, err := h.Svc.CanAccessFile(c.Request.Context(), uid, fileID, false)
+	history, err := h.Svc.ReadFileVersionHistory(c.Request.Context(), uid, fileID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-	if !canRead {
-		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+		writeFileMutationError(c, err, "read version history failed")
 		return
 	}
 
-	rows, err := h.Svc.ListFileVersions(c.Request.Context(), fileID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"items": rows})
+	c.JSON(http.StatusOK, history)
 }
 
 func normalizeFilePermission(p string) string {

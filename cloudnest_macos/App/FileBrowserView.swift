@@ -10,6 +10,7 @@ struct FileBrowserView: View {
     @State private var naming: NameAction?
     @State private var confirmingTrash = false
     @State private var destination: FileDestinationAction?
+    @State private var versionFile: FileItem?
     @State private var previewRequest: UUID?
     @State private var previewURL: URL?
     @State private var presentedPreview: UUID?
@@ -147,13 +148,18 @@ struct FileBrowserView: View {
         .disabled(browser.busy)
         .focusedSceneValue(\.fileBrowserActions, fileActions)
         .inspector(isPresented: $showingInspector) {
-            FileInspector(items: browser.selectedItems)
+            FileInspector(items: browser.selectedItems) { versionFile = $0 }
                 .inspectorColumnWidth(min: 220, ideal: 260, max: 350)
         }
         .quickLookPreview($previewURL)
         .sheet(item: $destination) { action in
             FileDestinationSheet(session: session, action: action) { target in
                 Task { await browser.relocate(ids: action.ids, parentID: target, copy: action.copy) }
+            }
+        }
+        .sheet(item: $versionFile) { item in
+            FileVersionsSheet(file: item, session: session, transfers: transfers) {
+                Task { await browser.reload() }
             }
         }
         .sheet(item: $naming) { action in
@@ -223,7 +229,7 @@ struct FileBrowserView: View {
 
     private var fileActions: FileBrowserActions {
         var actions = FileBrowserActions()
-        guard !browser.busy, naming == nil, destination == nil, !confirmingTrash else { return actions }
+        guard !browser.busy, naming == nil, destination == nil, versionFile == nil, !confirmingTrash else { return actions }
         actions.refresh = { Task { await browser.reload() } }
         actions.inspector = { showingInspector.toggle() }
         let selected = browser.selectedItems
@@ -241,7 +247,10 @@ struct FileBrowserView: View {
         }
         if selected.count == 1, let item = selected.first {
             actions.rename = { naming = .rename(item) }
-            if !item.isDirectory { actions.preview = { preparePreview(item) } }
+            if !item.isDirectory {
+                actions.preview = { preparePreview(item) }
+                actions.versions = { versionFile = item }
+            }
         }
         return actions
     }
@@ -333,6 +342,7 @@ struct FileBrowserView: View {
                         Button("打开") { Task { await browser.open(item) } }
                     }
                     if !item.isDirectory { Button("快速查看") { preparePreview(item) } }
+                    if !item.isDirectory { Button("版本历史…") { versionFile = item } }
                     Button("重新命名") { naming = .rename(item) }
                 }
                 Button("移入回收站", role: .destructive) {
@@ -407,6 +417,7 @@ private struct FileNameSheet: View {
 
 private struct FileInspector: View {
     let items: [FileItem]
+    let versions: (FileItem) -> Void
 
     var body: some View {
         Form {
@@ -416,6 +427,7 @@ private struct FileInspector: View {
                 if !item.isDirectory {
                     LabeledContent("大小", value: item.size.formatted(.byteCount(style: .file)))
                     LabeledContent("版本", value: String(item.currentVersion))
+                    Button("版本历史…") { versions(item) }
                 }
                 if let modified = item.modified {
                     LabeledContent("修改时间", value: modified.formatted(date: .abbreviated, time: .shortened))
