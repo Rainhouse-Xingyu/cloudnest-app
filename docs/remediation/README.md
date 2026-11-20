@@ -114,3 +114,4 @@ G05 已加入[停止并清除 Agent 恢复配置](FRP-FORGET-CONFIG.md)的排他
 G06 在独立集成分支同时接入 G04 与 G05 的代码，保留 AI worker 生命周期、Agent TLS 和两套 Schema 检查。G04/G05 草稿 PR 保持独立，集成分支用于验证合并后的接口、迁移和后续后端改动。
 
 - [G07 原生 macOS 骨架与真实会话联调](G07-MACOS-FOUNDATION.md)
+- [MySQL 新连接时间协议与历史迁移边界](MYSQL-TIMESTAMPS.md)

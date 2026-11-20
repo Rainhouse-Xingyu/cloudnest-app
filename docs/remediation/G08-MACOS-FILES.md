@@ -76,7 +76,7 @@ macOS 队列以已写入本地检查点的任务 UUID 为键。初始化响应�
 
 `TestMacOSNativeUIFixture` 在独立临时数据库中创建专用账户、目录及 78 字节文本文件，提供 loopback HTTPS Go 路由。设置 `CLOUDNEST_NATIVE_UI_FIXTURE_DIR` 后，测试脚本运行该有界验收服务，收到目录中的 `stop` 文件后退出；20 分钟未结束会自动停止。清单、证书和源文件位于私有临时目录，未设该变量时仍运行既有自动联调。
 
-`python3 scripts/build-macos-native-ui.py <fixture目录>/fixture.json` 构建独立的验收应用，参数须替换为服务报告的确切清单路径。它使用当前仓库的 WorkspaceWindow 视图定义及其他 App/Core 源码，测试入口注入仅信任本次固定证书的 URLSession。该入口位于 NativeUITestSupport，未加入产品 App/Core 目标；产品 TLS 配置没有引入测试开关。每次构建使用独立 bundle ID、Keychain 服务及专用任务目录；CI 只构建该验收入口，交互仍由本机真实 UI 操作验证。
+`python3 scripts/build-macos-native-ui.py <fixture目录>/fixture.json` 构建独立的验收应用，参数须替换为服务报告的确切清单路径。它使用当前仓库的 WorkspaceWindow 视图定义及其他 App/Core 源码，测试入口注入仅信任本次固定证书的 URLSession。该入口位于 NativeUITestSupport，未加入产品 App/Core 目标；产品 TLS 配置没有引入测试开关。每次构建使用独立 bundle ID 及专用任务目录；测试会话只存内存，不读取或写入钥匙串。CI 只构建该验收入口，交互仍由本机真实 UI 操作验证；正式应用继续采用 Keychain，并由专门的 CI 回归覆盖。
 
 运行步骤：在第一终端用 `mktemp -d /tmp/cloudnest-native-ui-XXXXXXXX` 建立目录，以该路径设置 `CLOUDNEST_NATIVE_UI_FIXTURE_DIR` 后执行 `python3 scripts/test-macos-backend.py`。服务报告 ready 后，在第二终端以确切的 fixture.json 路径执行构建脚本，打开输出的验收应用，使用私有清单中的本地地址与专用账户登录。验收结束先退出登录，再在该目录创建 `stop` 文件，等待服务进程退出。依赖可用上述独立 MySQL/Redis 路径覆盖，默认仍采用 Homebrew。
 
@@ -86,4 +86,12 @@ macOS 队列以已写入本地检查点的任务 UUID 为键。初始化响应�
 
 GUI 暴露 Command-Delete 在 onKeyPress 中未触发的问题；本批改由原生菜单键等价项处理，并单独通过 Table focused value 提供动作。修正构建中，Table 的 Command-Backspace 打开确认框；搜索框获得焦点后同键仅清空搜索文本，原选中文件保留，文件菜单的“移入回收站”禁用。该修正与验收入口等待本批精确提交 CI。批量拖拽、多选排序、错误/中断与暂停恢复 GUI、深色和窗口尺寸、速度及资源等仍需后续验收，G08 继续进行中。
 
-早期验收构建复用了旧 Keychain 服务，ad-hoc 重建后触发系统访问提示；自动工具禁止操作 SecurityAgent，已请求用户拒绝旧测试提示，后续构建改用上述独立标识并正常完成验收。旧实例的提示清理仍待用户处理。另在真实界面观察并用临时数据库 SQL 确认 7 小时时间偏移，已登记 TIME-001；这是后端默认时间值与连接时区不一致，尚未修改历史数据或声称修复。
+早期验收构建复用了旧 Keychain 服务，ad-hoc 重建后触发系统访问提示；自动工具禁止操作 SecurityAgent。用户反馈提示遮挡并点了接受，随后已确认旧 Native UI 实例退出，并通过原生 Quit 关闭另一遗留产品验收实例。后续测试入口进一步改用内存会话，避免测试重建读取旧钥匙串项目；编译及签名校验已通过，未再次启动 GUI。真实界面和临时 SQL 另确认了 7 小时偏移，TIME-001 的新连接修复与历史边界见下文。
+
+## 时间协议与本批验证
+
+c982061 的双平台原生 CI [44692850987](https://github.com/Rainhouse-Xingyu/cloudnest-app/actions/runs/44692850987) 和完整后端 CI [44692850960](https://github.com/Rainhouse-Xingyu/cloudnest-app/actions/runs/44692850960) 已全通过，覆盖前述菜单修正及验收入口构建。
+
+本批 NewMySQL 保留 DSN loc，并为每条物理连接设置匹配的固定 session time_zone；冲突或未来会切换偏移的配置拒绝启动，新安装示例用 UTC。修复前在 -07:00 临时 MySQL 上连接池/列表时间/固定东八区三项均失败；修复后通过这三项及既有 Agent 跨时区 UTC 命令租约回归，包含 ON UPDATE 校验，Go 外层约 1.43s。精确提交 CI 待本批推送核验。历史 DATETIME 未改写，来源核对和受控迁移仍待完成，不能因此关闭 TIME-001，协议和迁移准入见 [MySQL 时间说明](MYSQL-TIMESTAMPS.md)。
+
+内存会话验收入口本机编译与签名校验、18 项普通 Swift 测试（需真实服务/Keychain 的测试按开关跳过）、Go 普通 race 测试及 vet 已通过。本轮未启动 GUI 或请求钥匙串访问。

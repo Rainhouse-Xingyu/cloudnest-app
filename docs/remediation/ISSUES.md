@@ -113,4 +113,4 @@ FRP-004 后续进展：Agent 0.3.0 的 `forget_config` 已提供排他队列、�
 
 2026-11-13：FRP-004 已接入正值服务器映射作用域、服务器策略范围分配、HTTP/S 不占无关 TCP 端口及复合唯一索引；历史零作用域仍与全部服务器重叠。旧表迁移保留和并发专项已验证；历史 unknown/旧身份对账、离线策略和真实旧库升级仍待完成。公网测试的初次 TCP 注册被手工测试映射占用拒绝，实际复测结果见 TESTING。
 
-TIME-001 P2（已复现，待修复）：2026-11-20 原生 UI 的临时 MySQL 实例为 `time_zone=SYSTEM`、`system_time_zone=MST`，`NOW()` 比 `UTC_TIMESTAMP()` 少 7 小时。`CURRENT_TIMESTAMP` 生成的文件 create_time/update_time 存为本地朴素值，`loc=UTC` 连接再按 UTC 解读，导致客户端再次减去 7 小时。本机原生文件面板显示 23:39，而列表对应时间显示 16:39；SQL 原值及实测见 G08-MACOS-FILES。NewMySQL 目前直接采用 DSN，没有统一会话时区。须补齐新连接/新写入的时间协议、非 UTC 回归，以及明确原时区的旧默认时间字段迁移方案；不得猜测转换历史数据，G06/G10 继续整改。
+TIME-001 P2（新连接修复，历史迁移进行中）：2026-11-20 原生 UI 的临时 MySQL 实例为 `time_zone=SYSTEM`、`system_time_zone=MST`，`NOW()` 比 `UTC_TIMESTAMP()` 少 7 小时。`CURRENT_TIMESTAMP` 生成的文件 create_time/update_time 存为本地朴素值，`loc=UTC` 连接再按 UTC 解读，导致客户端再次减去 7 小时。本机原生文件面板显示 23:39，而列表对应时间显示 16:39；SQL 原值及实测见 G08-MACOS-FILES。NewMySQL 现保留 DSN loc 并为每条物理连接设置匹配的固定 session time_zone，冲突/DST 配置拒绝；-07:00 临时 MySQL 的连接池/列表默认时间/固定东八区及 Agent 跨时区租约已回归。历史值没有转换；来源明确的迁移工具与副本演练仍待完成，不能关闭本项，见 [时间协议](MYSQL-TIMESTAMPS.md)。

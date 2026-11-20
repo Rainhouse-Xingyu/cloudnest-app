@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run native Swift session tests against disposable local Go/MySQL/Redis."""
 import os
+import argparse
 from pathlib import Path
 import shutil
 import socket
@@ -19,6 +20,12 @@ def available_port():
 
 
 def run():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--filter', dest='test_filter')
+    parser.add_argument('--mysql-time-zone', default='SYSTEM')
+    arguments = parser.parse_args()
+    if arguments.test_filter and os.environ.get('CLOUDNEST_NATIVE_UI_FIXTURE_DIR'):
+        parser.error('--filter cannot be combined with the manual UI fixture')
     if sys.platform != 'darwin':
         raise RuntimeError('This integration test requires macOS and Swift 6.2 or newer')
     mysql_prefix = os.environ.get('CLOUDNEST_TEST_MYSQL_PREFIX') or subprocess.check_output(
@@ -40,6 +47,7 @@ def run():
                 processes.append(subprocess.Popen([
                     mysqld, '--no-defaults', f'--basedir={mysql_prefix}', f'--datadir={data}', f'--socket={mysql_socket}',
                     f'--port={mysql_port}', '--bind-address=127.0.0.1', '--mysqlx=0',
+                    f'--default-time-zone={arguments.mysql_time_zone}',
                     '--log-bin-trust-function-creators=1',
                     f'--pid-file={directory / "mysql.pid"}',
                 ], stdout=mysql_log, stderr=subprocess.STDOUT))
@@ -73,7 +81,7 @@ GRANT ALL PRIVILEGES ON cloudnest_test.* TO 'cloudnest_test'@'127.0.0.1';
                     CLOUDNEST_TEST_REDIS_ADDR=f'127.0.0.1:{redis_port}',
                 )
                 ui_fixture = os.environ.get('CLOUDNEST_NATIVE_UI_FIXTURE_DIR')
-                test = '^TestMacOSNativeUIFixture$' if ui_fixture else '^TestMacOSClientSession$'
+                test = '^TestMacOSNativeUIFixture$' if ui_fixture else (arguments.test_filter or '^TestMacOSClientSession$')
                 timeout = '25m' if ui_fixture else '10m'
                 subprocess.run(['go', 'test', '-tags=integration', '-count=1', f'-timeout={timeout}', '-v',
                                 './integration', '-run', test],

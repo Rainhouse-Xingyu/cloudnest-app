@@ -48,6 +48,8 @@ jobs:
         run: |
           brew install mysql@8.4 redis
           python3 ../scripts/test-macos-backend.py
+      - name: Test timestamps with a non-UTC MySQL default
+        run: python3 ../scripts/test-macos-backend.py --filter '^TestMySQLTime|^TestAgentCommandUTCLeasesAcrossConnectionTimezones$' --mysql-time-zone=-07:00
       - name: Build and verify the release app
         run: |
           xcodebuild -project CloudNest.xcodeproj -scheme CloudNest -configuration Release \

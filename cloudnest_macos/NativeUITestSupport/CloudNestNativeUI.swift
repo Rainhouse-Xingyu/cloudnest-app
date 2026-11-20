@@ -7,6 +7,15 @@ private struct NativeUIFixture: Decodable {
     let directory: String
 }
 
+// UI fixtures never persist credentials or request access to another build's
+// Keychain items. The shipping vault is covered by dedicated Keychain tests.
+private final class NativeUISessionVault: SessionVault {
+    private var session: SavedSession?
+    func read() throws -> SavedSession? { session }
+    func write(_ session: SavedSession) throws { self.session = session }
+    func clear() throws { session = nil }
+}
+
 private final class NativeUITLSPolicy: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
     let certificate: SecCertificate
 
@@ -53,8 +62,7 @@ struct CloudNestNativeUI: App {
             let transport = URLSession(configuration: configuration, delegate: policy, delegateQueue: nil)
             let api = ServerAPI(session: transport, delegate: policy)
             let root = URL(fileURLWithPath: fixture.directory)
-            let service = "org.cloudnest.native-ui.\(root.lastPathComponent).\(Bundle.main.bundleIdentifier ?? UUID().uuidString)"
-            let state = SessionState(api: api, vault: KeychainSessionVault(service: service))
+            let state = SessionState(api: api, vault: NativeUISessionVault())
             _session = State(initialValue: state)
             _transfers = State(initialValue: TransferManager(session: state, directory: root.appending(path: "journal")))
         } catch { fatalError("Could not open the dedicated native UI fixture: \(error)") }
