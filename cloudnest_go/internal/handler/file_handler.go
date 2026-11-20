@@ -201,6 +201,11 @@ func (h *FileHandler) Delete(c *gin.Context) {
 func (h *FileHandler) InitUpload(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<10)
 	uid := c.GetInt64(middleware.ContextUserIDKey)
+	keys := c.Request.Header.Values("Idempotency-Key")
+	if len(keys) > 1 || len(keys) == 1 && keys[0] == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid initialization key"})
+		return
+	}
 
 	var req InitUploadRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -216,6 +221,7 @@ func (h *FileHandler) InitUpload(c *gin.Context) {
 
 	res, err := h.Svc.InitUpload(c.Request.Context(), uid, service.FileUploadInitInput{
 		UploadID:    req.UploadID,
+		RequestKey:  c.GetHeader("Idempotency-Key"),
 		ParentID:    req.ParentID,
 		Filename:    req.Filename,
 		TotalSize:   *req.TotalSize,

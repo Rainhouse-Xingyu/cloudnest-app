@@ -94,6 +94,7 @@ type FileSearchResult struct {
 // FileUploadInitInput 表示上传任务初始化参数。
 type FileUploadInitInput struct {
 	UploadID    string
+	RequestKey  string
 	ParentID    int64
 	Filename    string
 	TotalSize   int64
@@ -278,6 +279,29 @@ func (s *FileService) InitUpload(ctx context.Context, uid int64, in FileUploadIn
 	if in.ChunkSize < 0 || in.TotalChunks < 0 {
 		return FileUploadInitResult{}, contract.ErrInvalidInput
 	}
+	var replay *contract.UploadInitialization
+	uploadID := ""
+	if in.RequestKey != "" {
+		if in.UploadID != "" {
+			return FileUploadInitResult{}, contract.ErrInvalidInput
+		}
+		var err error
+		uploadID, err = contract.UploadInitializationID(uid, in.RequestKey)
+		if err != nil {
+			return FileUploadInitResult{}, err
+		}
+		replay = &contract.UploadInitialization{UserID: uid, ParentID: in.ParentID, Filename: in.Filename, TotalSize: in.TotalSize, ChunkSize: in.ChunkSize, TotalChunks: in.TotalChunks}
+		task, chunks, err := s.fileRepo.GetUploadTaskAndUploadedChunkIndexes(ctx, uid, uploadID)
+		if err == nil {
+			if err := replay.ValidateReplay(task); err != nil {
+				return FileUploadInitResult{}, err
+			}
+			return uploadInitializationResult(task, chunks), nil
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return FileUploadInitResult{}, err
+		}
+	}
 	if in.ChunkSize <= 0 {
 		if v, ok, err := s.getSystemSettingInt64(ctx, "upload_default_chunk_size_mb"); err != nil {
 			return FileUploadInitResult{}, err
@@ -340,7 +364,9 @@ func (s *FileService) InitUpload(ctx context.Context, uid int64, in FileUploadIn
 		}, nil
 	}
 
-	uploadID := generateUploadID(uid)
+	if uploadID == "" {
+		uploadID = generateUploadID(uid)
+	}
 	uidCopy := uid
 	totalSizeCopy := in.TotalSize
 	chunkSizeCopy := in.ChunkSize
@@ -355,10 +381,21 @@ func (s *FileService) InitUpload(ctx context.Context, uid int64, in FileUploadIn
 		TotalChunks: &totalChunksCopy,
 		Status:      0,
 	}
-	if err := s.fileRepo.CreateUploadTask(ctx, task); err != nil {
-		return FileUploadInitResult{}, err
+	if err := s.fileRepo.CreateUploadTask(ctx, task, replay); err != nil {
+		return FileUploadInitResult{}, translateFileMutationError(err)
+	}
+	if replay != nil {
+		current, chunks, err := s.fileRepo.GetUploadTaskAndUploadedChunkIndexes(ctx, uid, uploadID)
+		if err != nil {
+			return FileUploadInitResult{}, err
+		}
+		return uploadInitializationResult(current, chunks), nil
 	}
 	return FileUploadInitResult{UploadID: uploadID, UploadedChunks: []int{}, UploadedCount: 0, Status: 0}, nil
+}
+
+func uploadInitializationResult(task model.UploadTask, chunks []int) FileUploadInitResult {
+	return FileUploadInitResult{UploadID: task.UploadID, TransferEpoch: task.TransferEpoch, UploadedChunks: chunks, UploadedCount: task.UploadedChunks, Status: task.Status}
 }
 
 // ValidateUploadChunk 校验分片上传任务归属与状态。

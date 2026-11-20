@@ -3,6 +3,9 @@
 package integration
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,6 +13,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -23,7 +28,37 @@ func TestMacOSClientSession(t *testing.T) {
 		t.Skip("run scripts/test-macos-backend.py on a macOS development runner")
 	}
 	f := newFixture(t)
+	var lostInitializations sync.Map
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/files/upload/init" {
+			body, err := io.ReadAll(io.LimitReader(r.Body, (16<<10)+1))
+			if err != nil {
+				t.Error(err)
+				w.WriteHeader(500)
+				return
+			}
+			r.Body.Close()
+			r.Body = io.NopCloser(bytes.NewReader(body))
+			var input struct {
+				Filename string `json:"filename"`
+			}
+			if json.Unmarshal(body, &input) == nil && strings.HasPrefix(input.Filename, "lost-init-") {
+				key := r.Header.Get("Idempotency-Key")
+				if key == "" {
+					t.Error("native transfer omitted durable initialization key")
+					w.WriteHeader(400)
+					return
+				}
+				if _, alreadyLost := lostInitializations.LoadOrStore(key, true); !alreadyLost {
+					var disconnected atomic.Bool
+					f.router.ServeHTTP(disconnectReceiptWriter{w, &disconnected}, r)
+					if !disconnected.Load() {
+						t.Error("native initialization did not reach response loss")
+					}
+					return
+				}
+			}
+		}
 		if r.URL.Path == "/api/files/upload/chunk" || strings.HasSuffix(r.URL.Path, "/download") {
 			select {
 			case <-r.Context().Done():

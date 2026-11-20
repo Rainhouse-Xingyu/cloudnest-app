@@ -139,7 +139,7 @@ private struct SignInView: View {
     @State private var server = ""
     @State private var username = ""
     @State private var password = ""
-    @ScaledMetric(relativeTo: .body) private var formHeight: CGFloat = 132
+    @ScaledMetric(relativeTo: .body) private var formHeight: CGFloat = 168
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {

@@ -42,12 +42,13 @@ extension ServerAPI {
     private struct ChunkReceipt: Decodable { let message: String }
     private struct CancelReceipt: Decodable { let status: Int }
 
-    func initializeUpload(_ context: TransferContext, name: String, parentID: Int64,
+    func initializeUpload(_ context: TransferContext, requestID: UUID, name: String, parentID: Int64,
                           source: UploadSource) async throws -> UploadStatus {
         let input = InitUpload(filename: name, parent_id: parentID, total_size: source.size,
                                chunk_size: source.chunkSize, total_chunks: source.chunks.count)
         return try await request(context.origin, "api/files/upload/init", token: context.token,
-                                 body: JSONEncoder().encode(input), method: "POST")
+                                 body: JSONEncoder().encode(input), method: "POST",
+                                 headers: ["Idempotency-Key": requestID.uuidString.lowercased()])
     }
 
     func uploadProgress(_ context: TransferContext, id: String) async throws -> UploadStatus {

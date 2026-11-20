@@ -244,7 +244,7 @@ final class TransferManager {
         if let id = job.uploadID {
             status = try await context.api.uploadProgress(context, id: id)
         } else {
-            status = try await context.api.initializeUpload(context, name: job.name, parentID: job.parentID, source: source)
+            status = try await context.api.initializeUpload(context, requestID: job.id, name: job.name, parentID: job.parentID, source: source)
             job.uploadID = status.uploadID
             job.epoch = status.epoch
             try validateUpload(status, id: status.uploadID, source: source)
@@ -394,6 +394,16 @@ final class TransferManager {
         do {
             try await persist(job)
             let context = try session.transferContext()
+            if job.direction == .upload, job.uploadID == nil, let source = job.source {
+                // Init may have committed before its response was lost. Resolve
+                // the durable request key before acknowledging pause or cancel.
+                let status = try await context.api.initializeUpload(context, requestID: job.id,
+                    name: job.name, parentID: job.parentID, source: source)
+                try validateUpload(status, id: status.uploadID, source: source)
+                job.uploadID = status.uploadID
+                job.epoch = status.epoch
+                try await persist(job)
+            }
             if job.direction == .upload, let uploadID = job.uploadID {
                 let status = try await context.api.uploadProgress(context, id: uploadID)
                 guard status.uploadID == uploadID, status.epoch >= 0 else { throw ServerError.invalidResponse }

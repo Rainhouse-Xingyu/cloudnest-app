@@ -606,7 +606,7 @@ func (r *FileRepo) GetUploadTaskAndUploadedChunkIndexes(ctx context.Context, use
 	return task, chunkIndexes, nil
 }
 
-func (r *FileRepo) CreateUploadTask(ctx context.Context, task model.UploadTask) error {
+func (r *FileRepo) CreateUploadTask(ctx context.Context, task model.UploadTask, replay *contract.UploadInitialization) error {
 	if task.UserID == nil || task.TotalSize == nil || task.ReservedBytes != *task.TotalSize || task.ReservedBytes < 0 || (task.ReservedBytes == 0 && !contract.IsEmptyUpload(task)) || task.ContractVersion != 1 {
 		return contract.ErrInvalidInput
 	}
@@ -614,6 +614,18 @@ func (r *FileRepo) CreateUploadTask(ctx context.Context, task model.UploadTask) 
 	return fileMetadataTransaction(ctx, r.db, func(tx *gorm.DB) error {
 		if err := quota.Begin(tx, uid); err != nil {
 			return err
+		}
+		if replay != nil {
+			var existing model.UploadTask
+			err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&existing, "upload_id=?", task.UploadID).Error
+			if err == nil {
+				// Under the owner ledger lock, concurrent retries acknowledge one
+				// allocation without renewing its lease, quota or audit revision.
+				return replay.ValidateReplay(existing)
+			}
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
 		}
 		expired := tx.Model(&model.UploadTask{}).Where("user_id=? AND contract_version=1 AND status IN (0,2) AND expires_at<=UTC_TIMESTAMP(6)", uid).Updates(map[string]any{"status": 4, "reserved_bytes": int64(0)})
 		if expired.Error != nil {
