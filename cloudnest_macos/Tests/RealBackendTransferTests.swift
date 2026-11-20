@@ -85,6 +85,11 @@ private enum TransferTestError: Error { case timeout, failed(String) }
     #expect(manager.records[preview]?.phase == .completed)
     let previewURL = try await manager.resultURL(preview)
     #expect(SHA256.hash(data: try Data(contentsOf: previewURL)) == SHA256.hash(data: payload))
+    #expect(!manager.jobs.contains { $0.id == preview })
+    #expect(!FileManager.default.fileExists(atPath: journal.appending(path: "\(preview).json").path))
+    await manager.dismissPreview(preview)
+    #expect(manager.records[preview] == nil)
+    #expect(!FileManager.default.fileExists(atPath: previewURL.path))
     let folderName = "Archive-\(UUID())"
     try await state.createFolder(name: folderName, parentID: 0)
     let withFolder = try await state.listFiles(parentID: 0, recycleBin: false)
@@ -120,5 +125,71 @@ private enum TransferTestError: Error { case timeout, failed(String) }
     let current = try await state.listFiles(parentID: 0, recycleBin: false)
     #expect(!current.contains { $0.filename == cancelledSource.lastPathComponent })
     await manager.close()
+    await state.signOut()
+}
+
+@Test(.enabled(if: ProcessInfo.processInfo.environment["CLOUDNEST_SWIFT_ORIGIN"] != nil &&
+               ProcessInfo.processInfo.environment["CLOUDNEST_SWIFT_RESTRICTED"] == "0"))
+@MainActor func realBackendPreviewBudgetAndDismissal() async throws {
+    let env = ProcessInfo.processInfo.environment
+    let origin = try ServerOrigin(#require(env["CLOUDNEST_SWIFT_ORIGIN"]))
+    let certificateURL = URL(fileURLWithPath: try #require(env["CLOUDNEST_SWIFT_CERTIFICATE"]))
+    let delegate = try FixtureTLSDelegate(der: Data(contentsOf: certificateURL))
+    let transport = URLSession(configuration: .ephemeral, delegate: delegate, delegateQueue: nil)
+    defer { transport.invalidateAndCancel() }
+    let api = ServerAPI(session: transport, delegate: delegate)
+    let vault = KeychainSessionVault(service: "org.cloudnest.macos.preview-test.\(UUID())")
+    defer { try? vault.clear() }
+    let state = SessionState(api: api, vault: vault)
+    await state.restore()
+    await state.signIn(server: origin.url.absoluteString,
+                       username: try #require(env["CLOUDNEST_SWIFT_USERNAME"]),
+                       password: try #require(env["CLOUDNEST_SWIFT_PASSWORD"]))
+    let root = FileManager.default.temporaryDirectory.appending(path: "cloudnest-real-preview-\(UUID())")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let journal = root.appending(path: "journal")
+    let manager = TransferManager(session: state, directory: journal,
+                                  previewLimits: .init(bytes: 4096, fileBytes: 4096, entries: 2))
+    let source = root.appending(path: "preview-\(UUID()).bin")
+    try Data(repeating: 0x45, count: 2048).write(to: source)
+    let upload = try await manager.enqueueUpload(source, parentID: 0)
+    await manager.waitUntilIdle(upload)
+    #expect(manager.records[upload]?.phase == .completed)
+    let fileID = try #require(manager.records[upload]?.resultFileID)
+    let files = try await state.listFiles(parentID: 0, recycleBin: false)
+    let file = try #require(files.first { $0.id == fileID })
+    let first = try await manager.enqueuePreview(file)
+    await manager.waitUntilIdle(first)
+    let second = try await manager.enqueuePreview(file)
+    await manager.waitUntilIdle(second)
+    let firstURL = try await manager.resultURL(first)
+    let secondURL = try await manager.resultURL(second)
+    #expect(firstURL != secondURL)
+    await #expect(throws: TransferError.previewCapacity) { try await manager.enqueuePreview(file) }
+    #expect(FileManager.default.fileExists(atPath: firstURL.path))
+    #expect(FileManager.default.fileExists(atPath: secondURL.path))
+    await manager.dismissPreview(first)
+    #expect(!FileManager.default.fileExists(atPath: firstURL.path))
+    #expect(FileManager.default.fileExists(atPath: secondURL.path))
+    let pending = try await manager.enqueuePreview(file)
+    await manager.dismissPreview(pending)
+    #expect(manager.records[pending] == nil)
+    // A stale row says one byte, but the real HTTP representation is larger.
+    let stale = FileItem(id: file.id, filename: file.filename, parentID: file.parentID,
+                         isFolder: 0, size: 1, currentVersion: file.currentVersion,
+                         updateTime: file.updateTime, fileType: file.fileType)
+    let changed = try await manager.enqueuePreview(stale)
+    await manager.waitUntilIdle(changed)
+    #expect(manager.records[changed]?.phase == .failed)
+    #expect(manager.records[changed]?.confirmedBytes == 0)
+    await manager.dismissPreview(changed)
+    await manager.close()
+    #expect(!FileManager.default.fileExists(atPath: secondURL.path))
+    let restored = TransferManager(session: state, directory: journal)
+    await restored.restore()
+    #expect(restored.records[upload]?.phase == .completed)
+    #expect(!restored.records.values.contains { $0.previewID != nil })
+    await restored.close()
     await state.signOut()
 }

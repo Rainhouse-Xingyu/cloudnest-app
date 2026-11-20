@@ -33,7 +33,7 @@ actor TransferStore {
                 throw TransferError.invalidCheckpoint
             }
             let record = try JSONDecoder().decode(TransferRecord.self, from: Data(contentsOf: url))
-            guard record.id == id, record.totalBytes >= 0, record.confirmedBytes >= 0,
+            guard record.id == id, record.previewID == nil, record.totalBytes >= 0, record.confirmedBytes >= 0,
                   record.confirmedBytes <= record.totalBytes, record.epoch >= 0,
                   record.revision >= 0, record.revision < Int64.max,
                   record.identity.userID > 0, record.parentID >= 0,

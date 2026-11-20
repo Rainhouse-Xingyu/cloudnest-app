@@ -12,6 +12,7 @@ struct FileBrowserView: View {
     @State private var destination: FileDestinationAction?
     @State private var previewRequest: UUID?
     @State private var previewURL: URL?
+    @State private var presentedPreview: UUID?
     @State private var previewGeneration = UUID()
 
     init(session: SessionState, transfers: TransferManager, recycleBin: Bool) {
@@ -59,6 +60,24 @@ struct FileBrowserView: View {
             .onDeleteCommand {
                 if !browser.recycleBin && !browser.selectedItems.isEmpty { confirmingTrash = true }
             }
+            .onKeyPress(keys: [.space, .return, .delete]) { press in
+                guard !browser.recycleBin, !browser.busy else { return .ignored }
+                if press.key == .delete, press.modifiers == .command, !browser.selectedItems.isEmpty {
+                    confirmingTrash = true
+                    return .handled
+                }
+                guard press.modifiers.isEmpty, browser.selectedItems.count == 1,
+                      let item = browser.selectedItems.first else { return .ignored }
+                if press.key == .space, !item.isDirectory {
+                    preparePreview(item)
+                    return .handled
+                }
+                if press.key == .return {
+                    naming = .rename(item)
+                    return .handled
+                }
+                return .ignored
+            }
             .overlay {
                 if browser.busy && !browser.loaded { ProgressView("正在读取文件") }
                 if browser.loaded && browser.items.isEmpty && browser.error == nil {
@@ -69,12 +88,10 @@ struct FileBrowserView: View {
             if let id = previewRequest, let job = transfers.records[id], job.phase != .completed {
                 HStack {
                     if job.phase.isActive { ProgressView().controlSize(.small) }
-                    Text(job.error ?? "正在准备预览，可在传输中查看进度")
+                    Text(job.error ?? "正在下载并验证预览 · \(job.confirmedBytes.formatted(.byteCount(style: .file))) / \(job.totalBytes.formatted(.byteCount(style: .file)))")
                     Spacer()
                     Button("取消预览") {
-                        previewGeneration = UUID()
-                        previewRequest = nil
-                        Task { await transfers.cancel(id) }
+                        clearPreview()
                     }
                 }
                 .foregroundStyle(.secondary)
@@ -112,7 +129,6 @@ struct FileBrowserView: View {
                     } label: {
                         Label("新建文件夹", systemImage: "folder.badge.plus")
                     }
-                    .keyboardShortcut("n", modifiers: [.command, .shift])
                 } else {
                     Button("恢复", systemImage: "arrow.uturn.backward") {
                         Task { await browser.restoreSelected() }
@@ -124,16 +140,15 @@ struct FileBrowserView: View {
                 } label: {
                     Label("刷新文件", systemImage: "arrow.clockwise")
                 }
-                .keyboardShortcut("r")
                 Button {
                     showingInspector.toggle()
                 } label: {
                     Label("检查器", systemImage: "sidebar.right")
                 }
-                .keyboardShortcut("i", modifiers: [.command, .option])
             }
         }
         .disabled(browser.busy)
+        .focusedSceneValue(\.fileBrowserActions, fileActions)
         .inspector(isPresented: $showingInspector) {
             FileInspector(items: browser.selectedItems)
                 .inspectorColumnWidth(min: 220, ideal: 260, max: 350)
@@ -165,11 +180,19 @@ struct FileBrowserView: View {
                 do {
                     let url = try await transfers.resultURL(id)
                     guard generation == previewGeneration, previewRequest == id else { return }
+                    presentedPreview = id
                     previewURL = url
-                    previewRequest = nil
                 } catch { transfers.report(error) }
             }
         }
+        .onChange(of: previewURL) { _, url in
+            if url == nil, let id = presentedPreview {
+                presentedPreview = nil
+                if previewRequest == id { previewRequest = nil }
+                Task { await transfers.dismissPreview(id) }
+            }
+        }
+        .onDisappear { clearPreview() }
         .onChange(of: transfers.jobs.filter { $0.direction == .upload && $0.phase == .completed }.count) {
             Task { await browser.reload() }
         }
@@ -180,14 +203,50 @@ struct FileBrowserView: View {
         previewGeneration = generation
         let previous = previewRequest
         previewRequest = nil
+        presentedPreview = nil
+        previewURL = nil
         Task {
-            if let previous { await transfers.cancel(previous) }
+            if let previous { await transfers.dismissPreview(previous) }
             do {
                 let id = try await transfers.enqueuePreview(item)
                 if generation == previewGeneration { previewRequest = id }
-                else { await transfers.cancel(id) }
+                else { await transfers.dismissPreview(id) }
             } catch { transfers.report(error) }
         }
+    }
+
+    private func clearPreview() {
+        previewGeneration = UUID()
+        let previous = previewRequest
+        previewRequest = nil
+        presentedPreview = nil
+        previewURL = nil
+        if let previous { Task { await transfers.dismissPreview(previous) } }
+    }
+
+    private var fileActions: FileBrowserActions {
+        var actions = FileBrowserActions()
+        guard !browser.busy, naming == nil, destination == nil, !confirmingTrash else { return actions }
+        actions.refresh = { Task { await browser.reload() } }
+        actions.inspector = { showingInspector.toggle() }
+        let selected = browser.selectedItems
+        if browser.recycleBin {
+            if selected.count == 1 { actions.restore = { Task { await browser.restoreSelected() } } }
+            return actions
+        }
+        actions.createFolder = { naming = .create }
+        actions.upload = chooseUploads
+        if !selected.isEmpty {
+            actions.download = { chooseDownloads(browser.selectedItems) }
+            actions.move = { destination = FileDestinationAction(ids: browser.selection.sorted(), copy: false) }
+            actions.copy = { destination = FileDestinationAction(ids: browser.selection.sorted(), copy: true) }
+            actions.trash = { confirmingTrash = true }
+        }
+        if selected.count == 1, let item = selected.first {
+            actions.rename = { naming = .rename(item) }
+            if !item.isDirectory { actions.preview = { preparePreview(item) } }
+        }
+        return actions
     }
 
     private func chooseUploads() {

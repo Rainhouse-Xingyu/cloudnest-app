@@ -23,8 +23,10 @@ struct CloudNestApp: App {
         .defaultSize(width: 900, height: 590)
         .onChange(of: session.transferIdentity) { Task { await transfers.synchronizeIdentity() } }
         .commands {
+            FileBrowserCommands()
             CommandMenu("服务器") {
                 Button("刷新连接状态") { Task { await session.refresh() } }
+                    .keyboardShortcut("r", modifiers: [.command, .option])
                     .disabled(!session.hasSavedSession || session.busy)
                 Button("退出登录") { Task { await session.signOut() } }
                     .disabled(!session.hasSavedSession || session.busy)
@@ -110,7 +112,6 @@ struct WorkspaceWindow: View {
                             } label: {
                                 Label("刷新连接状态", systemImage: "arrow.clockwise")
                             }
-                            .keyboardShortcut("r")
                             .disabled(session.busy)
                         }
                     }

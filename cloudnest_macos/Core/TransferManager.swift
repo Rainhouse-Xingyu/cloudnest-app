@@ -11,6 +11,10 @@ final class TransferManager {
     private let session: SessionState
     private let directory: URL
     private let disk = TransferDisk()
+    private let previews: PreviewCache
+    private var previewDismissals: [UUID: Task<Void, Never>] = [:]
+    private var abandonedPreviews: Set<UUID> = []
+    private var closing = false
     private var store: TransferStore?
     private var active: [UUID: Task<Void, Never>] = [:]
     private var generations: [UUID: UUID] = [:]
@@ -19,12 +23,14 @@ final class TransferManager {
     private var restoration: Task<Void, Never>?
 
     var jobs: [TransferRecord] {
-        records.values.filter { $0.identity == session.transferIdentity }.sorted { $0.createdAt > $1.createdAt }
+        records.values.filter { $0.identity == session.transferIdentity && $0.previewID == nil }.sorted { $0.createdAt > $1.createdAt }
     }
 
-    init(session: SessionState, directory: URL = TransferStore.defaultDirectory) {
+    init(session: SessionState, directory: URL = TransferStore.defaultDirectory,
+         previewLimits: PreviewCache.Limits = .init()) {
         self.session = session
         self.directory = directory
+        previews = PreviewCache(directory: directory.appending(path: "preview-cache-v1", directoryHint: .isDirectory), limits: previewLimits)
     }
 
     func restore() async {
@@ -51,6 +57,8 @@ final class TransferManager {
             }
             restored = true
             error = nil
+            do { try await previews.recover() }
+            catch { self.error = message(error) }
         } catch {
             store = nil
             self.error = message(error)
@@ -90,16 +98,63 @@ final class TransferManager {
     }
 
     func enqueuePreview(_ file: FileItem) async throws -> UUID {
-        guard !file.isDirectory, file.filename != ".", file.filename != "..",
+        try await ensureStore()
+        let context = try session.transferContext()
+        guard file.id > 0, !file.isDirectory, !file.filename.isEmpty, file.filename != ".", file.filename != "..",
               URL(fileURLWithPath: file.filename).lastPathComponent == file.filename else { throw ServerError.invalidResponse }
-        let folder = directory.appending(path: "previews/\(UUID())", directoryHint: .isDirectory)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true,
-                                                attributes: [.posixPermissions: 0o700])
-        return try await enqueueDownload(file, destination: folder.appending(path: file.filename))
+        for id in Array(abandonedPreviews) { await dismissPreview(id) }
+        error = nil
+        let id = UUID()
+        let folder = try await previews.reserve(id, bytes: file.size)
+        do {
+            let bookmark = try await disk.bookmark(folder)
+            var job = TransferRecord(id: id, createdAt: Date(), identity: context.identity, direction: .download,
+                                     name: file.filename, bookmark: bookmark, parentID: 0, fileID: file.id,
+                                     isArchive: false, totalBytes: file.size)
+            guard context.identity == session.transferIdentity else { throw ServerError.unauthorized }
+            job.previewID = id
+            try await persist(job)
+            await schedule()
+            return id
+        } catch {
+            records[id] = nil
+            try? await previews.remove(id)
+            throw error
+        }
+    }
+
+    func dismissPreview(_ id: UUID) async {
+        if let dismissal = previewDismissals[id] { await dismissal.value; return }
+        guard records[id]?.previewID == id else { return }
+        let dismissal = Task {
+            await self.removePreview(id)
+            self.previewDismissals[id] = nil
+        }
+        previewDismissals[id] = dismissal
+        await dismissal.value
+    }
+
+    private func removePreview(_ id: UUID) async {
+        abandonedPreviews.insert(id)
+        records[id]?.phase = .cancelling
+        active[id]?.cancel()
+        await active[id]?.value
+        await disk.closeDownload(id)
+        do {
+            try await previews.remove(id)
+            records[id] = nil
+            abandonedPreviews.remove(id)
+        } catch {
+            records[id]?.phase = .failed
+            records[id]?.error = message(error)
+            self.error = message(error)
+        }
+        await schedule()
     }
 
     func resume(_ id: UUID) async {
         guard var job = records[id], job.identity == session.transferIdentity,
+              job.previewID == nil,
               active[id] == nil, !controls.contains(id), [.paused, .failed].contains(job.phase) else { return }
         if job.cancelRequested { await cancel(id); return }
         job.phase = .queued
@@ -114,6 +169,9 @@ final class TransferManager {
     func cancel(_ id: UUID) async { await control(id, cancel: true) }
 
     func synchronizeIdentity() async {
+        for job in Array(records.values) where job.previewID != nil && job.identity != session.transferIdentity {
+            await dismissPreview(job.id)
+        }
         for (id, task) in active where records[id]?.identity != session.transferIdentity {
             task.cancel()
             if var job = records[id] {
@@ -130,6 +188,10 @@ final class TransferManager {
     }
 
     func close() async {
+        closing = true
+        defer { closing = false }
+        for job in Array(records.values) where job.previewID != nil { await dismissPreview(job.id) }
+        for dismissal in Array(previewDismissals.values) { await dismissal.value }
         for id in Array(active.keys) { await pause(id) }
         store = nil
         restored = false
@@ -155,7 +217,7 @@ final class TransferManager {
         var job = value
         job.revision = (records[job.id]?.revision ?? -1) + 1
         records[job.id] = job
-        do { try await store.save(job) }
+        do { if job.previewID == nil { try await store.save(job) } }
         catch {
             if records[job.id]?.revision == job.revision {
                 records[job.id]?.phase = .failed
@@ -171,14 +233,14 @@ final class TransferManager {
         var job = value
         job.revision = (records[job.id]?.revision ?? 0) + 1
         records[job.id]?.revision = job.revision
-        try await store.save(job)
+        if job.previewID == nil { try await store.save(job) }
         guard generations[job.id] == generation, records[job.id]?.phase == .running,
               records[job.id]?.revision == job.revision else { throw CancellationError() }
         records[job.id] = job
     }
 
     private func schedule() async {
-        guard restored, !scheduling else { return }
+        guard restored, !scheduling, !closing else { return }
         scheduling = true
         defer { scheduling = false }
         let pending = records.values.filter { $0.phase == .queued && $0.identity == session.transferIdentity }
@@ -312,6 +374,7 @@ final class TransferManager {
             }
             defer { bytes.cancel() }
             let plan = try DownloadPlan(response: response, record: job, requestedStart: start, requestedEnd: end)
+            if job.previewID != nil { try await previews.validate(job.id, total: plan.total) }
             if plan.replaces {
                 try await disk.resetDownload(job.id)
                 job.confirmedBytes = 0
@@ -379,6 +442,7 @@ final class TransferManager {
 
     private func control(_ id: UUID, cancel: Bool) async {
         guard var job = records[id], job.identity == session.transferIdentity,
+              job.previewID == nil,
               !controls.contains(id), job.phase != .completed, job.phase != .cancelled else { return }
         controls.insert(id)
         defer { controls.remove(id) }
