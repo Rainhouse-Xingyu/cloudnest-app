@@ -48,6 +48,9 @@ struct FileDestinationSheet: View {
                     Button("重试") { Task { await browser.reload() } }
                 }
             }
+            Text("同名项目将自动分配新名称。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             HStack {
                 Text(browser.title).foregroundStyle(.secondary)
                 Spacer()

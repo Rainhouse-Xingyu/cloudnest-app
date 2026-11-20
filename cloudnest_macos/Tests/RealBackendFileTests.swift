@@ -67,10 +67,12 @@ import Testing
     #expect(copied.count == 1)
     #expect(copied.first?.id != folder.id)
     #expect(copied.first?.filename == folder.filename)
-    do {
-        try await state.relocateFiles(ids: [folder.id], parentID: destination.id, copy: false)
-        Issue.record("A conflicting move was accepted")
-    } catch { #expect(error as? ServerError == .conflict) }
+    try await state.relocateFiles(ids: [folder.id], parentID: destination.id, copy: false)
+    let allocated = try await state.listFiles(parentID: destination.id, recycleBin: false)
+    #expect(allocated.count == 2)
+    let movedOriginal = try #require(allocated.first { $0.id == folder.id })
+    #expect(movedOriginal.filename != folder.filename)
+    #expect(allocated.contains { $0.id == copied.first?.id && $0.filename == folder.filename })
     try await state.renameFile(id: folder.id, name: "Moved-\(UUID())")
     try await state.relocateFiles(ids: [folder.id], parentID: destination.id, copy: false)
     let moved = try await state.listFiles(parentID: destination.id, recycleBin: false)
