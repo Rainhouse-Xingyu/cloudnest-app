@@ -14,7 +14,7 @@
 | SEC-008 P1 | `auth_service.go:Logout` 忽略 Redis 删除错误；角色/禁用状态来自历史 JWT | Redis 断开后注销；登录后撤销角色/禁用再访问 | G01 注销错误传播、会话撤销/用户状态检查 | 已修：注销错误传播、实时身份与权限，待审 |
 | SEC-009 P1 | `app/container.go` FRP 上报/拉命令同用户 JWT 入口 | 用用户身份调用设备命令 API；无独立设备认证模型 | G05 设备 enrollment、独立凭据哈希/轮换/撤销与权限范围 | 已登记设备接入独立身份与持久命令，旧 JWT 执行入口已拒绝。实际 Go Agent 已验证三种隧道及重连；未登记设备兼容路径仍待迁移，见 [G05 记录](G05-DEVICE-IDENTITY.md) |
 | SEC-010 P1 | `service/frp_service.go:generateFRPCYaml/SaveConfig` 明文 token 拼入配置并持久化 | 隔离环境读取配置记录/响应；不要记录真实 token | G05 加密敏感配置、脱敏响应、最小 Agent 权限 | 服务端 TLS/脱敏、AES-GCM、显式迁移/轮换与活动租约配置领取已实现。Agent 已接入 Keychain/外部密钥与身份/日志加密、显式迁移；frpc 认证 token 改由继承匿名管道传入，不写运行配置；映射参数缓存、历史备份及生产迁移仍待治理，SEC-010 保持开放 |
-| SEC-011 P1 | iOS `Shared/Managers/SessionManager.swift` 用 UserDefaults 存 token | 检查保存/读取路径 | G07 新 macOS 用 Keychain；冻结旧 iOS 开发 | 已确认，待做 |
+| SEC-011 P1 | iOS `Shared/Managers/SessionManager.swift` 用 UserDefaults 存 token | 检查保存/读取路径 | G07 新 macOS 用 Keychain；冻结旧 iOS 开发 | 新 macOS Keychain 与真实会话回归通过；旧 iOS 冻结 |
 | SEC-012 P1 | `cmd/server/main.go` 用 `gin.Run` 无显式 HTTP 超时；上传入口缺少请求体总限额 | 慢请求/超大 multipart；需受限资源测试 | G01/G03 显式服务器超时、请求/分片尺寸上限、登录速率限制 | G01 请求头/空闲超时及登录体积/限流已修；G03 已补齐有界流式 multipart、共享并发准入、实际 TCP 读取期限及服务读取超时；分片/合并临时卷预算已追加；ZIP/缓存预算与慢请求规模压测待做 |
 | SEC-013 P1 | G01 初版自定义权限覆盖默认路由，导致 GET auth/me、POST auth/logout 被拒绝 | 真实 API 用户仅授予 GET files，me 返回 403；注销同受影响 | 在完整身份认证后独立允许精确方法/自身会话路由，业务与管理员权限不扩大 | 修复前已复现；修复后集成测试通过 |
 | SEC-014 P1 | JWT 仅含用户与秒级时间，相同用户同秒登录 token 相同，注销互相影响 | 真实重复登录返回同一 token；固定时刻签发测试 | crypto/rand 256-bit JTI；独立 Redis 会话与单会话注销验证 | 修复前已复现；修复后集成测试通过 |
@@ -22,7 +22,7 @@
 | SEC-016 P1 | 无密码恢复命令及用户全部会话撤销入口，无法安全处理历史账号或丢失设备登录 | 历史明文恢复、当前/旧/延迟签发 Token、多用户隔离、审计故障、旧结构迁移 | G01 auth_version + 受控密码恢复命令 + 精确 logout-all；密码/版本/审计同事务 | 代码已实现，详见 [账号恢复](ACCOUNT-RECOVERY.md)，真实账号未操作 |
 | SEC-017 P1 | config.Load 的 JWT_EXPIRE_HOURS 非数字输入静默回退为 168 小时 | 设置 one-hour，Validate 原先通过 | G01 错误文本/溢出转为无效值，由 Validate 在连接前拒绝 | 修复前测试失败，修复后通过；未设置仍为 168 小时 |
 | CLIENT-001 P2 | 旧 SettingsViewModel 对普通用户也请求需显式授权的权限汇总，并展示管理员操作入口 | 57 路由契约核对；真实 GET settings/permissions 对普通用户 403 | G07/G09 按服务端能力展示；不放宽后端管理员/跨用户边界，冻结 iOS 功能开发 | 已记录兼容性边界，待新客户端实现 |
-| CLIENT-002 P2 | 旧 SettingsViewModel.logout 忽略服务端撤销错误，直接清本地会话 | 静态调用链证据；后端错误已正确返回 503 | G07 保留可重试的远端注销并展示失败状态 | 已记录，待新客户端实现 |
+| CLIENT-002 P2 | 旧 SettingsViewModel.logout 忽略服务端撤销错误，直接清本地会话 | 静态调用链证据；后端错误已正确返回 503 | G07 保留可重试的远端注销并展示失败状态 | 新 macOS 已实现远端注销失败重试；旧 iOS 冻结 |
 | DEP-001 P1 | 初次 govulncheck 报告 x/net、x/text、quic-go 可达漏洞；旧 Go 标准库另查 | `make vuln`；见 BASELINE | G01 按公告最小升级依赖和工具链，重新构建/扫描 | 已升级；可达/导入包告警 0，另 1 项未调用 OpenPGP 模块告警 |
 | DATA-001 P1 | `internal/store/mysql.go:NewMySQL` 每次启动 AutoMigrate，无版本/审核开关 | 审查启动调用链；仅在测试库观察建表 | G01 关闭隐式生产迁移；G06/G10 版本化迁移、备份/回滚演练 | 普通启动不再迁移；G02 独立文件名与两步存储引用版本化迁移已实现，其余模型版本化与真实备份恢复待 G06/G10 |
 | FILE-001 P1 | `storage/mysql/file_repo.go:HasActiveNameConflict` 根目录 parent_id=0 未含 user_id | 两用户根目录创建同名目录；第二个不应冲突 | G02 对根按所有者作用域，非根按共享父目录；事务并发约束 | 已复现跨用户 409；修复后通过根/共享目录与并发测试，待 G02 PR 审查 |
@@ -58,7 +58,7 @@
 | ENG-002 P2 | 已跟踪 dist/main/*.o/xcuserdata | `git ls-files`；检查工作树文件仍在 | G00 取消跟踪并 ignore；历史 patch 需独立核对后归档 | 当前产物已取消跟踪 |
 | ENG-003 P2 | file handler 2165 行、service 1193 行；已有契约与仓储可复用 | 逐功能调用链审查和单元边界 | G02–G06 随业务拆模块，不全盘重写 | 待做 |
 | ENG-004 P1 | 无原有 CI/运行监控/备份恢复演练 | 检查 workflows/部署脚本，执行隔离发布演练 | G00 CI；G10 发布/指标/健康检查/备份恢复 | CI 已执行，G00 构建/测试通过、漏洞检查失败；运行治理待做 |
-| MAC-001 P1 | `cloudnest_macos/` 空目录 | 文件清单 | G07–G09 独立原生 SwiftUI/AppKit 应用与 Keychain；无 UIKit 依赖 | 未开始 |
+| MAC-001 P1 | `cloudnest_macos/` 空目录 | 文件清单 | G07–G09 独立原生 SwiftUI/AppKit 应用与 Keychain；无 UIKit 依赖 | G07/G08 原生客户端已接入待审；G09、异常恢复和完整 GUI/资源验收继续 |
 | ENV-001 P2 | iOS target 26.2，Xcode 无相应平台；模拟器仅 18.6 可用 | xcodebuild 返回 70，destination 不可用 | 保留失败证据；macOS 用可用 SDK 独立验证 | 环境阻塞；非代码编译结论 |
 
 ## 审查边界

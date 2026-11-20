@@ -599,3 +599,9 @@ G06 公开分享新增 HTTPS 提取码、下载上限和跨链接限流。11 项
 ## 2026-11-19 G07 原生 macOS 会话
 
 提交 5ff84a3 的 macOS CI 44639630078 在 macOS 26.7.2 / Xcode 26.6 和 macOS 27.0.1 / Xcode 27.1 均通过基础 Swift 回归、独立 Keychain 往返和默认/自定义权限两种真实 Go HTTPS 会话场景。两台均完成 Universal Release、临时签名和 arm64/x86_64 检查。TLS/重定向及临时服务边界见 [G07 记录](G07-MACOS-FOUNDATION.md)，GUI 运行验收继续推进。
+
+## 2026-11-20 UTC G08 原生文件与可恢复传输
+
+提交 a892b1c 的 macOS CI 44647503610 在 macOS 26.7.2 / Xcode 26.6 和 macOS 27.0.1 / Xcode 27.1 均通过基础 Swift 回归、真实 HTTPS Go/MySQL/Redis 联调、Universal Release 与签名/双架构检查。新增覆盖分片摘要与源变化、下载身份与前缀篡改、检查点锁/恢复、发布重试与同名保留、未确认 Data 块取消、真实上传/下载暂停与队列重建、未确认后缀截断、预览准备、目录 ZIP、空文件、取消，以及移动/复制自动重名和跨用户拒绝。
+
+真实传输用例约 18.01s/18.23s，旧逐字节版本 602ea2e 为 168s/159s；两批场景数量不同，范围和剩余异常恢复/大文件/RSS/GUI 验收见 [G08 记录](G08-MACOS-FILES.md)。本机原生登录表单的密码遮蔽/清空及非 HTTPS 提示已通过实际 UI 操作确认。

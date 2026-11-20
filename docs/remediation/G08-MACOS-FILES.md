@@ -6,7 +6,7 @@ G08 在独立的 `cloudnest_macos/` 中接入 Go 文件 API。原生 Table 支�
 
 真实后端联调通过临时 MySQL、Redis 和 HTTPS Go 路由验证客户端，入口为 `python3 scripts/test-macos-backend.py`，依赖 Homebrew 的 `mysql@8.4`、`redis` 和项目 Go/Swift 工具链。数据库使用随机本地端口、独立临时目录和专用测试账户，进程在测试结束时退出。TLS 测试客户端使用本次服务器证书作为独立信任锚。
 
-提交 5ae810b 的 [双平台 CI 44640208599](https://github.com/Rainhouse-Xingyu/cloudnest-app/actions/runs/44640208599) 已通过目录创建、重名冲突、改名、跨用户拒绝、批量删除部分成功、回收站恢复及退出后清空文件列表，另有默认/自定义权限会话联调。macOS 26.7.2 / Xcode 26.6 和 macOS 27.0.1 / Xcode 27.1 均通过基础 Swift 回归、真实 Go 联调、Universal Release、签名及双架构检查。上传下载任务、进度/暂停/恢复、拖拽、Quick Look、移动/复制和客户端持久恢复仍需补齐。G08 保持进行中。
+提交 5ae810b 的 [双平台 CI 44640208599](https://github.com/Rainhouse-Xingyu/cloudnest-app/actions/runs/44640208599) 已通过目录创建、重名冲突、改名、跨用户拒绝、批量删除部分成功、回收站恢复及退出后清空文件列表，另有默认/自定义权限会话联调。macOS 26.7.2 / Xcode 26.6 和 macOS 27.0.1 / Xcode 27.1 均通过基础 Swift 回归、真实 Go 联调、Universal Release、签名及双架构检查。后续传输、预览和移动/复制的实现与验收见下文。G08 保持进行中。
 
 CI 应用包已从 artifact 14584934079 下载，外层归档 SHA-256 与 GitHub 摘要一致，解包后再次通过签名校验。在本机 macOS 27.2.1 启动后，确认进程运行并创建 900×590 的可见窗口。原生 UI 工具连续两次超时，当前进程的 Accessibility 与 Screen Capture preflight 均为 false，因此登录表单和文件界面的实际交互/视觉验收仍待完成。此次只将进程和窗口创建记为本机运行证据。
 
@@ -25,3 +25,15 @@ CI 应用包已从 artifact 14584934079 下载，外层归档 SHA-256 与 GitHub
 文件菜单后续增加移动/复制及原生目标目录选择，普通文件可双击或通过“快速查看”下载到独立预览目录，完整校验完成后调用系统 Quick Look。新增真实复制、同名移动分配、成功移动、跨用户复制拒绝、预览准备和目录 ZIP 回归，结果待新提交验证。Quick Look 窗口的实际交互/视觉验收及预览缓存预算仍待完成。
 
 提交 a843210 的双平台复测中，新版真实传输用例均约 18.35s 完成，覆盖恢复、预览准备、目录 ZIP、空文件及取消。整轮 CI 仍因新增移动断言失败：服务端既有 MoveFiles 会为重名自动分配新名称，该测试错误地预期 409。后续回归改为检查移动后两个 ID 均保留、复制品仍使用原名称、移动项获得不同名称，目标目录选择界面同时提示该命名行为。
+
+## 2026-11-20 UTC 当前验证结果
+
+提交 a892b1c 的 [双平台 CI 44647503610](https://github.com/Rainhouse-Xingyu/cloudnest-app/actions/runs/44647503610) 已全部通过。macOS 26.7.2 / Xcode 26.6 与 macOS 27.0.1 / Xcode 27.1 均完成基础 Swift 回归、默认/自定义权限两类真实 Go/MySQL/Redis 会话、目录操作、传输、Universal Release、临时签名和双架构检查。真实传输用例分别约 18.01s、18.23s，包含新增预览、目录 ZIP、空下载等场景；旧 602ea2e 用例的 159–168s 记录覆盖更少场景，两批均使用临时服务，不能由此推算大文件吞吐或峰值 RSS。
+
+原生界面检查通道在本轮恢复。通过真实 CloudNest 窗口输入非 HTTPS 地址及固定测试凭据，已验证密码遮蔽、提交后清空、地址错误提示和登录按钮禁用。该轮 GUI 操作使用 5ae810b 的既有 CI 应用包；新传输/Quick Look 窗口与完整文件交互仍需后续端到端验收。之前的 UI 超时和访问 preflight 为历史记录，当前通道已可用。
+
+后续继续补齐取得 upload_id 前初始化响应丢失的可恢复确认、预览缓存治理、并行任务与大文件/RSS/断电/多卷演练，以及通过原生控件完成文件和传输操作的端到端流程。整体 Goal 保持进行中。
+
+已下载并校验 a892b1c 对应应用 artifact 14588753626（归档摘要 16e2ac204dd03c39f27ac3c5921c93caccdbfcff921c0724a35cd693a6ab5529），本机启动、Command-Comma 设置窗口、Command-N 新窗口及 Command-W 返回原窗口均已实测。截图暴露登录 Form 占用剩余高度的问题，后续改为随字体缩放的有界表单高度；该布局修正等待新构建视觉复核。
+
+同一 a892b1c 的 [后端完整 CI 44647503606](https://github.com/Rainhouse-Xingyu/cloudnest-app/actions/runs/44647503606) 已全部通过，包含 race 单元/完整集成、网络传输、AI 检索、Agent 原生服务与 Keychain、HEIF 及漏洞检查。

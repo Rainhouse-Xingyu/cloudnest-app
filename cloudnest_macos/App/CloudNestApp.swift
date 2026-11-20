@@ -139,6 +139,7 @@ private struct SignInView: View {
     @State private var server = ""
     @State private var username = ""
     @State private var password = ""
+    @ScaledMetric(relativeTo: .body) private var formHeight: CGFloat = 132
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -153,6 +154,7 @@ private struct SignInView: View {
                     .textContentType(.password)
             }
             .formStyle(.grouped)
+            .frame(height: formHeight)
             if let error = session.error {
                 Label(error, systemImage: "exclamationmark.circle")
                     .foregroundStyle(.secondary)
