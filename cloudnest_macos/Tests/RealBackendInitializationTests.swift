@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import CloudNestCore
 
+extension RealBackendTests {
 @Test(.enabled(if: ProcessInfo.processInfo.environment["CLOUDNEST_SWIFT_ORIGIN"] != nil &&
                ProcessInfo.processInfo.environment["CLOUDNEST_SWIFT_RESTRICTED"] == "0"))
 @MainActor func realBackendInitializationResponseLoss() async throws {
@@ -72,4 +73,6 @@ import Testing
         await manager.close()
     }
     await state.signOut()
+}
+
 }

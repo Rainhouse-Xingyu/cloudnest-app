@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import CloudNestCore
 
+extension RealBackendTests {
 @Test(.enabled(if: ProcessInfo.processInfo.environment["CLOUDNEST_SWIFT_ORIGIN"] != nil &&
                ProcessInfo.processInfo.environment["CLOUDNEST_SWIFT_RESTRICTED"] == "0"))
 @MainActor func realBackendFileOperations() async throws {
@@ -85,4 +86,6 @@ import Testing
     await browser.reload()
     #expect(browser.items.isEmpty)
     #expect(browser.error == ServerError.unauthorized.localizedDescription)
+}
+
 }

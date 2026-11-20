@@ -21,10 +21,11 @@ def available_port():
 def run():
     if sys.platform != 'darwin':
         raise RuntimeError('This integration test requires macOS and Swift 6.2 or newer')
-    mysql_prefix = subprocess.check_output(['brew', '--prefix', 'mysql@8.4'], text=True).strip()
+    mysql_prefix = os.environ.get('CLOUDNEST_TEST_MYSQL_PREFIX') or subprocess.check_output(
+        ['brew', '--prefix', 'mysql@8.4'], text=True).strip()
     mysqld = str(Path(mysql_prefix) / 'bin/mysqld')
     mysql = str(Path(mysql_prefix) / 'bin/mysql')
-    redis = shutil.which('redis-server')
+    redis = os.environ.get('CLOUDNEST_TEST_REDIS_BINARY') or shutil.which('redis-server')
     if redis is None:
         raise RuntimeError('Install redis with Homebrew before running this test')
     with tempfile.TemporaryDirectory(prefix='cloudnest-native-', dir='/tmp') as directory:
@@ -32,12 +33,12 @@ def run():
         data = directory / 'mysql'
         mysql_socket = str(directory / 'mysql.sock')
         mysql_port, redis_port = available_port(), available_port()
-        subprocess.run([mysqld, '--no-defaults', '--initialize-insecure', f'--datadir={data}'], check=True)
+        subprocess.run([mysqld, '--no-defaults', '--initialize-insecure', f'--basedir={mysql_prefix}', f'--datadir={data}'], check=True)
         processes = []
         with (directory / 'mysql.log').open('w+') as mysql_log, (directory / 'redis.log').open('w+') as redis_log:
             try:
                 processes.append(subprocess.Popen([
-                    mysqld, '--no-defaults', f'--datadir={data}', f'--socket={mysql_socket}',
+                    mysqld, '--no-defaults', f'--basedir={mysql_prefix}', f'--datadir={data}', f'--socket={mysql_socket}',
                     f'--port={mysql_port}', '--bind-address=127.0.0.1', '--mysqlx=0',
                     '--log-bin-trust-function-creators=1',
                     f'--pid-file={directory / "mysql.pid"}',

@@ -16,6 +16,7 @@ private enum TransferTestError: Error { case timeout, failed(String) }
     throw TransferTestError.timeout
 }
 
+extension RealBackendTests {
 @Test(.enabled(if: ProcessInfo.processInfo.environment["CLOUDNEST_SWIFT_ORIGIN"] != nil &&
                ProcessInfo.processInfo.environment["CLOUDNEST_SWIFT_RESTRICTED"] == "0"))
 @MainActor func realBackendTransfers() async throws {
@@ -160,8 +161,8 @@ private enum TransferTestError: Error { case timeout, failed(String) }
     let files = try await state.listFiles(parentID: 0, recycleBin: false)
     let file = try #require(files.first { $0.id == fileID })
     let first = try await manager.enqueuePreview(file)
-    await manager.waitUntilIdle(first)
     let second = try await manager.enqueuePreview(file)
+    await manager.waitUntilIdle(first)
     await manager.waitUntilIdle(second)
     let firstURL = try await manager.resultURL(first)
     let secondURL = try await manager.resultURL(second)
@@ -192,4 +193,6 @@ private enum TransferTestError: Error { case timeout, failed(String) }
     #expect(!restored.records.values.contains { $0.previewID != nil })
     await restored.close()
     await state.signOut()
+}
+
 }
