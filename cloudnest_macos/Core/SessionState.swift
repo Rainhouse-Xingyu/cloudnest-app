@@ -151,6 +151,20 @@ final class SessionState {
         }
     }
 
+    var transferIdentity: TransferIdentity? {
+        guard let origin, let account, saved != nil else { return nil }
+        return TransferIdentity(server: origin.url.absoluteString, userID: account.id)
+    }
+
+    func transferContext() throws -> TransferContext {
+        guard let identity = transferIdentity, let origin, let saved else { throw ServerError.unauthorized }
+        return TransferContext(identity: identity, origin: origin, token: saved.token, api: api)
+    }
+
+    func observeTransferFailure(_ error: any Error, identity: TransferIdentity) {
+        if error as? ServerError == .unauthorized && transferIdentity == identity { invalidateSession() }
+    }
+
     private func checkHealth(_ origin: ServerOrigin, token: String) async throws {
         do {
             try await api.health(origin, token: token)

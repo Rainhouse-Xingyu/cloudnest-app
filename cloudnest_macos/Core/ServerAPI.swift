@@ -82,6 +82,7 @@ struct ServerAPI: Sendable {
     private struct Profile: Decodable { let user: Account }
     private struct Message: Decodable { let message: String }
     private let session: URLSession
+    private let transferSession: URLSession
     private let requestDelegate: any URLSessionTaskDelegate
 
     init(configuration: URLSessionConfiguration = .ephemeral) {
@@ -93,10 +94,15 @@ struct ServerAPI: Sendable {
         let delegate = NoRedirect()
         requestDelegate = delegate
         session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+        let transferConfiguration = configuration.copy() as! URLSessionConfiguration
+        transferConfiguration.timeoutIntervalForRequest = 90
+        transferConfiguration.timeoutIntervalForResource = 24 * 60 * 60
+        transferSession = URLSession(configuration: transferConfiguration, delegate: delegate, delegateQueue: nil)
     }
 
     init(session: URLSession, delegate: any URLSessionTaskDelegate) {
         self.session = session
+        transferSession = session
         requestDelegate = delegate
     }
 
@@ -126,30 +132,24 @@ struct ServerAPI: Sendable {
 
     func request<T: Decodable>(_ origin: ServerOrigin, _ path: String, token: String? = nil,
                                       body: Data? = nil, method: String = "GET",
-                                      query: [URLQueryItem] = [], maximumBytes: Int = 64 * 1024) async throws -> T {
+                                      query: [URLQueryItem] = [], maximumBytes: Int = 64 * 1024,
+                                      headers: [String: String] = [:], contentType: String = "application/json",
+                                      transfer: Bool = false) async throws -> T {
         let url = origin.endpoint(path).appending(queryItems: query)
         var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
         req.httpMethod = method
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         if let token { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         if let body {
-            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.setValue(contentType, forHTTPHeaderField: "Content-Type")
             req.httpBody = body
         }
-        let (bytes, response) = try await session.bytes(for: req, delegate: requestDelegate)
+        for (name, value) in headers { req.setValue(value, forHTTPHeaderField: name) }
+        let transport = transfer ? transferSession : session
+        let (bytes, response) = try await transport.bytes(for: req, delegate: requestDelegate)
+        defer { bytes.task.cancel() }
         guard let response = response as? HTTPURLResponse else { throw ServerError.invalidResponse }
-        switch response.statusCode {
-        case 200: break
-        case 400, 413, 422: throw ServerError.invalidOperation
-        case 404: throw ServerError.notFound
-        case 409: throw ServerError.conflict
-        case 507: throw ServerError.capacityExceeded
-        case 401: throw path == "api/auth/login" ? ServerError.signInRejected : ServerError.unauthorized
-        case 403: throw ServerError.forbidden
-        case 429: throw ServerError.rateLimited
-        case 500...599: throw ServerError.unavailable
-        default: throw ServerError.invalidResponse
-        }
+        try validateStatus(response.statusCode, login: path == "api/auth/login")
         var data = Data()
         for try await byte in bytes {
             guard data.count < maximumBytes else { throw ServerError.invalidResponse }
@@ -161,4 +161,35 @@ struct ServerAPI: Sendable {
             throw ServerError.invalidResponse
         }
     }
+    func downloadResponse(_ origin: ServerOrigin, token: String, fileID: Int64, archive: Bool,
+                          start: Int64?, end: Int64?, etag: String?) async throws -> (URLSession.AsyncBytes, HTTPURLResponse) {
+        let path = archive ? "api/files/\(fileID)/download-zip" : "api/files/\(fileID)/download"
+        var request = URLRequest(url: origin.endpoint(path), cachePolicy: .reloadIgnoringLocalCacheData)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
+        if let start, let end {
+            request.setValue("bytes=\(start)-\(end)", forHTTPHeaderField: "Range")
+            if let etag { request.setValue(etag, forHTTPHeaderField: "If-Range") }
+        }
+        let (bytes, response) = try await transferSession.bytes(for: request, delegate: requestDelegate)
+        guard let response = response as? HTTPURLResponse else { throw ServerError.invalidResponse }
+        if ![200, 206, 416].contains(response.statusCode) { try validateStatus(response.statusCode) }
+        return (bytes, response)
+    }
+
+    private func validateStatus(_ status: Int, login: Bool = false) throws {
+        switch status {
+        case 200: return
+        case 400, 413, 422: throw ServerError.invalidOperation
+        case 404: throw ServerError.notFound
+        case 409, 412: throw ServerError.conflict
+        case 507: throw ServerError.capacityExceeded
+        case 401: throw login ? ServerError.signInRejected : ServerError.unauthorized
+        case 403: throw ServerError.forbidden
+        case 429: throw ServerError.rateLimited
+        case 500...599: throw ServerError.unavailable
+        default: throw ServerError.invalidResponse
+        }
+    }
+
 }

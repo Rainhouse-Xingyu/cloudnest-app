@@ -9,7 +9,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"cloudenest_go/model"
 )
@@ -21,7 +23,16 @@ func TestMacOSClientSession(t *testing.T) {
 		t.Skip("run scripts/test-macos-backend.py on a macOS development runner")
 	}
 	f := newFixture(t)
-	server := httptest.NewTLSServer(f.router)
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/files/upload/chunk" || strings.HasSuffix(r.URL.Path, "/download") {
+			select {
+			case <-r.Context().Done():
+				return
+			case <-time.After(100 * time.Millisecond):
+			}
+		}
+		f.router.ServeHTTP(w, r)
+	}))
 	defer server.Close()
 	redirectServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/auth/login" {

@@ -2,16 +2,24 @@ import SwiftUI
 
 @main
 struct CloudNestApp: App {
-    @State private var session = SessionState(
-        api: ServerAPI(),
-        vault: KeychainSessionVault(service: "org.cloudnest.macos.session")
-    )
+    @State private var session: SessionState
+    @State private var transfers: TransferManager
+
+    init() {
+        let session = SessionState(api: ServerAPI(), vault: KeychainSessionVault(service: "org.cloudnest.macos.session"))
+        _session = State(initialValue: session)
+        _transfers = State(initialValue: TransferManager(session: session))
+    }
 
     var body: some Scene {
         WindowGroup("CloudNest", id: "workspace") {
-            WorkspaceWindow(session: session)
+            WorkspaceWindow(session: session, transfers: transfers)
                 .frame(minWidth: 640, minHeight: 440)
-                .task { await session.restore() }
+                .task {
+                    await session.restore()
+                    await transfers.restore()
+                }
+                .onChange(of: session.transferIdentity) { Task { await transfers.synchronizeIdentity() } }
         }
         .defaultSize(width: 900, height: 590)
         .commands {
@@ -33,6 +41,7 @@ struct CloudNestApp: App {
 private enum Page: String, CaseIterable, Identifiable {
     case files = "我的文件"
     case recycleBin = "回收站"
+    case transfers = "传输"
     case connection = "服务器连接"
     case account = "账户"
     var id: Self { self }
@@ -40,6 +49,7 @@ private enum Page: String, CaseIterable, Identifiable {
         switch self {
         case .files: "folder"
         case .recycleBin: "trash"
+        case .transfers: "arrow.up.arrow.down"
         case .connection: "network"
         case .account: "person.crop.circle"
         }
@@ -48,6 +58,7 @@ private enum Page: String, CaseIterable, Identifiable {
 
 struct WorkspaceWindow: View {
     let session: SessionState
+    let transfers: TransferManager
     @State private var selection: Page? = .files
 
     var body: some View {
@@ -55,7 +66,9 @@ struct WorkspaceWindow: View {
             NavigationSplitView {
                 List(selection: $selection) {
                     ForEach(Page.allCases) { page in
-                        Label(page.rawValue, systemImage: page.icon).tag(page)
+                        Label(page.rawValue, systemImage: page.icon)
+                            .badge(page == .transfers ? transfers.jobs.filter { $0.phase.isActive || $0.phase == .queued }.count : 0)
+                            .tag(page)
                     }
                 }
                 .navigationSplitViewColumnWidth(min: 170, ideal: 200, max: 260)
@@ -63,11 +76,13 @@ struct WorkspaceWindow: View {
                 Group {
                     switch selection ?? .connection {
                     case .files:
-                        FileBrowserView(session: session, recycleBin: false)
+                        FileBrowserView(session: session, transfers: transfers, recycleBin: false)
                             .id(session.account?.id)
                     case .recycleBin:
-                        FileBrowserView(session: session, recycleBin: true)
+                        FileBrowserView(session: session, transfers: transfers, recycleBin: true)
                             .id(session.account?.id)
+                    case .transfers:
+                        TransferListView(transfers: transfers)
                     case .connection:
                         ConnectionDetails(session: session)
                     case .account:

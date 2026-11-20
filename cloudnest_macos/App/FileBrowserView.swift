@@ -1,12 +1,15 @@
 import SwiftUI
+import AppKit
 
 struct FileBrowserView: View {
+    let transfers: TransferManager
     @State private var browser: FileBrowserState
     @State private var showingInspector = false
     @State private var naming: NameAction?
     @State private var confirmingTrash = false
 
-    init(session: SessionState, recycleBin: Bool) {
+    init(session: SessionState, transfers: TransferManager, recycleBin: Bool) {
+        self.transfers = transfers
         _browser = State(initialValue: FileBrowserState(session: session, recycleBin: recycleBin))
     }
 
@@ -39,6 +42,12 @@ struct FileBrowserView: View {
                     Task { await browser.open(item) }
                 }
             }
+            .dropDestination(for: URL.self) { urls, _ in
+                guard !browser.recycleBin, !urls.isEmpty, urls.allSatisfy(\.isFileURL) else { return false }
+                let parentID = browser.parentID
+                Task { await queueUploads(urls, parentID: parentID) }
+                return true
+            }
             .onDeleteCommand {
                 if !browser.recycleBin && !browser.selectedItems.isEmpty { confirmingTrash = true }
             }
@@ -48,6 +57,11 @@ struct FileBrowserView: View {
                     ContentUnavailableView(browser.recycleBin ? "回收站为空" : "此文件夹为空",
                                            systemImage: browser.recycleBin ? "trash" : "folder")
                 }
+            }
+            if let error = transfers.error {
+                Label(error, systemImage: "exclamationmark.circle")
+                    .foregroundStyle(.secondary)
+                    .padding(12)
             }
             if let error = browser.error {
                 HStack {
@@ -68,6 +82,9 @@ struct FileBrowserView: View {
         .toolbar {
             ToolbarItemGroup {
                 if !browser.recycleBin {
+                    Button("上传", systemImage: "arrow.up.doc", action: chooseUploads)
+                    Button("下载", systemImage: "arrow.down.doc") { chooseDownloads(browser.selectedItems) }
+                        .disabled(browser.selectedItems.isEmpty)
                     Button {
                         naming = .create
                     } label: {
@@ -113,6 +130,60 @@ struct FileBrowserView: View {
             Button("移入回收站", role: .destructive) { Task { await browser.trashSelected() } }
         }
         .task { await browser.reload() }
+        .onChange(of: transfers.jobs.filter { $0.direction == .upload && $0.phase == .completed }.count) {
+            Task { await browser.reload() }
+        }
+    }
+
+    private func chooseUploads() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        let parentID = browser.parentID
+        panel.begin { response in
+            guard response == .OK else { return }
+            let urls = panel.urls
+            Task { await queueUploads(urls, parentID: parentID) }
+        }
+    }
+
+    private func queueUploads(_ urls: [URL], parentID: Int64) async {
+        for url in urls {
+            do { try await transfers.enqueueUpload(url, parentID: parentID) }
+            catch { transfers.report(error) }
+        }
+    }
+
+    private func chooseDownloads(_ items: [FileItem]) {
+        guard !items.isEmpty else { return }
+        if items.count == 1, let item = items.first {
+            let panel = NSSavePanel()
+            panel.nameFieldStringValue = item.isDirectory ? "\(item.filename).zip" : item.filename
+            panel.canCreateDirectories = true
+            panel.begin { response in
+                guard response == .OK, let url = panel.url else { return }
+                Task {
+                    do { try await transfers.enqueueDownload(item, destination: url) }
+                    catch { transfers.report(error) }
+                }
+            }
+        } else {
+            let panel = NSOpenPanel()
+            panel.canChooseDirectories = true
+            panel.canChooseFiles = false
+            panel.canCreateDirectories = true
+            panel.begin { response in
+                guard response == .OK, let directory = panel.url else { return }
+                Task {
+                    for item in items {
+                        let name = item.isDirectory ? "\(item.filename).zip" : item.filename
+                        do { try await transfers.enqueueDownload(item, destination: directory.appending(path: name)) }
+                        catch { transfers.report(error) }
+                    }
+                }
+            }
+        }
     }
 
     private var breadcrumbs: some View {
@@ -138,6 +209,7 @@ struct FileBrowserView: View {
                 }
                 .disabled(ids.count != 1)
             } else {
+                Button("下载…") { chooseDownloads(browser.items.filter { ids.contains($0.id) }) }
                 if ids.count == 1, let item = browser.items.first(where: { ids.contains($0.id) }) {
                     if item.isDirectory {
                         Button("打开") { Task { await browser.open(item) } }
