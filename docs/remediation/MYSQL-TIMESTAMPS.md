@@ -18,7 +18,42 @@ TIME-001 的直接证据来自 2026-11-20 原生 UI 验收使用的独立临时�
 
 盘点只反映当前凭据能看到的元数据：没有可见列不代表库没有时间字段。元数据不构成历史一致性快照，需在 DDL 静止时核对；当前时区和默认值不能证明旧数据的来源。实际历史计划仍需下面的来源证据、原值和逐值 CAS。本批仅在临时测试库运行此命令。
 
-TIME-001 的历史部分保持开放。本批没有提供自动转换命令，也没有运行生产迁移。不能根据当前服务器 SYSTEM、用户界面地区或一条样本，为所有行整体加减 7 小时。
+TIME-001 的历史部分保持开放。已有只读盘点和逐值规划，尚未提供执行/回滚命令，也没有运行生产迁移。不能根据当前服务器 SYSTEM、用户界面地区或一条样本，为所有行整体加减 7 小时。
+
+## 只读逐值计划
+
+`cloudnest plan-mysql-time` 从非终端 stdin 读取一个严格 JSON 请求，最多 1 MiB、200 个不重复的明确单元格。每项要求表、列、正整数行 ID、原时区和证据引用；没有按范围或“全库平移”的入口。示例仅描述格式，ID、原时区和证据必须来自已核对的目标副本：
+
+```json
+{
+  "version": 1,
+  "cells": [
+    {"table":"file","column":"create_time","row_id":42,
+     "source_zone":"America/Phoenix","evidence":"CHG-42/mysql-host-history"},
+    {"table":"file","column":"update_time","row_id":42,
+     "source_zone":"America/New_York","source_offset":"-04:00",
+     "evidence":"CHG-42/writer-log-with-offset"}
+  ]
+}
+```
+
+在私有目录准备请求并保留输出，例如先设置 `umask 077`，再执行 `cloudnest plan-mysql-time < request.json > plan.json`。同一批中不同字段可有不同来源。证据引用最多 200 字节，不能是空白或控制字符，不应存放凭据。未知 JSON 字段、多文档、重复选择、未知列、非整数主键、非 InnoDB 表和 TIMESTAMP 列均拒绝；缺失行不会被当成 NULL。
+
+原时区可用明确 IANA 名称或带符号的 HH:MM/HH:MM:SS 固定偏移，拒绝 Local/SYSTEM。规划枚举原时区的实际偏移区间，验证回转字段一致；缺失时间拒绝，重复时间必须以 `source_offset` 指定实际原偏移，偏移不符同样拒绝。原值为 NULL 时保留 NULL；零日期、非法日期和转换越界不生成计划。微秒保留到字段定义中的精度，不对时间增加浮点换算。
+
+目标约定来自本次实际使用的最终 MYSQL_DSN loc，并与只读事务的 session time_zone 核对；目标 loc 必须是明确名称，不能是随主机变化的 Local。不能为运行规划而猜测更换旧部署的 loc。目标历史时刻若产生新的重复墙钟时间也拒绝，避免再次存入无法唯一解读的 DATETIME。
+
+计划在只读 Repeatable Read 事务内读取指定原始墙钟字符串，输出库 UUID/名称、目标约定、每项 before/after、对应 UTC 时刻、解析出的原偏移、证据和字段定义；不读取文件内容、账号凭据或修改行/结构/审计。按表、行 ID、列排序，SHA-256 绑定完整 JSON 结构（计算时 sha256 字段为空字符串）。摘要供完整性核对使用；执行工具仍须校验库身份、字段定义、来源和原值，不能只信任摘要。
+
+目前只允许下列旧业务元数据列。它们的写入来源仍必须逐项提供证据，列名不代表数据已被证明有误：
+
+| 表 | 列 |
+|---|---|
+| user、file | create_time、update_time |
+| storage、workspace、upload_chunk、upload_task、user_path_permission、file_version | create_time |
+| live_photo、device、frp_mapping、frp_config、ai_metadata、ai_task、share、operation_log | create_time |
+
+Agent UTC 命令/租约、AI 拍摄本地时间、到期字段及容量账本时钟不进入这个旧默认值转换协议。当前命令只输出计划，**不执行修复或回滚**；历史修复完成条件仍包含下面的事务、CAS、回执、派生索引和恢复演练。
 
 后续迁移应先在副本演练，并形成以下可审阅材料：
 

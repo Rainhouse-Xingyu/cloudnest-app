@@ -99,3 +99,9 @@ c982061 的双平台原生 CI [44692850987](https://github.com/Rainhouse-Xingyu/
 6af72bc 的后端 CI 44746992910 首先在仓库检查失败：示例 DSN 已改为 UTC，但检查脚本仍精确要求旧 loc=Local，未进入后端集成步骤。已同步脚本的精确安全占位值，保留拒绝非占位凭据的行为，本机仓库检查通过。后续代码检查及 CI 继续核验，不将此轮标为完整后端通过。
 
 历史时间整改追加只读 `audit-mysql-time`：报告具体库身份、当前时区和可见的 DATETIME/TIMESTAMP 字段定义，明确不读取行值、不推断原时区。输出最多 1000 列，截断时保留部分 JSON 并非零退出；不依赖 JWT/Redis，也不做 schema 迁移。临时库的 CLI、微秒精度/NULL/两种字段类型区分、原值/结构/审计不变、取消，以及 1020 列以上的有界报告已回归通过（4.175s），含截断 CLI 非零退出及部分 JSON 校验；make check、受影响包 race 和仓库检查均通过，后续提交 CI 单独核验。历史逐值修复与回滚工具仍待完成。
+
+68d4c8b 的双平台原生 [44748168877](https://github.com/Rainhouse-Xingyu/cloudnest-app/actions/runs/44748168877) 及完整后端 [44748168667](https://github.com/Rainhouse-Xingyu/cloudnest-app/actions/runs/44748168667) 已全通过：普通集成 332.097s、独立网络 97.054s、AI 39.266s，Agent 原生/Keychain/systemd、HEIF 和漏洞检查通过。macOS 26/27 均完成真实会话/传输、六项显式非 UTC 回归、Universal Release/签名/双架构及内存会话验收入口构建。
+
+后续追加只读 `plan-mysql-time`，按明确行 ID、列、原时区和证据生成每项 before/after、UTC 时刻、解析偏移、字段定义及全计划 SHA-256，绑定具体库 UUID/目标连接约定。最多 200 项，缺失/重复源时间、非法偏移、目标歧义、零日期/越界、TIMESTAMP 或非整数主键等拒绝，不改数据/结构/审计。混合来源、微秒/NULL、未选中行保持和严格 stdin 的本机回归已执行；最终提交 CI 继续核验。该批没有执行或回滚命令，TIME-001 和整个 Goal 保持进行中，详见 MYSQL-TIMESTAMPS。
+
+该批本机完整时间/Agent 专项八项通过（10.234s）；追加区分零日期与 NULL 后，两项规划回归再次通过（3.940s），包含真实宽松旧写入、当前 SQL mode 恢复和原记录不变验证。Go 普通 race、make check、仓库检查和 diff 检查通过；CLI 帮助已列出两条只读时间命令。最终精确提交的远端结果以 PR 为准。

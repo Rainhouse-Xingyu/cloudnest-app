@@ -114,3 +114,5 @@ FRP-004 后续进展：Agent 0.3.0 的 `forget_config` 已提供排他队列、�
 2026-11-13：FRP-004 已接入正值服务器映射作用域、服务器策略范围分配、HTTP/S 不占无关 TCP 端口及复合唯一索引；历史零作用域仍与全部服务器重叠。旧表迁移保留和并发专项已验证；历史 unknown/旧身份对账、离线策略和真实旧库升级仍待完成。公网测试的初次 TCP 注册被手工测试映射占用拒绝，实际复测结果见 TESTING。
 
 TIME-001 P2（新连接修复，历史迁移进行中）：2026-11-20 原生 UI 的临时 MySQL 实例为 `time_zone=SYSTEM`、`system_time_zone=MST`，`NOW()` 比 `UTC_TIMESTAMP()` 少 7 小时。`CURRENT_TIMESTAMP` 生成的文件 create_time/update_time 存为本地朴素值，`loc=UTC` 连接再按 UTC 解读，导致客户端再次减去 7 小时。本机原生文件面板显示 23:39，而列表对应时间显示 16:39；SQL 原值及实测见 G08-MACOS-FILES。NewMySQL 现保留 DSN loc 并为每条物理连接设置匹配的固定 session time_zone，冲突/DST 配置拒绝；-07:00 临时 MySQL 的连接池/列表默认时间/固定东八区及 Agent 跨时区租约已回归。历史值没有转换；来源明确的迁移工具与副本演练仍待完成，不能关闭本项，见 [时间协议](MYSQL-TIMESTAMPS.md)。
+
+TIME-001 后续：只读 `audit-mysql-time` 已在 68d4c8b 双平台与完整后端 CI 通过；本批增加 `plan-mysql-time`，以明确单元格、原时区及证据形成绑定库身份/原值/目标值/UTC 时刻和 SHA-256 的计划。混合来源、夏令时缺失/重复与偏移、微秒/NULL/零日期、TIMESTAMP 和主键类型等已有回归。没有执行历史 UPDATE；事务应用、回执、CAS 回滚及副本恢复演练仍待完成，不能据只读规划关闭本项。

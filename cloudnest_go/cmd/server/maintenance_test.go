@@ -7,6 +7,7 @@ import (
 
 func TestMaintenanceRejectsAmbiguousTargetsAndPasswordArguments(t *testing.T) {
 	for _, args := range [][]string{
+		{"plan-mysql-time", "extra"},
 		{"audit-mysql-time", "extra"},
 		{"reconcile-frp-reservation", "0"}, {"reconcile-frp-reservation", "1", "CHG-42"}, {"reconcile-frp-reservation", "1", "--confirm-decommissioned", ""}, {"reconcile-frp-reservation", "1", "--confirm-decommissioned", "invalid\nreference"},
 		{"audit-frp-configs", "extra"}, {"encrypt-frp-configs", "extra"}, {"reset-password"}, {"reset-password", "1"}, {"reset-password", "0", "alice"},
@@ -26,6 +27,18 @@ func TestMaintenanceRejectsAmbiguousTargetsAndPasswordArguments(t *testing.T) {
 	cmd, recognized, err := parseMaintenanceArgs([]string{"reset-password", "42", "Alice"})
 	if err != nil || !recognized || cmd.userID != 42 || cmd.username != "Alice" {
 		t.Fatal("exact target lost")
+	}
+}
+
+func TestTimestampPlanStdinRejectsAmbiguousOrOversizedDocuments(t *testing.T) {
+	for _, raw := range []string{"", "{} {}", "{} null", `{"unknown":"fixture-private-value"}`, `{"version":1,"cells":[{"row_id":1.5}]}`, strings.Repeat(" ", (1<<20)+1)} {
+		if _, err := readMySQLTimePlanRequest(strings.NewReader(raw)); err == nil || strings.Contains(err.Error(), "fixture-private-value") {
+			t.Fatal("ambiguous input accepted or raw input exposed")
+		}
+	}
+	request, err := readMySQLTimePlanRequest(strings.NewReader(`{"version":1,"cells":[{"table":"file","column":"create_time","row_id":1,"source_zone":"UTC","evidence":"CHG-1"}]}`))
+	if err != nil || request.Version != 1 || len(request.Cells) != 1 || request.Cells[0].Evidence != "CHG-1" {
+		t.Fatal("valid bounded request lost", err)
 	}
 }
 
