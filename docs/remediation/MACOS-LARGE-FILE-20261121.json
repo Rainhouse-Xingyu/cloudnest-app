@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "passed": true,
+  "generated_utc": "2026-11-21T06:05:08Z",
+  "git_head": "a50e762d2d6fdacac2e9940a4fa56db3c8aeef88",
+  "client_source_sha256": {
+    "App/CloudNestApp.swift": "48619c45ac06838af4f66e691322d901b7075c9d8a8f1c26c2a5ebc6ce33870f",
+    "App/FileBrowserCommands.swift": "1744b820661ef09fa3836c67397d2975133a4982444807012c12c5112731d4e8",
+    "App/FileBrowserView.swift": "4f946fbffb7d08c5cd8642cd500d0cee6dfc73933e97c99d5040f26b0aca3e11",
+    "App/FileDestinationSheet.swift": "e687c0269882fd072479942c7a73c96790796ffdcaa6a176657b59c669b51a7d",
+    "App/FileVersionsSheet.swift": "17fe6e46888249269a57f5172de163e8aeb6a7a56b6ecb188c5608f39099920a",
+    "App/TransferListView.swift": "6fc69ce848b3d7634be0ed0a8f1a8bc58b038edc9b11fa75996f0fe14b0c3a2c",
+    "Core/DownloadPlan.swift": "641b33f9f36001a67bcb3ed583c2ff3e61b40ac2683d10fafdaa70c6b24965b1",
+    "Core/DownloadStream.swift": "a4878ddee1749ae049ca898fac22175dae907ada9b859e961afbe801ad897a15",
+    "Core/FileAPI.swift": "e80f37d57c9420b91ff4d27b2be03b2eeb6b46b0935eae8ce1ef208fcdee34b9",
+    "Core/FileBrowserState.swift": "312b325d054c4b34aa867320570321a010c17359b6bf5413c51253cd767c3380",
+    "Core/FileVersions.swift": "1b009b2cd68dd555325b667186b757b5307dad6a355fd27ebc955da2474b7483",
+    "Core/PreviewCache.swift": "24e5560809afd2d6065a9994d5355c0c36f62128e2a4a256b29c2bdd2c808904",
+    "Core/ServerAPI.swift": "8335d406f5d48203e2f6734360d68973069098e674716db912a950b38a6ae854",
+    "Core/SessionState.swift": "d86d254fbc18c17e6b8dd601ab501f29be47e9b16bd9125acc514a5706e4a0ef",
+    "Core/SessionVault.swift": "8aaeafe193e99da59b8a5298fe8d2fa5052c21e8fef67e182927be438d8d7495",
+    "Core/TransferAPI.swift": "757fa9919a3cc5d66d20b380d2470165acc2af63cffac5da3811ec298cf4625b",
+    "Core/TransferDisk.swift": "f75f42b9d3dbcdbefb8240b8c2477081c3fea69465bf17dd4fee5e7d19fc4091",
+    "Core/TransferManager.swift": "3c73db191497e49699cc1760be32a2d2100db738baa779af96e8fee8a632c3d5",
+    "Core/TransferRecord.swift": "985e8f25558e64bc393bccd8ed953ff35c5383297ab436c931c9ce1dd6fa2286",
+    "Core/TransferStore.swift": "66cae8a28ba323c0a90e67eec549356c70c88b843fa9bb352ba0f30c4567e17f",
+    "Core/TransferTelemetry.swift": "95eb7bba18223c173ceeead47cc025fb1fc34617985ab3d80db8ce89d9011345"
+  },
+  "bytes": 1073741997,
+  "rate_limit_kib_per_second": 10240,
+  "phases": [
+    {
+      "phase": "upload-pause",
+      "pid": 31994,
+      "bytes": 1073741997,
+      "confirmedBytes": 541065216,
+      "elapsedSeconds": 59.729072708,
+      "baselineRSSBytes": 45940736,
+      "peakRSSBytes": 68419584,
+      "sha256": "fdf61503926da9ee3a2d8ca59e1a8b3a798abef83ac8467ed381114cfa554c3c"
+    },
+    {
+      "phase": "upload-resume",
+      "pid": 32112,
+      "bytes": 1073741997,
+      "confirmedBytes": 1073741997,
+      "elapsedSeconds": 62.010628833,
+      "baselineRSSBytes": 46071808,
+      "peakRSSBytes": 73646080,
+      "sha256": "fdf61503926da9ee3a2d8ca59e1a8b3a798abef83ac8467ed381114cfa554c3c"
+    },
+    {
+      "phase": "download-pause",
+      "pid": 32212,
+      "bytes": 1073741997,
+      "confirmedBytes": 541065216,
+      "elapsedSeconds": 52.124256083,
+      "baselineRSSBytes": 46088192,
+      "peakRSSBytes": 168378368,
+      "sha256": "fdf61503926da9ee3a2d8ca59e1a8b3a798abef83ac8467ed381114cfa554c3c"
+    },
+    {
+      "phase": "download-resume",
+      "pid": 32315,
+      "bytes": 1073741997,
+      "confirmedBytes": 1073741997,
+      "elapsedSeconds": 52.884920958,
+      "baselineRSSBytes": 46071808,
+      "peakRSSBytes": 143032320,
+      "sha256": "fdf61503926da9ee3a2d8ca59e1a8b3a798abef83ac8467ed381114cfa554c3c"
+    }
+  ],
+  "download_requests": [
+    {
+      "phase": "download-pause",
+      "range": "bytes=0-",
+      "if_range": "",
+      "status": 206,
+      "written_bytes": 541294592
+    },
+    {
+      "phase": "download-resume",
+      "range": "bytes=541065216-",
+      "if_range": "\"sha256-fdf61503926da9ee3a2d8ca59e1a8b3a798abef83ac8467ed381114cfa554c3c\"",
+      "status": 206,
+      "written_bytes": 532676781
+    }
+  ]
+}

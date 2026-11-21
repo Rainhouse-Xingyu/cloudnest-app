@@ -3,7 +3,7 @@ import Security
 import Testing
 @testable import CloudNestCore
 
-private final class FixtureTLSDelegate: NSObject, URLSessionDelegate, URLSessionTaskDelegate, @unchecked Sendable {
+final class FixtureTLSDelegate: NSObject, URLSessionDelegate, URLSessionTaskDelegate, @unchecked Sendable {
     let certificate: SecCertificate
 
     init(der: Data) throws {
@@ -28,6 +28,11 @@ private final class FixtureTLSDelegate: NSObject, URLSessionDelegate, URLSession
                     newRequest request: URLRequest) async -> URLRequest? { nil }
 }
 
+// These cases share a fixture account and its two-body upload admission budget.
+@Suite(.serialized)
+struct RealBackendTests {}
+
+extension RealBackendTests {
 @Test(.enabled(if: ProcessInfo.processInfo.environment["CLOUDNEST_SWIFT_ORIGIN"] != nil))
 @MainActor func realBackendSessionLifecycle() async throws {
     let env = ProcessInfo.processInfo.environment
@@ -87,4 +92,6 @@ private final class FixtureTLSDelegate: NSObject, URLSessionDelegate, URLSession
     await state.refresh()
     #expect(state.account == nil)
     #expect(!state.hasSavedSession)
+}
+
 }

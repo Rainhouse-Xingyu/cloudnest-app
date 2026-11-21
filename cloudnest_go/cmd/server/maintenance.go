@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
 	"strconv"
@@ -8,6 +10,7 @@ import (
 
 	"cloudenest_go/internal/auth"
 	storageMysql "cloudenest_go/internal/storage/mysql"
+	"cloudenest_go/internal/store"
 )
 
 type maintenanceCommand struct {
@@ -24,7 +27,7 @@ func parseMaintenanceArgs(args []string) (maintenanceCommand, bool, error) {
 		return maintenanceCommand{}, false, nil
 	}
 	switch args[0] {
-	case "audit-frp-configs", "encrypt-frp-configs", "migrate", "bootstrap-admin", "audit-file-names", "migrate-file-names", "audit-storage-references", "migrate-storage-references", "gc-storage", "prune-read-leases", "audit-transfers", "reconcile-transfers":
+	case "plan-mysql-time", "audit-mysql-time", "audit-frp-configs", "encrypt-frp-configs", "migrate", "bootstrap-admin", "audit-file-names", "migrate-file-names", "audit-storage-references", "migrate-storage-references", "gc-storage", "prune-read-leases", "audit-transfers", "reconcile-transfers":
 		if len(args) != 1 {
 			return maintenanceCommand{}, true, errors.New("maintenance command does not accept extra arguments")
 		}
@@ -67,6 +70,25 @@ func parseMaintenanceArgs(args []string) (maintenanceCommand, bool, error) {
 	default:
 		return maintenanceCommand{}, false, nil
 	}
+}
+
+func readMySQLTimePlanRequest(input io.Reader) (store.MySQLTimePlanRequest, error) {
+	const limit = 1 << 20
+	invalid := errors.New("plan-mysql-time requires one JSON request of at most 1 MiB on private stdin")
+	raw, err := io.ReadAll(io.LimitReader(input, limit+1))
+	if err != nil || len(raw) > limit {
+		return store.MySQLTimePlanRequest{}, invalid
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	var request store.MySQLTimePlanRequest
+	if err := decoder.Decode(&request); err != nil {
+		return store.MySQLTimePlanRequest{}, invalid
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		return store.MySQLTimePlanRequest{}, invalid
+	}
+	return request, nil
 }
 
 func readResetPassword(input io.Reader) (string, error) {

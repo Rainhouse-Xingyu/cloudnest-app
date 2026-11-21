@@ -1,0 +1,91 @@
+import Foundation
+import Testing
+@testable import CloudNestCore
+
+extension RealBackendTests {
+@Test(.enabled(if: ProcessInfo.processInfo.environment["CLOUDNEST_SWIFT_ORIGIN"] != nil &&
+               ProcessInfo.processInfo.environment["CLOUDNEST_SWIFT_RESTRICTED"] == "0"))
+@MainActor func realBackendFileOperations() async throws {
+    let env = ProcessInfo.processInfo.environment
+    let origin = try ServerOrigin(#require(env["CLOUDNEST_SWIFT_ORIGIN"]))
+    let certificateURL = URL(fileURLWithPath: try #require(env["CLOUDNEST_SWIFT_CERTIFICATE"]))
+    let delegate = try FixtureTLSDelegate(der: Data(contentsOf: certificateURL))
+    let transport = URLSession(configuration: .ephemeral, delegate: delegate, delegateQueue: nil)
+    defer { transport.invalidateAndCancel() }
+    let api = ServerAPI(session: transport, delegate: delegate)
+    let vault = KeychainSessionVault(service: "org.cloudnest.macos.file-test.\(UUID())")
+    defer { try? vault.clear() }
+    let state = SessionState(api: api, vault: vault)
+    await state.restore()
+    await state.signIn(server: origin.url.absoluteString,
+                       username: try #require(env["CLOUDNEST_SWIFT_USERNAME"]),
+                       password: try #require(env["CLOUDNEST_SWIFT_PASSWORD"]))
+    let browser = FileBrowserState(session: state, recycleBin: false)
+    await browser.reload()
+    #expect(browser.error == nil)
+    let name = "Native-\(UUID())"
+    await browser.createFolder(name: name)
+    #expect(browser.error == nil)
+    let folder = try #require(browser.items.first { $0.filename == name })
+    #expect(folder.isDirectory)
+    await browser.open(folder)
+    #expect(browser.parentID == folder.id)
+    await browser.createFolder(name: "Child")
+    #expect(browser.error == nil)
+    let child = try #require(browser.items.first { $0.filename == "Child" })
+    await browser.createFolder(name: "Child")
+    #expect(browser.error == ServerError.conflict.localizedDescription)
+    await browser.rename(child, name: "Renamed")
+    #expect(browser.error == nil)
+    #expect(browser.items.first?.filename == "Renamed")
+    #expect(browser.items.first?.modified != nil)
+
+    let otherValue = try #require(env["CLOUDNEST_SWIFT_FORBIDDEN_FILE"])
+    let otherID = try #require(Int64(otherValue))
+    let result = try await state.trashFiles(ids: [child.id, otherID])
+    #expect(result.deletedIDs == [child.id])
+    #expect(result.failed.keys.contains(String(otherID)))
+    #expect(state.account != nil)
+    await browser.reload()
+    #expect(browser.items.isEmpty)
+    let recycleBin = FileBrowserState(session: state, recycleBin: true)
+    await recycleBin.reload()
+    #expect(recycleBin.error == nil)
+    #expect(recycleBin.items.contains { $0.id == child.id })
+    recycleBin.selection = [child.id]
+    await recycleBin.restoreSelected()
+    #expect(recycleBin.error == nil)
+    await browser.reload()
+    #expect(browser.items.first?.filename == "Renamed")
+    await browser.navigate(to: 0)
+    #expect(browser.parentID == 0)
+    #expect(browser.items.contains { $0.id == folder.id })
+    let targetName = "Destination-\(UUID())"
+    await browser.createFolder(name: targetName)
+    let destination = try #require(browser.items.first { $0.filename == targetName })
+    try await state.relocateFiles(ids: [folder.id], parentID: destination.id, copy: true)
+    let copied = try await state.listFiles(parentID: destination.id, recycleBin: false)
+    #expect(copied.count == 1)
+    #expect(copied.first?.id != folder.id)
+    #expect(copied.first?.filename == folder.filename)
+    try await state.relocateFiles(ids: [folder.id], parentID: destination.id, copy: false)
+    let allocated = try await state.listFiles(parentID: destination.id, recycleBin: false)
+    #expect(allocated.count == 2)
+    let movedOriginal = try #require(allocated.first { $0.id == folder.id })
+    #expect(movedOriginal.filename != folder.filename)
+    #expect(allocated.contains { $0.id == copied.first?.id && $0.filename == folder.filename })
+    try await state.renameFile(id: folder.id, name: "Moved-\(UUID())")
+    try await state.relocateFiles(ids: [folder.id], parentID: destination.id, copy: false)
+    let moved = try await state.listFiles(parentID: destination.id, recycleBin: false)
+    #expect(moved.contains { $0.id == folder.id })
+    do {
+        try await state.relocateFiles(ids: [otherID], parentID: destination.id, copy: true)
+        Issue.record("A cross-user copy was accepted")
+    } catch { #expect(error as? ServerError == .forbidden) }
+    await state.signOut()
+    await browser.reload()
+    #expect(browser.items.isEmpty)
+    #expect(browser.error == ServerError.unauthorized.localizedDescription)
+}
+
+}

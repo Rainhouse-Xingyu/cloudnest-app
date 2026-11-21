@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "passed": true,
+  "verified_utc": "2026-11-21T11:12:47.743971+00:00",
+  "product_commit": "168b0269c9366b4c49e68da447d22600913501dc",
+  "binary_sha256": "38dab616d556c04ad0871700ec72ed060664855de953e54742e543807be21d1c",
+  "environment": "disposable loopback HTTPS Go/MySQL/Redis; macOS native app; in-memory test vault",
+  "moved": [
+    {
+      "id": 5,
+      "filename": "Move Alpha",
+      "parent_id": 2,
+      "is_folder": 1,
+      "size": 0
+    },
+    {
+      "id": 6,
+      "filename": "Move Beta",
+      "parent_id": 2,
+      "is_folder": 1,
+      "size": 0
+    }
+  ],
+  "recycle_bin": [
+    {
+      "id": 8,
+      "filename": "Partial Beta",
+      "parent_id": 0,
+      "is_folder": 1,
+      "size": 0
+    },
+    {
+      "id": 7,
+      "filename": "Partial Alpha",
+      "parent_id": 0,
+      "is_folder": 1,
+      "size": 0
+    }
+  ],
+  "root": [
+    {
+      "id": 2,
+      "filename": "Fixture folder",
+      "parent_id": 0,
+      "is_folder": 1,
+      "size": 0
+    },
+    {
+      "id": 1,
+      "filename": "Preview.txt",
+      "parent_id": 0,
+      "is_folder": 0,
+      "size": 78
+    },
+    {
+      "id": 4,
+      "filename": "Source for Version history.txt",
+      "parent_id": 0,
+      "is_folder": 0,
+      "size": 28
+    },
+    {
+      "id": 3,
+      "filename": "Version history.txt",
+      "parent_id": 0,
+      "is_folder": 0,
+      "size": 28
+    }
+  ],
+  "external_trash": {
+    "deleted_ids": [
+      7
+    ],
+    "failed": {}
+  },
+  "gui": {
+    "move_root_removed": true,
+    "target_contains_both": true,
+    "own_selected_destinations_disabled": true,
+    "trash_confirmation_count": 2,
+    "reported_failed_items": 1,
+    "retry_cleared_error": true,
+    "recycle_bin_contains_both": true
+  },
+  "native_process_exited": true,
+  "scope": "Batch move of two directories; partial batch trash with one stale selection. Does not test permission revocation or interrupted move."
+}

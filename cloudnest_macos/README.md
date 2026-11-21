@@ -16,6 +16,10 @@ xcodebuild -project cloudnest_macos/CloudNest.xcodeproj -scheme CloudNest \
 
 ## 连接后端
 
+普通下载采用连续 Range 响应，在有背压的磁盘块边界记录恢复检查点，重新打开应用后仍核对前缀和强 ETag。独立 opt-in GiB 测试、实际窗口恢复和内存测量方法见 [原生大文件验收](../docs/remediation/MACOS-LARGE-FILES.md)。
+
 打开应用，输入 CloudNest API 的 HTTPS 源地址，例如 `https://cloudnest.example:8443`，以及现有账户的用户名和密码。服务证书需要受 macOS 信任，证书名称需要匹配该地址。服务应将该源下的 `/api/auth/login`、`/api/auth/me`、`/api/auth/logout` 和 `/api/resource/health` 路由到 Go 后端。
 
 登录后，应用将会话保存在 Keychain，在恢复会话时向服务查询账户状态。服务器状态单独检查资源权限，自定义权限账户仍可恢复会话和退出。服务器不可达时可在窗口工具栏重试，或按 Command-R。重新登录时可输入另一台服务器。
+
+文件页提供版本历史、所选历史版本下载、确认后追加恢复，以及选择本地文件上传为新版本。上传捕获确认基线，冲突后需取消并重新确认，不覆盖未见的新版本。传输页分别显示已确认进度、最近五秒速度及校验/发布阶段，暂停或重新开始时重置速度。协议和验证边界见 [G08](../docs/remediation/G08-MACOS-FILES.md)、[版本上传](../docs/remediation/VERSION-UPLOADS.md)、[历史版本](../docs/remediation/MACOS-VERSIONS.md) 和 [速度](../docs/remediation/MACOS-TRANSFER-SPEED.md)。

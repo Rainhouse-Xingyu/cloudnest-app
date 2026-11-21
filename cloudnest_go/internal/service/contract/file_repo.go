@@ -63,6 +63,7 @@ type FileRepository interface {
 	GetActiveFileByID(ctx context.Context, fileID int64) (model.File, error)
 	// ResolveFileVersion returns authorized metadata only; physical readers must pin it.
 	ResolveFileVersion(ctx context.Context, uid, fileID int64, version int) (model.File, model.Storage, error)
+	ResolveVersionUploadTarget(ctx context.Context, uid, fileID int64, baseVersion int) (model.File, error)
 	GetStorageByID(ctx context.Context, storageID int64) (model.Storage, error)
 	CollectFolderZipEntries(ctx context.Context, uid, rootID int64) ([]FolderZipEntry, error)
 	GetSystemSettingByKey(ctx context.Context, key string) (model.SystemSetting, error)
@@ -77,7 +78,9 @@ type FileRepository interface {
 	PermanentDeleteFromRecycleBin(ctx context.Context, uid int64, fileID int64, clientIP string) error
 	GetUploadTaskByUploadID(ctx context.Context, uid int64, uploadID string) (model.UploadTask, error)
 	GetUploadTaskAndUploadedChunkIndexes(ctx context.Context, userID int64, uploadID string) (model.UploadTask, []int, error)
-	CreateUploadTask(ctx context.Context, task model.UploadTask) error
+	// replay is non-nil only for an owner-scoped idempotent initialization.
+	CreateUploadTask(ctx context.Context, task model.UploadTask, replay *UploadInitialization) error
+	CancelUploadInitialization(ctx context.Context, uid int64, key, clientIP string) (UploadInitializationCancellation, error)
 	CancelUploadTask(ctx context.Context, uid int64, uploadID, clientIP string) error
 	ControlUploadTask(ctx context.Context, uid int64, uploadID string, expectedEpoch int64, paused bool, clientIP string) (model.UploadTask, error)
 	UpsertUploadChunkAndRefreshProgress(ctx context.Context, taskID int64, uploadID string, chunkIndex int, chunkSize int64, chunkPath, chunkRoot, sha256, md5, artifactToken string) (ChunkCommit, error)

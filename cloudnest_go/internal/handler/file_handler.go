@@ -201,6 +201,11 @@ func (h *FileHandler) Delete(c *gin.Context) {
 func (h *FileHandler) InitUpload(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<10)
 	uid := c.GetInt64(middleware.ContextUserIDKey)
+	keys := c.Request.Header.Values("Idempotency-Key")
+	if len(keys) > 1 || len(keys) == 1 && keys[0] == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid initialization key"})
+		return
+	}
 
 	var req InitUploadRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -216,6 +221,7 @@ func (h *FileHandler) InitUpload(c *gin.Context) {
 
 	res, err := h.Svc.InitUpload(c.Request.Context(), uid, service.FileUploadInitInput{
 		UploadID:    req.UploadID,
+		RequestKey:  c.GetHeader("Idempotency-Key"),
 		ParentID:    req.ParentID,
 		Filename:    req.Filename,
 		TotalSize:   *req.TotalSize,
@@ -367,7 +373,9 @@ func (h *FileHandler) CompleteUpload(c *gin.Context) {
 	h.cleanupChunkManifest(c.Request.Context(), uid, snapshot.Chunks, c.ClientIP())
 	// The durable AI index job was committed with the file and upload receipt.
 	// 上传完成后尝试自动与同目录同名文件配对绑定 Live Photo（无阻塞失败）。
-	_ = h.tryAutoBindLivePhotoForFile(c.Request.Context(), uid, createdFile, c.ClientIP())
+	if snapshot.Task.ContractVersion == 1 {
+		_ = h.tryAutoBindLivePhotoForFile(c.Request.Context(), uid, createdFile, c.ClientIP())
+	}
 
 	c.JSON(http.StatusOK, gin.H{"item": createdFile})
 }
@@ -411,7 +419,7 @@ func (h *FileHandler) UploadProgress(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	c.JSON(http.StatusOK, versionUploadFields(gin.H{
 		"upload_id":       res.UploadID,
 		"transfer_epoch":  res.TransferEpoch,
 		"status":          res.Status,
@@ -420,7 +428,7 @@ func (h *FileHandler) UploadProgress(c *gin.Context) {
 		"uploaded_chunks": res.UploadedChunks,
 		"missing_chunks":  res.MissingChunks,
 		"progress":        res.Progress,
-	})
+	}, res.Version))
 }
 
 // Download 下载单个文件，返回附件流给客户端。
@@ -1563,7 +1571,7 @@ func writeFileMutationError(c *gin.Context, err error, fallback string) {
 }
 
 func isUploadContractError(err error) bool {
-	return errors.Is(err, contract.ErrQuotaExceeded) || errors.Is(err, contract.ErrQuotaAccounting) || errors.Is(err, contract.ErrUploadContract) || errors.Is(err, contract.ErrUploadReceipt) || errors.Is(err, contract.ErrUploadReceiptMissing)
+	return errors.Is(err, contract.ErrForbidden) || errors.Is(err, contract.ErrConflict) || errors.Is(err, contract.ErrInvalidInput) || errors.Is(err, contract.ErrQuotaExceeded) || errors.Is(err, contract.ErrQuotaAccounting) || errors.Is(err, contract.ErrUploadContract) || errors.Is(err, contract.ErrUploadReceipt) || errors.Is(err, contract.ErrUploadReceiptMissing)
 }
 func (h *FileHandler) CancelUpload(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<10)

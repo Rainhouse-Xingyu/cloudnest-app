@@ -27,6 +27,7 @@ struct ServerOrigin: Equatable, Sendable {
 
 enum ServerError: LocalizedError, Equatable {
     case invalidAddress, invalidResponse, signInRejected, unauthorized, forbidden, rateLimited, unavailable
+    case invalidOperation, notFound, conflict, capacityExceeded, sessionChanged
 
     var errorDescription: String? {
         switch self {
@@ -34,8 +35,13 @@ enum ServerError: LocalizedError, Equatable {
         case .invalidResponse: "服务器返回了无法识别的响应。"
         case .signInRejected: "用户名或密码有误。"
         case .unauthorized: "会话已失效，请重新登录。"
+        case .sessionChanged: "账户或服务器已切换，请重新选择文件或操作。"
         case .forbidden: "当前账户没有权限执行此操作。"
         case .rateLimited: "请求过于频繁，请稍后再试。"
+        case .invalidOperation: "操作参数无效，请检查名称及目标目录。"
+        case .notFound: "项目已被移动或删除，请刷新目录。"
+        case .conflict: "项目已发生变化或目标中已有同名项目，请刷新后重试。"
+        case .capacityExceeded: "服务器存储空间或传输额度不足。"
         case .unavailable: "服务器暂时不可用，请检查连接后重试。"
         }
     }
@@ -77,6 +83,7 @@ struct ServerAPI: Sendable {
     private struct Profile: Decodable { let user: Account }
     private struct Message: Decodable { let message: String }
     private let session: URLSession
+    private let transferSession: URLSession
     private let requestDelegate: any URLSessionTaskDelegate
 
     init(configuration: URLSessionConfiguration = .ephemeral) {
@@ -88,16 +95,21 @@ struct ServerAPI: Sendable {
         let delegate = NoRedirect()
         requestDelegate = delegate
         session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+        let transferConfiguration = configuration.copy() as! URLSessionConfiguration
+        transferConfiguration.timeoutIntervalForRequest = 90
+        transferConfiguration.timeoutIntervalForResource = 24 * 60 * 60
+        transferSession = URLSession(configuration: transferConfiguration, delegate: delegate, delegateQueue: nil)
     }
 
     init(session: URLSession, delegate: any URLSessionTaskDelegate) {
         self.session = session
+        transferSession = session
         requestDelegate = delegate
     }
 
     func login(_ origin: ServerOrigin, username: String, password: String) async throws -> LoginResponse {
         let body = try JSONEncoder().encode(Credentials(username: username, password: password))
-        let result: LoginResponse = try await request(origin, "api/auth/login", body: body)
+        let result: LoginResponse = try await request(origin, "api/auth/login", body: body, method: "POST")
         guard result.tokenType.caseInsensitiveCompare("Bearer") == .orderedSame,
               !result.token.isEmpty, result.token.utf8.count <= 8192,
               result.token.utf8.allSatisfy({ (33...126).contains($0) }),
@@ -119,29 +131,32 @@ struct ServerAPI: Sendable {
         let _: Message = try await request(origin, "api/resource/health", token: token)
     }
 
-    private func request<T: Decodable>(_ origin: ServerOrigin, _ path: String, token: String? = nil,
-                                      body: Data? = nil, method: String = "GET") async throws -> T {
-        var req = URLRequest(url: origin.endpoint(path), cachePolicy: .reloadIgnoringLocalCacheData)
-        req.httpMethod = body == nil ? method : "POST"
+    func request<T: Decodable>(_ origin: ServerOrigin, _ path: String, token: String? = nil,
+                                      body: Data? = nil, method: String = "GET",
+                                      query: [URLQueryItem] = [], maximumBytes: Int = 64 * 1024,
+                                      headers: [String: String] = [:], contentType: String = "application/json",
+                                      transfer: Bool = false, telemetry: TransferTelemetry? = nil) async throws -> T {
+        let url = origin.endpoint(path).appending(queryItems: query)
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
+        req.httpMethod = method
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         if let token { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         if let body {
-            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.setValue(contentType, forHTTPHeaderField: "Content-Type")
             req.httpBody = body
         }
-        let (bytes, response) = try await session.bytes(for: req, delegate: requestDelegate)
+        for (name, value) in headers { req.setValue(value, forHTTPHeaderField: name) }
+        let transport = transfer ? transferSession : session
+        let delegate: any URLSessionTaskDelegate
+        if let telemetry { delegate = UploadProgressDelegate(policy: requestDelegate, telemetry: telemetry) }
+        else { delegate = requestDelegate }
+        let (bytes, response) = try await transport.bytes(for: req, delegate: delegate)
+        defer { bytes.task.cancel() }
         guard let response = response as? HTTPURLResponse else { throw ServerError.invalidResponse }
-        switch response.statusCode {
-        case 200: break
-        case 401: throw path == "api/auth/login" ? ServerError.signInRejected : ServerError.unauthorized
-        case 403: throw ServerError.forbidden
-        case 429: throw ServerError.rateLimited
-        case 500...599: throw ServerError.unavailable
-        default: throw ServerError.invalidResponse
-        }
+        try validateStatus(response.statusCode, login: path == "api/auth/login")
         var data = Data()
         for try await byte in bytes {
-            guard data.count < 64 * 1024 else { throw ServerError.invalidResponse }
+            guard data.count < maximumBytes else { throw ServerError.invalidResponse }
             data.append(byte)
         }
         do {
@@ -150,4 +165,43 @@ struct ServerAPI: Sendable {
             throw ServerError.invalidResponse
         }
     }
+    func downloadResponse(_ origin: ServerOrigin, token: String, fileID: Int64, archive: Bool,
+                          version: Int? = nil, start: Int64?, end: Int64?, etag: String?) async throws -> (DownloadStream, HTTPURLResponse) {
+        guard fileID > 0, version.map({ $0 > 0 && !archive }) ?? true else { throw ServerError.invalidOperation }
+        let path: String
+        if let version { path = "api/files/\(fileID)/versions/\(version)/download" }
+        else { path = archive ? "api/files/\(fileID)/download-zip" : "api/files/\(fileID)/download" }
+        var request = URLRequest(url: origin.endpoint(path), cachePolicy: .reloadIgnoringLocalCacheData)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
+        if let start {
+            request.setValue("bytes=\(start)-\(end.map(String.init) ?? "")", forHTTPHeaderField: "Range")
+            if let etag { request.setValue(etag, forHTTPHeaderField: "If-Range") }
+        }
+        let stream = DownloadStream(configuration: transferSession.configuration, policy: requestDelegate)
+        do {
+            let response = try await stream.start(request)
+            if ![200, 206, 416].contains(response.statusCode) { try validateStatus(response.statusCode) }
+            return (stream, response)
+        } catch {
+            stream.cancel()
+            throw error
+        }
+    }
+
+    private func validateStatus(_ status: Int, login: Bool = false) throws {
+        switch status {
+        case 200: return
+        case 400, 413, 422: throw ServerError.invalidOperation
+        case 404: throw ServerError.notFound
+        case 409, 412: throw ServerError.conflict
+        case 507: throw ServerError.capacityExceeded
+        case 401: throw login ? ServerError.signInRejected : ServerError.unauthorized
+        case 403: throw ServerError.forbidden
+        case 429: throw ServerError.rateLimited
+        case 500...599: throw ServerError.unavailable
+        default: throw ServerError.invalidResponse
+        }
+    }
+
 }

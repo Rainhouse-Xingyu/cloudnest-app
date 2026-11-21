@@ -65,7 +65,7 @@
 | POST | `/api/files/move` | 默认业务；自定义账号需授权 |
 | POST | `/api/files/upload/chunk` | 默认业务；自定义账号需授权 |
 | POST | `/api/files/upload/complete` | 默认业务；自定义账号需授权 |
-| POST | `/api/files/upload/init` | 默认业务；自定义账号需授权 |
+| POST | `/api/files/upload/init` | 默认业务；自定义账号需授权；可选 Idempotency-Key 按当前用户确认同一初始化，不能与 upload_id 并用，见 G08-MACOS-FILES |
 | POST | `/api/frp/configs/save` | 默认业务；自定义账号需授权 |
 | POST | `/api/frp/devices` | 默认业务；自定义账号需授权 |
 | POST | `/api/frp/mappings` | 默认业务；自定义账号需授权 |

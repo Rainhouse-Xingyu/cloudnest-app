@@ -21,7 +21,7 @@ for name in filter(None, tracked):
 
 example = ROOT / "cloudnest_go/.env.example"
 safe_values = {
-    "MYSQL_DSN": "cloudnest:CHANGE_ME@tcp(127.0.0.1:3306)/cloudnest?charset=utf8mb4&parseTime=True&loc=Local",
+    "MYSQL_DSN": "cloudnest:CHANGE_ME@tcp(127.0.0.1:3306)/cloudnest?charset=utf8mb4&parseTime=True&loc=UTC",
     "REDIS_PASSWORD": "",
     "JWT_SECRET": "replace_with_a_strong_random_secret",
 }

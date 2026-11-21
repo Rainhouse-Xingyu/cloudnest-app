@@ -57,6 +57,13 @@ type CollaborationFileVersionRow struct {
 	CreateTime     time.Time `json:"create_time"`
 }
 
+type CollaborationFileVersionHistory struct {
+	FileID         int64                         `json:"file_id"`
+	CurrentVersion int                           `json:"current_version"`
+	Items          []CollaborationFileVersionRow `json:"items"`
+	Page           *VersionHistoryPageResult     `json:"page,omitempty"`
+}
+
 type WorkspaceMemberChange struct {
 	WorkspaceID, ActorID, TargetID int64
 	Role, ClientIP                 string
@@ -88,4 +95,6 @@ type CollaborationRepository interface {
 	CreateFileVersion(ctx context.Context, req CollaborationCreateFileVersionInput) (model.FileVersion, error)
 	RestoreFileVersion(ctx context.Context, uid, fileID int64, version, baseVersion int, clientIP string) (model.FileVersion, error)
 	ListFileVersions(ctx context.Context, fileID int64) ([]CollaborationFileVersionRow, error)
+	ReadFileVersionHistory(ctx context.Context, uid, fileID int64) (CollaborationFileVersionHistory, error)
+	ReadFileVersionHistoryPage(ctx context.Context, uid, fileID int64, page VersionHistoryPage) (CollaborationFileVersionHistory, error)
 }
