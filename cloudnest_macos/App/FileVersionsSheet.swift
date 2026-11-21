@@ -54,6 +54,15 @@ struct FileVersionsSheet: View {
                     ContentUnavailableView("没有已登记的版本", systemImage: "clock")
                 }
             }
+            HStack {
+                Button("较新版本") { Task { await history.loadPage(older: false) } }
+                    .disabled(history.busy || history.page?.hasNewer != true)
+                Button("较早版本") { Task { await history.loadPage(older: true) } }
+                    .disabled(history.busy || history.page?.hasOlder != true)
+                if let newest = history.items.first?.version, let oldest = history.items.last?.version {
+                    Text("版本 \(oldest)–\(newest)").foregroundStyle(.secondary)
+                }
+            }
             TextField("新版本说明（可选，最多 255 个字符）", text: $uploadComment)
                 .disabled(history.busy)
             if !validComment { Text("说明最多 255 个字符，不能包含空字符。").foregroundStyle(.secondary) }

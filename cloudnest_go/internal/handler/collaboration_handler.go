@@ -441,7 +441,17 @@ func (h *CollaborationHandler) ListFileVersions(c *gin.Context) {
 		return
 	}
 
-	history, err := h.Svc.ReadFileVersionHistory(c.Request.Context(), uid, fileID)
+	page, err := parseVersionHistoryPage(c.Request.URL.RawQuery)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid version history page"})
+		return
+	}
+	var history contract.CollaborationFileVersionHistory
+	if page == nil {
+		history, err = h.Svc.ReadFileVersionHistory(c.Request.Context(), uid, fileID)
+	} else {
+		history, err = h.Svc.ReadFileVersionHistoryPage(c.Request.Context(), uid, fileID, *page)
+	}
 	if err != nil {
 		writeFileMutationError(c, err, "read version history failed")
 		return

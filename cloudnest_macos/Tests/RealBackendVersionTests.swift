@@ -105,6 +105,31 @@ extension RealBackendTests {
         _ = try await state.fileVersions(fileID: forbidden)
         Issue.record("Another user's history was visible")
     } catch { #expect(error as? ServerError == .forbidden) }
+
+    // More than one native page, via real append operations. Navigation keeps
+    // only one page and must refuse to combine pages from different heads.
+    for base in 4..<56 {
+        _ = try await api.restoreVersion(origin, token: context.token, fileID: fileID, version: 2, baseVersion: base)
+    }
+    await history.reload()
+    #expect(history.currentVersion == 56)
+    #expect(history.items.map(\.version) == Array((7...56).reversed()))
+    #expect(history.page?.hasOlder == true)
+    #expect(history.page?.hasNewer == false)
+    await history.loadPage(older: true)
+    #expect(history.items.map(\.version) == [6, 5, 4, 3, 2, 1])
+    #expect(history.page?.hasOlder == false)
+    #expect(history.page?.hasNewer == true)
+    await history.loadPage(older: false)
+    #expect(history.items.map(\.version) == Array((7...56).reversed()))
+    _ = try await api.restoreVersion(origin, token: context.token, fileID: fileID, version: 2, baseVersion: 56)
+    await history.loadPage(older: true)
+    #expect(history.items.isEmpty)
+    #expect(history.currentVersion == nil)
+    #expect(history.error != nil)
+    await history.reload()
+    #expect(history.currentVersion == 57)
+    #expect(history.items.count == 50)
     await manager.close()
     await state.signOut()
     await history.reload()

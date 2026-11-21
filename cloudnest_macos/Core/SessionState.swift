@@ -141,9 +141,9 @@ final class SessionState {
         }
     }
 
-    func fileVersions(fileID: Int64) async throws -> FileVersionHistory {
+    func fileVersions(fileID: Int64, before: Int? = nil, after: Int? = nil, snapshot: Int? = nil) async throws -> FileVersionHistory {
         try await withSession { origin, token in
-            try await api.fileVersions(origin, token: token, fileID: fileID)
+            try await api.fileVersions(origin, token: token, fileID: fileID, before: before, after: after, snapshot: snapshot)
         }
     }
 

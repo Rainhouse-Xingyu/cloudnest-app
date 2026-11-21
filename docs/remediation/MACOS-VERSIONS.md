@@ -29,3 +29,6 @@ G08 将已有 Go 版本协议接入独立 macOS 客户端。普通文件的文�
 本机可用 `CLOUDNEST_SWIFT_TEST_FILTER=realBackendVersionHistory python3 scripts/test-macos-backend.py` 定向运行新用例，依赖路径可用既有两个私有前缀环境变量覆盖。未提供 Swift 过滤变量时，CI 继续执行完整的串行真实后端 suite；受限账户仅执行其允许的会话用例。最终提交的 macOS 26/27 和完整后端 CI 单独按 SHA 核验。
 
 本批是版本列表/下载/恢复的接入；版本上传的后续证据见专用协议，不替代极大历史分页、大文件资源基准或整个 G08/G00–G11 目标。
+
+
+原生历史已接入每页 50 项的双向版本游标及代次校验，页面替换而不无限追加；新上传 GUI 与两次固定版本下载已验证，见 [上传验收](VERSION-UPLOADS.md) 和 [历史分页](VERSION-HISTORY-PAGES.md)。无查询旧接口保持兼容；新版原生要求 page 元数据，不回退无界加载。

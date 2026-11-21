@@ -69,6 +69,14 @@ func TestVersionHistoryRemainsCoherentWhileRestoresAppend(t *testing.T) {
 		if history.FileID != file.ID || len(history.Items) == 0 || len(history.Items) != history.CurrentVersion || history.Items[0].Version != history.CurrentVersion {
 			t.Fatal("history and current version came from different snapshots")
 		}
+		var page struct {
+			CurrentVersion int                 `json:"current_version"`
+			Items          []model.FileVersion `json:"items"`
+		}
+		decode(t, f.json(t, "GET", path+"?page_size=7", f.alice, nil, 200), &page)
+		if len(page.Items) != min(7, page.CurrentVersion) || len(page.Items) == 0 || page.Items[0].Version != page.CurrentVersion {
+			t.Fatal("paged history and head came from different snapshots")
+		}
 		select {
 		case <-done:
 			if err := <-result; err != nil {

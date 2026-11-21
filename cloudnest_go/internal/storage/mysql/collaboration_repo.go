@@ -430,6 +430,17 @@ func (r *CollaborationRepo) ListFileVersions(ctx context.Context, fileID int64) 
 }
 
 func (r *CollaborationRepo) ReadFileVersionHistory(ctx context.Context, uid, fileID int64) (contract.CollaborationFileVersionHistory, error) {
+	return r.readFileVersionHistory(ctx, uid, fileID, nil)
+}
+
+func (r *CollaborationRepo) ReadFileVersionHistoryPage(ctx context.Context, uid, fileID int64, page contract.VersionHistoryPage) (contract.CollaborationFileVersionHistory, error) {
+	if err := page.Validate(); err != nil {
+		return contract.CollaborationFileVersionHistory{}, err
+	}
+	return r.readFileVersionHistory(ctx, uid, fileID, &page)
+}
+
+func (r *CollaborationRepo) readFileVersionHistory(ctx context.Context, uid, fileID int64, page *contract.VersionHistoryPage) (contract.CollaborationFileVersionHistory, error) {
 	var history contract.CollaborationFileVersionHistory
 	if uid <= 0 || fileID <= 0 {
 		return history, contract.ErrForbidden
@@ -445,11 +456,39 @@ func (r *CollaborationRepo) ReadFileVersionHistory(ctx context.Context, uid, fil
 		if err := requireTreeRead(tx, uid, []fileTreeNode{{File: file}}); err != nil {
 			return err
 		}
-		rows, err := listFileVersions(tx, fileID)
+		if page != nil && page.Snapshot != 0 && page.Snapshot != file.CurrentVersion {
+			return contract.ErrConflict
+		}
+		query := tx
+		if page != nil {
+			query = tx.Limit(page.Size)
+			if page.Before > 0 {
+				query = query.Where("fv.version < ?", page.Before)
+			}
+			if page.After > 0 {
+				// Select the nearest newer page, then present all pages descending.
+				query = query.Where("fv.version > ?", page.After).Order("fv.version ASC")
+			}
+		}
+		rows, err := listFileVersions(query, fileID)
 		if err != nil {
 			return err
 		}
 		history = contract.CollaborationFileVersionHistory{FileID: file.ID, CurrentVersion: file.CurrentVersion, Items: rows}
+		if page != nil {
+			if page.After > 0 {
+				for i, j := 0, len(rows)-1; i < j; i, j = i+1, j-1 {
+					rows[i], rows[j] = rows[j], rows[i]
+				}
+			}
+			result := &contract.VersionHistoryPageResult{Size: page.Size, Snapshot: file.CurrentVersion}
+			if len(rows) > 0 {
+				if err := tx.Raw("SELECT EXISTS(SELECT 1 FROM file_version WHERE file_id=? AND version<?), EXISTS(SELECT 1 FROM file_version WHERE file_id=? AND version>?)", fileID, rows[len(rows)-1].Version, fileID, rows[0].Version).Row().Scan(&result.HasOlder, &result.HasNewer); err != nil {
+					return err
+				}
+			}
+			history.Page = result
+		}
 		return nil
 	})
 	return history, err

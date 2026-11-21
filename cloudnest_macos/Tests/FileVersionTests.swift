@@ -11,15 +11,21 @@ private final class VersionResponseProtocol: URLProtocol, @unchecked Sendable {
         let item = #"{"id":1,"version":1,"size":8,"comment":"fixture","username":"reader","create_time":"2026-11-20T00:00:00Z"}"#
         var fileID = 7
         var items = item
+        var page = #","page":{"size":50,"snapshot_version":2,"has_older":false,"has_newer":false}"#
         switch url.host {
         case "wrong-file.test": fileID = 8
         case "duplicate.test": items = item + "," + item
         case "future-version.test": items = item.replacingOccurrences(of: #""version":1"#, with: #""version":3"#)
         case "negative-size.test": items = item.replacingOccurrences(of: #""size":8"#, with: #""size":-1"#)
+        case "missing-page.test": page = ""
+        case "wrong-snapshot.test": page = page.replacingOccurrences(of: #""snapshot_version":2"#, with: #""snapshot_version":3"#)
+        case "unbounded.test": page = page.replacingOccurrences(of: #""size":50"#, with: #""size":1000"#)
+        case "false-older.test": page = page.replacingOccurrences(of: #""has_older":false"#, with: #""has_older":true"#)
+        case "ascending.test": items = item + "," + item.replacingOccurrences(of: #""id":1,"version":1"#, with: #""id":2,"version":2"#)
         default: break
         }
         let status = request.httpMethod == "GET" && request.value(forHTTPHeaderField: "Authorization") == "Bearer fixture-token" ? 200 : 400
-        let body = "{\"file_id\":\(fileID),\"current_version\":2,\"items\":[\(items)]}"
+        let body = "{\"file_id\":\(fileID),\"current_version\":2,\"items\":[\(items)]\(page)}"
         let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Data(body.utf8))
@@ -35,10 +41,17 @@ private final class VersionResponseProtocol: URLProtocol, @unchecked Sendable {
     let valid = try await api.fileVersions(ServerOrigin("https://valid.test"), token: "fixture-token", fileID: 7)
     #expect(valid.currentVersion == 2)
     #expect(valid.items.first?.version == 1)
-    for host in ["wrong-file.test", "duplicate.test", "future-version.test", "negative-size.test"] {
+    for host in ["wrong-file.test", "duplicate.test", "future-version.test", "negative-size.test", "missing-page.test", "wrong-snapshot.test", "unbounded.test", "false-older.test", "ascending.test"] {
         do {
             _ = try await api.fileVersions(ServerOrigin("https://\(host)"), token: "fixture-token", fileID: 7)
             Issue.record("An inconsistent version response was accepted")
+        } catch { #expect(error as? ServerError == .invalidResponse) }
+    }
+    for older in [true, false] {
+        do {
+            _ = try await api.fileVersions(ServerOrigin("https://valid.test"), token: "fixture-token", fileID: 7,
+                before: older ? 1 : nil, after: older ? nil : 1, snapshot: 2)
+            Issue.record("An out-of-cursor version was accepted")
         } catch { #expect(error as? ServerError == .invalidResponse) }
     }
 }

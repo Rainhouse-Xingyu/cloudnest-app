@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -65,6 +66,11 @@ func TestMacOSNativeUIFixture(t *testing.T) {
 	seed := completedBlob(t, f, completeUploadRecorder(f, f.alice, id))
 	fixtureFolder(t, f, f.alice, "Fixture folder", 0)
 	versioned := fixtureNativeVersionHistory(t, f, "Version history.txt", []byte("Original native version.\n"), []byte("Replacement native version.\n"))
+	if os.Getenv("CLOUDNEST_NATIVE_UI_VERSION_PAGES") == "1" {
+		for base := 2; base < 56; base++ {
+			f.json(t, "POST", fmt.Sprintf("/api/files/%d/versions/1/restore", versioned.ID), f.alice, map[string]int{"base_version": base}, 200)
+		}
+	}
 	source := filepath.Join(absolute, "Upload from Finder.txt")
 	if err := os.WriteFile(source, []byte("Uploaded through the native macOS file panel.\n"), 0600); err != nil {
 		t.Fatal(err)

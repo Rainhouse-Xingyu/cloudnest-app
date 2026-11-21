@@ -25,11 +25,25 @@ struct FileVersionHistory: Decodable, Sendable {
     let fileID: Int64
     let currentVersion: Int
     let items: [FileVersionItem]
+    let page: FileVersionPage?
 
     enum CodingKeys: String, CodingKey {
         case fileID = "file_id"
         case currentVersion = "current_version"
-        case items
+        case items, page
+    }
+}
+
+struct FileVersionPage: Decodable, Sendable {
+    let size: Int
+    let snapshotVersion: Int
+    let hasOlder: Bool
+    let hasNewer: Bool
+    enum CodingKeys: String, CodingKey {
+        case size
+        case snapshotVersion = "snapshot_version"
+        case hasOlder = "has_older"
+        case hasNewer = "has_newer"
     }
 }
 
@@ -47,14 +61,32 @@ extension ServerAPI {
     private struct RestoreVersionInput: Encodable { let base_version: Int }
     private struct RestoreVersionResponse: Decodable { let item: RestoredFileVersion }
 
-    func fileVersions(_ origin: ServerOrigin, token: String, fileID: Int64) async throws -> FileVersionHistory {
-        guard fileID > 0 else { throw ServerError.invalidOperation }
+    func fileVersions(_ origin: ServerOrigin, token: String, fileID: Int64,
+                      before: Int? = nil, after: Int? = nil, snapshot: Int? = nil) async throws -> FileVersionHistory {
+        guard fileID > 0, !(before != nil && after != nil),
+              [before, after, snapshot].compactMap({ $0 }).allSatisfy({ $0 > 0 && $0 <= 2147483647 }),
+              ((before != nil || after != nil) == (snapshot != nil)),
+              before.map({ $0 <= (snapshot ?? 0) }) ?? true,
+              after.map({ $0 <= (snapshot ?? 0) }) ?? true else { throw ServerError.invalidOperation }
+        var query = [URLQueryItem(name: "page_size", value: "50")]
+        if let before { query.append(URLQueryItem(name: "before_version", value: String(before))) }
+        if let after { query.append(URLQueryItem(name: "after_version", value: String(after))) }
+        if let snapshot { query.append(URLQueryItem(name: "snapshot_version", value: String(snapshot))) }
         let history: FileVersionHistory = try await request(origin, "api/files/\(fileID)/versions", token: token,
-                                                           maximumBytes: 8 * 1024 * 1024)
-        guard history.fileID == fileID, history.currentVersion >= 0,
-              history.items.allSatisfy({ $0.id > 0 && $0.version > 0 && $0.version <= history.currentVersion && ($0.size.map { $0 >= 0 } ?? true) }),
+                                                           query: query, maximumBytes: 512 * 1024)
+        guard let page = history.page, page.size == 50, page.snapshotVersion == history.currentVersion,
+              history.fileID == fileID, history.currentVersion >= 0, history.currentVersion <= 2147483647,
+              snapshot.map({ $0 == history.currentVersion }) ?? true,
+              history.items.count <= 50,
+              history.items.allSatisfy({ item in item.id > 0 && item.version > 0 && item.version <= history.currentVersion &&
+                  (item.size.map { $0 >= 0 } ?? true) && (before.map { item.version < $0 } ?? true) &&
+                  (after.map { item.version > $0 } ?? true) }),
               Set(history.items.map(\.id)).count == history.items.count,
-              Set(history.items.map(\.version)).count == history.items.count else { throw ServerError.invalidResponse }
+              zip(history.items, history.items.dropFirst()).allSatisfy({ $0.0.version > $0.1.version }),
+              !(history.items.isEmpty && (page.hasOlder || page.hasNewer || before != nil || after != nil)),
+              !(page.hasOlder && (history.items.last?.version ?? 0) <= 1),
+              !(page.hasNewer && (history.items.first?.version ?? history.currentVersion) >= history.currentVersion),
+              !(before == nil && after == nil && page.hasNewer) else { throw ServerError.invalidResponse }
         return history
     }
 
@@ -76,6 +108,7 @@ final class FileVersionState {
     let file: FileItem
     private(set) var items: [FileVersionItem] = []
     private(set) var currentVersion: Int?
+    private(set) var page: FileVersionPage?
     private(set) var busy = false
     private(set) var loaded = false
     private(set) var error: String?
@@ -100,6 +133,23 @@ final class FileVersionState {
         do { try await readHistory() }
         catch is CancellationError { clearHistory() }
         catch { clearHistory(); self.error = message(error) }
+    }
+
+    func loadPage(older: Bool) async {
+        guard !busy, let page, let currentVersion,
+              older ? page.hasOlder : page.hasNewer,
+              let boundary = older ? items.last?.version : items.first?.version else { return }
+        busy = true
+        error = nil
+        notice = nil
+        defer { busy = false }
+        do {
+            try await readHistory(before: older ? boundary : nil, after: older ? nil : boundary, snapshot: currentVersion)
+        } catch {
+            clearHistory()
+            self.error = error as? ServerError == .conflict
+                ? "版本历史已变化，请刷新后重新浏览。" : message(error)
+        }
     }
 
     func restore(_ version: FileVersionItem, expectedCurrentVersion: Int) async -> Bool {
@@ -180,13 +230,14 @@ final class FileVersionState {
         return false
     }
 
-    private func readHistory() async throws {
+    private func readHistory(before: Int? = nil, after: Int? = nil, snapshot: Int? = nil) async throws {
         try checkIdentity()
-        let history = try await session.fileVersions(fileID: file.id)
+        let history = try await session.fileVersions(fileID: file.id, before: before, after: after, snapshot: snapshot)
         try Task.checkCancellation()
         try checkIdentity()
         items = history.items.sorted { $0.version > $1.version }
         currentVersion = history.currentVersion
+        page = history.page
         selection = items.first(where: { $0.id == selection })?.id
         loaded = true
     }
@@ -195,6 +246,7 @@ final class FileVersionState {
         items = []
         selection = nil
         currentVersion = nil
+        page = nil
     }
 
     private func checkIdentity() throws {
