@@ -12,6 +12,10 @@ final class TransferManager {
     private let directory: URL
     private let disk = TransferDisk()
     private let previews: PreviewCache
+    private let legacyPreviews: LegacyPreviewDirectory
+    private(set) var legacyPreviewJobs: Set<UUID> = []
+    private(set) var legacyPreviewsFound = false
+    var legacyPreviewDirectory: URL? { legacyPreviewsFound ? legacyPreviews.root : nil }
     private var previewDismissals: [UUID: Task<Void, Never>] = [:]
     private var abandonedPreviews: Set<UUID> = []
     private var closing = false
@@ -42,6 +46,7 @@ final class TransferManager {
          previewLimits: PreviewCache.Limits = .init()) {
         self.session = session
         self.directory = directory
+        legacyPreviews = LegacyPreviewDirectory(store: directory)
         previews = PreviewCache(directory: directory.appending(path: "preview-cache-v1", directoryHint: .isDirectory), limits: previewLimits)
     }
 
@@ -59,7 +64,17 @@ final class TransferManager {
             let store = try TransferStore(directory: directory)
             self.store = store
             let saved = try await store.load()
+            legacyPreviewJobs.removeAll()
+            legacyPreviewsFound = legacyPreviews.isPresent
             for var record in saved {
+                if record.direction.isDownload, await disk.isLegacyPreview(record.bookmark, namespace: legacyPreviews) {
+                    // Preserve the exact old journal, including interrupted phase.
+                    // These files have no managed-cache ownership marker/budget.
+                    legacyPreviewJobs.insert(record.id)
+                    legacyPreviewsFound = true
+                    records[record.id] = record
+                    continue
+                }
                 if record.phase.isActive || record.phase == .queued {
                     record.phase = record.cancelRequested ? .failed : .paused
                     record.error = "上次传输已中断，可继续或取消。"
@@ -109,6 +124,7 @@ final class TransferManager {
         error = nil
         let name = destination.lastPathComponent
         guard !name.isEmpty, name != ".", name != "..", file.id > 0 else { throw ServerError.invalidOperation }
+        guard !legacyPreviews.contains(destination.deletingLastPathComponent()) else { throw TransferError.legacyPreview }
         let bookmark = try await disk.bookmark(destination.deletingLastPathComponent())
         try requireIdentity(context.identity, expected: expectedIdentity)
         let job = TransferRecord(id: UUID(), createdAt: Date(), identity: context.identity, direction: .download,
@@ -157,6 +173,7 @@ final class TransferManager {
               version.size.map({ $0 >= 0 }) ?? true else { throw ServerError.invalidOperation }
         let name = destination.lastPathComponent
         guard !name.isEmpty, name != ".", name != ".." else { throw ServerError.invalidOperation }
+        guard !legacyPreviews.contains(destination.deletingLastPathComponent()) else { throw TransferError.legacyPreview }
         let bookmark = try await disk.bookmark(destination.deletingLastPathComponent())
         try requireIdentity(context.identity, expected: expectedIdentity)
         var job = TransferRecord(id: UUID(), createdAt: Date(), identity: context.identity, direction: .versionDownload,
@@ -233,6 +250,7 @@ final class TransferManager {
         guard !closing, var job = records[id], job.identity == session.transferIdentity,
               job.previewID == nil,
               active[id] == nil, !controls.contains(id), [.paused, .failed].contains(job.phase) else { return }
+        guard !legacyPreviewJobs.contains(id) else { error = TransferError.legacyPreview.localizedDescription; return }
         admissions += 1
         defer { finishAdmission() }
         if job.cancelRequested { await cancel(id); return }
@@ -375,7 +393,7 @@ final class TransferManager {
             schedulerWaiters.removeAll()
             for waiter in waiters { waiter.resume() }
         }
-        let pending = records.values.filter { $0.phase == .queued && $0.identity == session.transferIdentity }
+        let pending = records.values.filter { $0.phase == .queued && $0.identity == session.transferIdentity && !legacyPreviewJobs.contains($0.id) }
             .sorted { $0.createdAt < $1.createdAt }
         for var job in pending where active.count < 2 {
             guard active[job.id] == nil else { continue }
@@ -496,6 +514,11 @@ final class TransferManager {
         var job = initial
         guard let fileID = job.fileID else { throw TransferError.invalidCheckpoint }
         let directory = try await disk.resolve(job.bookmark)
+        if job.previewID == nil && legacyPreviews.contains(directory) {
+            legacyPreviewJobs.insert(job.id)
+            legacyPreviewsFound = true
+            throw TransferError.legacyPreview
+        }
         let access = directory.startAccessingSecurityScopedResource()
         defer { if access { directory.stopAccessingSecurityScopedResource() } }
         try await disk.openDownload(job, directory: directory)
@@ -594,6 +617,7 @@ final class TransferManager {
               job.previewID == nil,
               !controls.contains(id), job.phase != .completed, job.phase != .cancelled,
               let context = try? session.transferContext(), context.identity == job.identity else { return }
+        guard !legacyPreviewJobs.contains(id) else { error = TransferError.legacyPreview.localizedDescription; return }
         controls.insert(id)
         telemetry[id]?.stop()
         defer {

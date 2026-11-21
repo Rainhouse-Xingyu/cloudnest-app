@@ -1,0 +1,148 @@
+{
+  "version": 1,
+  "passed": true,
+  "verified_utc": "2026-11-21T11:37:24.624674+00:00",
+  "base_commit": "c6db8b9759a81e0a959358ab4f2ef0b33ef5f239",
+  "environment": "macOS 27.2.1 arm64, independent native app, disposable loopback TLS/Go/MySQL/Redis; memory session vault",
+  "binary_sha256": "a6140196a1339f73cd6a10003d2e2d04401f3c23909b7aa21d2616016af3b8c2",
+  "legacy_states": [
+    "queued",
+    "running",
+    "paused",
+    "failed",
+    "completed"
+  ],
+  "preserved_files": [
+    {
+      "path": "journal/233C6193-9BCF-45BE-845F-76D1B955D96B.json",
+      "bytes": 1399,
+      "before_sha256": "5a36cbdd79ff3522fb67fd5cbb5ab2fa1009154b467459e40f4e2505995dcbbd",
+      "after_sha256": "5a36cbdd79ff3522fb67fd5cbb5ab2fa1009154b467459e40f4e2505995dcbbd"
+    },
+    {
+      "path": "journal/previews/EB64A5CB-FB05-455A-AFFB-233318AA306E/.cloudnest-233C6193-9BCF-45BE-845F-76D1B955D96B.part",
+      "bytes": 12,
+      "before_sha256": "2480620343e4957d2bf6e3b5890d405eafb05303026a9be9a6b0a2e483e49638",
+      "after_sha256": "2480620343e4957d2bf6e3b5890d405eafb05303026a9be9a6b0a2e483e49638"
+    },
+    {
+      "path": "journal/previews/EB64A5CB-FB05-455A-AFFB-233318AA306E/Old queued.txt",
+      "bytes": 11,
+      "before_sha256": "cb2d87cbb7f61e4e9419e51e9990f7877998aa880fce84b84ced2f4dd728816c",
+      "after_sha256": "cb2d87cbb7f61e4e9419e51e9990f7877998aa880fce84b84ced2f4dd728816c"
+    },
+    {
+      "path": "journal/A00D6F0F-1386-4EA7-9402-41C568619EF1.json",
+      "bytes": 1402,
+      "before_sha256": "9ea79d2a8da0ab5f343d1bf7847d033dde9f6e0de3947fa52ad002d589865351",
+      "after_sha256": "9ea79d2a8da0ab5f343d1bf7847d033dde9f6e0de3947fa52ad002d589865351"
+    },
+    {
+      "path": "journal/previews/8A821DAE-CDD7-487B-93B8-CD7DDEF24026/.cloudnest-A00D6F0F-1386-4EA7-9402-41C568619EF1.part",
+      "bytes": 12,
+      "before_sha256": "2480620343e4957d2bf6e3b5890d405eafb05303026a9be9a6b0a2e483e49638",
+      "after_sha256": "2480620343e4957d2bf6e3b5890d405eafb05303026a9be9a6b0a2e483e49638"
+    },
+    {
+      "path": "journal/previews/8A821DAE-CDD7-487B-93B8-CD7DDEF24026/Old running.txt",
+      "bytes": 11,
+      "before_sha256": "cb2d87cbb7f61e4e9419e51e9990f7877998aa880fce84b84ced2f4dd728816c",
+      "after_sha256": "cb2d87cbb7f61e4e9419e51e9990f7877998aa880fce84b84ced2f4dd728816c"
+    },
+    {
+      "path": "journal/DB311E88-B276-4C8F-B22E-5B265B76EC31.json",
+      "bytes": 1399,
+      "before_sha256": "22cc0f4a364311b32411ee21ff0104c3f1b90fa431c1c1ab5dbff1feff67a388",
+      "after_sha256": "22cc0f4a364311b32411ee21ff0104c3f1b90fa431c1c1ab5dbff1feff67a388"
+    },
+    {
+      "path": "journal/previews/E8FFD9BA-0930-4630-A74C-D86CD9940592/.cloudnest-DB311E88-B276-4C8F-B22E-5B265B76EC31.part",
+      "bytes": 12,
+      "before_sha256": "2480620343e4957d2bf6e3b5890d405eafb05303026a9be9a6b0a2e483e49638",
+      "after_sha256": "2480620343e4957d2bf6e3b5890d405eafb05303026a9be9a6b0a2e483e49638"
+    },
+    {
+      "path": "journal/previews/E8FFD9BA-0930-4630-A74C-D86CD9940592/Old paused.txt",
+      "bytes": 11,
+      "before_sha256": "cb2d87cbb7f61e4e9419e51e9990f7877998aa880fce84b84ced2f4dd728816c",
+      "after_sha256": "cb2d87cbb7f61e4e9419e51e9990f7877998aa880fce84b84ced2f4dd728816c"
+    },
+    {
+      "path": "journal/76A698FE-CE72-4A44-A7FB-0978FBF5F40D.json",
+      "bytes": 1399,
+      "before_sha256": "fe7ad90dde88f59c6ebd3bcf5ca108f0576a96d7089f7abf561ed491ba2bce91",
+      "after_sha256": "fe7ad90dde88f59c6ebd3bcf5ca108f0576a96d7089f7abf561ed491ba2bce91"
+    },
+    {
+      "path": "journal/previews/ACA23E1E-EB08-46A4-8BD9-3652D9F08755/.cloudnest-76A698FE-CE72-4A44-A7FB-0978FBF5F40D.part",
+      "bytes": 12,
+      "before_sha256": "2480620343e4957d2bf6e3b5890d405eafb05303026a9be9a6b0a2e483e49638",
+      "after_sha256": "2480620343e4957d2bf6e3b5890d405eafb05303026a9be9a6b0a2e483e49638"
+    },
+    {
+      "path": "journal/previews/ACA23E1E-EB08-46A4-8BD9-3652D9F08755/Old failed.txt",
+      "bytes": 11,
+      "before_sha256": "cb2d87cbb7f61e4e9419e51e9990f7877998aa880fce84b84ced2f4dd728816c",
+      "after_sha256": "cb2d87cbb7f61e4e9419e51e9990f7877998aa880fce84b84ced2f4dd728816c"
+    },
+    {
+      "path": "journal/EE45E901-D80B-49FD-A678-BA28836A1F84.json",
+      "bytes": 1583,
+      "before_sha256": "fea4a190939dea3c0f8ae0a0638b87aa4dbe4f7704741d37b859656b0856d505",
+      "after_sha256": "fea4a190939dea3c0f8ae0a0638b87aa4dbe4f7704741d37b859656b0856d505"
+    },
+    {
+      "path": "journal/previews/41FD9258-7CC3-4623-96B2-EDB47EDE54CC/.cloudnest-EE45E901-D80B-49FD-A678-BA28836A1F84.part",
+      "bytes": 12,
+      "before_sha256": "2480620343e4957d2bf6e3b5890d405eafb05303026a9be9a6b0a2e483e49638",
+      "after_sha256": "2480620343e4957d2bf6e3b5890d405eafb05303026a9be9a6b0a2e483e49638"
+    },
+    {
+      "path": "journal/previews/41FD9258-7CC3-4623-96B2-EDB47EDE54CC/Old completed.txt",
+      "bytes": 11,
+      "before_sha256": "cb2d87cbb7f61e4e9419e51e9990f7877998aa880fce84b84ced2f4dd728816c",
+      "after_sha256": "cb2d87cbb7f61e4e9419e51e9990f7877998aa880fce84b84ced2f4dd728816c"
+    },
+    {
+      "path": "journal/previews/unknown.txt",
+      "bytes": 16,
+      "before_sha256": "82ce951a454589c0f8b0fc4b0e9ba0972b26e5c47d4ddad809e3da3bb21d64ad",
+      "after_sha256": "82ce951a454589c0f8b0fc4b0e9ba0972b26e5c47d4ddad809e3da3bb21d64ad"
+    }
+  ],
+  "held_rows_observed": 5,
+  "continue_cancel_controls_absent": true,
+  "legacy_notice_visible": true,
+  "legacy_tasks_not_counted_as_active": true,
+  "quick_look_showed_real_go_text": true,
+  "new_preview_download_requests": 1,
+  "new_preview_cache_after_dismissal": [
+    ".format-v1"
+  ],
+  "native_process_exited": true,
+  "source_sha256": {
+    "Core/DownloadPlan.swift": "641b33f9f36001a67bcb3ed583c2ff3e61b40ac2683d10fafdaa70c6b24965b1",
+    "Core/DownloadStream.swift": "a4878ddee1749ae049ca898fac22175dae907ada9b859e961afbe801ad897a15",
+    "Core/FileAPI.swift": "e80f37d57c9420b91ff4d27b2be03b2eeb6b46b0935eae8ce1ef208fcdee34b9",
+    "Core/FileBrowserState.swift": "312b325d054c4b34aa867320570321a010c17359b6bf5413c51253cd767c3380",
+    "Core/FileVersions.swift": "1b009b2cd68dd555325b667186b757b5307dad6a355fd27ebc955da2474b7483",
+    "Core/LegacyPreviewDirectory.swift": "05b9022f6f528de4bff5c4f9c236518b25271537b5794409384d9e5c0329f608",
+    "Core/PreviewCache.swift": "24e5560809afd2d6065a9994d5355c0c36f62128e2a4a256b29c2bdd2c808904",
+    "Core/ServerAPI.swift": "8335d406f5d48203e2f6734360d68973069098e674716db912a950b38a6ae854",
+    "Core/SessionState.swift": "d86d254fbc18c17e6b8dd601ab501f29be47e9b16bd9125acc514a5706e4a0ef",
+    "Core/SessionVault.swift": "8aaeafe193e99da59b8a5298fe8d2fa5052c21e8fef67e182927be438d8d7495",
+    "Core/TransferAPI.swift": "757fa9919a3cc5d66d20b380d2470165acc2af63cffac5da3811ec298cf4625b",
+    "Core/TransferDisk.swift": "f75f42b9d3dbcdbefb8240b8c2477081c3fea69465bf17dd4fee5e7d19fc4091",
+    "Core/TransferManager.swift": "9480769b73c15f4c00378fe46caf573d41ef501da55c8e280e5d79ffbc380762",
+    "Core/TransferRecord.swift": "f0f8c20631dd0ef4516d84bdd541961614c0a6f4450c84454b3333fccbd1b71e",
+    "Core/TransferStore.swift": "66cae8a28ba323c0a90e67eec549356c70c88b843fa9bb352ba0f30c4567e17f",
+    "Core/TransferTelemetry.swift": "95eb7bba18223c173ceeead47cc025fb1fc34617985ab3d80db8ce89d9011345",
+    "App/CloudNestApp.swift": "dbcbe3f68baf2efa48b4f8a2717c9320b380123a5f81b1ca22e3b88a76a119a0",
+    "App/FileBrowserCommands.swift": "1744b820661ef09fa3836c67397d2975133a4982444807012c12c5112731d4e8",
+    "App/FileBrowserView.swift": "4f946fbffb7d08c5cd8642cd500d0cee6dfc73933e97c99d5040f26b0aca3e11",
+    "App/FileDestinationSheet.swift": "e687c0269882fd072479942c7a73c96790796ffdcaa6a176657b59c669b51a7d",
+    "App/FileVersionsSheet.swift": "17fe6e46888249269a57f5172de163e8aeb6a7a56b6ecb188c5608f39099920a",
+    "App/TransferListView.swift": "a8e26aa331492e166bea32e406507aa5daa2420cf651c7074d50d718712b6181"
+  },
+  "limits": "Retains legacy files; does not reclaim historical disk bytes or import them into the disposable cache. Unknown/unresolvable bookmarks do not establish ownership."
+}

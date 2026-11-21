@@ -69,7 +69,9 @@ struct WorkspaceWindow: View {
                 List(selection: $selection) {
                     ForEach(Page.allCases) { page in
                         Label(page.rawValue, systemImage: page.icon)
-                            .badge(page == .transfers ? transfers.jobs.filter { $0.phase.isActive || $0.phase == .queued }.count : 0)
+                            .badge(page == .transfers ? transfers.jobs.filter {
+                                !transfers.legacyPreviewJobs.contains($0.id) && ($0.phase.isActive || $0.phase == .queued)
+                            }.count : 0)
                             .tag(page)
                     }
                 }

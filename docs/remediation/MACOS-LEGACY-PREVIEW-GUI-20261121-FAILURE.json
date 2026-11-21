@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "passed": false,
+  "observed_utc": "2026-11-21T11:34:47.082016+00:00",
+  "stage": "initial GUI with cross-process bookmarks",
+  "base_commit": "c6db8b9759a81e0a959358ab4f2ef0b33ef5f239",
+  "binary_sha256": "8b2cb28edf8ba3cb6f2ee69a7759503add2542ca73a1b1376d5e27efb46b6513",
+  "gui_legacy_notice_visible": true,
+  "gui_held_legacy_rows": 0,
+  "gui_continue_and_cancel_controls_visible": true,
+  "no_unsafe_controls_clicked": true,
+  "changed_files": [
+    {
+      "path": "journal/233C6193-9BCF-45BE-845F-76D1B955D96B.json",
+      "before_sha256": "5a36cbdd79ff3522fb67fd5cbb5ab2fa1009154b467459e40f4e2505995dcbbd",
+      "after_sha256": "c08739f4c3ca8cf1e789ae68d8dd04664542c166ee943cec31a89a9e9eb97b32"
+    },
+    {
+      "path": "journal/A00D6F0F-1386-4EA7-9402-41C568619EF1.json",
+      "before_sha256": "9ea79d2a8da0ab5f343d1bf7847d033dde9f6e0de3947fa52ad002d589865351",
+      "after_sha256": "48f4c726bfb1009f23feeffb96d9b582724c5806ca223caee51af47d44bb9deb"
+    }
+  ],
+  "source_sha256": {
+    "Core/DownloadPlan.swift": "641b33f9f36001a67bcb3ed583c2ff3e61b40ac2683d10fafdaa70c6b24965b1",
+    "Core/DownloadStream.swift": "a4878ddee1749ae049ca898fac22175dae907ada9b859e961afbe801ad897a15",
+    "Core/FileAPI.swift": "e80f37d57c9420b91ff4d27b2be03b2eeb6b46b0935eae8ce1ef208fcdee34b9",
+    "Core/FileBrowserState.swift": "312b325d054c4b34aa867320570321a010c17359b6bf5413c51253cd767c3380",
+    "Core/FileVersions.swift": "1b009b2cd68dd555325b667186b757b5307dad6a355fd27ebc955da2474b7483",
+    "Core/LegacyPreviewDirectory.swift": "ccbf8b8349d7a550a0cb2b89efc63973eccc53f5d217189c1cdaeb1a5d9af407",
+    "Core/PreviewCache.swift": "24e5560809afd2d6065a9994d5355c0c36f62128e2a4a256b29c2bdd2c808904",
+    "Core/ServerAPI.swift": "8335d406f5d48203e2f6734360d68973069098e674716db912a950b38a6ae854",
+    "Core/SessionState.swift": "d86d254fbc18c17e6b8dd601ab501f29be47e9b16bd9125acc514a5706e4a0ef",
+    "Core/SessionVault.swift": "8aaeafe193e99da59b8a5298fe8d2fa5052c21e8fef67e182927be438d8d7495",
+    "Core/TransferAPI.swift": "757fa9919a3cc5d66d20b380d2470165acc2af63cffac5da3811ec298cf4625b",
+    "Core/TransferDisk.swift": "f75f42b9d3dbcdbefb8240b8c2477081c3fea69465bf17dd4fee5e7d19fc4091",
+    "Core/TransferManager.swift": "a724957872f7805cf074f27dc179abc8260775517a399d164ecfe23c1cc535ea",
+    "Core/TransferRecord.swift": "f0f8c20631dd0ef4516d84bdd541961614c0a6f4450c84454b3333fccbd1b71e",
+    "Core/TransferStore.swift": "66cae8a28ba323c0a90e67eec549356c70c88b843fa9bb352ba0f30c4567e17f",
+    "Core/TransferTelemetry.swift": "95eb7bba18223c173ceeead47cc025fb1fc34617985ab3d80db8ce89d9011345",
+    "App/CloudNestApp.swift": "dbcbe3f68baf2efa48b4f8a2717c9320b380123a5f81b1ca22e3b88a76a119a0",
+    "App/FileBrowserCommands.swift": "1744b820661ef09fa3836c67397d2975133a4982444807012c12c5112731d4e8",
+    "App/FileBrowserView.swift": "4f946fbffb7d08c5cd8642cd500d0cee6dfc73933e97c99d5040f26b0aca3e11",
+    "App/FileDestinationSheet.swift": "e687c0269882fd072479942c7a73c96790796ffdcaa6a176657b59c669b51a7d",
+    "App/FileVersionsSheet.swift": "17fe6e46888249269a57f5172de163e8aeb6a7a56b6ecb188c5608f39099920a",
+    "App/TransferListView.swift": "a8e26aa331492e166bea32e406507aa5daa2420cf651c7074d50d718712b6181"
+  },
+  "diagnosis": "Scoped bookmark resolution failed with NSCocoaErrorDomain Code=259 in a separate executable; unscoped read-only resolution returned the legacy path. Only queued/running journals were normalized. All part/result/unknown files retained."
+}

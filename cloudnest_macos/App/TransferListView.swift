@@ -19,7 +19,7 @@ struct TransferListView: View {
                                 .font(.caption).foregroundStyle(.secondary)
                             if let version = job.publishedVersion { Text("已发布为版本 \(version)").font(.caption).foregroundStyle(.secondary) }
                         }
-                        if job.phase == .running {
+                        if job.phase == .running && !transfers.legacyPreviewJobs.contains(job.id) {
                             TimelineView(.periodic(from: .now, by: 1)) { _ in
                                 activity(job)
                             }
@@ -38,6 +38,16 @@ struct TransferListView: View {
                 if transfers.jobs.isEmpty && transfers.restored {
                     ContentUnavailableView("没有传输任务", systemImage: "arrow.up.arrow.down")
                 }
+            }
+            if let directory = transfers.legacyPreviewDirectory {
+                HStack(alignment: .top) {
+                    Label("旧版预览文件及记录已保留。需要重新预览或下载时，请从文件列表打开。", systemImage: "archivebox")
+                    Spacer()
+                    Button("在 Finder 中查看") { NSWorkspace.shared.activateFileViewerSelecting([directory]) }
+                }
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .padding(12)
             }
             if let error = transfers.error {
                 HStack {
@@ -80,30 +90,35 @@ struct TransferListView: View {
     }
 
     @ViewBuilder private func actions(_ job: TransferRecord) -> some View {
-        switch job.phase {
-        case .queued, .running:
-            Button("暂停") { Task { await transfers.pause(job.id) } }
-            Button("取消", role: .destructive) { Task { await transfers.cancel(job.id) } }
-        case .paused, .failed:
-            Button(job.cancelRequested ? "重试取消" : "继续") { Task { await transfers.resume(job.id) } }
-            Button("取消", role: .destructive) { Task { await transfers.cancel(job.id) } }
-        case .completed:
-            if job.direction.isDownload {
-                Button("在 Finder 中显示") {
-                    Task {
-                        do { NSWorkspace.shared.activateFileViewerSelecting([try await transfers.resultURL(job.id)]) }
-                        catch { transfers.report(error) }
+        if transfers.legacyPreviewJobs.contains(job.id) {
+            EmptyView()
+        } else {
+            switch job.phase {
+            case .queued, .running:
+                Button("暂停") { Task { await transfers.pause(job.id) } }
+                Button("取消", role: .destructive) { Task { await transfers.cancel(job.id) } }
+            case .paused, .failed:
+                Button(job.cancelRequested ? "重试取消" : "继续") { Task { await transfers.resume(job.id) } }
+                Button("取消", role: .destructive) { Task { await transfers.cancel(job.id) } }
+            case .completed:
+                if job.direction.isDownload {
+                    Button("在 Finder 中显示") {
+                        Task {
+                            do { NSWorkspace.shared.activateFileViewerSelecting([try await transfers.resultURL(job.id)]) }
+                            catch { transfers.report(error) }
+                        }
                     }
                 }
+            case .pausing, .cancelling:
+                ProgressView().controlSize(.small)
+            case .cancelled:
+                EmptyView()
             }
-        case .pausing, .cancelling:
-            ProgressView().controlSize(.small)
-        case .cancelled:
-            EmptyView()
         }
     }
 
     private func status(_ job: TransferRecord) -> String {
+        if transfers.legacyPreviewJobs.contains(job.id) { return "旧版预览 · 已保留" }
         let progress = "\(job.confirmedBytes.formatted(.byteCount(style: .file))) / \(job.totalBytes.formatted(.byteCount(style: .file)))"
         switch job.phase {
         case .queued: return "等待传输"

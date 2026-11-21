@@ -118,6 +118,7 @@ G06 在独立集成分支同时接入 G04 与 G05 的代码，保留 AI worker �
 - [macOS 版本历史、固定版本下载与追加式恢复](MACOS-VERSIONS.md)
 - [绑定目标的版本上传与初始化取消](VERSION-UPLOADS.md)
 - [原生传输速度与确认进度](MACOS-TRANSFER-SPEED.md)
+- [旧预览任务只读兼容与跨进程书签验证](MACOS-LEGACY-PREVIEWS.md)：保留旧文件和原 journal，不把历史文件导入可删除缓存；失败、最终 GUI 与精确测试范围单独记录。
 - [原生连续下载、GiB 跨进程恢复与 GUI 内存验收](MACOS-LARGE-FILES.md)：保留首轮观察器失败与最终成功原始报告；普通单用户暖盘结果不替代断电、多卷及聚合资源验收。a50e762 精确 CI 已全通过，本批另核验，G08/总 Goal 继续进行中。
 
 

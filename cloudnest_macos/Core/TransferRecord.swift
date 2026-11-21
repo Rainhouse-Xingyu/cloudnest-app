@@ -62,7 +62,7 @@ struct TransferRecord: Codable, Identifiable, Sendable {
 
 enum TransferError: LocalizedError, Equatable {
     case sourceChanged, invalidCheckpoint, integrity, alreadyRunning, invalidSource, invalidDownload, localStorage, destinationExists
-    case previewTooLarge, previewCapacity, previewStorage
+    case previewTooLarge, previewCapacity, previewStorage, legacyPreview
 
     var errorDescription: String? {
         switch self {
@@ -77,6 +77,7 @@ enum TransferError: LocalizedError, Equatable {
         case .previewTooLarge: "文件超过预览缓存限制或已变大，请先下载后打开。"
         case .previewCapacity: "预览缓存已满，请关闭其他预览后重试。"
         case .previewStorage: "无法验证预览缓存目录，请检查文件访问权限。"
+        case .legacyPreview: "旧版预览文件和记录已保留，不再继续或取消。需要文件时，请从文件列表重新下载到其他位置。"
         }
     }
 }

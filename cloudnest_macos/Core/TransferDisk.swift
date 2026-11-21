@@ -21,6 +21,10 @@ actor TransferDisk {
         return url
     }
 
+    func isLegacyPreview(_ bookmark: Data, namespace: LegacyPreviewDirectory) -> Bool {
+        namespace.containsBookmark(bookmark)
+    }
+
     func prepareUpload(_ url: URL) async throws -> UploadSource {
         let access = url.startAccessingSecurityScopedResource()
         defer { if access { url.stopAccessingSecurityScopedResource() } }
