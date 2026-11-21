@@ -174,8 +174,8 @@ struct ServerAPI: Sendable {
         var request = URLRequest(url: origin.endpoint(path), cachePolicy: .reloadIgnoringLocalCacheData)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
-        if let start, let end {
-            request.setValue("bytes=\(start)-\(end)", forHTTPHeaderField: "Range")
+        if let start {
+            request.setValue("bytes=\(start)-\(end.map(String.init) ?? "")", forHTTPHeaderField: "Range")
             if let etag { request.setValue(etag, forHTTPHeaderField: "If-Range") }
         }
         let stream = DownloadStream(configuration: transferSession.configuration, policy: requestDelegate)

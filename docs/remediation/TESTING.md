@@ -609,4 +609,12 @@ G06 公开分享新增 HTTPS 提取码、下载上限和跨链接限流。11 项
 
 ## 原生操作身份专项
 
+此批 a50e762 的双平台原生 CI 44872184196 与完整后端 CI 44872184221 已全通过，精确结果另记 G08。
+
 `swift test --package-path cloudnest_macos --filter TransferIntentTests` 运行可控响应/队列回归，覆盖旧选择、迟到 200/401、同账户新登录与关闭旧工作任务。新双账户联调由 `python3 scripts/test-macos-backend.py` 的默认真实 suite 执行；可用 `CLOUDNEST_SWIFT_TEST_FILTER=realBackendTransferIntentStaysWithItsAccount` 定向运行，仍需独立本机 MySQL/Redis 依赖。受限账户按条件跳过该写用例，不把跳过计为执行通过。详见 [身份协议与本批结果](MACOS-OPERATION-IDENTITY.md)。
+
+## 原生连续下载与 opt-in GiB 验收
+
+`python3 scripts/test-macos-backend.py --large-file --report /tmp/new-native-large-file.json` 运行四个独立 Swift 进程的真实 GiB 恢复验收；需要 macOS、本机隔离 MySQL/Redis 与至少 8 GiB 临时空闲卷，报告独占创建。不能和 --filter/手动 UI 夹具组合，普通 CI 不隐式跑 GiB。定向请求计数可用 `CLOUDNEST_SWIFT_TEST_FILTER=realBackendStreamingDownloadRequestBudget python3 scripts/test-macos-backend.py`。GUI 使用既有 `CLOUDNEST_NATIVE_UI_FIXTURE_DIR` 与额外 `CLOUDNEST_NATIVE_UI_LARGE_FILE=1`，只给私有夹具设置 10240 KiB/s，不增加产品选项。
+
+2026-11-21：普通 Swift 38 项注册、26 项实际通过/12 条件跳过（0.081s）；完整默认 10 项真实联调和受限 1 项通过（其余 9 项跳过），包 74.745s；最后严格计数版本又通过 24.006s。四进程 1 GiB + 173 字节验收包 242.338s，通过上传/下载暂停退出恢复、后缀截断、强 ETag/Range 与完整摘要，每进程真实峰值 <512 MiB（最高 160.58）。另三进程实际 GUI 正常 Quit/重开恢复通过，结果 SHA/字节一致、无 part，采样峰值最高 212.63 MiB。首轮观察器错误导致失败，原始报告保留；修正观察器 defer 后同门槛完整重跑。具体日志路径、原始成功/失败/GUI JSON 与环境/吞吐率边界见 [大文件验收](MACOS-LARGE-FILES.md)。

@@ -43,6 +43,10 @@ func TestMacOSNativeUIFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	f := newFixture(t)
+	if os.Getenv("CLOUDNEST_NATIVE_UI_LARGE_FILE") == "1" {
+		rateSetting(t, f, "upload_speed_limit_kbps", "10240")
+		rateSetting(t, f, "download_speed_limit_kbps", "10240")
+	}
 	slow := os.Getenv("CLOUDNEST_NATIVE_UI_SLOW_TRANSFERS") == "1"
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if slow && r.URL.Path == "/api/files/upload/chunk" {

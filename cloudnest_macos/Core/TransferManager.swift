@@ -505,11 +505,14 @@ final class TransferManager {
             try Task.checkCancellation()
             let probe = job.etag != nil && job.confirmedBytes == job.totalBytes
             let start = probe ? 0 : job.confirmedBytes
-            guard start <= Int64.max - Int64(TransferDisk.downloadChunkSize) else { throw TransferError.invalidDownload }
-            let end = probe ? 0 : start + Int64(TransferDisk.downloadChunkSize) - 1
+            // A stream stays bounded by DownloadStream acknowledgements and
+            // four-MiB disk checkpoints, not by issuing one HTTP request per
+            // block (which makes the server re-hash the full object each time).
+            let end = probe ? 0 : Int64.max
             let full = job.etag == nil && job.totalBytes == 0 && !job.isArchive
             var (bytes, response) = try await context.api.downloadResponse(context.origin, token: context.token,
-                fileID: fileID, archive: job.isArchive, version: job.fileVersion, start: full ? nil : start, end: full ? nil : end, etag: job.etag)
+                fileID: fileID, archive: job.isArchive, version: job.fileVersion,
+                start: full ? nil : start, end: probe ? 0 : nil, etag: job.etag)
             if response.statusCode == 416 {
                 bytes.cancel()
                 (bytes, response) = try await context.api.downloadResponse(context.origin, token: context.token,

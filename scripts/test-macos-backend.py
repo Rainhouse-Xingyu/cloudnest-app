@@ -4,6 +4,7 @@ import os
 import argparse
 from pathlib import Path
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -19,11 +20,53 @@ def available_port():
         return listener.getsockname()[1]
 
 
+def run_large_file_command(command, environment):
+    # Own the Go/Swift process group so interruption or a Go watchdog cannot
+    # leave an orphaned GiB writer after disposable services are stopped.
+    process = subprocess.Popen(command, cwd=ROOT / 'cloudnest_go', env=environment, start_new_session=True)
+    try:
+        status = process.wait()
+        if status:
+            raise subprocess.CalledProcessError(status, command)
+    finally:
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                try:
+                    os.killpg(process.pid, 0)
+                except ProcessLookupError:
+                    break
+                time.sleep(0.05)
+            else:
+                os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.wait()
+
+
 def run():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--filter', dest='test_filter')
     parser.add_argument('--mysql-time-zone', default='SYSTEM')
+    parser.add_argument('--large-file', action='store_true', help='Run explicit 1 GiB + 173 byte, four-process native acceptance')
+    parser.add_argument('--report', type=Path, help='Create an exclusive JSON report for --large-file')
     arguments = parser.parse_args()
+    if arguments.large_file and (arguments.test_filter or os.environ.get('CLOUDNEST_NATIVE_UI_FIXTURE_DIR')):
+        parser.error('--large-file cannot be combined with --filter or the manual UI fixture')
+    if arguments.report and not arguments.large_file:
+        parser.error('--report requires --large-file')
+    if arguments.report and (arguments.report.exists() or not arguments.report.parent.is_dir()):
+        parser.error('the report must name a new file in an existing directory')
+    if arguments.large_file and shutil.disk_usage('/tmp').free < 8 * 1024**3:
+        parser.error('--large-file requires at least 8 GiB of free temporary disk')
     if arguments.test_filter and os.environ.get('CLOUDNEST_NATIVE_UI_FIXTURE_DIR'):
         parser.error('--filter cannot be combined with the manual UI fixture')
     if sys.platform != 'darwin':
@@ -81,11 +124,18 @@ GRANT ALL PRIVILEGES ON cloudnest_test.* TO 'cloudnest_test'@'127.0.0.1';
                     CLOUDNEST_TEST_REDIS_ADDR=f'127.0.0.1:{redis_port}',
                 )
                 ui_fixture = os.environ.get('CLOUDNEST_NATIVE_UI_FIXTURE_DIR')
-                test = '^TestMacOSNativeUIFixture$' if ui_fixture else (arguments.test_filter or '^TestMacOSClientSession$')
-                timeout = '25m' if ui_fixture else '10m'
-                subprocess.run(['go', 'test', '-tags=integration', '-count=1', f'-timeout={timeout}', '-v',
-                                './integration', '-run', test],
-                               cwd=ROOT / 'cloudnest_go', env=environment, check=True)
+                if arguments.large_file:
+                    environment['CLOUDNEST_NATIVE_LARGE_FILE'] = '1'
+                    if arguments.report:
+                        environment['CLOUDNEST_NATIVE_LARGE_FILE_REPORT'] = str(arguments.report.resolve())
+                test = '^TestMacOSNativeLargeFile$' if arguments.large_file else ('^TestMacOSNativeUIFixture$' if ui_fixture else (arguments.test_filter or '^TestMacOSClientSession$'))
+                timeout = '15m' if arguments.large_file else ('25m' if ui_fixture else '10m')
+                command = ['go', 'test', '-tags=integration', '-count=1', f'-timeout={timeout}', '-v',
+                           './integration', '-run', test]
+                if arguments.large_file:
+                    run_large_file_command(command, environment)
+                else:
+                    subprocess.run(command, cwd=ROOT / 'cloudnest_go', env=environment, check=True)
             except BaseException:
                 for log in (mysql_log, redis_log):
                     log.flush()

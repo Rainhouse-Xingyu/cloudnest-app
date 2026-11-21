@@ -54,6 +54,29 @@ private func transferFixture(name: String = "out.bin", total: Int64 = 0) -> Tran
     #expect(empty.sha256 == TransferDisk.hex(SHA256.hash(data: Data())))
 }
 
+@Test func openEndedDownloadRequiresTheWholeRemainingRepresentation() throws {
+    let data = Data(repeating: 0x43, count: 100)
+    let digest = SHA256.hash(data: data)
+    let tag = "\"sha256-\(TransferDisk.hex(digest))\""
+    var job = transferFixture(total: 100)
+    job.confirmedBytes = 40
+    job.etag = tag
+    var headers = ["ETag": tag, "Repr-Digest": "sha-256=:\(Data(digest).base64EncodedString()):",
+                   "Content-Length": "60", "Content-Range": "bytes 40-99/100"]
+    func response() throws -> HTTPURLResponse {
+        try #require(HTTPURLResponse(url: URL(string: "https://example.test")!, statusCode: 206,
+                                     httpVersion: nil, headerFields: headers))
+    }
+    let plan = try DownloadPlan(response: response(), record: job, requestedStart: 40, requestedEnd: .max)
+    #expect(plan.total == 100)
+    #expect(plan.length == 60)
+    headers["Content-Length"] = "40"
+    headers["Content-Range"] = "bytes 40-79/100"
+    #expect(throws: TransferError.invalidDownload) {
+        try DownloadPlan(response: response(), record: job, requestedStart: 40, requestedEnd: .max)
+    }
+}
+
 @Test func downloadCheckpointRejectsTamperingAndPreservesExistingDestination() async throws {
     let directory = FileManager.default.temporaryDirectory.appending(path: "cloudnest-target-\(UUID())")
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

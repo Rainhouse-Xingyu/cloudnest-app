@@ -33,11 +33,19 @@ func TestMacOSClientSession(t *testing.T) {
 	f := newFixture(t)
 	var lostInitializations sync.Map
 	var telemetryGates sync.Map
+	var streamingDownloads atomic.Int32
 	gateFor := func(key string) *nativeTelemetryGate {
 		value, _ := telemetryGates.LoadOrStore(key, &nativeTelemetryGate{done: make(chan struct{})})
 		return value.(*nativeTelemetryGate)
 	}
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-CloudNest-Test-Stream") == "native-single-stream" {
+			if strings.HasSuffix(r.URL.Path, "/download") {
+				streamingDownloads.Add(1)
+			} else if r.URL.Path == "/api/auth/me" {
+				w.Header().Set("X-CloudNest-Test-Download-Requests", strconv.FormatInt(int64(streamingDownloads.Load()), 10))
+			}
+		}
 		if strings.HasPrefix(r.Header.Get("X-CloudNest-Test-Version-Binding"), "native-version-binding-") && strings.HasSuffix(r.URL.Path, "/versions/upload") {
 			receipt := httptest.NewRecorder()
 			f.router.ServeHTTP(receipt, r)
@@ -228,6 +236,9 @@ func TestMacOSClientSession(t *testing.T) {
 			t.Log(string(output))
 			if err != nil {
 				t.Fatal(err)
+			}
+			if tc.restricted == "0" && streamingDownloads.Load() > 1 {
+				t.Fatalf("uninterrupted native download used %d requests; want one bounded stream", streamingDownloads.Load())
 			}
 		})
 	}
