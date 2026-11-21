@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "passed": true,
+  "generated_utc": "2026-11-21T22:52:54Z",
+  "git_head": "620e4b197c9b6f138a8c1f7ba9a90421bff18106",
+  "client_source_sha256": {
+    "App/CloudNestApp.swift": "dbcbe3f68baf2efa48b4f8a2717c9320b380123a5f81b1ca22e3b88a76a119a0",
+    "App/FileBrowserCommands.swift": "1744b820661ef09fa3836c67397d2975133a4982444807012c12c5112731d4e8",
+    "App/FileBrowserView.swift": "4f946fbffb7d08c5cd8642cd500d0cee6dfc73933e97c99d5040f26b0aca3e11",
+    "App/FileDestinationSheet.swift": "e687c0269882fd072479942c7a73c96790796ffdcaa6a176657b59c669b51a7d",
+    "App/FileVersionsSheet.swift": "17fe6e46888249269a57f5172de163e8aeb6a7a56b6ecb188c5608f39099920a",
+    "App/TransferListView.swift": "a8e26aa331492e166bea32e406507aa5daa2420cf651c7074d50d718712b6181",
+    "Core/DownloadPlan.swift": "641b33f9f36001a67bcb3ed583c2ff3e61b40ac2683d10fafdaa70c6b24965b1",
+    "Core/DownloadStream.swift": "a4878ddee1749ae049ca898fac22175dae907ada9b859e961afbe801ad897a15",
+    "Core/FileAPI.swift": "e80f37d57c9420b91ff4d27b2be03b2eeb6b46b0935eae8ce1ef208fcdee34b9",
+    "Core/FileBrowserState.swift": "312b325d054c4b34aa867320570321a010c17359b6bf5413c51253cd767c3380",
+    "Core/FileVersions.swift": "1b009b2cd68dd555325b667186b757b5307dad6a355fd27ebc955da2474b7483",
+    "Core/LegacyPreviewDirectory.swift": "05b9022f6f528de4bff5c4f9c236518b25271537b5794409384d9e5c0329f608",
+    "Core/PreviewCache.swift": "24e5560809afd2d6065a9994d5355c0c36f62128e2a4a256b29c2bdd2c808904",
+    "Core/ServerAPI.swift": "8335d406f5d48203e2f6734360d68973069098e674716db912a950b38a6ae854",
+    "Core/SessionState.swift": "d86d254fbc18c17e6b8dd601ab501f29be47e9b16bd9125acc514a5706e4a0ef",
+    "Core/SessionVault.swift": "8aaeafe193e99da59b8a5298fe8d2fa5052c21e8fef67e182927be438d8d7495",
+    "Core/TransferAPI.swift": "757fa9919a3cc5d66d20b380d2470165acc2af63cffac5da3811ec298cf4625b",
+    "Core/TransferDisk.swift": "51ca36fc080604b9a6ece8d0b1302e56904984691c9caa22ee77cdd432ceae84",
+    "Core/TransferManager.swift": "2b63f616cd56cdfd3fe1bb17a31d388fd4831322208627450284e9c95f0c242a",
+    "Core/TransferRecord.swift": "f0f8c20631dd0ef4516d84bdd541961614c0a6f4450c84454b3333fccbd1b71e",
+    "Core/TransferStore.swift": "66cae8a28ba323c0a90e67eec549356c70c88b843fa9bb352ba0f30c4567e17f",
+    "Core/TransferTelemetry.swift": "95eb7bba18223c173ceeead47cc025fb1fc34617985ab3d80db8ce89d9011345"
+  },
+  "bytes": 1073741997,
+  "rate_limit_kib_per_second": 10240,
+  "phases": [
+    {
+      "phase": "upload-pause",
+      "pid": 68090,
+      "bytes": 1073741997,
+      "confirmedBytes": 541065216,
+      "elapsedSeconds": 59.634827417,
+      "baselineRSSBytes": 46104576,
+      "peakRSSBytes": 67665920,
+      "sha256": "fdf61503926da9ee3a2d8ca59e1a8b3a798abef83ac8467ed381114cfa554c3c"
+    },
+    {
+      "phase": "upload-resume",
+      "pid": 68202,
+      "bytes": 1073741997,
+      "confirmedBytes": 1073741997,
+      "elapsedSeconds": 62.108174,
+      "baselineRSSBytes": 46055424,
+      "peakRSSBytes": 71139328,
+      "sha256": "fdf61503926da9ee3a2d8ca59e1a8b3a798abef83ac8467ed381114cfa554c3c"
+    },
+    {
+      "phase": "download-pause",
+      "pid": 68291,
+      "bytes": 1073741997,
+      "confirmedBytes": 541065216,
+      "elapsedSeconds": 52.3020625,
+      "baselineRSSBytes": 46153728,
+      "peakRSSBytes": 86638592,
+      "sha256": "fdf61503926da9ee3a2d8ca59e1a8b3a798abef83ac8467ed381114cfa554c3c"
+    },
+    {
+      "phase": "download-resume",
+      "pid": 68433,
+      "bytes": 1073741997,
+      "confirmedBytes": 1073741997,
+      "elapsedSeconds": 53.262682208,
+      "baselineRSSBytes": 46055424,
+      "peakRSSBytes": 80855040,
+      "sha256": "fdf61503926da9ee3a2d8ca59e1a8b3a798abef83ac8467ed381114cfa554c3c"
+    }
+  ],
+  "download_requests": [
+    {
+      "phase": "download-pause",
+      "range": "bytes=0-",
+      "if_range": "",
+      "status": 206,
+      "written_bytes": 541605888
+    },
+    {
+      "phase": "download-resume",
+      "range": "bytes=541065216-",
+      "if_range": "\"sha256-fdf61503926da9ee3a2d8ca59e1a8b3a798abef83ac8467ed381114cfa554c3c\"",
+      "status": 206,
+      "written_bytes": 532676781
+    }
+  ]
+}

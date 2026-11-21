@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -48,12 +49,56 @@ func TestMacOSNativeUIFixture(t *testing.T) {
 		rateSetting(t, f, "download_speed_limit_kbps", "10240")
 	}
 	slow := os.Getenv("CLOUDNEST_NATIVE_UI_SLOW_TRANSFERS") == "1"
+	var traceMu sync.Mutex
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/download") {
+			if _, err := os.Stat(filepath.Join(absolute, "trace-downloads")); err == nil {
+				observed := &nativeUIResponseWriter{ResponseWriter: w}
+				w = observed
+				defer func() {
+					traceMu.Lock()
+					defer traceMu.Unlock()
+					data, err := json.Marshal(map[string]any{"path": r.URL.Path, "range": r.Header.Get("Range"),
+						"if_range": r.Header.Get("If-Range"), "status": observed.status, "written_bytes": observed.written,
+						"etag": observed.Header().Get("ETag"), "utc": time.Now().UTC().Format(time.RFC3339Nano)})
+					if err != nil {
+						t.Error(err)
+						return
+					}
+					file, err := os.OpenFile(filepath.Join(absolute, "download-trace.jsonl"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+					if err != nil {
+						t.Error(err)
+						return
+					}
+					if _, err := file.Write(append(data, '\n')); err != nil {
+						t.Error(err)
+					}
+					if err := file.Close(); err != nil {
+						t.Error(err)
+					}
+				}()
+			}
+		}
 		if slow && r.URL.Path == "/api/files/upload/chunk" {
 			r.Body = nativeUIReadCloser{ReadCloser: r.Body, context: r.Context()}
 		}
 		if slow && strings.HasSuffix(r.URL.Path, "/download") {
 			w = &nativeUIWriter{ResponseWriter: w, context: r.Context()}
+		}
+		if strings.HasSuffix(r.URL.Path, "/download") && os.Remove(filepath.Join(absolute, "interrupt-next-download")) == nil {
+			writer := &nativeUIInterruptWriter{ResponseWriter: w, remaining: 5 << 20}
+			defer func() {
+				data, err := json.Marshal(map[string]any{"path": r.URL.Path, "range": r.Header.Get("Range"),
+					"if_range": r.Header.Get("If-Range"), "written_bytes": (5 << 20) - writer.remaining, "interrupted": writer.interrupted})
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				if err := os.WriteFile(filepath.Join(absolute, "interrupted-download.json"), data, 0600); err != nil {
+					t.Error(err)
+				}
+			}()
+			w = writer
 		}
 		f.router.ServeHTTP(w, r)
 	}))
@@ -88,6 +133,21 @@ func TestMacOSNativeUIFixture(t *testing.T) {
 		"origin": server.URL, "certificate": certificate, "username": user.Username,
 		"password": "disposable-fixture-password", "directory": absolute, "seed_file_id": seed.ID, "upload_source": source,
 		"version_file_id": versioned.ID,
+	}
+	if os.Getenv("CLOUDNEST_NATIVE_UI_PERMISSION_ADMIN") == "1" {
+		admin := model.Role{RoleName: "admin"}
+		if err := f.db.Where("role_name = ?", "admin").FirstOrCreate(&admin).Error; err != nil {
+			t.Fatal(err)
+		}
+		if err := f.db.Create(&model.UserRole{UserID: f.bobID, RoleID: admin.ID}).Error; err != nil {
+			t.Fatal(err)
+		}
+		var operator model.User
+		if err := f.db.First(&operator, f.bobID).Error; err != nil {
+			t.Fatal(err)
+		}
+		manifest["permission_admin_username"] = operator.Username
+		manifest["permission_user_id"] = user.ID
 	}
 	data, err := json.Marshal(manifest)
 	if err != nil {

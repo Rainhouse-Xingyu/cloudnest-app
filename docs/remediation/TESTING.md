@@ -607,6 +607,12 @@ G06 公开分享新增 HTTPS 提取码、下载上限和跨链接限流。11 项
 真实传输用例约 18.01s/18.23s，旧逐字节版本 602ea2e 为 168s/159s；两批场景数量不同，范围和剩余异常恢复/大文件/RSS/GUI 验收见 [G08 记录](G08-MACOS-FILES.md)。本机原生登录表单的密码遮蔽/清空及非 HTTPS 提示已通过实际 UI 操作确认。
 
 
+## 原生权限与真实网络中断
+
+手动夹具额外设置 CLOUDNEST_NATIVE_UI_PERMISSION_ADMIN=1、CLOUDNEST_NATIVE_UI_SLOW_TRANSFERS=1，在私有目录创建 trace-downloads 观察实际响应；interrupt-next-download 只让下一次下载正文在 5 MiB 后中断。真实管理 API 撤回/恢复和会话注销均使用合成账户。夹具/故障机制不进入生产服务。新测试 TestMacOSNativeUIInterruptsActualHTTP 验证真实 HTTP 206 的半截正文/UnexpectedEOF 和 ResponseController 透传，已接入默认 macOS 运行器；本地 wire/race 1.690s、完整 10+1 真实联调及新 Go 测试 78.015s 通过。最终 GUI 的改名/列表/下载/上传恢复权限变化、断流 Range/If-Range 继续和会话撤销均已验证，原始成功/环境失败及详细限制见 [报告](MACOS-PERMISSION-NETWORK.md)。620e4b1 精确 CI 已全通过，新批次单独核对。
+
+同一最新产品代码再次运行 opt-in 四进程 GiB 场景通过（包 249.240s），原报告 MACOS-LARGE-FILE-620E4B1-20261121.json 的 App/Core 指纹匹配 620e4b1 和当前产品文件。半程确认 541,065,216 字节、原 ETag/If-Range 恢复、未确认后缀截断、最终 1,073,741,997 字节全摘要与 <512 MiB 门槛均通过，最高阶段结束时进程高水位 82.625 MiB；方法/测量点见 [大文件记录](MACOS-LARGE-FILES.md)。
+
 ## 原生旧预览兼容专项
 
 `swift test --package-path cloudnest_macos --filter LegacyPreviewTests` 验证五种旧状态原始 journal/文件保留、不发送旧下载请求、相邻正常下载继续取消、路径组件/别名/未知符号链接，以及普通/历史版本新任务拒绝旧区域。初始 9 条失败和 scoped 书签遗漏的 3 条失败均保留。最终普通 Swift 42 项注册，实际 30 项/12 条件跳过（0.094s）；真实默认 10 项加受限 1 项通过（9 项跳过），Go 包 70.424s。最终独立应用在全新夹具验证 5 个历史 journal 和 11 个数据文件全部字节不变、新版 Quick Look 真实正文/回收与历史共存；应用、服务正常退出。协议、失败与最终源码指纹 JSON 见 [旧预览兼容](MACOS-LEGACY-PREVIEWS.md)。c6db8b9 基线 CI 已全通过，新批次单独核对。

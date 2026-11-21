@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "passed": false,
+  "stage": "expired-private-fixture login",
+  "observed_utc": "2026-11-21T22:30:42Z",
+  "target": "https://127.0.0.1:55645",
+  "ui_error": "\u65e0\u6cd5\u5b8c\u6210\u8fde\u63a5\u3002\u8bf7\u68c0\u67e5\u7f51\u7edc\u548c\u670d\u52a1\u5668\u8bc1\u4e66\u540e\u91cd\u8bd5\u3002",
+  "server_terminal_exit_code": 1,
+  "server_error": "native UI fixture expired; all services will stop",
+  "go_fixture_elapsed_seconds": 1200.49,
+  "port_listening_at_observation": false,
+  "permission_checks_executed": false,
+  "scope": "Temporary environment expiration; not a product permission failure. Fresh private fixture used for subsequent acceptance."
+}

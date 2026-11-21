@@ -1,0 +1,333 @@
+{
+  "version": 1,
+  "passed": true,
+  "verified_utc": "2026-11-21T22:45:53.501697+00:00",
+  "shipping_product_commit": "620e4b197c9b6f138a8c1f7ba9a90421bff18106",
+  "environment": "macOS 27.2.1 arm64; disposable Go/TLS/MySQL/Redis; synthetic admin grants through the shipping API; client session only in memory",
+  "binary_sha256": "a3e84f0c30666a39303f6982e784e815505f7ea96d9809404bfea9898b5474a7",
+  "gui_checks": {
+    "rename_after_revocation_forbidden_and_original_retained": true,
+    "rename_after_restore_succeeded": true,
+    "list_revocation_cleared_items_and_selection_and_disabled_download": true,
+    "list_restore_retry_reloaded_items": true,
+    "forbidden_download_retained_session_and_resumed_same_task": true,
+    "upload_resume_forbidden_kept_checkpoint_and_identity": true,
+    "upload_restore_completed_same_task": true,
+    "interrupted_download_showed_failure_and_resumed_same_task": true,
+    "logout_all_followed_by_refresh_returned_to_login_and_cleared_credentials": true,
+    "new_login_retained_three_completed_jobs": true
+  },
+  "permission_api_receipts": [
+    {
+      "action": "read_only",
+      "status": 200,
+      "permissions": [
+        {
+          "method": "GET",
+          "path": "/api/files"
+        },
+        {
+          "method": "GET",
+          "path": "/api/resource/health"
+        }
+      ],
+      "utc": "2026-11-21T22:33:31.439379+00:00"
+    },
+    {
+      "action": "restore",
+      "status": 200,
+      "permissions": [],
+      "utc": "2026-11-21T22:33:40.332152+00:00"
+    },
+    {
+      "action": "deny_list",
+      "status": 200,
+      "permissions": [
+        {
+          "method": "GET",
+          "path": "/api/resource/health"
+        }
+      ],
+      "utc": "2026-11-21T22:33:58.620094+00:00"
+    },
+    {
+      "action": "restore",
+      "status": 200,
+      "permissions": [],
+      "utc": "2026-11-21T22:34:06.199037+00:00"
+    },
+    {
+      "action": "read_only",
+      "status": 200,
+      "permissions": [
+        {
+          "method": "GET",
+          "path": "/api/files"
+        },
+        {
+          "method": "GET",
+          "path": "/api/resource/health"
+        }
+      ],
+      "utc": "2026-11-21T22:34:36.343447+00:00"
+    },
+    {
+      "action": "restore",
+      "status": 200,
+      "permissions": [],
+      "utc": "2026-11-21T22:34:51.088152+00:00"
+    },
+    {
+      "action": "resume_denied",
+      "status": 200,
+      "permissions": [
+        {
+          "method": "GET",
+          "path": "/api/files"
+        },
+        {
+          "method": "GET",
+          "path": "/api/resource/health"
+        },
+        {
+          "method": "GET",
+          "path": "/api/files/upload/progress"
+        },
+        {
+          "method": "POST",
+          "path": "/api/files/upload/pause"
+        }
+      ],
+      "utc": "2026-11-21T22:36:55.544388+00:00"
+    },
+    {
+      "action": "restore",
+      "status": 200,
+      "permissions": [],
+      "utc": "2026-11-21T22:37:06.720585+00:00"
+    },
+    {
+      "action": "revoke_sessions",
+      "status": 200,
+      "utc": "2026-11-21T22:40:33.352238+00:00"
+    }
+  ],
+  "permission_download": {
+    "denied": {
+      "id": "976EB9B6-BA40-4C05-B726-41F9FB4AC28E",
+      "direction": "download",
+      "name": "Permission recovered.txt",
+      "phase": "failed",
+      "confirmedBytes": 0,
+      "totalBytes": 78,
+      "epoch": 0,
+      "error": "\u5f53\u524d\u8d26\u6237\u6ca1\u6709\u6743\u9650\u6267\u884c\u6b64\u64cd\u4f5c\u3002"
+    },
+    "completed": {
+      "id": "976EB9B6-BA40-4C05-B726-41F9FB4AC28E",
+      "direction": "download",
+      "name": "Permission recovered.txt",
+      "phase": "completed",
+      "confirmedBytes": 78,
+      "totalBytes": 78,
+      "epoch": 0,
+      "etag": "\"sha256-da92a2dbbc61507ddcec740d14b019f98209a972ce40911d8d282e164a4f3811\"",
+      "sha256": "da92a2dbbc61507ddcec740d14b019f98209a972ce40911d8d282e164a4f3811",
+      "resultName": "Permission recovered.txt"
+    }
+  },
+  "permission_upload": {
+    "paused": {
+      "id": "53FC6044-E43C-46C1-8639-AE72DA92DC5B",
+      "direction": "upload",
+      "name": "Speed acceptance.bin",
+      "phase": "paused",
+      "confirmedBytes": 4194304,
+      "totalBytes": 9437357,
+      "uploadID": "init1_1_c9d35fbb8ea4e97e560d857921ce9af29297956e499c20b7c9c7e46bbe3ec195",
+      "epoch": 1
+    },
+    "denied": {
+      "id": "53FC6044-E43C-46C1-8639-AE72DA92DC5B",
+      "direction": "upload",
+      "name": "Speed acceptance.bin",
+      "phase": "failed",
+      "confirmedBytes": 4194304,
+      "totalBytes": 9437357,
+      "uploadID": "init1_1_c9d35fbb8ea4e97e560d857921ce9af29297956e499c20b7c9c7e46bbe3ec195",
+      "epoch": 1,
+      "error": "\u5f53\u524d\u8d26\u6237\u6ca1\u6709\u6743\u9650\u6267\u884c\u6b64\u64cd\u4f5c\u3002"
+    },
+    "completed": {
+      "id": "53FC6044-E43C-46C1-8639-AE72DA92DC5B",
+      "direction": "upload",
+      "name": "Speed acceptance.bin",
+      "phase": "completed",
+      "confirmedBytes": 9437357,
+      "totalBytes": 9437357,
+      "uploadID": "init1_1_c9d35fbb8ea4e97e560d857921ce9af29297956e499c20b7c9c7e46bbe3ec195",
+      "epoch": 2,
+      "resultFileID": 5
+    }
+  },
+  "network_download": {
+    "interrupted": {
+      "id": "CDBFB81D-5955-455D-A9FC-34FD22E4BEF0",
+      "direction": "download",
+      "name": "Network recovered.bin",
+      "phase": "failed",
+      "confirmedBytes": 4194304,
+      "totalBytes": 9437357,
+      "epoch": 0,
+      "etag": "\"sha256-3ff9e8cc78a48729be846a5417e5b7989aab01a4c82bf29248c11cf9cf1ec117\"",
+      "sha256": "3ff9e8cc78a48729be846a5417e5b7989aab01a4c82bf29248c11cf9cf1ec117",
+      "error": "\u4f20\u8f93\u672a\u5b8c\u6210\uff0c\u8bf7\u68c0\u67e5\u7f51\u7edc\u3001\u78c1\u76d8\u7a7a\u95f4\u548c\u6587\u4ef6\u8bbf\u95ee\u6743\u9650\u540e\u91cd\u8bd5\u3002"
+    },
+    "completed": {
+      "id": "CDBFB81D-5955-455D-A9FC-34FD22E4BEF0",
+      "direction": "download",
+      "name": "Network recovered.bin",
+      "phase": "completed",
+      "confirmedBytes": 9437357,
+      "totalBytes": 9437357,
+      "epoch": 0,
+      "etag": "\"sha256-3ff9e8cc78a48729be846a5417e5b7989aab01a4c82bf29248c11cf9cf1ec117\"",
+      "sha256": "3ff9e8cc78a48729be846a5417e5b7989aab01a4c82bf29248c11cf9cf1ec117",
+      "resultName": "Network recovered.bin"
+    },
+    "fault_receipt": {
+      "if_range": "",
+      "interrupted": true,
+      "path": "/api/files/5/download",
+      "range": "bytes=0-",
+      "written_bytes": 5242880
+    },
+    "actual_server_responses": [
+      {
+        "etag": "",
+        "if_range": "",
+        "path": "/api/files/1/download",
+        "range": "bytes=0-",
+        "status": 403,
+        "utc": "2026-11-21T22:34:40.306276Z",
+        "written_bytes": 29
+      },
+      {
+        "etag": "\"sha256-da92a2dbbc61507ddcec740d14b019f98209a972ce40911d8d282e164a4f3811\"",
+        "if_range": "",
+        "path": "/api/files/1/download",
+        "range": "bytes=0-",
+        "status": 206,
+        "utc": "2026-11-21T22:35:02.309322Z",
+        "written_bytes": 78
+      },
+      {
+        "etag": "\"sha256-3ff9e8cc78a48729be846a5417e5b7989aab01a4c82bf29248c11cf9cf1ec117\"",
+        "if_range": "",
+        "path": "/api/files/5/download",
+        "range": "bytes=0-",
+        "status": 206,
+        "utc": "2026-11-21T22:39:07.860532Z",
+        "written_bytes": 5242880
+      },
+      {
+        "etag": "\"sha256-3ff9e8cc78a48729be846a5417e5b7989aab01a4c82bf29248c11cf9cf1ec117\"",
+        "if_range": "\"sha256-3ff9e8cc78a48729be846a5417e5b7989aab01a4c82bf29248c11cf9cf1ec117\"",
+        "path": "/api/files/5/download",
+        "range": "bytes=4194304-",
+        "status": 206,
+        "utc": "2026-11-21T22:39:50.360373Z",
+        "written_bytes": 5243053
+      }
+    ]
+  },
+  "files": {
+    "Permission recovered.txt": {
+      "bytes": 78,
+      "sha256": "da92a2dbbc61507ddcec740d14b019f98209a972ce40911d8d282e164a4f3811"
+    },
+    "Speed acceptance.bin": {
+      "bytes": 9437357,
+      "sha256": "3ff9e8cc78a48729be846a5417e5b7989aab01a4c82bf29248c11cf9cf1ec117"
+    },
+    "Network recovered.bin": {
+      "bytes": 9437357,
+      "sha256": "3ff9e8cc78a48729be846a5417e5b7989aab01a4c82bf29248c11cf9cf1ec117"
+    }
+  },
+  "final_remote_files": [
+    {
+      "id": 2,
+      "filename": "Fixture folder",
+      "parent_id": 0,
+      "size": 0,
+      "is_folder": 1,
+      "current_version": 1
+    },
+    {
+      "id": 1,
+      "filename": "Permission renamed.txt",
+      "parent_id": 0,
+      "size": 78,
+      "is_folder": 0,
+      "current_version": 1
+    },
+    {
+      "id": 4,
+      "filename": "Source for Version history.txt",
+      "parent_id": 0,
+      "size": 28,
+      "is_folder": 0,
+      "current_version": 1
+    },
+    {
+      "id": 5,
+      "filename": "Speed acceptance.bin",
+      "parent_id": 0,
+      "size": 9437357,
+      "is_folder": 0,
+      "current_version": 1
+    },
+    {
+      "id": 3,
+      "filename": "Version history.txt",
+      "parent_id": 0,
+      "size": 28,
+      "is_folder": 0,
+      "current_version": 2
+    }
+  ],
+  "final_journal_count": 3,
+  "no_remaining_part_files": true,
+  "native_process_exited": true,
+  "client_source_sha256": {
+    "App/CloudNestApp.swift": "dbcbe3f68baf2efa48b4f8a2717c9320b380123a5f81b1ca22e3b88a76a119a0",
+    "App/FileBrowserCommands.swift": "1744b820661ef09fa3836c67397d2975133a4982444807012c12c5112731d4e8",
+    "App/FileBrowserView.swift": "4f946fbffb7d08c5cd8642cd500d0cee6dfc73933e97c99d5040f26b0aca3e11",
+    "App/FileDestinationSheet.swift": "e687c0269882fd072479942c7a73c96790796ffdcaa6a176657b59c669b51a7d",
+    "App/FileVersionsSheet.swift": "17fe6e46888249269a57f5172de163e8aeb6a7a56b6ecb188c5608f39099920a",
+    "App/TransferListView.swift": "a8e26aa331492e166bea32e406507aa5daa2420cf651c7074d50d718712b6181",
+    "Core/DownloadPlan.swift": "641b33f9f36001a67bcb3ed583c2ff3e61b40ac2683d10fafdaa70c6b24965b1",
+    "Core/DownloadStream.swift": "a4878ddee1749ae049ca898fac22175dae907ada9b859e961afbe801ad897a15",
+    "Core/FileAPI.swift": "e80f37d57c9420b91ff4d27b2be03b2eeb6b46b0935eae8ce1ef208fcdee34b9",
+    "Core/FileBrowserState.swift": "312b325d054c4b34aa867320570321a010c17359b6bf5413c51253cd767c3380",
+    "Core/FileVersions.swift": "1b009b2cd68dd555325b667186b757b5307dad6a355fd27ebc955da2474b7483",
+    "Core/LegacyPreviewDirectory.swift": "05b9022f6f528de4bff5c4f9c236518b25271537b5794409384d9e5c0329f608",
+    "Core/PreviewCache.swift": "24e5560809afd2d6065a9994d5355c0c36f62128e2a4a256b29c2bdd2c808904",
+    "Core/ServerAPI.swift": "8335d406f5d48203e2f6734360d68973069098e674716db912a950b38a6ae854",
+    "Core/SessionState.swift": "d86d254fbc18c17e6b8dd601ab501f29be47e9b16bd9125acc514a5706e4a0ef",
+    "Core/SessionVault.swift": "8aaeafe193e99da59b8a5298fe8d2fa5052c21e8fef67e182927be438d8d7495",
+    "Core/TransferAPI.swift": "757fa9919a3cc5d66d20b380d2470165acc2af63cffac5da3811ec298cf4625b",
+    "Core/TransferDisk.swift": "51ca36fc080604b9a6ece8d0b1302e56904984691c9caa22ee77cdd432ceae84",
+    "Core/TransferManager.swift": "2b63f616cd56cdfd3fe1bb17a31d388fd4831322208627450284e9c95f0c242a",
+    "Core/TransferRecord.swift": "f0f8c20631dd0ef4516d84bdd541961614c0a6f4450c84454b3333fccbd1b71e",
+    "Core/TransferStore.swift": "66cae8a28ba323c0a90e67eec549356c70c88b843fa9bb352ba0f30c4567e17f",
+    "Core/TransferTelemetry.swift": "95eb7bba18223c173ceeead47cc025fb1fc34617985ab3d80db8ce89d9011345"
+  },
+  "fixture_source_sha256": {
+    "cloudnest_go/integration/macos_ui_test.go": "ca63dc1b91bc2239be77985cddcaac149096883928bf0289597190ea6ba03902",
+    "cloudnest_go/integration/macos_ui_faults_test.go": "9cb7ae6c930c983b997b3eee47f104486afff8e49fb37469de54413909c269c2",
+    "scripts/test-macos-backend.py": "203aa2c2fe41549ff77953f7f6a0586c6e0d5c3d2122e24dc1414d1f4771446b"
+  },
+  "limits": "Per-request path grants and explicit retries; response interruption uses the real router and test-only write failure. Logout-all checked after transfers completed. Does not prove abrupt power-loss durability, revocation of an already authorized active stream, cross-volume behavior or throughput."
+}

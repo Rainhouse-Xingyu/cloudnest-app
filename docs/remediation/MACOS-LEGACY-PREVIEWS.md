@@ -40,3 +40,5 @@ TransferManager 在修改旧中断状态前，先对下载书签做只读归类�
 普通测试运行 `swift test --package-path cloudnest_macos --filter LegacyPreviewTests`；真实套件仍用 `python3 scripts/test-macos-backend.py`。GUI 报告记录基线 c6db8b9 和实际 App/Core 源码 SHA-256，因为本批测试时工作树尚未提交；不能仅用基线 SHA 声称包含新修复。
 
 基线 c6db8b9 的原生 CI 44898806151、后端 CI 44898806139 已全通过。本批源码的精确新 CI 在发布后单独核对，不借用基线结果。G08 权限变化/中断 GUI、文字缩放/多显示器、断电/多卷，以及 G09–G11/TIME-001 等继续开放；整个 Goal 不因本子项完成。
+
+发布后已核实产品提交 620e4b1 的[原生 44900586921](https://github.com/Rainhouse-Xingyu/cloudnest-app/actions/runs/44900586921)、[后端 44900586925](https://github.com/Rainhouse-Xingyu/cloudnest-app/actions/runs/44900586925)全部通过。双平台各实际 31 项基础/Keychain、10 项默认真实后端及受限 1 项，包含四项旧预览回归、非 UTC 时间、Universal Release/双架构/签名和 UI 入口。后端普通 474.461s、网络 98.597s、AI 59.427s，Agent/systemd、HEIF、Keychain、漏洞检查全通过；本机构建亦通过。本次后续权限/中断 GUI 不改这份产品 App/Core，具体证据另见 [报告](MACOS-PERMISSION-NETWORK.md)，其他稳定性工作仍开放。

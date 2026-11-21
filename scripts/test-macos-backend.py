@@ -128,7 +128,7 @@ GRANT ALL PRIVILEGES ON cloudnest_test.* TO 'cloudnest_test'@'127.0.0.1';
                     environment['CLOUDNEST_NATIVE_LARGE_FILE'] = '1'
                     if arguments.report:
                         environment['CLOUDNEST_NATIVE_LARGE_FILE_REPORT'] = str(arguments.report.resolve())
-                test = '^TestMacOSNativeLargeFile$' if arguments.large_file else ('^TestMacOSNativeUIFixture$' if ui_fixture else (arguments.test_filter or '^TestMacOSClientSession$'))
+                test = '^TestMacOSNativeLargeFile$' if arguments.large_file else ('^TestMacOSNativeUIFixture$' if ui_fixture else (arguments.test_filter or '^(TestMacOSClientSession|TestMacOSNativeUIInterruptsActualHTTP)$'))
                 timeout = '15m' if arguments.large_file else ('25m' if ui_fixture else '10m')
                 command = ['go', 'test', '-tags=integration', '-count=1', f'-timeout={timeout}', '-v',
                            './integration', '-run', test]
