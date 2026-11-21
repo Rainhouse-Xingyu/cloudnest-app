@@ -185,6 +185,10 @@ func TestMacOSClientSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var otherUser model.User
+	if err := f.db.First(&otherUser, f.bobID).Error; err != nil {
+		t.Fatal(err)
+	}
 	for _, tc := range []struct {
 		name       string
 		id         int64
@@ -214,6 +218,7 @@ func TestMacOSClientSession(t *testing.T) {
 				"CLOUDNEST_SWIFT_ORIGIN="+server.URL,
 				"CLOUDNEST_SWIFT_REDIRECT_ORIGIN="+redirectServer.URL,
 				"CLOUDNEST_SWIFT_USERNAME="+user.Username,
+				"CLOUDNEST_SWIFT_OTHER_USERNAME="+otherUser.Username,
 				"CLOUDNEST_SWIFT_PASSWORD=disposable-fixture-password",
 				"CLOUDNEST_SWIFT_CERTIFICATE="+certificatePath,
 				"CLOUDNEST_SWIFT_RESTRICTED="+tc.restricted,

@@ -14,6 +14,7 @@ final class FileBrowserState {
     var sortOrder = [KeyPathComparator(\FileItem.filename, comparator: .localizedStandard)]
     let recycleBin: Bool
     private let session: SessionState
+    private let identity: TransferIdentity?
 
     var parentID: Int64 { folders.last?.id ?? 0 }
     var title: String { recycleBin ? "回收站" : folders.last?.filename ?? "我的文件" }
@@ -24,6 +25,7 @@ final class FileBrowserState {
 
     init(session: SessionState, recycleBin: Bool) {
         self.session = session
+        identity = session.transferIdentity
         self.recycleBin = recycleBin
     }
 
@@ -56,6 +58,7 @@ final class FileBrowserState {
         busy = true
         error = nil
         do {
+            try checkIdentity()
             let result = try await session.trashFiles(ids: ids)
             busy = false
             await reload()
@@ -86,8 +89,10 @@ final class FileBrowserState {
         error = nil
         defer { busy = false }
         do {
+            try checkIdentity()
             let result = try await session.listFiles(parentID: next.last?.id ?? 0, recycleBin: recycleBin)
             try Task.checkCancellation()
+            try checkIdentity()
             let changedDirectory = folders.map(\.id) != next.map(\.id)
             folders = next
             items = result
@@ -112,6 +117,7 @@ final class FileBrowserState {
         busy = true
         error = nil
         do {
+            try checkIdentity()
             try await operation()
             busy = false
             await reload()
@@ -123,5 +129,9 @@ final class FileBrowserState {
 
     private func message(_ error: any Error) -> String {
         (error as? ServerError)?.localizedDescription ?? "无法完成文件操作，请检查连接后重试。"
+    }
+
+    private func checkIdentity() throws {
+        try session.requireTransferIdentity(identity)
     }
 }

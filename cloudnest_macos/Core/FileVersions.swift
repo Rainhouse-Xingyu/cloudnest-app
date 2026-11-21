@@ -182,7 +182,7 @@ final class FileVersionState {
         do {
             try checkIdentity()
             guard items.contains(version) else { throw ServerError.invalidOperation }
-            try await transfers.enqueueVersionDownload(file, version: version, destination: destination)
+            try await transfers.enqueueVersionDownload(file, version: version, destination: destination, expectedIdentity: identity)
             notice = "版本 \(version.version) 已加入下载队列。"
         } catch { self.error = message(error) }
     }
@@ -199,7 +199,7 @@ final class FileVersionState {
         defer { busy = false }
         do {
             try checkIdentity()
-            let id = try await transfers.enqueueVersionUpload(source, file: file, baseVersion: expectedCurrentVersion, comment: comment)
+            let id = try await transfers.enqueueVersionUpload(source, file: file, baseVersion: expectedCurrentVersion, comment: comment, expectedIdentity: identity)
             try checkIdentity()
             notice = "新版本已加入传输队列，可在侧栏“传输”中暂停、继续或取消。"
             return id
@@ -250,7 +250,7 @@ final class FileVersionState {
     }
 
     private func checkIdentity() throws {
-        guard identity != nil, session.transferIdentity == identity else { throw ServerError.unauthorized }
+        try session.requireTransferIdentity(identity)
     }
 
     private func message(_ error: any Error) -> String {

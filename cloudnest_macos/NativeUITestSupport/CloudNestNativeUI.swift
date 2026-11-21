@@ -46,6 +46,7 @@ private final class NativeUITLSPolicy: NSObject, URLSessionTaskDelegate, @unchec
 struct CloudNestNativeUI: App {
     @State private var session: SessionState
     @State private var transfers: TransferManager
+    @State private var acceptanceColorScheme: ColorScheme?
 
     init() {
         do {
@@ -71,6 +72,7 @@ struct CloudNestNativeUI: App {
     var body: some Scene {
         WindowGroup("CloudNest Native UI", id: "workspace") {
             WorkspaceWindow(session: session, transfers: transfers)
+                .preferredColorScheme(acceptanceColorScheme)
                 .frame(minWidth: 640, minHeight: 440)
                 .task { await session.restore(); await transfers.restore() }
         }
@@ -78,6 +80,13 @@ struct CloudNestNativeUI: App {
         .onChange(of: session.transferIdentity) { Task { await transfers.synchronizeIdentity() } }
         .commands {
             FileBrowserCommands()
+            // Exercise the shipping views in both environments without changing
+            // the user's system appearance. This menu is outside the app target.
+            CommandMenu("验收外观") {
+                Button("跟随系统") { acceptanceColorScheme = nil }
+                Button("浅色") { acceptanceColorScheme = .light }
+                Button("深色") { acceptanceColorScheme = .dark }
+            }
             CommandMenu("服务器") {
                 Button("刷新连接状态") { Task { await session.refresh() } }
                 Button("退出登录") { Task { await session.signOut() } }

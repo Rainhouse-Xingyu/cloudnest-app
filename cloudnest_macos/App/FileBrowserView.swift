@@ -53,9 +53,10 @@ struct FileBrowserView: View {
                 }
             }
             .dropDestination(for: URL.self) { urls, _ in
-                guard !browser.recycleBin, !urls.isEmpty, urls.allSatisfy(\.isFileURL) else { return false }
+                guard !browser.recycleBin, !urls.isEmpty, urls.allSatisfy(\.isFileURL),
+                      let identity = session.transferIdentity else { return false }
                 let parentID = browser.parentID
-                Task { await queueUploads(urls, parentID: parentID) }
+                Task { await queueUploads(urls, parentID: parentID, identity: identity) }
                 return true
             }
             .onDeleteCommand {
@@ -202,6 +203,7 @@ struct FileBrowserView: View {
     }
 
     private func preparePreview(_ item: FileItem) {
+        guard let identity = session.transferIdentity else { return }
         let generation = UUID()
         previewGeneration = generation
         let previous = previewRequest
@@ -211,7 +213,7 @@ struct FileBrowserView: View {
         Task {
             if let previous { await transfers.dismissPreview(previous) }
             do {
-                let id = try await transfers.enqueuePreview(item)
+                let id = try await transfers.enqueuePreview(item, expectedIdentity: identity)
                 if generation == previewGeneration { previewRequest = id }
                 else { await transfers.dismissPreview(id) }
             } catch { transfers.report(error) }
@@ -256,6 +258,7 @@ struct FileBrowserView: View {
     }
 
     private func chooseUploads() {
+        guard let identity = session.transferIdentity else { return }
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
@@ -264,19 +267,22 @@ struct FileBrowserView: View {
         panel.begin { response in
             guard response == .OK else { return }
             let urls = panel.urls
-            Task { await queueUploads(urls, parentID: parentID) }
+            Task { await queueUploads(urls, parentID: parentID, identity: identity) }
         }
     }
 
-    private func queueUploads(_ urls: [URL], parentID: Int64) async {
+    private func queueUploads(_ urls: [URL], parentID: Int64, identity: TransferIdentity) async {
         for url in urls {
-            do { try await transfers.enqueueUpload(url, parentID: parentID) }
-            catch { transfers.report(error) }
+            do { try await transfers.enqueueUpload(url, parentID: parentID, expectedIdentity: identity) }
+            catch {
+                transfers.report(error)
+                if session.transferIdentity != identity { return }
+            }
         }
     }
 
     private func chooseDownloads(_ items: [FileItem]) {
-        guard !items.isEmpty else { return }
+        guard !items.isEmpty, let identity = session.transferIdentity else { return }
         if items.count == 1, let item = items.first {
             let panel = NSSavePanel()
             panel.nameFieldStringValue = item.isDirectory ? "\(item.filename).zip" : item.filename
@@ -284,7 +290,7 @@ struct FileBrowserView: View {
             panel.begin { response in
                 guard response == .OK, let url = panel.url else { return }
                 Task {
-                    do { try await transfers.enqueueDownload(item, destination: url) }
+                    do { try await transfers.enqueueDownload(item, destination: url, expectedIdentity: identity) }
                     catch { transfers.report(error) }
                 }
             }
@@ -303,8 +309,11 @@ struct FileBrowserView: View {
                             continue
                         }
                         let name = item.isDirectory ? "\(item.filename).zip" : item.filename
-                        do { try await transfers.enqueueDownload(item, destination: directory.appending(path: name)) }
-                        catch { transfers.report(error) }
+                        do { try await transfers.enqueueDownload(item, destination: directory.appending(path: name), expectedIdentity: identity) }
+                        catch {
+                            transfers.report(error)
+                            if session.transferIdentity != identity { return }
+                        }
                     }
                 }
             }

@@ -605,3 +605,8 @@ G06 公开分享新增 HTTPS 提取码、下载上限和跨链接限流。11 项
 提交 a892b1c 的 macOS CI 44647503610 在 macOS 26.7.2 / Xcode 26.6 和 macOS 27.0.1 / Xcode 27.1 均通过基础 Swift 回归、真实 HTTPS Go/MySQL/Redis 联调、Universal Release 与签名/双架构检查。新增覆盖分片摘要与源变化、下载身份与前缀篡改、检查点锁/恢复、发布重试与同名保留、未确认 Data 块取消、真实上传/下载暂停与队列重建、未确认后缀截断、预览准备、目录 ZIP、空文件、取消，以及移动/复制自动重名和跨用户拒绝。
 
 真实传输用例约 18.01s/18.23s，旧逐字节版本 602ea2e 为 168s/159s；两批场景数量不同，范围和剩余异常恢复/大文件/RSS/GUI 验收见 [G08 记录](G08-MACOS-FILES.md)。本机原生登录表单的密码遮蔽/清空及非 HTTPS 提示已通过实际 UI 操作确认。
+
+
+## 原生操作身份专项
+
+`swift test --package-path cloudnest_macos --filter TransferIntentTests` 运行可控响应/队列回归，覆盖旧选择、迟到 200/401、同账户新登录与关闭旧工作任务。新双账户联调由 `python3 scripts/test-macos-backend.py` 的默认真实 suite 执行；可用 `CLOUDNEST_SWIFT_TEST_FILTER=realBackendTransferIntentStaysWithItsAccount` 定向运行，仍需独立本机 MySQL/Redis 依赖。受限账户按条件跳过该写用例，不把跳过计为执行通过。详见 [身份协议与本批结果](MACOS-OPERATION-IDENTITY.md)。

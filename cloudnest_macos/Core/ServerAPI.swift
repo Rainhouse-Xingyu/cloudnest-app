@@ -27,7 +27,7 @@ struct ServerOrigin: Equatable, Sendable {
 
 enum ServerError: LocalizedError, Equatable {
     case invalidAddress, invalidResponse, signInRejected, unauthorized, forbidden, rateLimited, unavailable
-    case invalidOperation, notFound, conflict, capacityExceeded
+    case invalidOperation, notFound, conflict, capacityExceeded, sessionChanged
 
     var errorDescription: String? {
         switch self {
@@ -35,6 +35,7 @@ enum ServerError: LocalizedError, Equatable {
         case .invalidResponse: "服务器返回了无法识别的响应。"
         case .signInRejected: "用户名或密码有误。"
         case .unauthorized: "会话已失效，请重新登录。"
+        case .sessionChanged: "账户或服务器已切换，请重新选择文件或操作。"
         case .forbidden: "当前账户没有权限执行此操作。"
         case .rateLimited: "请求过于频繁，请稍后再试。"
         case .invalidOperation: "操作参数无效，请检查名称及目标目录。"

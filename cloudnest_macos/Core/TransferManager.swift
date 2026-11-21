@@ -20,6 +20,11 @@ final class TransferManager {
     private var generations: [UUID: UUID] = [:]
     private var telemetry: [UUID: TransferTelemetry] = [:]
     private var controls: Set<UUID> = []
+    private var controlWaiters: [CheckedContinuation<Void, Never>] = []
+    private var closeWaiters: [CheckedContinuation<Void, Never>] = []
+    private var admissions = 0
+    private var admissionWaiters: [CheckedContinuation<Void, Never>] = []
+    private var schedulerWaiters: [CheckedContinuation<Void, Never>] = []
     private var scheduling = false
     private var restoration: Task<Void, Never>?
 
@@ -41,7 +46,7 @@ final class TransferManager {
     }
 
     func restore() async {
-        guard !restored else { return }
+        guard !closing, !restored else { return }
         if let restoration { await restoration.value; return }
         let task = Task { await self.loadStore() }
         restoration = task
@@ -73,13 +78,18 @@ final class TransferManager {
     }
 
     @discardableResult
-    func enqueueUpload(_ url: URL, parentID: Int64) async throws -> UUID {
-        try await ensureStore()
+    func enqueueUpload(_ url: URL, parentID: Int64, expectedIdentity: TransferIdentity? = nil) async throws -> UUID {
+        try beginAdmission()
+        defer { finishAdmission() }
         let context = try session.transferContext()
+        try requireIdentity(context.identity, expected: expectedIdentity)
+        try await ensureStore()
+        try requireIdentity(context.identity, expected: expectedIdentity)
         error = nil
         let name = url.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, parentID >= 0 else { throw ServerError.invalidOperation }
         let bookmark = try await disk.bookmark(url)
+        try requireIdentity(context.identity, expected: expectedIdentity)
         let job = TransferRecord(id: UUID(), createdAt: Date(), identity: context.identity, direction: .upload,
                                  name: name, bookmark: bookmark, parentID: parentID, fileID: nil,
                                  isArchive: false, totalBytes: 0)
@@ -89,13 +99,18 @@ final class TransferManager {
     }
 
     @discardableResult
-    func enqueueDownload(_ file: FileItem, destination: URL) async throws -> UUID {
-        try await ensureStore()
+    func enqueueDownload(_ file: FileItem, destination: URL, expectedIdentity: TransferIdentity? = nil) async throws -> UUID {
+        try beginAdmission()
+        defer { finishAdmission() }
         let context = try session.transferContext()
+        try requireIdentity(context.identity, expected: expectedIdentity)
+        try await ensureStore()
+        try requireIdentity(context.identity, expected: expectedIdentity)
         error = nil
         let name = destination.lastPathComponent
         guard !name.isEmpty, name != ".", name != "..", file.id > 0 else { throw ServerError.invalidOperation }
         let bookmark = try await disk.bookmark(destination.deletingLastPathComponent())
+        try requireIdentity(context.identity, expected: expectedIdentity)
         let job = TransferRecord(id: UUID(), createdAt: Date(), identity: context.identity, direction: .download,
                                  name: name, bookmark: bookmark, parentID: 0, fileID: file.id,
                                  isArchive: file.isDirectory, totalBytes: file.isDirectory ? 0 : file.size)
@@ -105,14 +120,19 @@ final class TransferManager {
     }
 
     @discardableResult
-    func enqueueVersionUpload(_ url: URL, file: FileItem, baseVersion: Int, comment: String) async throws -> UUID {
-        try await ensureStore()
+    func enqueueVersionUpload(_ url: URL, file: FileItem, baseVersion: Int, comment: String, expectedIdentity: TransferIdentity? = nil) async throws -> UUID {
+        try beginAdmission()
+        defer { finishAdmission() }
         let context = try session.transferContext()
+        try requireIdentity(context.identity, expected: expectedIdentity)
+        try await ensureStore()
+        try requireIdentity(context.identity, expected: expectedIdentity)
         guard !file.isDirectory, file.id > 0, baseVersion > 0, baseVersion < 2147483647,
               comment.unicodeScalars.count <= 255, !comment.contains("\0") else { throw ServerError.invalidOperation }
         let name = url.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { throw ServerError.invalidOperation }
         let bookmark = try await disk.bookmark(url)
+        try requireIdentity(context.identity, expected: expectedIdentity)
         var job = TransferRecord(id: UUID(), createdAt: Date(), identity: context.identity, direction: .versionUpload,
             name: name, bookmark: bookmark, parentID: 0, fileID: file.id, isArchive: false, totalBytes: 0)
         job.baseVersion = baseVersion
@@ -125,15 +145,20 @@ final class TransferManager {
     }
 
     @discardableResult
-    func enqueueVersionDownload(_ file: FileItem, version: FileVersionItem, destination: URL) async throws -> UUID {
-        try await ensureStore()
+    func enqueueVersionDownload(_ file: FileItem, version: FileVersionItem, destination: URL, expectedIdentity: TransferIdentity? = nil) async throws -> UUID {
+        try beginAdmission()
+        defer { finishAdmission() }
         let context = try session.transferContext()
+        try requireIdentity(context.identity, expected: expectedIdentity)
+        try await ensureStore()
+        try requireIdentity(context.identity, expected: expectedIdentity)
         error = nil
         guard !file.isDirectory, file.id > 0, version.id > 0, version.version > 0,
               version.size.map({ $0 >= 0 }) ?? true else { throw ServerError.invalidOperation }
         let name = destination.lastPathComponent
         guard !name.isEmpty, name != ".", name != ".." else { throw ServerError.invalidOperation }
         let bookmark = try await disk.bookmark(destination.deletingLastPathComponent())
+        try requireIdentity(context.identity, expected: expectedIdentity)
         var job = TransferRecord(id: UUID(), createdAt: Date(), identity: context.identity, direction: .versionDownload,
                                  name: name, bookmark: bookmark, parentID: 0, fileID: file.id,
                                  isArchive: false, totalBytes: version.size ?? 0)
@@ -144,9 +169,13 @@ final class TransferManager {
         return job.id
     }
 
-    func enqueuePreview(_ file: FileItem) async throws -> UUID {
-        try await ensureStore()
+    func enqueuePreview(_ file: FileItem, expectedIdentity: TransferIdentity? = nil) async throws -> UUID {
+        try beginAdmission()
+        defer { finishAdmission() }
         let context = try session.transferContext()
+        try requireIdentity(context.identity, expected: expectedIdentity)
+        try await ensureStore()
+        try requireIdentity(context.identity, expected: expectedIdentity)
         guard file.id > 0, !file.isDirectory, !file.filename.isEmpty, file.filename != ".", file.filename != "..",
               URL(fileURLWithPath: file.filename).lastPathComponent == file.filename else { throw ServerError.invalidResponse }
         for id in Array(abandonedPreviews) { await dismissPreview(id) }
@@ -158,7 +187,7 @@ final class TransferManager {
             var job = TransferRecord(id: id, createdAt: Date(), identity: context.identity, direction: .download,
                                      name: file.filename, bookmark: bookmark, parentID: 0, fileID: file.id,
                                      isArchive: false, totalBytes: file.size)
-            guard context.identity == session.transferIdentity else { throw ServerError.unauthorized }
+            try requireIdentity(context.identity, expected: expectedIdentity)
             job.previewID = id
             try await persist(job)
             await schedule()
@@ -201,9 +230,11 @@ final class TransferManager {
     }
 
     func resume(_ id: UUID) async {
-        guard var job = records[id], job.identity == session.transferIdentity,
+        guard !closing, var job = records[id], job.identity == session.transferIdentity,
               job.previewID == nil,
               active[id] == nil, !controls.contains(id), [.paused, .failed].contains(job.phase) else { return }
+        admissions += 1
+        defer { finishAdmission() }
         if job.cancelRequested { await cancel(id); return }
         job.phase = .queued
         job.error = nil
@@ -217,6 +248,9 @@ final class TransferManager {
     func cancel(_ id: UUID) async { await control(id, cancel: true) }
 
     func synchronizeIdentity() async {
+        guard !closing else { return }
+        admissions += 1
+        defer { finishAdmission() }
         for job in Array(records.values) where job.previewID != nil && job.identity != session.transferIdentity {
             await dismissPreview(job.id)
         }
@@ -237,11 +271,35 @@ final class TransferManager {
     }
 
     func close() async {
+        if closing {
+            await withCheckedContinuation { closeWaiters.append($0) }
+            return
+        }
         closing = true
-        defer { closing = false }
+        defer {
+            closing = false
+            let waiters = closeWaiters
+            closeWaiters.removeAll()
+            for waiter in waiters { waiter.resume() }
+        }
+        if let restoration { await restoration.value }
+        if admissions > 0 {
+            await withCheckedContinuation { admissionWaiters.append($0) }
+        }
+        if scheduling {
+            await withCheckedContinuation { schedulerWaiters.append($0) }
+        }
         for job in Array(records.values) where job.previewID != nil { await dismissPreview(job.id) }
         for dismissal in Array(previewDismissals.values) { await dismissal.value }
-        for id in Array(active.keys) { await pause(id) }
+        let ids = Array(active.keys)
+        for id in ids { active[id]?.cancel() }
+        for id in ids {
+            if records[id]?.identity == session.transferIdentity { await control(id, cancel: false, duringClose: true) }
+            await active[id]?.value
+        }
+        if !controls.isEmpty {
+            await withCheckedContinuation { controlWaiters.append($0) }
+        }
         store = nil
         restored = false
     }
@@ -255,6 +313,26 @@ final class TransferManager {
     }
 
     func report(_ error: any Error) { self.error = message(error) }
+
+    private func beginAdmission() throws {
+        guard !closing else { throw TransferError.localStorage }
+        admissions += 1
+    }
+
+    private func finishAdmission() {
+        admissions -= 1
+        if admissions == 0 {
+            let waiters = admissionWaiters
+            admissionWaiters.removeAll()
+            for waiter in waiters { waiter.resume() }
+        }
+    }
+
+    private func requireIdentity(_ identity: TransferIdentity, expected: TransferIdentity?) throws {
+        guard !closing else { throw TransferError.localStorage }
+        try session.requireTransferIdentity(identity)
+        guard expected == nil || expected == identity else { throw ServerError.sessionChanged }
+    }
 
     private func ensureStore() async throws {
         if !restored { await restore() }
@@ -291,13 +369,19 @@ final class TransferManager {
     private func schedule() async {
         guard restored, !scheduling, !closing else { return }
         scheduling = true
-        defer { scheduling = false }
+        defer {
+            scheduling = false
+            let waiters = schedulerWaiters
+            schedulerWaiters.removeAll()
+            for waiter in waiters { waiter.resume() }
+        }
         let pending = records.values.filter { $0.phase == .queued && $0.identity == session.transferIdentity }
             .sorted { $0.createdAt < $1.createdAt }
         for var job in pending where active.count < 2 {
             guard active[job.id] == nil else { continue }
             do {
                 let context = try session.transferContext()
+                guard context.identity == job.identity else { continue }
                 job.phase = .running
                 try await persist(job)
                 guard records[job.id]?.phase == .running, !controls.contains(job.id) else { continue }
@@ -320,7 +404,7 @@ final class TransferManager {
 
     private func run(_ id: UUID, context: TransferContext, generation: UUID) async {
         do {
-            guard let job = records[id] else { throw TransferError.invalidCheckpoint }
+            guard let job = records[id], job.identity == context.identity else { throw TransferError.invalidCheckpoint }
             switch job.direction {
             case .upload, .versionUpload: try await runUpload(job, context: context, generation: generation)
             case .download, .versionDownload: try await runDownload(job, context: context, generation: generation)
@@ -332,7 +416,7 @@ final class TransferManager {
                 records[id] = job
                 do { try await persist(job) } catch { self.error = message(error) }
             }
-            session.observeTransferFailure(error, identity: context.identity)
+            session.observeTransferFailure(error, context: context)
         }
         if generations[id] == generation { telemetry[id]?.stop() }
         await disk.closeDownload(id)
@@ -502,13 +586,21 @@ final class TransferManager {
         try await checkpoint(job, generation: generation)
     }
 
-    private func control(_ id: UUID, cancel: Bool) async {
-        guard var job = records[id], job.identity == session.transferIdentity,
+    private func control(_ id: UUID, cancel: Bool, duringClose: Bool = false) async {
+        guard (!closing || duringClose), var job = records[id], job.identity == session.transferIdentity,
               job.previewID == nil,
-              !controls.contains(id), job.phase != .completed, job.phase != .cancelled else { return }
+              !controls.contains(id), job.phase != .completed, job.phase != .cancelled,
+              let context = try? session.transferContext(), context.identity == job.identity else { return }
         controls.insert(id)
         telemetry[id]?.stop()
-        defer { controls.remove(id) }
+        defer {
+            controls.remove(id)
+            if controls.isEmpty {
+                let waiters = controlWaiters
+                controlWaiters.removeAll()
+                for waiter in waiters { waiter.resume() }
+            }
+        }
         job.phase = cancel ? .cancelling : .pausing
         job.cancelRequested = cancel
         job.error = nil
@@ -520,7 +612,6 @@ final class TransferManager {
         job.cancelRequested = cancel
         do {
             try await persist(job)
-            let context = try session.transferContext()
             if job.direction.isUpload, cancel, job.uploadID == nil, job.source != nil {
                 do {
                     let result = try await context.api.cancelUploadInitialization(context, requestID: job.id)
@@ -593,7 +684,7 @@ final class TransferManager {
             job.error = failureMessage(error, job: job)
             records[id] = job
             try? await persist(job)
-            session.observeTransferFailure(error, identity: job.identity)
+            session.observeTransferFailure(error, context: context)
         }
         await schedule()
     }

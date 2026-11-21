@@ -156,10 +156,15 @@ final class SessionState {
     private func withSession<T: Sendable>(_ operation: (ServerOrigin, String) async throws -> T) async throws -> T {
         guard let saved, let origin, account != nil else { throw ServerError.unauthorized }
         do {
-            return try await operation(origin, saved.token)
-        } catch ServerError.unauthorized {
-            invalidateSession()
-            throw ServerError.unauthorized
+            let result = try await operation(origin, saved.token)
+            guard self.saved == saved else { throw CancellationError() }
+            return result
+        } catch {
+            // A request from a logged-out session must never update or revoke
+            // the account that replaced it, including a new login to this user.
+            guard self.saved == saved else { throw CancellationError() }
+            if error as? ServerError == .unauthorized { invalidateSession() }
+            throw error
         }
     }
 
@@ -179,8 +184,14 @@ final class SessionState {
         return TransferContext(identity: identity, origin: origin, token: saved.token, api: api)
     }
 
-    func observeTransferFailure(_ error: any Error, identity: TransferIdentity) {
-        if error as? ServerError == .unauthorized && transferIdentity == identity { invalidateSession() }
+    func requireTransferIdentity(_ expected: TransferIdentity?) throws {
+        guard let expected, let current = transferIdentity else { throw ServerError.unauthorized }
+        guard expected == current else { throw ServerError.sessionChanged }
+    }
+
+    func observeTransferFailure(_ error: any Error, context: TransferContext) {
+        if error as? ServerError == .unauthorized, transferIdentity == context.identity,
+           saved?.token == context.token { invalidateSession() }
     }
 
     private func checkHealth(_ origin: ServerOrigin, token: String) async throws {
