@@ -1,6 +1,6 @@
 import Foundation
 
-struct TransferIdentity: Codable, Equatable, Sendable {
+struct TransferIdentity: Codable, Hashable, Sendable {
     let server: String
     let userID: Int64
 }

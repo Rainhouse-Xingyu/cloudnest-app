@@ -1,0 +1,141 @@
+{
+  "generated_utc": "2026-11-21T23:22:03.103638+00:00",
+  "passed": true,
+  "scope": "G09 AI initial native GUI, actual local model and disposable Go/MySQL/Redis; not whole G09 completion",
+  "origin": "https://127.0.0.1:65356",
+  "model": "qwen3-embedding:0.6b",
+  "model_digest": "ac6da0dfba84a81fdbfbaf330198c33cd77c4cdfc53e8bc50eb581914a15621d",
+  "native_observations": [
+    "Login to pinned disposable TLS origin",
+    "Natural-language query shows Project Atlas.md with original Chinese snippet and keyword/semantic sources; private similar document absent",
+    "Rebuild confirmed; queued notice and waiting state observed; later refresh shows current one-chunk index",
+    "Search result NSSavePanel download completed at 135 bytes in shared transfer list",
+    "Light and dark appearance observed through harness-only menu",
+    "640 x 492 point dark search and index layouts observed; snippet wraps, actions and footer visible",
+    "Normal Command-Q; app absent from inventory"
+  ],
+  "gui_rebuild_log_line": "2026/11/21 - 16:19:31 | 202 | POST /api/ai/index/rebuild",
+  "post_gui_cli_verification": {
+    "search_status": 200,
+    "search": {
+      "items": [
+        {
+          "chunk_ordinal": 0,
+          "create_time": "2026-11-21T23:17:49Z",
+          "description": "",
+          "extraction_kind": "text",
+          "file_type": "md",
+          "filename": "Project Atlas.md",
+          "has_ocr_index": false,
+          "has_text_index": true,
+          "id": 5,
+          "index_generation": 2,
+          "match_sources": [
+            "keyword",
+            "semantic"
+          ],
+          "ocr_snippet": "数据库迁移方案：MySQL 升级前先备份，并验证迁移后的数据一致性。迁移失败时回滚到已验证的备份。",
+          "parent_id": 0,
+          "score": 0.03278688524590164,
+          "semantic_score": 0.7523604730780934,
+          "size": 135,
+          "snippet": "数据库迁移方案：MySQL 升级前先备份，并验证迁移后的数据一致性。迁移失败时回滚到已验证的备份。",
+          "snippet_offset_basis": "extracted_text_runes",
+          "snippet_start_rune": 0,
+          "tags": "",
+          "update_time": "2026-11-21T23:17:49Z",
+          "user_id": 1,
+          "vision_digest": "",
+          "vision_model": ""
+        }
+      ],
+      "nl_plan": {
+        "query": {
+          "keyword": "MySQL 升级与数据迁移的执行计划",
+          "file_type": "",
+          "location": "",
+          "landmark": "",
+          "start_time": "",
+          "end_time": "",
+          "tag_only": false,
+          "page": 1,
+          "limit": 20
+        },
+        "source": "hybrid"
+      },
+      "pagination": {
+        "limit": 20,
+        "page": 1,
+        "total": 1
+      },
+      "retrieval": {
+        "mode": "hybrid",
+        "rerank": {
+          "status": "disabled",
+          "evaluated_count": 0,
+          "window_size": 20,
+          "window_limited": false
+        },
+        "warnings": [],
+        "window_limited": false,
+        "window_size": 200
+      }
+    },
+    "index_status": 200,
+    "rebuilt_item": {
+      "file_id": 5,
+      "filename": "Project Atlas.md",
+      "generation": 2,
+      "status": "done",
+      "attempts": 1,
+      "error_code": "",
+      "available_at": "2026-11-21T23:19:31.0654Z",
+      "updated_at": "2026-11-21T23:19:32.133979Z",
+      "source_current": true,
+      "indexed_current": true,
+      "chunk_count": 1,
+      "indexed_at": "2026-11-21T23:19:32.13212Z"
+    }
+  },
+  "download": {
+    "name": "Atlas GUI acceptance.md",
+    "bytes": 135,
+    "sha256": "75a9135c6ba7921daab37757b64c073393ee82ae54ea8acede514121ce40e4de",
+    "task_id": "EEB35B42-A52A-4ACC-A525-E6317B7FD1EC",
+    "phase": "completed"
+  },
+  "source_sha256": {
+    "cloudnest_macos/App/AISearchView.swift": "3907385f1ea29e4e4a13c828b41c60e13fa443e3f285b03c2a3f55b6acae2d6e",
+    "cloudnest_macos/App/CloudNestApp.swift": "23331de73a83f343470bab57addc788003eea02a74339fd0ab1dbf85b5d54942",
+    "cloudnest_macos/App/FileBrowserCommands.swift": "1744b820661ef09fa3836c67397d2975133a4982444807012c12c5112731d4e8",
+    "cloudnest_macos/App/FileBrowserView.swift": "4f946fbffb7d08c5cd8642cd500d0cee6dfc73933e97c99d5040f26b0aca3e11",
+    "cloudnest_macos/App/FileDestinationSheet.swift": "e687c0269882fd072479942c7a73c96790796ffdcaa6a176657b59c669b51a7d",
+    "cloudnest_macos/App/FileVersionsSheet.swift": "17fe6e46888249269a57f5172de163e8aeb6a7a56b6ecb188c5608f39099920a",
+    "cloudnest_macos/App/TransferListView.swift": "a8e26aa331492e166bea32e406507aa5daa2420cf651c7074d50d718712b6181",
+    "cloudnest_macos/Core/AISearchAPI.swift": "d37a7e8c21134d4f620cebbe09163817b57802ec04074d5eba3ac715ce487c6f",
+    "cloudnest_macos/Core/AISearchState.swift": "edc719bd4968668676683544871c160cc12354e629189a6c82023fc6bf860b87",
+    "cloudnest_macos/Core/DownloadPlan.swift": "641b33f9f36001a67bcb3ed583c2ff3e61b40ac2683d10fafdaa70c6b24965b1",
+    "cloudnest_macos/Core/DownloadStream.swift": "a4878ddee1749ae049ca898fac22175dae907ada9b859e961afbe801ad897a15",
+    "cloudnest_macos/Core/FileAPI.swift": "f65a045b2e59dba168d72487b16699a875753579a3968141fa739f214600e767",
+    "cloudnest_macos/Core/FileBrowserState.swift": "312b325d054c4b34aa867320570321a010c17359b6bf5413c51253cd767c3380",
+    "cloudnest_macos/Core/FileVersions.swift": "1b009b2cd68dd555325b667186b757b5307dad6a355fd27ebc955da2474b7483",
+    "cloudnest_macos/Core/LegacyPreviewDirectory.swift": "05b9022f6f528de4bff5c4f9c236518b25271537b5794409384d9e5c0329f608",
+    "cloudnest_macos/Core/PreviewCache.swift": "24e5560809afd2d6065a9994d5355c0c36f62128e2a4a256b29c2bdd2c808904",
+    "cloudnest_macos/Core/ServerAPI.swift": "b23f553f42f3fbd7ea4d91b1839621d25d13ee0d01fa619af8573e3d4ab320db",
+    "cloudnest_macos/Core/SessionState.swift": "dcbd3268aa446e1544285c71723baa90ced5d4cfd24adca3ba26f58946393a43",
+    "cloudnest_macos/Core/SessionVault.swift": "8aaeafe193e99da59b8a5298fe8d2fa5052c21e8fef67e182927be438d8d7495",
+    "cloudnest_macos/Core/TransferAPI.swift": "757fa9919a3cc5d66d20b380d2470165acc2af63cffac5da3811ec298cf4625b",
+    "cloudnest_macos/Core/TransferDisk.swift": "51ca36fc080604b9a6ece8d0b1302e56904984691c9caa22ee77cdd432ceae84",
+    "cloudnest_macos/Core/TransferManager.swift": "d2a1b943c518cc3fffe7208815da8b9299a1336668a91e9493a375e8255256ff",
+    "cloudnest_macos/Core/TransferRecord.swift": "5deba6f800be9fc2ff2428582f5908e1afbe6c227303661764f2ad1d8374f965",
+    "cloudnest_macos/Core/TransferStore.swift": "66cae8a28ba323c0a90e67eec549356c70c88b843fa9bb352ba0f30c4567e17f",
+    "cloudnest_macos/Core/TransferTelemetry.swift": "95eb7bba18223c173ceeead47cc025fb1fc34617985ab3d80db8ce89d9011345"
+  },
+  "binary_sha256": "99f2e5b57527784c88b9afea436f4fb7dbb4de751c96959551e04d702bfa60ec",
+  "limitations": [
+    "Single small synthetic corpus, not retrieval-quality benchmark",
+    "Initial AX row exposes action label but not standalone button or selectable snippet; follow-up required",
+    "Model outage and rapid-query/403 covered by separate core/API tests, not this GUI cohort",
+    "No FRP/collaboration/share/settings acceptance in this report"
+  ]
+}

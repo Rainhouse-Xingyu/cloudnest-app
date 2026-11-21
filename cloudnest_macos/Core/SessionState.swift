@@ -153,6 +153,24 @@ final class SessionState {
         }
     }
 
+    func searchAI(question: String, page: Int) async throws -> AISearchResponse {
+        try await withSession { origin, token in
+            try await api.searchAI(origin, token: token, question: question, page: page)
+        }
+    }
+
+    func indexAI(after: Int64) async throws -> AIIndexPage {
+        try await withSession { origin, token in
+            try await api.indexAI(origin, token: token, after: after)
+        }
+    }
+
+    func rebuildAI(_ item: AIIndexItem) async throws {
+        try await withSession { origin, token in
+            try await api.rebuildAI(origin, token: token, item: item)
+        }
+    }
+
     private func withSession<T: Sendable>(_ operation: (ServerOrigin, String) async throws -> T) async throws -> T {
         guard let saved, let origin, account != nil else { throw ServerError.unauthorized }
         do {

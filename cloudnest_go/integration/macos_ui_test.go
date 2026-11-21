@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"cloudenest_go/internal/app"
 	"cloudenest_go/model"
 )
 
@@ -44,6 +45,12 @@ func TestMacOSNativeUIFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	f := newFixture(t)
+	aiLive := os.Getenv("CLOUDNEST_NATIVE_UI_AI") == "1"
+	if aiLive {
+		f.cfg.AIOllamaBaseURL = "http://127.0.0.1:11434"
+		f.cfg.AIEmbeddingModel = "qwen3-embedding:0.6b"
+		f.router = fixtureRouter(app.NewContainer(f.cfg, f.db, f.rdb).NewRouter())
+	}
 	if os.Getenv("CLOUDNEST_NATIVE_UI_LARGE_FILE") == "1" {
 		rateSetting(t, f, "upload_speed_limit_kbps", "10240")
 		rateSetting(t, f, "download_speed_limit_kbps", "10240")
@@ -133,6 +140,28 @@ func TestMacOSNativeUIFixture(t *testing.T) {
 		"origin": server.URL, "certificate": certificate, "username": user.Username,
 		"password": "disposable-fixture-password", "directory": absolute, "seed_file_id": seed.ID, "upload_source": source,
 		"version_file_id": versioned.ID,
+	}
+	if aiLive {
+		content := "数据库迁移方案：MySQL 升级前先备份，并验证迁移后的数据一致性。迁移失败时回滚到已验证的备份。"
+		file := f.upload(t, f.alice, "Project Atlas.md", []byte(content))
+		f.upload(t, f.bob, "Private Atlas.md", []byte(content))
+		worker := textWorker(t, f, f.cfg.AIOllamaBaseURL)
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		for {
+			worked, err := worker.Step(ctx)
+			if err != nil {
+				t.Fatal("real UI model indexing required", err)
+			}
+			if !worked {
+				break
+			}
+		}
+		done := make(chan struct{})
+		go func() { defer close(done); worker.Run(ctx) }()
+		defer func() { cancel(); <-done }()
+		manifest["ai_file_id"] = file.ID
+		manifest["ai_model"] = f.cfg.AIEmbeddingModel
 	}
 	if os.Getenv("CLOUDNEST_NATIVE_UI_PERMISSION_ADMIN") == "1" {
 		admin := model.Role{RoleName: "admin"}

@@ -135,7 +135,8 @@ struct ServerAPI: Sendable {
                                       body: Data? = nil, method: String = "GET",
                                       query: [URLQueryItem] = [], maximumBytes: Int = 64 * 1024,
                                       headers: [String: String] = [:], contentType: String = "application/json",
-                                      transfer: Bool = false, telemetry: TransferTelemetry? = nil) async throws -> T {
+                                      transfer: Bool = false, telemetry: TransferTelemetry? = nil,
+                                      successStatus: Int = 200) async throws -> T {
         let url = origin.endpoint(path).appending(queryItems: query)
         var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
         req.httpMethod = method
@@ -153,7 +154,7 @@ struct ServerAPI: Sendable {
         let (bytes, response) = try await transport.bytes(for: req, delegate: delegate)
         defer { bytes.task.cancel() }
         guard let response = response as? HTTPURLResponse else { throw ServerError.invalidResponse }
-        try validateStatus(response.statusCode, login: path == "api/auth/login")
+        try validateStatus(response.statusCode, login: path == "api/auth/login", successStatus: successStatus)
         var data = Data()
         for try await byte in bytes {
             guard data.count < maximumBytes else { throw ServerError.invalidResponse }
@@ -189,9 +190,9 @@ struct ServerAPI: Sendable {
         }
     }
 
-    private func validateStatus(_ status: Int, login: Bool = false) throws {
+    private func validateStatus(_ status: Int, login: Bool = false, successStatus: Int = 200) throws {
+        if status == successStatus { return }
         switch status {
-        case 200: return
         case 400, 413, 422: throw ServerError.invalidOperation
         case 404: throw ServerError.notFound
         case 409, 412: throw ServerError.conflict

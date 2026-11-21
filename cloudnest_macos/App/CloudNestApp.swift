@@ -44,6 +44,7 @@ private enum Page: String, CaseIterable, Identifiable {
     case files = "我的文件"
     case recycleBin = "回收站"
     case transfers = "传输"
+    case ai = "AI 检索"
     case connection = "服务器连接"
     case account = "账户"
     var id: Self { self }
@@ -52,6 +53,7 @@ private enum Page: String, CaseIterable, Identifiable {
         case .files: "folder"
         case .recycleBin: "trash"
         case .transfers: "arrow.up.arrow.down"
+        case .ai: "sparkle.magnifyingglass"
         case .connection: "network"
         case .account: "person.crop.circle"
         }
@@ -87,6 +89,9 @@ struct WorkspaceWindow: View {
                             .id(session.account?.id)
                     case .transfers:
                         TransferListView(transfers: transfers)
+                    case .ai:
+                        AISearchView(session: session, transfers: transfers)
+                            .id(session.transferIdentity)
                     case .connection:
                         ConnectionDetails(session: session)
                     case .account:

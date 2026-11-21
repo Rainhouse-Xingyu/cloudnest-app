@@ -114,7 +114,7 @@ final class TransferManager {
     }
 
     @discardableResult
-    func enqueueDownload(_ file: FileItem, destination: URL, expectedIdentity: TransferIdentity? = nil) async throws -> UUID {
+    func enqueueDownload(_ file: some DownloadableFile, destination: URL, expectedIdentity: TransferIdentity? = nil) async throws -> UUID {
         try beginAdmission()
         defer { finishAdmission() }
         let context = try session.transferContext()

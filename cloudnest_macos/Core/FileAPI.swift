@@ -1,6 +1,13 @@
 import Foundation
 
-struct FileItem: Decodable, Identifiable, Equatable, Sendable {
+protocol DownloadableFile: Sendable {
+    var id: Int64 { get }
+    var filename: String { get }
+    var size: Int64 { get }
+    var isDirectory: Bool { get }
+}
+
+struct FileItem: Decodable, Identifiable, Equatable, DownloadableFile {
     let id: Int64
     let filename: String
     let parentID: Int64
