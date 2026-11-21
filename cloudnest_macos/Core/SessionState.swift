@@ -171,6 +171,26 @@ final class SessionState {
         }
     }
 
+    func frpDevices() async throws -> [FRPDevice] {
+        try await withSession { origin, token in try await api.frpDevices(origin, token: token) }
+    }
+
+    func frpMappings(deviceID: Int64) async throws -> [FRPMapping] {
+        try await withSession { origin, token in try await api.frpMappings(origin, token: token, deviceID: deviceID) }
+    }
+
+    func frpStatus(deviceID: Int64) async throws -> FRPStatus {
+        try await withSession { origin, token in try await api.frpStatus(origin, token: token, deviceID: deviceID) }
+    }
+
+    func frpConfigs(deviceID: Int64) async throws -> [FRPConfig] {
+        try await withSession { origin, token in try await api.frpConfigs(origin, token: token, deviceID: deviceID) }
+    }
+
+    func frpCommands(deviceID: Int64) async throws -> [FRPCommand] {
+        try await withSession { origin, token in try await api.frpCommands(origin, token: token, deviceID: deviceID) }
+    }
+
     private func withSession<T: Sendable>(_ operation: (ServerOrigin, String) async throws -> T) async throws -> T {
         guard let saved, let origin, account != nil else { throw ServerError.unauthorized }
         do {

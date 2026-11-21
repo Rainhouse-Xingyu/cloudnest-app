@@ -1,0 +1,70 @@
+{
+  "recorded_utc": "2026-11-21T23:46:48.283438+00:00",
+  "passed": false,
+  "scope": "Concurrent local acceptance failure; not attributed to a single root cause",
+  "host_memory_bytes": 8589934592,
+  "model": "qwen3-vl:4b",
+  "model_digest": "a1b29c246319cdcb1f3842f36d29f198f737c0cf516ba1bcba34b1b974e87980",
+  "ollama_version": "0.40.17",
+  "ollama_ps_observation": {
+    "resident_display": "4.8 GB",
+    "processor_display": "38%/62% CPU/GPU",
+    "context": 8192
+  },
+  "concurrent_work": [
+    "Real image indexing test",
+    "Native optimized harness compilation",
+    "Multiple disposable MySQL/Redis fixtures",
+    "Full Swift/Go transfer suite"
+  ],
+  "failures": [
+    {
+      "test": "TestAITextLiveImagesUsePixelsEXIFAndRealSemanticSearch",
+      "message": "actual image indexing true AI index processing failed: model_unavailable",
+      "test_seconds": 122.86,
+      "go_package_seconds": 123.499
+    },
+    {
+      "test": "TestMacOSClientSession",
+      "local_time": "2026-11-21 16:39:31 America/Phoenix",
+      "request": "POST /api/files/upload/complete",
+      "actual_status": 500,
+      "expected_status": 200,
+      "handler_seconds": 12.719264375,
+      "reason": "Response failure observed; internal root cause not established from this log"
+    }
+  ],
+  "memory_pages_16384_bytes": {
+    "while_loaded": {
+      "free": 4060,
+      "wired": 367046
+    },
+    "after_test_ended_and_own_model_unloaded": {
+      "free": 243565,
+      "wired": 130814
+    }
+  },
+  "inference": "Parallel resource contention remains a plausible contributor to the earlier HTTP 500, whose root cause is unconfirmed. The unchanged 4B image test also failed alone at the 120-second provider bound; concurrency alone does not explain the model failure.",
+  "follow_up": "Keep original gates/timeouts and failures, evaluate official qwen3-vl:2b separately with the same pixel/OCR/date/ACL assertions. Do not claim 4B acceptance.",
+  "serial_follow_up": {
+    "full_native_tls_go_mysql_redis": {
+      "passed": true,
+      "go_package_seconds": 77.449,
+      "default_actual_tests": 11,
+      "restricted_actual_tests": 2,
+      "frp_owner_actual_tests": 1,
+      "frp_restricted_actual_tests": 1
+    },
+    "release_universal_build_and_signature": {
+      "passed": true
+    },
+    "vision_model_test": {
+      "passed": false,
+      "message": "actual image indexing true AI index processing failed: model_unavailable",
+      "test_seconds": 122.39,
+      "go_package_seconds": 124.079,
+      "model": "qwen3-vl:4b",
+      "other_builds_ui_and_full_suites": "not running"
+    }
+  }
+}

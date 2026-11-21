@@ -489,6 +489,11 @@ func TestAITextLiveImagesUsePixelsEXIFAndRealSemanticSearch(t *testing.T) {
 	f, _ := indexFixture(t)
 	f.cfg.AIOllamaBaseURL = "http://127.0.0.1:11434"
 	f.cfg.AIEmbeddingModel = "qwen3-embedding:0.6b"
+	visionModel := os.Getenv("CLOUDNEST_TEST_IMAGE_VISION_MODEL")
+	if visionModel == "" {
+		visionModel = "qwen3-vl:4b"
+	}
+	f.cfg.AIOCRModel = visionModel
 	f.router = fixtureRouter(app.NewContainer(f.cfg, f.db, f.rdb).NewRouter())
 	capture := time.Date(time.Now().Year()-1, 6, 15, 10, 20, 30, 0, time.UTC)
 	var beachID int64
@@ -510,14 +515,14 @@ func TestAITextLiveImagesUsePixelsEXIFAndRealSemanticSearch(t *testing.T) {
 		if !tc.ocr {
 			beachID = file.ID
 		}
-		if worked, err := textWorker(t, f, f.cfg.AIOllamaBaseURL).Step(context.Background()); !worked || err != nil {
+		if worked, err := textWorkerWithVision(t, f, f.cfg.AIOllamaBaseURL, visionModel).Step(context.Background()); !worked || err != nil {
 			t.Fatal("actual image indexing", worked, err)
 		}
 		var doc model.AIIndexDocument
 		if err := f.db.First(&doc, "file_id=?", file.ID).Error; err != nil {
 			t.Fatal(err)
 		}
-		if doc.ExtractionKind != "image" || doc.VisionModel != "qwen3-vl:4b" || len(doc.VisionDigest) != 64 || doc.HasOCR != tc.ocr || doc.VisualDescription == "" || doc.VisualTags == "" {
+		if doc.ExtractionKind != "image" || doc.VisionModel != visionModel || len(doc.VisionDigest) != 64 || doc.HasOCR != tc.ocr || doc.VisualDescription == "" || doc.VisualTags == "" {
 			t.Fatalf("bad actual vision provenance: %+v", doc)
 		}
 		if !tc.ocr && (doc.CapturedAtLocal == nil || doc.CapturedAtLocal.Format("2006-01-02 15:04:05") != capture.Format("2006-01-02 15:04:05") || doc.CaptureOffset != "+08:00") {

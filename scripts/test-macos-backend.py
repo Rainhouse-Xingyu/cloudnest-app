@@ -55,10 +55,13 @@ def run_large_file_command(command, environment):
 def run():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--filter', dest='test_filter')
+    parser.add_argument('--go-tags', default='integration', help='Go build tags, including integration; optional real-model tests require aimodel')
     parser.add_argument('--mysql-time-zone', default='SYSTEM')
     parser.add_argument('--large-file', action='store_true', help='Run explicit 1 GiB + 173 byte, four-process native acceptance')
     parser.add_argument('--report', type=Path, help='Create an exclusive JSON report for --large-file')
     arguments = parser.parse_args()
+    if 'integration' not in arguments.go_tags.split(','):
+        parser.error('--go-tags must include integration')
     if arguments.large_file and (arguments.test_filter or os.environ.get('CLOUDNEST_NATIVE_UI_FIXTURE_DIR')):
         parser.error('--large-file cannot be combined with --filter or the manual UI fixture')
     if arguments.report and not arguments.large_file:
@@ -128,9 +131,9 @@ GRANT ALL PRIVILEGES ON cloudnest_test.* TO 'cloudnest_test'@'127.0.0.1';
                     environment['CLOUDNEST_NATIVE_LARGE_FILE'] = '1'
                     if arguments.report:
                         environment['CLOUDNEST_NATIVE_LARGE_FILE_REPORT'] = str(arguments.report.resolve())
-                test = '^TestMacOSNativeLargeFile$' if arguments.large_file else ('^TestMacOSNativeUIFixture$' if ui_fixture else (arguments.test_filter or '^(TestMacOSClientSession|TestMacOSNativeUIInterruptsActualHTTP)$'))
+                test = '^TestMacOSNativeLargeFile$' if arguments.large_file else ('^TestMacOSNativeUIFixture$' if ui_fixture else (arguments.test_filter or '^(TestMacOSClientSession|TestMacOSClientFRPRead|TestMacOSNativeUIInterruptsActualHTTP)$'))
                 timeout = '15m' if arguments.large_file else ('25m' if ui_fixture else '10m')
-                command = ['go', 'test', '-tags=integration', '-count=1', f'-timeout={timeout}', '-v',
+                command = ['go', 'test', f'-tags={arguments.go_tags}', '-count=1', f'-timeout={timeout}', '-v',
                            './integration', '-run', test]
                 if arguments.large_file:
                     run_large_file_command(command, environment)

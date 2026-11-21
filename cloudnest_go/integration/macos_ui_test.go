@@ -141,6 +141,14 @@ func TestMacOSNativeUIFixture(t *testing.T) {
 		"password": "disposable-fixture-password", "directory": absolute, "seed_file_id": seed.ID, "upload_source": source,
 		"version_file_id": versioned.ID,
 	}
+	if os.Getenv("CLOUDNEST_NATIVE_UI_FRP") == "1" {
+		seed := fixtureNativeFRP(t, f)
+		f.router = fixtureRouter(app.NewContainer(f.cfg, f.db, f.rdb).NewRouter())
+		manifest["frp_device_id"] = seed.Devices[0]
+		manifest["frp_mapping_id"] = seed.Mapping.ID
+		manifest["frp_config_id"] = seed.Config.ID
+		manifest["frp_command_id"] = seed.Command.ID
+	}
 	if aiLive {
 		content := "数据库迁移方案：MySQL 升级前先备份，并验证迁移后的数据一致性。迁移失败时回滚到已验证的备份。"
 		file := f.upload(t, f.alice, "Project Atlas.md", []byte(content))
