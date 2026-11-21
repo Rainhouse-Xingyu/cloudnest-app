@@ -14,7 +14,7 @@
 | SEC-008 P1 | `auth_service.go:Logout` 忽略 Redis 删除错误；角色/禁用状态来自历史 JWT | Redis 断开后注销；登录后撤销角色/禁用再访问 | G01 注销错误传播、会话撤销/用户状态检查 | 已修：注销错误传播、实时身份与权限，待审 |
 | SEC-009 P1 | `app/container.go` FRP 上报/拉命令同用户 JWT 入口 | 用用户身份调用设备命令 API；无独立设备认证模型 | G05 设备 enrollment、独立凭据哈希/轮换/撤销与权限范围 | 已登记设备接入独立身份与持久命令，旧 JWT 执行入口已拒绝。实际 Go Agent 已验证三种隧道及重连；未登记设备兼容路径仍待迁移，见 [G05 记录](G05-DEVICE-IDENTITY.md) |
 | SEC-010 P1 | `service/frp_service.go:generateFRPCYaml/SaveConfig` 明文 token 拼入配置并持久化 | 隔离环境读取配置记录/响应；不要记录真实 token | G05 加密敏感配置、脱敏响应、最小 Agent 权限 | 服务端 TLS/脱敏、AES-GCM、显式迁移/轮换与活动租约配置领取已实现。Agent 已接入 Keychain/外部密钥与身份/日志加密、显式迁移；frpc 认证 token 改由继承匿名管道传入，不写运行配置；映射参数缓存、历史备份及生产迁移仍待治理，SEC-010 保持开放 |
-| SEC-011 P1 | iOS `Shared/Managers/SessionManager.swift` 用 UserDefaults 存 token | 检查保存/读取路径 | G07 新 macOS 用 Keychain；冻结旧 iOS 开发 | 已确认，待做 |
+| SEC-011 P1 | iOS `Shared/Managers/SessionManager.swift` 用 UserDefaults 存 token | 检查保存/读取路径 | G07 新 macOS 用 Keychain；冻结旧 iOS 开发 | 新 macOS Keychain 与真实会话回归通过；旧 iOS 冻结 |
 | SEC-012 P1 | `cmd/server/main.go` 用 `gin.Run` 无显式 HTTP 超时；上传入口缺少请求体总限额 | 慢请求/超大 multipart；需受限资源测试 | G01/G03 显式服务器超时、请求/分片尺寸上限、登录速率限制 | G01 请求头/空闲超时及登录体积/限流已修；G03 已补齐有界流式 multipart、共享并发准入、实际 TCP 读取期限及服务读取超时；分片/合并临时卷预算已追加；ZIP/缓存预算与慢请求规模压测待做 |
 | SEC-013 P1 | G01 初版自定义权限覆盖默认路由，导致 GET auth/me、POST auth/logout 被拒绝 | 真实 API 用户仅授予 GET files，me 返回 403；注销同受影响 | 在完整身份认证后独立允许精确方法/自身会话路由，业务与管理员权限不扩大 | 修复前已复现；修复后集成测试通过 |
 | SEC-014 P1 | JWT 仅含用户与秒级时间，相同用户同秒登录 token 相同，注销互相影响 | 真实重复登录返回同一 token；固定时刻签发测试 | crypto/rand 256-bit JTI；独立 Redis 会话与单会话注销验证 | 修复前已复现；修复后集成测试通过 |
@@ -22,7 +22,7 @@
 | SEC-016 P1 | 无密码恢复命令及用户全部会话撤销入口，无法安全处理历史账号或丢失设备登录 | 历史明文恢复、当前/旧/延迟签发 Token、多用户隔离、审计故障、旧结构迁移 | G01 auth_version + 受控密码恢复命令 + 精确 logout-all；密码/版本/审计同事务 | 代码已实现，详见 [账号恢复](ACCOUNT-RECOVERY.md)，真实账号未操作 |
 | SEC-017 P1 | config.Load 的 JWT_EXPIRE_HOURS 非数字输入静默回退为 168 小时 | 设置 one-hour，Validate 原先通过 | G01 错误文本/溢出转为无效值，由 Validate 在连接前拒绝 | 修复前测试失败，修复后通过；未设置仍为 168 小时 |
 | CLIENT-001 P2 | 旧 SettingsViewModel 对普通用户也请求需显式授权的权限汇总，并展示管理员操作入口 | 57 路由契约核对；真实 GET settings/permissions 对普通用户 403 | G07/G09 按服务端能力展示；不放宽后端管理员/跨用户边界，冻结 iOS 功能开发 | 已记录兼容性边界，待新客户端实现 |
-| CLIENT-002 P2 | 旧 SettingsViewModel.logout 忽略服务端撤销错误，直接清本地会话 | 静态调用链证据；后端错误已正确返回 503 | G07 保留可重试的远端注销并展示失败状态 | 已记录，待新客户端实现 |
+| CLIENT-002 P2 | 旧 SettingsViewModel.logout 忽略服务端撤销错误，直接清本地会话 | 静态调用链证据；后端错误已正确返回 503 | G07 保留可重试的远端注销并展示失败状态 | 新 macOS 已实现远端注销失败重试；旧 iOS 冻结 |
 | DEP-001 P1 | 初次 govulncheck 报告 x/net、x/text、quic-go 可达漏洞；旧 Go 标准库另查 | `make vuln`；见 BASELINE | G01 按公告最小升级依赖和工具链，重新构建/扫描 | 已升级；可达/导入包告警 0，另 1 项未调用 OpenPGP 模块告警 |
 | DATA-001 P1 | `internal/store/mysql.go:NewMySQL` 每次启动 AutoMigrate，无版本/审核开关 | 审查启动调用链；仅在测试库观察建表 | G01 关闭隐式生产迁移；G06/G10 版本化迁移、备份/回滚演练 | 普通启动不再迁移；G02 独立文件名与两步存储引用版本化迁移已实现，其余模型版本化与真实备份恢复待 G06/G10 |
 | FILE-001 P1 | `storage/mysql/file_repo.go:HasActiveNameConflict` 根目录 parent_id=0 未含 user_id | 两用户根目录创建同名目录；第二个不应冲突 | G02 对根按所有者作用域，非根按共享父目录；事务并发约束 | 已复现跨用户 409；修复后通过根/共享目录与并发测试，待 G02 PR 审查 |
@@ -41,7 +41,7 @@
 | FILE-009 P2 | 文件搜索多列 LIKE、ListFiles/目录递归无分页/批量规划 | 数据规模测试、EXPLAIN、查询计数 | G02/G10 索引/游标分页/批量目录查询 | 结构已确认，性能未测 |
 | FILE-010 P2 | Go `sendFileWithRateLimit` 已 ServeContent/io.Copy/固定缓冲；客户端 NetworkClient 使用 data(for:) | 大文件峰值内存测试 | G03/G08 新客户端 URLSession 文件下载任务；不重写已流式 Go 普通下载 | 后端整文件内存假设未成立；性能未测 |
 | FILE-011 P1 | Share 模型及 CreateShare 只有 code/expiry，无提取码/访问次数约束 | 查看真实字段/API | G06 提取码哈希/访问计数、限速、撤销/到期测试 | 已接入 HTTPS 提取码、下载次数、按 IP 限流和显式升级检查，见 [G06 公开分享](G06-PUBLIC-SHARES.md) |
-| FILE-012 P1 | 文件版本只创建/列出，没有专用恢复/上传完整协议；客户端可传 size | 版本覆盖/恢复与配额一致性测试 | G01 先保护 storage_id；G02 版本引用/恢复协议 | 上传/复制初始引用、旧当前快照、历史下载、追加式恢复和事务审计已实现；配额已接入；AI 增量更新已在 G04 接入；版本专用上传票据仍待后续 |
+| FILE-012 P1 | 文件版本只创建/列出，没有专用恢复/上传完整协议；客户端可传 size | 版本覆盖/恢复与配额一致性测试 | G01 先保护 storage_id；G02 版本引用/恢复协议 | 初始引用/旧快照/历史下载/追加恢复/审计、配额和 AI 增量已接入；后续目标/基线绑定的版本上传、协作者计入文件所有者、按键取消、原子发布及原生队列已实现，14 项新 race 与真实 Core 联调通过；新上传 GUI/固定下载已验收，历史有界分页及双向 GUI 已通过，新分页 CI/真实库升级等完整验收仍待完成，见 VERSION-UPLOADS |
 | AI-001 P1 | `triggerAsyncAutoAnalyze` 内存 goroutine，AiTask 仅写状态记录 | 上传后杀进程重启；任务无恢复 worker | G04 事务 outbox、持久任务、租约/超时/重试/诊断 | 进行中：原子入队、租约/重领/退避/结果隔离已实现；服务 worker/独立 blob 读取与文本处理已接入；状态/游标历史回填/代次 CAS 批量重建 API 已实现，真实服务重建通过；版本/复制/回收恢复/扩展名增量入队及其事务回滚已接入 |
 | AI-002 P1 | `service/ai_service.go:NLSearch` 解析条件后调用 `storage/mysql/ai_repo.go:Search` 的 LIKE；无 embedding/vector | 执行语义同义查询/带无关干扰的评估集 | G04 独立 embedding、chunk、向量索引、混合检索/文件级 ACL/片段 | 已接入实际文本 embedding 与精确扫描/关键词融合、权限和代次复核、片段及降级；10k 向量扫描通过，DOCX/XLSX/PPTX 有界解析/实际模型链路已实现；PDF/扫描页真实 OCR 已接入；JPEG/PNG/GIF 真实视觉已接入；六类合成评估已执行且初始基线失败，候选阈值/配置类型/查询指令整改后 v1 门槛通过；可选实际重排使已暴露 v1 发票族 R@5 从 75% 提升到 100%，stress-v2 负例仅 1/6 为空且一次超时，完整质量验收待做 |
 | AI-003 P1 | `buildAutoAnalyzeResult` 忽略 OCR/模型错误并写“分析完成”；照片标签描述请求仅文本 | 关闭 Ollama 上传图片；查看任务状态和描述 | G04 区分提取/OCR/视觉失败、真实视觉输入、可诊断降级 | 原上传后吞错入口已移除，文本实际解析/embedding 失败持久记录并重试；PDF 扫描页已接真实视觉 OCR 与失败拒绝；JPEG/PNG/GIF 场景描述及手动 OCR 统一已经接入；其余格式/复杂 OCR 与峰值资源验证待做 |
@@ -58,7 +58,7 @@
 | ENG-002 P2 | 已跟踪 dist/main/*.o/xcuserdata | `git ls-files`；检查工作树文件仍在 | G00 取消跟踪并 ignore；历史 patch 需独立核对后归档 | 当前产物已取消跟踪 |
 | ENG-003 P2 | file handler 2165 行、service 1193 行；已有契约与仓储可复用 | 逐功能调用链审查和单元边界 | G02–G06 随业务拆模块，不全盘重写 | 待做 |
 | ENG-004 P1 | 无原有 CI/运行监控/备份恢复演练 | 检查 workflows/部署脚本，执行隔离发布演练 | G00 CI；G10 发布/指标/健康检查/备份恢复 | CI 已执行，G00 构建/测试通过、漏洞检查失败；运行治理待做 |
-| MAC-001 P1 | `cloudnest_macos/` 空目录 | 文件清单 | G07–G09 独立原生 SwiftUI/AppKit 应用与 Keychain；无 UIKit 依赖 | 未开始 |
+| MAC-001 P1 | `cloudnest_macos/` 空目录 | 文件清单 | G07–G09 独立原生 SwiftUI/AppKit 应用与 Keychain；无 UIKit 依赖 | G07/G08 原生客户端已接入待审；G09、异常恢复和完整 GUI/资源验收继续 |
 | ENV-001 P2 | iOS target 26.2，Xcode 无相应平台；模拟器仅 18.6 可用 | xcodebuild 返回 70，destination 不可用 | 保留失败证据；macOS 用可用 SDK 独立验证 | 环境阻塞；非代码编译结论 |
 
 ## 审查边界
@@ -112,3 +112,20 @@ FRP-004 后续进展：Agent 0.3.0 的 `forget_config` 已提供排他队列、�
 2026-11-12，FRP-004 运行配置子项：新增每命令/凭据代次持久占用、映射删除/更新后的保留、原子入队及首次 forget 回执释放，重复旧回执不影响新部署。全局映射唯一约束未放宽。旧配置迁移为 unknown 记录并提供只读查询，解除流程与服务器级映射仍待实现，因此问题继续开放，见 [运行占用协议](FRP-RUNTIME-RESERVATIONS.md)。
 
 2026-11-13：FRP-004 已接入正值服务器映射作用域、服务器策略范围分配、HTTP/S 不占无关 TCP 端口及复合唯一索引；历史零作用域仍与全部服务器重叠。旧表迁移保留和并发专项已验证；历史 unknown/旧身份对账、离线策略和真实旧库升级仍待完成。公网测试的初次 TCP 注册被手工测试映射占用拒绝，实际复测结果见 TESTING。
+
+TIME-001 P2（新连接修复，历史迁移进行中）：2026-11-20 原生 UI 的临时 MySQL 实例为 `time_zone=SYSTEM`、`system_time_zone=MST`，`NOW()` 比 `UTC_TIMESTAMP()` 少 7 小时。`CURRENT_TIMESTAMP` 生成的文件 create_time/update_time 存为本地朴素值，`loc=UTC` 连接再按 UTC 解读，导致客户端再次减去 7 小时。本机原生文件面板显示 23:39，而列表对应时间显示 16:39；SQL 原值及实测见 G08-MACOS-FILES。NewMySQL 现保留 DSN loc 并为每条物理连接设置匹配的固定 session time_zone，冲突/DST 配置拒绝；-07:00 临时 MySQL 的连接池/列表默认时间/固定东八区及 Agent 跨时区租约已回归。历史值没有转换；来源明确的迁移工具与副本演练仍待完成，不能关闭本项，见 [时间协议](MYSQL-TIMESTAMPS.md)。
+
+TIME-001 后续：只读 `audit-mysql-time` 已在 68d4c8b 双平台与完整后端 CI 通过；本批增加 `plan-mysql-time`，以明确单元格、原时区及证据形成绑定库身份/原值/目标值/UTC 时刻和 SHA-256 的计划。混合来源、夏令时缺失/重复与偏移、微秒/NULL/零日期、TIMESTAMP 和主键类型等已有回归。没有执行历史 UPDATE；事务应用、回执、CAS 回滚及副本恢复演练仍待完成，不能据只读规划关闭本项。
+
+MAC-002 P2（版本界面接入待审）：原生客户端此前仅在 Inspector 显示当前版本数字，未调用历史列表/历史下载/追加恢复。现有三项真实 API、授权快照基线、固定历史下载/降级拒绝和恢复确认已通过双平台 CI 及解锁后的 GUI，见 [版本界面](MACOS-VERSIONS.md)。真实速度与确认进度分离、暂停恢复也已通过 GUI/CI。后续 [本地版本上传](VERSION-UPLOADS.md) 已实现并通过 Core/Go、14 项真实 API race 和队列持久化回归；新上传 GUI/固定下载与双向分页已通过实际验收，837affd 双平台及完整后端 CI 全通过；后续 Finder 双文件拖入/回读、批量复制下载/回收恢复与深浅色已实测，较窄主窗口及其他 GUI/资源验收仍开放，不能据本批关闭 G08。
+
+
+MAC-003 P1（操作身份边界，代码完成待审）：文件面板与批量队列此前在每次入队时重新获取当前身份，旧选择可能转投新连接；旧 API 200/401 还可能回填旧结果或清理新会话。修复前两项原生测试均失败；现固定面板/拖入/版本/浏览器身份，异步边界重查，请求返回和传输 401 核对原 token，控制上下文在等待前捕获，close 等待全部旧工作任务。五项本地回归和真实双账户上传下载通过，精确新 CI 待核对，见 [操作身份](MACOS-OPERATION-IDENTITY.md)。此为独立 G08 核对所得，未读取延后正式 Review。
+
+2026-11-21：MAC-003 的 a50e762 精确双平台原生和完整后端 CI 已全通过。独立新增 MAC-004 P2（连续下载，代码完成待审）：每 4 MiB Range 触发服务端重复整对象校验；真实 9 MiB 修复前为 3 次请求并失败，修复后严格 1 次通过。1 GiB + 173 字节四进程恢复/摘要/真实峰值和三进程 GUI 正常关闭恢复/采样内存已通过，首轮观察器失败保留；见 [大文件报告](MACOS-LARGE-FILES.md)。这不关闭断电、多卷、聚合资源或整个 G08。新批次 CI 独立核对。
+
+MAC-002/G08 后续验收：168b026 的实际两目录批量移动、过期选择导致的回收部分失败/重试与真实回读已通过；相同产品视图的 640 点宽窗口（实际 640×492 点）完成列表/检查器/版本面板/搜索和工具栏溢出核对。默认字号单显示器结果不替代文字缩放与权限撤销/中断 GUI，原始记录见 G08。
+
+MAC-005 P2（旧预览只读兼容，代码完成待审）：旧版将预览作为普通持久下载，新版恢复/继续/取消会重写或删除旧副本。初始复现 9 条失败；跨签名 GUI 又发现 scoped 书签解析 Code=259，使归类遗漏，补充夹具再复现 3 条失败。现用磁盘 actor 中的只读位置解析归类，保持原 journal/文件，不自动调度或取消，新版预览和普通相邻下载不受影响。四项单测、完整真实后端及最终 16 文件逐值 GUI 保留通过；历史磁盘回收仍开放，见 [兼容说明](MACOS-LEGACY-PREVIEWS.md)。未读取延后正式 Review。
+
+620e4b1 的 MAC-005 精确双平台原生与完整后端 CI 已全通过。其后同一产品代码的实际管理员撤权/恢复、会话撤销及真实下载响应中断/续传均通过 GUI：旧列表清空、403 保留会话与任务检查点、恢复同任务、原强 ETag/Range 和最终字节摘要均核对。没有为了验收放宽产品鉴权；本批仅补夹具、wire/race 回归与证据，见 [权限/网络报告](MACOS-PERMISSION-NETWORK.md)。已授权活动流的即时撤权、强杀/断电、多卷及历史空间治理仍开放。

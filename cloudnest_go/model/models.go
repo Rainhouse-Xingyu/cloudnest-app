@@ -145,6 +145,11 @@ func (UploadChunk) TableName() string {
 
 // UploadTask 分片上传任务
 type UploadTask struct {
+	// Immutable contract v2 binding; no FK keeps a deleted target alive.
+	VersionFileID    *int64     `gorm:"type:bigint;index:idx_version_upload_target,priority:1" json:"-"`
+	VersionBase      int        `gorm:"type:bigint;not null;default:0" json:"-"`
+	VersionComment   string     `gorm:"type:varchar(255);not null;default:''" json:"-"`
+	QuotaUserID      *int64     `gorm:"type:bigint;index:idx_version_upload_quota,priority:1" json:"-"`
 	TransferEpoch    int64      `gorm:"type:bigint;not null;default:0" json:"transfer_epoch"`
 	TransferProtocol int16      `gorm:"type:smallint;not null;default:0" json:"-"`
 	TransferVolume   string     `gorm:"type:char(64);not null;default:''" json:"-"`
@@ -153,10 +158,10 @@ type UploadTask struct {
 	ResultVersion    int16      `gorm:"type:smallint;not null;default:0" json:"-"`
 	ResultFileID     *int64     `gorm:"type:bigint" json:"-"`
 	ResultJSON       *string    `gorm:"type:text" json:"-"`
-	ContractVersion  int16      `gorm:"type:smallint;not null;default:0;index:idx_upload_quota,priority:2" json:"-"`
+	ContractVersion  int16      `gorm:"type:smallint;not null;default:0;index:idx_upload_quota,priority:2;index:idx_version_upload_quota,priority:2" json:"-"`
 	ReservedBytes    int64      `gorm:"not null;default:0" json:"-"`
 	ParentID         int64      `gorm:"not null;default:0" json:"parent_id"`
-	ExpiresAt        *time.Time `gorm:"type:datetime(6);index;index:idx_upload_quota,priority:4" json:"expires_at,omitempty"`
+	ExpiresAt        *time.Time `gorm:"type:datetime(6);index;index:idx_upload_quota,priority:4;index:idx_version_upload_quota,priority:4;index:idx_version_upload_target,priority:3" json:"expires_at,omitempty"`
 	ID               int64      `gorm:"primaryKey;autoIncrement" json:"id"`
 	UploadID         string     `gorm:"type:varchar(100);not null;unique" json:"upload_id"`
 	UserID           *int64     `gorm:"type:bigint;index:idx_upload_quota,priority:1" json:"user_id"`
@@ -165,7 +170,7 @@ type UploadTask struct {
 	ChunkSize        *int       `gorm:"type:int" json:"chunk_size"`
 	TotalChunks      *int       `gorm:"type:int" json:"total_chunks"`
 	UploadedChunks   int        `gorm:"type:int;default:0" json:"uploaded_chunks"`
-	Status           int8       `gorm:"type:tinyint;default:0;index:idx_upload_quota,priority:3;comment:0上传中 1完成 2暂停 3取消 4过期" json:"status"`
+	Status           int8       `gorm:"type:tinyint;default:0;index:idx_upload_quota,priority:3;index:idx_version_upload_quota,priority:3;index:idx_version_upload_target,priority:2;comment:0上传中 1完成 2暂停 3取消 4过期" json:"status"`
 	CreateTime       time.Time  `gorm:"type:datetime;default:CURRENT_TIMESTAMP" json:"create_time"`
 }
 

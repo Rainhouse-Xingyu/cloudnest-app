@@ -57,7 +57,7 @@ func main() {
 	if err := applyCLIOverrides(&cfg, args); err != nil {
 		log.Fatalf("启动参数错误: %v", err)
 	}
-	databaseOnly := maintenance.kind == "reconcile-frp-reservation" || maintenance.kind == "audit-frp-configs" || maintenance.kind == "encrypt-frp-configs" || maintenance.kind == "audit-file-names" || maintenance.kind == "migrate-file-names" || maintenance.kind == "audit-storage-references" || maintenance.kind == "migrate-storage-references" || maintenance.kind == "gc-storage" || maintenance.kind == "prune-read-leases" || maintenance.kind == "audit-transfers" || maintenance.kind == "reconcile-transfers" || maintenance.kind == "set-transfer-limit"
+	databaseOnly := maintenance.kind == "plan-mysql-time" || maintenance.kind == "audit-mysql-time" || maintenance.kind == "reconcile-frp-reservation" || maintenance.kind == "audit-frp-configs" || maintenance.kind == "encrypt-frp-configs" || maintenance.kind == "audit-file-names" || maintenance.kind == "migrate-file-names" || maintenance.kind == "audit-storage-references" || maintenance.kind == "migrate-storage-references" || maintenance.kind == "gc-storage" || maintenance.kind == "prune-read-leases" || maintenance.kind == "audit-transfers" || maintenance.kind == "reconcile-transfers" || maintenance.kind == "set-transfer-limit"
 	if databaseOnly {
 		err = cfg.ValidateDatabase()
 	} else {
@@ -93,6 +93,18 @@ func main() {
 		}
 	}
 
+	var timePlanRequest store.MySQLTimePlanRequest
+	if maintenance.kind == "plan-mysql-time" {
+		info, statErr := os.Stdin.Stat()
+		if statErr != nil || info.Mode()&os.ModeCharDevice != 0 {
+			log.Fatal("plan-mysql-time requires a private pipe/file on stdin")
+		}
+		timePlanRequest, err = readMySQLTimePlanRequest(os.Stdin)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
 	db, err := store.NewMySQL(cfg)
 	if err != nil {
 		log.Fatalf("初始化 MySQL 失败: %s", explainStartupError(err))
@@ -105,6 +117,29 @@ func main() {
 	}
 	if maintenance.kind != "" {
 		switch maintenance.kind {
+		case "plan-mysql-time":
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
+			var plan store.MySQLTimePlan
+			plan, err = store.PlanMySQLTime(ctx, db, cfg.MySQLDSN, timePlanRequest)
+			if err == nil {
+				encoder := json.NewEncoder(os.Stdout)
+				encoder.SetIndent("", "  ")
+				err = encoder.Encode(plan)
+			}
+		case "audit-mysql-time":
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
+			var report store.MySQLTimeAudit
+			report, err = store.AuditMySQLTime(ctx, db)
+			if err == nil {
+				encoder := json.NewEncoder(os.Stdout)
+				encoder.SetIndent("", "  ")
+				err = encoder.Encode(report)
+				if err == nil && report.Truncated {
+					err = store.ErrMySQLTimeAuditTruncated
+				}
+			}
 		case "reconcile-frp-reservation":
 			if err = store.CheckAgentSchema(db); err != nil {
 				break
@@ -393,6 +428,8 @@ func printUsage() {
 	fmt.Println("  cloudnest start <端口> <数据目录>")
 	fmt.Println("  cloudnest version")
 	fmt.Println("  cloudnest reset-password <用户ID> <精确用户名>   从标准输入读取新密码并撤销该用户全部会话")
+	fmt.Println("  cloudnest audit-mysql-time      只读 JSON 时间字段盘点；超过 1000 列标记截断并非零退出")
+	fmt.Println("  cloudnest plan-mysql-time       从私有 stdin 读取来源清单，输出只读逐值时间计划；最多 200 项，不执行修复")
 	fmt.Println("  cloudnest audit-file-names      只读 JSON 名称冲突审计；发现问题时非零退出，不修改数据")
 	fmt.Println("  cloudnest migrate-file-names    审计通过后显式安装版本化活动文件名唯一约束（先备份并停旧实例）")
 	fmt.Println("  cloudnest audit-storage-references   只读 JSON 存储引用审计；包括回收站与旧版本，不读取或删除物理文件")

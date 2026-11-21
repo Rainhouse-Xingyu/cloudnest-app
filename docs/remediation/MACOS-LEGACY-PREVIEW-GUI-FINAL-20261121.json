@@ -1,0 +1,149 @@
+{
+  "version": 1,
+  "passed": true,
+  "verified_utc": "2026-11-21T11:42:08.541230+00:00",
+  "base_commit": "c6db8b9759a81e0a959358ab4f2ef0b33ef5f239",
+  "environment": "macOS 27.2.1 arm64, independent native app, disposable loopback TLS/Go/MySQL/Redis; memory session vault",
+  "binary_sha256": "205a6da12013bb02488b4d74a49903fcb5736029f1a7b3f2223e9a4d893bde58",
+  "legacy_states": [
+    "queued",
+    "running",
+    "paused",
+    "failed",
+    "completed"
+  ],
+  "preserved_files": [
+    {
+      "path": "journal/2301FC2D-717A-4A18-AFBA-F4BEA79B95F7.json",
+      "bytes": 1413,
+      "before_sha256": "c51808f3b2d7198a209ba8b24e4e394446df3ecadfe0cfb2b532293699da4faf",
+      "after_sha256": "c51808f3b2d7198a209ba8b24e4e394446df3ecadfe0cfb2b532293699da4faf"
+    },
+    {
+      "path": "journal/previews/66FD3925-60E5-40C3-B484-411034B3C8F2/.cloudnest-2301FC2D-717A-4A18-AFBA-F4BEA79B95F7.part",
+      "bytes": 12,
+      "before_sha256": "2480620343e4957d2bf6e3b5890d405eafb05303026a9be9a6b0a2e483e49638",
+      "after_sha256": "2480620343e4957d2bf6e3b5890d405eafb05303026a9be9a6b0a2e483e49638"
+    },
+    {
+      "path": "journal/previews/66FD3925-60E5-40C3-B484-411034B3C8F2/Old queued.txt",
+      "bytes": 11,
+      "before_sha256": "cb2d87cbb7f61e4e9419e51e9990f7877998aa880fce84b84ced2f4dd728816c",
+      "after_sha256": "cb2d87cbb7f61e4e9419e51e9990f7877998aa880fce84b84ced2f4dd728816c"
+    },
+    {
+      "path": "journal/277624E5-AA91-4B34-A4AA-D6BF2D90462F.json",
+      "bytes": 1417,
+      "before_sha256": "54a1e0915e52b52f82140c171d59efe642e0214e461fc39960b7ee3fb50f3c5a",
+      "after_sha256": "54a1e0915e52b52f82140c171d59efe642e0214e461fc39960b7ee3fb50f3c5a"
+    },
+    {
+      "path": "journal/previews/13B9967E-F675-4DAC-8568-8B567A0F772F/.cloudnest-277624E5-AA91-4B34-A4AA-D6BF2D90462F.part",
+      "bytes": 12,
+      "before_sha256": "2480620343e4957d2bf6e3b5890d405eafb05303026a9be9a6b0a2e483e49638",
+      "after_sha256": "2480620343e4957d2bf6e3b5890d405eafb05303026a9be9a6b0a2e483e49638"
+    },
+    {
+      "path": "journal/previews/13B9967E-F675-4DAC-8568-8B567A0F772F/Old running.txt",
+      "bytes": 11,
+      "before_sha256": "cb2d87cbb7f61e4e9419e51e9990f7877998aa880fce84b84ced2f4dd728816c",
+      "after_sha256": "cb2d87cbb7f61e4e9419e51e9990f7877998aa880fce84b84ced2f4dd728816c"
+    },
+    {
+      "path": "journal/344CFD73-2E6A-4CED-8164-83000F3484FB.json",
+      "bytes": 1413,
+      "before_sha256": "357440b563cb533d82759da0fff55f37af3921750e339bca9cc37f6e38da7d02",
+      "after_sha256": "357440b563cb533d82759da0fff55f37af3921750e339bca9cc37f6e38da7d02"
+    },
+    {
+      "path": "journal/previews/FE1FA268-77AE-42C6-B425-D324B9870CF6/.cloudnest-344CFD73-2E6A-4CED-8164-83000F3484FB.part",
+      "bytes": 12,
+      "before_sha256": "2480620343e4957d2bf6e3b5890d405eafb05303026a9be9a6b0a2e483e49638",
+      "after_sha256": "2480620343e4957d2bf6e3b5890d405eafb05303026a9be9a6b0a2e483e49638"
+    },
+    {
+      "path": "journal/previews/FE1FA268-77AE-42C6-B425-D324B9870CF6/Old paused.txt",
+      "bytes": 11,
+      "before_sha256": "cb2d87cbb7f61e4e9419e51e9990f7877998aa880fce84b84ced2f4dd728816c",
+      "after_sha256": "cb2d87cbb7f61e4e9419e51e9990f7877998aa880fce84b84ced2f4dd728816c"
+    },
+    {
+      "path": "journal/41FC0EC9-D080-4F4A-8DBF-CF9E6484BA5D.json",
+      "bytes": 1414,
+      "before_sha256": "e48aa197a9a2e2a49e2d40d1d167600f6d1beae789ac1fd0b65fb79b8ac5fcd1",
+      "after_sha256": "e48aa197a9a2e2a49e2d40d1d167600f6d1beae789ac1fd0b65fb79b8ac5fcd1"
+    },
+    {
+      "path": "journal/previews/51D4ACAC-C6E7-4A0C-8483-89555F1FDA83/.cloudnest-41FC0EC9-D080-4F4A-8DBF-CF9E6484BA5D.part",
+      "bytes": 12,
+      "before_sha256": "2480620343e4957d2bf6e3b5890d405eafb05303026a9be9a6b0a2e483e49638",
+      "after_sha256": "2480620343e4957d2bf6e3b5890d405eafb05303026a9be9a6b0a2e483e49638"
+    },
+    {
+      "path": "journal/previews/51D4ACAC-C6E7-4A0C-8483-89555F1FDA83/Old failed.txt",
+      "bytes": 11,
+      "before_sha256": "cb2d87cbb7f61e4e9419e51e9990f7877998aa880fce84b84ced2f4dd728816c",
+      "after_sha256": "cb2d87cbb7f61e4e9419e51e9990f7877998aa880fce84b84ced2f4dd728816c"
+    },
+    {
+      "path": "journal/D4F71AD0-7A45-4F49-83FE-46BE9C77F895.json",
+      "bytes": 1596,
+      "before_sha256": "dd1e0b19c8d01f71f8e904c1529167c82fffdcb0bb1413cb8cb5579daccec03c",
+      "after_sha256": "dd1e0b19c8d01f71f8e904c1529167c82fffdcb0bb1413cb8cb5579daccec03c"
+    },
+    {
+      "path": "journal/previews/CCFA3EF0-39D5-4B10-B6D1-609DF416B68F/.cloudnest-D4F71AD0-7A45-4F49-83FE-46BE9C77F895.part",
+      "bytes": 12,
+      "before_sha256": "2480620343e4957d2bf6e3b5890d405eafb05303026a9be9a6b0a2e483e49638",
+      "after_sha256": "2480620343e4957d2bf6e3b5890d405eafb05303026a9be9a6b0a2e483e49638"
+    },
+    {
+      "path": "journal/previews/CCFA3EF0-39D5-4B10-B6D1-609DF416B68F/Old completed.txt",
+      "bytes": 11,
+      "before_sha256": "cb2d87cbb7f61e4e9419e51e9990f7877998aa880fce84b84ced2f4dd728816c",
+      "after_sha256": "cb2d87cbb7f61e4e9419e51e9990f7877998aa880fce84b84ced2f4dd728816c"
+    },
+    {
+      "path": "journal/previews/unknown.txt",
+      "bytes": 16,
+      "before_sha256": "82ce951a454589c0f8b0fc4b0e9ba0972b26e5c47d4ddad809e3da3bb21d64ad",
+      "after_sha256": "82ce951a454589c0f8b0fc4b0e9ba0972b26e5c47d4ddad809e3da3bb21d64ad"
+    }
+  ],
+  "held_rows_observed": 5,
+  "continue_cancel_controls_absent": true,
+  "legacy_notice_visible": true,
+  "legacy_tasks_not_counted_as_active": true,
+  "quick_look_showed_real_go_text": true,
+  "new_preview_download_requests": 1,
+  "new_preview_cache_after_dismissal": [
+    ".format-v1"
+  ],
+  "native_process_exited": true,
+  "classification_on_transfer_disk_actor": true,
+  "source_sha256": {
+    "Core/DownloadPlan.swift": "641b33f9f36001a67bcb3ed583c2ff3e61b40ac2683d10fafdaa70c6b24965b1",
+    "Core/DownloadStream.swift": "a4878ddee1749ae049ca898fac22175dae907ada9b859e961afbe801ad897a15",
+    "Core/FileAPI.swift": "e80f37d57c9420b91ff4d27b2be03b2eeb6b46b0935eae8ce1ef208fcdee34b9",
+    "Core/FileBrowserState.swift": "312b325d054c4b34aa867320570321a010c17359b6bf5413c51253cd767c3380",
+    "Core/FileVersions.swift": "1b009b2cd68dd555325b667186b757b5307dad6a355fd27ebc955da2474b7483",
+    "Core/LegacyPreviewDirectory.swift": "05b9022f6f528de4bff5c4f9c236518b25271537b5794409384d9e5c0329f608",
+    "Core/PreviewCache.swift": "24e5560809afd2d6065a9994d5355c0c36f62128e2a4a256b29c2bdd2c808904",
+    "Core/ServerAPI.swift": "8335d406f5d48203e2f6734360d68973069098e674716db912a950b38a6ae854",
+    "Core/SessionState.swift": "d86d254fbc18c17e6b8dd601ab501f29be47e9b16bd9125acc514a5706e4a0ef",
+    "Core/SessionVault.swift": "8aaeafe193e99da59b8a5298fe8d2fa5052c21e8fef67e182927be438d8d7495",
+    "Core/TransferAPI.swift": "757fa9919a3cc5d66d20b380d2470165acc2af63cffac5da3811ec298cf4625b",
+    "Core/TransferDisk.swift": "51ca36fc080604b9a6ece8d0b1302e56904984691c9caa22ee77cdd432ceae84",
+    "Core/TransferManager.swift": "2b63f616cd56cdfd3fe1bb17a31d388fd4831322208627450284e9c95f0c242a",
+    "Core/TransferRecord.swift": "f0f8c20631dd0ef4516d84bdd541961614c0a6f4450c84454b3333fccbd1b71e",
+    "Core/TransferStore.swift": "66cae8a28ba323c0a90e67eec549356c70c88b843fa9bb352ba0f30c4567e17f",
+    "Core/TransferTelemetry.swift": "95eb7bba18223c173ceeead47cc025fb1fc34617985ab3d80db8ce89d9011345",
+    "App/CloudNestApp.swift": "dbcbe3f68baf2efa48b4f8a2717c9320b380123a5f81b1ca22e3b88a76a119a0",
+    "App/FileBrowserCommands.swift": "1744b820661ef09fa3836c67397d2975133a4982444807012c12c5112731d4e8",
+    "App/FileBrowserView.swift": "4f946fbffb7d08c5cd8642cd500d0cee6dfc73933e97c99d5040f26b0aca3e11",
+    "App/FileDestinationSheet.swift": "e687c0269882fd072479942c7a73c96790796ffdcaa6a176657b59c669b51a7d",
+    "App/FileVersionsSheet.swift": "17fe6e46888249269a57f5172de163e8aeb6a7a56b6ecb188c5608f39099920a",
+    "App/TransferListView.swift": "a8e26aa331492e166bea32e406507aa5daa2420cf651c7074d50d718712b6181"
+  },
+  "limits": "Retains legacy files; does not reclaim historical disk bytes or import them into the disposable cache. Unknown/unresolvable bookmarks do not establish ownership."
+}

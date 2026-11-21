@@ -332,6 +332,16 @@ func (r *CollaborationRepo) CreateFileVersion(ctx context.Context, req contract.
 }
 
 func appendFileVersion(tx *gorm.DB, file model.File, storage model.Storage, uid int64, fileType, comment, action, clientIP string) (model.FileVersion, error) {
+	row, err := appendFileVersionMetadata(tx, file, storage, uid, fileType, comment, action, clientIP)
+	if err != nil {
+		return row, err
+	}
+	return row, quota.Refresh(tx, file.UserID, true)
+}
+
+// The upload completion transaction also consumes a reservation before its
+// final quota refresh. Counting both here would temporarily charge it twice.
+func appendFileVersionMetadata(tx *gorm.DB, file model.File, storage model.Storage, uid int64, fileType, comment, action, clientIP string) (model.FileVersion, error) {
 	if file.CurrentVersion <= 0 || file.CurrentVersion >= 2147483647 {
 		return model.FileVersion{}, contract.ErrConflict
 	}
@@ -348,9 +358,6 @@ func appendFileVersion(tx *gorm.DB, file model.File, storage model.Storage, uid 
 		return row, err
 	}
 	if err := tx.Model(&file).Updates(map[string]any{"current_version": row.Version, "storage_id": storage.ID, "size": size, "file_type": fileType}).Error; err != nil {
-		return row, err
-	}
-	if err := quota.Refresh(tx, file.UserID, true); err != nil {
 		return row, err
 	}
 	if err := indexqueue.Enqueue(tx, file.ID, true); err != nil {
@@ -419,8 +426,77 @@ func (r *CollaborationRepo) RestoreFileVersion(ctx context.Context, uid, fileID 
 }
 
 func (r *CollaborationRepo) ListFileVersions(ctx context.Context, fileID int64) ([]contract.CollaborationFileVersionRow, error) {
+	return listFileVersions(r.db.WithContext(ctx), fileID)
+}
+
+func (r *CollaborationRepo) ReadFileVersionHistory(ctx context.Context, uid, fileID int64) (contract.CollaborationFileVersionHistory, error) {
+	return r.readFileVersionHistory(ctx, uid, fileID, nil)
+}
+
+func (r *CollaborationRepo) ReadFileVersionHistoryPage(ctx context.Context, uid, fileID int64, page contract.VersionHistoryPage) (contract.CollaborationFileVersionHistory, error) {
+	if err := page.Validate(); err != nil {
+		return contract.CollaborationFileVersionHistory{}, err
+	}
+	return r.readFileVersionHistory(ctx, uid, fileID, &page)
+}
+
+func (r *CollaborationRepo) readFileVersionHistory(ctx context.Context, uid, fileID int64, page *contract.VersionHistoryPage) (contract.CollaborationFileVersionHistory, error) {
+	var history contract.CollaborationFileVersionHistory
+	if uid <= 0 || fileID <= 0 {
+		return history, contract.ErrForbidden
+	}
+	err := fileReadSnapshot(ctx, r.db, func(tx *gorm.DB) error {
+		var file model.File
+		if err := tx.First(&file, "id=? AND is_deleted=0", fileID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return contract.ErrForbidden
+			}
+			return err
+		}
+		if err := requireTreeRead(tx, uid, []fileTreeNode{{File: file}}); err != nil {
+			return err
+		}
+		if page != nil && page.Snapshot != 0 && page.Snapshot != file.CurrentVersion {
+			return contract.ErrConflict
+		}
+		query := tx
+		if page != nil {
+			query = tx.Limit(page.Size)
+			if page.Before > 0 {
+				query = query.Where("fv.version < ?", page.Before)
+			}
+			if page.After > 0 {
+				// Select the nearest newer page, then present all pages descending.
+				query = query.Where("fv.version > ?", page.After).Order("fv.version ASC")
+			}
+		}
+		rows, err := listFileVersions(query, fileID)
+		if err != nil {
+			return err
+		}
+		history = contract.CollaborationFileVersionHistory{FileID: file.ID, CurrentVersion: file.CurrentVersion, Items: rows}
+		if page != nil {
+			if page.After > 0 {
+				for i, j := 0, len(rows)-1; i < j; i, j = i+1, j-1 {
+					rows[i], rows[j] = rows[j], rows[i]
+				}
+			}
+			result := &contract.VersionHistoryPageResult{Size: page.Size, Snapshot: file.CurrentVersion}
+			if len(rows) > 0 {
+				if err := tx.Raw("SELECT EXISTS(SELECT 1 FROM file_version WHERE file_id=? AND version<?), EXISTS(SELECT 1 FROM file_version WHERE file_id=? AND version>?)", fileID, rows[len(rows)-1].Version, fileID, rows[0].Version).Row().Scan(&result.HasOlder, &result.HasNewer); err != nil {
+					return err
+				}
+			}
+			history.Page = result
+		}
+		return nil
+	})
+	return history, err
+}
+
+func listFileVersions(db *gorm.DB, fileID int64) ([]contract.CollaborationFileVersionRow, error) {
 	rows := make([]contract.CollaborationFileVersionRow, 0)
-	err := r.db.WithContext(ctx).
+	err := db.
 		Table("file_version fv").
 		Select("fv.id, fv.version, fv.storage_id, fv.size, fv.file_type, fv.source_verified, fv.comment, fv.create_user, u.username, fv.create_time").
 		Joins("LEFT JOIN user u ON u.id = fv.create_user").

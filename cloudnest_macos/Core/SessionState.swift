@@ -111,6 +111,89 @@ final class SessionState {
         }
     }
 
+    func listFiles(parentID: Int64, recycleBin: Bool) async throws -> [FileItem] {
+        try await withSession { origin, token in
+            try await api.files(origin, token: token, parentID: parentID, recycleBin: recycleBin)
+        }
+    }
+
+    func createFolder(name: String, parentID: Int64) async throws {
+        try await withSession { origin, token in
+            _ = try await api.createFolder(origin, token: token, name: name, parentID: parentID)
+        }
+    }
+
+    func renameFile(id: Int64, name: String) async throws {
+        try await withSession { origin, token in
+            try await api.renameFile(origin, token: token, id: id, name: name)
+        }
+    }
+
+    func trashFiles(ids: [Int64]) async throws -> DeleteFilesResponse {
+        try await withSession { origin, token in
+            try await api.trashFiles(origin, token: token, ids: ids)
+        }
+    }
+
+    func restoreFile(id: Int64) async throws {
+        try await withSession { origin, token in
+            try await api.restoreFile(origin, token: token, id: id)
+        }
+    }
+
+    func fileVersions(fileID: Int64, before: Int? = nil, after: Int? = nil, snapshot: Int? = nil) async throws -> FileVersionHistory {
+        try await withSession { origin, token in
+            try await api.fileVersions(origin, token: token, fileID: fileID, before: before, after: after, snapshot: snapshot)
+        }
+    }
+
+    func restoreVersion(fileID: Int64, version: Int, baseVersion: Int) async throws -> RestoredFileVersion {
+        try await withSession { origin, token in
+            try await api.restoreVersion(origin, token: token, fileID: fileID, version: version, baseVersion: baseVersion)
+        }
+    }
+
+    private func withSession<T: Sendable>(_ operation: (ServerOrigin, String) async throws -> T) async throws -> T {
+        guard let saved, let origin, account != nil else { throw ServerError.unauthorized }
+        do {
+            let result = try await operation(origin, saved.token)
+            guard self.saved == saved else { throw CancellationError() }
+            return result
+        } catch {
+            // A request from a logged-out session must never update or revoke
+            // the account that replaced it, including a new login to this user.
+            guard self.saved == saved else { throw CancellationError() }
+            if error as? ServerError == .unauthorized { invalidateSession() }
+            throw error
+        }
+    }
+
+    func relocateFiles(ids: [Int64], parentID: Int64, copy: Bool) async throws {
+        try await withSession { origin, token in
+            try await api.relocateFiles(origin, token: token, ids: ids, parentID: parentID, copy: copy)
+        }
+    }
+
+    var transferIdentity: TransferIdentity? {
+        guard let origin, let account, saved != nil else { return nil }
+        return TransferIdentity(server: origin.url.absoluteString, userID: account.id)
+    }
+
+    func transferContext() throws -> TransferContext {
+        guard let identity = transferIdentity, let origin, let saved else { throw ServerError.unauthorized }
+        return TransferContext(identity: identity, origin: origin, token: saved.token, api: api)
+    }
+
+    func requireTransferIdentity(_ expected: TransferIdentity?) throws {
+        guard let expected, let current = transferIdentity else { throw ServerError.unauthorized }
+        guard expected == current else { throw ServerError.sessionChanged }
+    }
+
+    func observeTransferFailure(_ error: any Error, context: TransferContext) {
+        if error as? ServerError == .unauthorized, transferIdentity == context.identity,
+           saved?.token == context.token { invalidateSession() }
+    }
+
     private func checkHealth(_ origin: ServerOrigin, token: String) async throws {
         do {
             try await api.health(origin, token: token)

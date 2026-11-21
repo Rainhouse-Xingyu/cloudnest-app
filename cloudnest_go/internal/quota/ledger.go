@@ -80,8 +80,10 @@ func snapshot(tx *gorm.DB, uid int64, withLimit bool) (contract.StorageUsage, er
 	}
 	if err := tx.Raw(`SELECT COALESCE(SUM(reserved_bytes),0) AS reserved_bytes,
  COALESCE(SUM(IF(reserved_bytes<0 OR total_size IS NULL OR reserved_bytes<>total_size OR
+ (contract_version=2 AND (quota_user_id IS NULL OR quota_user_id<=0 OR version_file_id IS NULL OR version_file_id<=0 OR version_base<=0 OR version_base>=2147483647 OR user_id IS NULL OR user_id<=0 OR parent_id<>0)) OR
+ (contract_version=1 AND (quota_user_id IS NOT NULL OR version_file_id IS NOT NULL OR version_base<>0 OR version_comment<>'')) OR
  (reserved_bytes=0 AND NOT(COALESCE(chunk_protocol=1 AND transfer_protocol=1 AND total_size=0 AND chunk_size BETWEEN 1 AND ? AND total_chunks=0 AND uploaded_chunks=0,0))),1,0)),0) AS broken
- FROM upload_task WHERE user_id=? AND contract_version=1 AND status IN (0,2) AND expires_at>UTC_TIMESTAMP(6)`, contract.MaxUploadChunkBytes, uid).Scan(&reservations).Error; err != nil {
+ FROM upload_task WHERE ((user_id=? AND contract_version=1) OR (quota_user_id=? AND contract_version=2)) AND status IN (0,2) AND expires_at>UTC_TIMESTAMP(6)`, contract.MaxUploadChunkBytes, uid, uid).Scan(&reservations).Error; err != nil {
 		return u, contract.ErrQuotaAccounting
 	}
 	u.ReservedBytes = reservations.ReservedBytes
@@ -150,7 +152,10 @@ func RequireLiveTask(tx *gorm.DB, t model.UploadTask) error {
 
 // RequireRetainedTask validates an unexpired running or paused reservation.
 func RequireRetainedTask(tx *gorm.DB, t model.UploadTask) error {
-	if t.ContractVersion != 1 || (t.Status != 0 && t.Status != 2) || t.TotalSize == nil || t.ReservedBytes != *t.TotalSize || t.ReservedBytes < 0 || (t.ReservedBytes == 0 && !contract.IsEmptyUpload(t)) || t.ExpiresAt == nil {
+	if _, err := contract.UploadQuotaUser(t); err != nil {
+		return err
+	}
+	if (t.Status != 0 && t.Status != 2) || t.TotalSize == nil || t.ReservedBytes != *t.TotalSize || t.ReservedBytes < 0 || (t.ReservedBytes == 0 && !contract.IsEmptyUpload(t)) || t.ExpiresAt == nil {
 		return contract.ErrUploadContract
 	}
 	var live int64

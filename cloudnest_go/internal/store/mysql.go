@@ -20,7 +20,11 @@ import (
 
 // NewMySQL opens a connection only. Schema changes require the explicit migrate command.
 func NewMySQL(cfg config.Config) (*gorm.DB, error) {
-	db, err := gorm.Open(mysql.Open(cfg.MySQLDSN), &gorm.Config{
+	dsn, err := mysqlTimeDSN(cfg.MySQLDSN, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
 		Logger: logger.New(log.New(os.Stderr, "", log.LstdFlags), logger.Config{
 			SlowThreshold: time.Second, LogLevel: logger.Warn,
 			IgnoreRecordNotFoundError: true, ParameterizedQueries: true,

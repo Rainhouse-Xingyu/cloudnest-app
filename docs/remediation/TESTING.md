@@ -599,3 +599,38 @@ G06 公开分享新增 HTTPS 提取码、下载上限和跨链接限流。11 项
 ## 2026-11-19 G07 原生 macOS 会话
 
 提交 5ff84a3 的 macOS CI 44639630078 在 macOS 26.7.2 / Xcode 26.6 和 macOS 27.0.1 / Xcode 27.1 均通过基础 Swift 回归、独立 Keychain 往返和默认/自定义权限两种真实 Go HTTPS 会话场景。两台均完成 Universal Release、临时签名和 arm64/x86_64 检查。TLS/重定向及临时服务边界见 [G07 记录](G07-MACOS-FOUNDATION.md)，GUI 运行验收继续推进。
+
+## 2026-11-20 UTC G08 原生文件与可恢复传输
+
+提交 a892b1c 的 macOS CI 44647503610 在 macOS 26.7.2 / Xcode 26.6 和 macOS 27.0.1 / Xcode 27.1 均通过基础 Swift 回归、真实 HTTPS Go/MySQL/Redis 联调、Universal Release 与签名/双架构检查。新增覆盖分片摘要与源变化、下载身份与前缀篡改、检查点锁/恢复、发布重试与同名保留、未确认 Data 块取消、真实上传/下载暂停与队列重建、未确认后缀截断、预览准备、目录 ZIP、空文件、取消，以及移动/复制自动重名和跨用户拒绝。
+
+真实传输用例约 18.01s/18.23s，旧逐字节版本 602ea2e 为 168s/159s；两批场景数量不同，范围和剩余异常恢复/大文件/RSS/GUI 验收见 [G08 记录](G08-MACOS-FILES.md)。本机原生登录表单的密码遮蔽/清空及非 HTTPS 提示已通过实际 UI 操作确认。
+
+
+## 原生权限与真实网络中断
+
+手动夹具额外设置 CLOUDNEST_NATIVE_UI_PERMISSION_ADMIN=1、CLOUDNEST_NATIVE_UI_SLOW_TRANSFERS=1，在私有目录创建 trace-downloads 观察实际响应；interrupt-next-download 只让下一次下载正文在 5 MiB 后中断。真实管理 API 撤回/恢复和会话注销均使用合成账户。夹具/故障机制不进入生产服务。新测试 TestMacOSNativeUIInterruptsActualHTTP 验证真实 HTTP 206 的半截正文/UnexpectedEOF 和 ResponseController 透传，已接入默认 macOS 运行器；本地 wire/race 1.690s、完整 10+1 真实联调及新 Go 测试 78.015s 通过。最终 GUI 的改名/列表/下载/上传恢复权限变化、断流 Range/If-Range 继续和会话撤销均已验证，原始成功/环境失败及详细限制见 [报告](MACOS-PERMISSION-NETWORK.md)。620e4b1 精确 CI 已全通过，新批次单独核对。
+
+同一最新产品代码再次运行 opt-in 四进程 GiB 场景通过（包 249.240s），原报告 MACOS-LARGE-FILE-620E4B1-20261121.json 的 App/Core 指纹匹配 620e4b1 和当前产品文件。半程确认 541,065,216 字节、原 ETag/If-Range 恢复、未确认后缀截断、最终 1,073,741,997 字节全摘要与 <512 MiB 门槛均通过，最高阶段结束时进程高水位 82.625 MiB；方法/测量点见 [大文件记录](MACOS-LARGE-FILES.md)。
+
+## 原生旧预览兼容专项
+
+`swift test --package-path cloudnest_macos --filter LegacyPreviewTests` 验证五种旧状态原始 journal/文件保留、不发送旧下载请求、相邻正常下载继续取消、路径组件/别名/未知符号链接，以及普通/历史版本新任务拒绝旧区域。初始 9 条失败和 scoped 书签遗漏的 3 条失败均保留。最终普通 Swift 42 项注册，实际 30 项/12 条件跳过（0.094s）；真实默认 10 项加受限 1 项通过（9 项跳过），Go 包 70.424s。最终独立应用在全新夹具验证 5 个历史 journal 和 11 个数据文件全部字节不变、新版 Quick Look 真实正文/回收与历史共存；应用、服务正常退出。协议、失败与最终源码指纹 JSON 见 [旧预览兼容](MACOS-LEGACY-PREVIEWS.md)。c6db8b9 基线 CI 已全通过，新批次单独核对。
+
+## 原生操作身份专项
+
+此批 a50e762 的双平台原生 CI 44872184196 与完整后端 CI 44872184221 已全通过，精确结果另记 G08。
+
+`swift test --package-path cloudnest_macos --filter TransferIntentTests` 运行可控响应/队列回归，覆盖旧选择、迟到 200/401、同账户新登录与关闭旧工作任务。新双账户联调由 `python3 scripts/test-macos-backend.py` 的默认真实 suite 执行；可用 `CLOUDNEST_SWIFT_TEST_FILTER=realBackendTransferIntentStaysWithItsAccount` 定向运行，仍需独立本机 MySQL/Redis 依赖。受限账户按条件跳过该写用例，不把跳过计为执行通过。详见 [身份协议与本批结果](MACOS-OPERATION-IDENTITY.md)。
+
+## 原生连续下载与 opt-in GiB 验收
+
+同提交 168b026 另完成两目录实际批量移动、另一客户端先回收一项后的批量部分失败/重试/回收站 GUI，真实认证 API 回读 ID/父目录/回收结果一致。应用与私有后端均正常退出，范围及原始 JSON 见 [G08 批量验收](G08-MACOS-FILES.md)。这是过期选择场景，不替代权限撤销或中断移动。
+
+同提交的产品 App/Core 另以临时测试入口 defaultSize=640×440 构建，系统实际整窗为 640×492 点（2× 截图 1280×984），已核对 Table/检查器/侧栏/版本 sheet/搜索与原生工具栏溢出。临时入口仅改变初始尺寸、未改产品视图；默认文本大小/浅色的单显示器结果不替代文字缩放。来源指纹、观察与局限见 [尺寸记录](MACOS-NARROW-GUI-20261121.json)，应用及服务均正常退出。
+
+168b026 精确原生 CI 44897677900 与后端 CI 44897677945 全通过。双平台各 27 项基础/Keychain、10 项默认真实后端加 1 项受限会话，以及非 UTC 时间、Universal Release/签名/双架构和 UI 入口；后端普通 394.079s、网络 97.509s、AI 44.528s 及 Agent/HEIF/漏洞全通过。详细平台/用例耗时见 G08，doc-only 后续提交不冒用此 SHA 的 run。
+
+`python3 scripts/test-macos-backend.py --large-file --report /tmp/new-native-large-file.json` 运行四个独立 Swift 进程的真实 GiB 恢复验收；需要 macOS、本机隔离 MySQL/Redis 与至少 8 GiB 临时空闲卷，报告独占创建。不能和 --filter/手动 UI 夹具组合，普通 CI 不隐式跑 GiB。定向请求计数可用 `CLOUDNEST_SWIFT_TEST_FILTER=realBackendStreamingDownloadRequestBudget python3 scripts/test-macos-backend.py`。GUI 使用既有 `CLOUDNEST_NATIVE_UI_FIXTURE_DIR` 与额外 `CLOUDNEST_NATIVE_UI_LARGE_FILE=1`，只给私有夹具设置 10240 KiB/s，不增加产品选项。
+
+2026-11-21：普通 Swift 38 项注册、26 项实际通过/12 条件跳过（0.081s）；完整默认 10 项真实联调和受限 1 项通过（其余 9 项跳过），包 74.745s；最后严格计数版本又通过 24.006s。四进程 1 GiB + 173 字节验收包 242.338s，通过上传/下载暂停退出恢复、后缀截断、强 ETag/Range 与完整摘要，每进程真实峰值 <512 MiB（最高 160.58）。另三进程实际 GUI 正常 Quit/重开恢复通过，结果 SHA/字节一致、无 part，采样峰值最高 212.63 MiB。首轮观察器错误导致失败，原始报告保留；修正观察器 defer 后同门槛完整重跑。具体日志路径、原始成功/失败/GUI JSON 与环境/吞吐率边界见 [大文件验收](MACOS-LARGE-FILES.md)。

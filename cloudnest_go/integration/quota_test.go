@@ -498,7 +498,7 @@ func TestQuotaSchemaExplicitUpgradeAndMissingPolicyRefusal(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := f.db.Exec("ALTER TABLE upload_task DROP INDEX idx_upload_quota,DROP INDEX idx_upload_task_expires_at,DROP COLUMN contract_version,DROP COLUMN reserved_bytes,DROP COLUMN parent_id,DROP COLUMN expires_at").Error; err != nil {
+	if err := f.db.Exec("ALTER TABLE upload_task DROP INDEX idx_upload_quota,DROP INDEX idx_version_upload_quota,DROP INDEX idx_version_upload_target,DROP INDEX idx_upload_task_expires_at,DROP COLUMN contract_version,DROP COLUMN reserved_bytes,DROP COLUMN parent_id,DROP COLUMN expires_at").Error; err != nil {
 		t.Fatal(err)
 	}
 	if store.CheckFileSchema(f.db) == nil {

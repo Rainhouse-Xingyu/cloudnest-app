@@ -114,3 +114,16 @@ G05 已加入[停止并清除 Agent 恢复配置](FRP-FORGET-CONFIG.md)的排他
 G06 在独立集成分支同时接入 G04 与 G05 的代码，保留 AI worker 生命周期、Agent TLS 和两套 Schema 检查。G04/G05 草稿 PR 保持独立，集成分支用于验证合并后的接口、迁移和后续后端改动。
 
 - [G07 原生 macOS 骨架与真实会话联调](G07-MACOS-FOUNDATION.md)
+- [MySQL 新连接时间协议与历史迁移边界](MYSQL-TIMESTAMPS.md)
+- [macOS 版本历史、固定版本下载与追加式恢复](MACOS-VERSIONS.md)
+- [绑定目标的版本上传与初始化取消](VERSION-UPLOADS.md)
+- [原生传输速度与确认进度](MACOS-TRANSFER-SPEED.md)
+- [旧预览任务只读兼容与跨进程书签验证](MACOS-LEGACY-PREVIEWS.md)：保留旧文件和原 journal，不把历史文件导入可删除缓存；失败、最终 GUI 与精确测试范围单独记录。
+- [原生权限变化、会话撤销与真实响应中断](MACOS-PERMISSION-NETWORK.md)：实际管理 API 撤回/恢复、原任务重试、强 ETag/Range 续传及环境到期失败记录。
+- [原生连续下载、GiB 跨进程恢复与 GUI 内存验收](MACOS-LARGE-FILES.md)：保留首轮观察器失败与最终成功原始报告；普通单用户暖盘结果不替代断电、多卷及聚合资源验收。a50e762 精确 CI 已全通过，本批另核验，G08/总 Goal 继续进行中。
+
+
+G08 3939be8 的双平台原生与完整后端 CI、新版本上传 GUI 已通过；随后补齐有界历史双向分页，每次继续核对权限及当前版本，原生固定 50 项并替换页面，实际 Core/Go 与 56 版 GUI 已通过。本批精确 CI 另核验，整体 Goal 继续进行中，见 [分页说明](VERSION-HISTORY-PAGES.md)。
+
+
+G08 837affd 的双平台原生及完整后端 CI 已全通过。后续 Finder 双文件拖入/字节回读、批量操作、深浅色和原生分屏布局已有实测；独立核对修复了操作意图跨账户和迟到响应污染新会话的问题，五项边界回归及真实双账户联调通过，见 [操作身份](MACOS-OPERATION-IDENTITY.md)。新提交 CI 单独核对，其余 G08/全项目要求继续推进。

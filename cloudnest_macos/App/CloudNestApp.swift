@@ -2,22 +2,31 @@ import SwiftUI
 
 @main
 struct CloudNestApp: App {
-    @State private var session = SessionState(
-        api: ServerAPI(),
-        vault: KeychainSessionVault(service: "org.cloudnest.macos.session")
-    )
+    @State private var session: SessionState
+    @State private var transfers: TransferManager
+
+    init() {
+        let session = SessionState(api: ServerAPI(), vault: KeychainSessionVault(service: "org.cloudnest.macos.session"))
+        _session = State(initialValue: session)
+        _transfers = State(initialValue: TransferManager(session: session))
+    }
 
     var body: some Scene {
         WindowGroup("CloudNest", id: "workspace") {
-            WorkspaceWindow(session: session)
+            WorkspaceWindow(session: session, transfers: transfers)
                 .frame(minWidth: 640, minHeight: 440)
-                .task { await session.restore() }
+                .task {
+                    await session.restore()
+                    await transfers.restore()
+                }
         }
         .defaultSize(width: 900, height: 590)
+        .onChange(of: session.transferIdentity) { Task { await transfers.synchronizeIdentity() } }
         .commands {
+            FileBrowserCommands()
             CommandMenu("服务器") {
                 Button("刷新连接状态") { Task { await session.refresh() } }
-                    .keyboardShortcut("r")
+                    .keyboardShortcut("r", modifiers: [.command, .option])
                     .disabled(!session.hasSavedSession || session.busy)
                 Button("退出登录") { Task { await session.signOut() } }
                     .disabled(!session.hasSavedSession || session.busy)
@@ -32,28 +41,52 @@ struct CloudNestApp: App {
 }
 
 private enum Page: String, CaseIterable, Identifiable {
+    case files = "我的文件"
+    case recycleBin = "回收站"
+    case transfers = "传输"
     case connection = "服务器连接"
     case account = "账户"
     var id: Self { self }
-    var icon: String { self == .connection ? "network" : "person.crop.circle" }
+    var icon: String {
+        switch self {
+        case .files: "folder"
+        case .recycleBin: "trash"
+        case .transfers: "arrow.up.arrow.down"
+        case .connection: "network"
+        case .account: "person.crop.circle"
+        }
+    }
 }
 
 struct WorkspaceWindow: View {
     let session: SessionState
-    @State private var selection: Page? = .connection
+    let transfers: TransferManager
+    @State private var selection: Page? = .files
 
     var body: some View {
         if session.hasSavedSession {
             NavigationSplitView {
                 List(selection: $selection) {
                     ForEach(Page.allCases) { page in
-                        Label(page.rawValue, systemImage: page.icon).tag(page)
+                        Label(page.rawValue, systemImage: page.icon)
+                            .badge(page == .transfers ? transfers.jobs.filter {
+                                !transfers.legacyPreviewJobs.contains($0.id) && ($0.phase.isActive || $0.phase == .queued)
+                            }.count : 0)
+                            .tag(page)
                     }
                 }
                 .navigationSplitViewColumnWidth(min: 170, ideal: 200, max: 260)
             } detail: {
                 Group {
                     switch selection ?? .connection {
+                    case .files:
+                        FileBrowserView(session: session, transfers: transfers, recycleBin: false)
+                            .id(session.account?.id)
+                    case .recycleBin:
+                        FileBrowserView(session: session, transfers: transfers, recycleBin: true)
+                            .id(session.account?.id)
+                    case .transfers:
+                        TransferListView(transfers: transfers)
                     case .connection:
                         ConnectionDetails(session: session)
                     case .account:
@@ -74,13 +107,15 @@ struct WorkspaceWindow: View {
                 }
                 .navigationTitle((selection ?? .connection).rawValue)
                 .toolbar {
-                    ToolbarItem {
-                        Button {
-                            Task { await session.refresh() }
-                        } label: {
-                            Label("刷新连接状态", systemImage: "arrow.clockwise")
+                    if selection == .connection || selection == .account {
+                        ToolbarItem {
+                            Button {
+                                Task { await session.refresh() }
+                            } label: {
+                                Label("刷新连接状态", systemImage: "arrow.clockwise")
+                            }
+                            .disabled(session.busy)
                         }
-                        .disabled(session.busy)
                     }
                 }
             }
@@ -107,6 +142,7 @@ private struct SignInView: View {
     @State private var server = ""
     @State private var username = ""
     @State private var password = ""
+    @ScaledMetric(relativeTo: .body) private var formHeight: CGFloat = 168
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -121,6 +157,7 @@ private struct SignInView: View {
                     .textContentType(.password)
             }
             .formStyle(.grouped)
+            .frame(height: formHeight)
             if let error = session.error {
                 Label(error, systemImage: "exclamationmark.circle")
                     .foregroundStyle(.secondary)
