@@ -14,8 +14,9 @@ struct UploadSource: Codable, Sendable {
 
 struct TransferRecord: Codable, Identifiable, Sendable {
     enum Direction: String, Codable {
-        case upload, download, versionDownload
-        var isDownload: Bool { self != .upload }
+        case upload, download, versionDownload, versionUpload
+        var isUpload: Bool { self == .upload || self == .versionUpload }
+        var isDownload: Bool { self == .download || self == .versionDownload }
     }
     enum Phase: String, Codable {
         case queued, running, pausing, paused, cancelling, cancelled, failed, completed
@@ -51,6 +52,12 @@ struct TransferRecord: Codable, Identifiable, Sendable {
     // refuse this journal rather than ignore these fields and fetch current bytes.
     var fileVersion: Int?
     var versionSize: Int64?
+    // A separate kind makes older clients refuse rather than publish this as
+    // an ordinary file. The confirmed base never advances on retry.
+    var baseVersion: Int?
+    var versionComment: String?
+    var versionTargetName: String?
+    var publishedVersion: Int?
 }
 
 enum TransferError: LocalizedError, Equatable {

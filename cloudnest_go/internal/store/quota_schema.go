@@ -62,5 +62,5 @@ func CheckQuotaSchema(db *gorm.DB) error {
 			}
 		}
 	}
-	return nil
+	return CheckVersionUploadSchema(db)
 }

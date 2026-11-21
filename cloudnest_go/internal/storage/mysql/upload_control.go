@@ -15,9 +15,13 @@ import (
 // Controls serialize with every writer on the owner/task locks. Expected epoch
 // prevents a delayed duplicate pause/resume from reversing a newer intention.
 func (r *FileRepo) ControlUploadTask(ctx context.Context, uid int64, id string, expected int64, paused bool, ip string) (model.UploadTask, error) {
+	owner, err := r.uploadLedgerForActor(ctx, uid, id)
+	if err != nil {
+		return model.UploadTask{}, err
+	}
 	var task model.UploadTask
-	err := fileMetadataTransaction(ctx, r.db, func(tx *gorm.DB) error {
-		if err := quota.Begin(tx, uid); err != nil {
+	err = fileMetadataTransaction(ctx, r.db, func(tx *gorm.DB) error {
+		if err := quota.Begin(tx, owner); err != nil {
 			return err
 		}
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("upload_id=?", id).First(&task).Error; err != nil {
@@ -31,6 +35,9 @@ func (r *FileRepo) ControlUploadTask(ctx context.Context, uid int64, id string, 
 		}
 		if err := quota.RequireRetainedTask(tx, task); err != nil {
 			return err
+		}
+		if actual, err := contract.UploadQuotaUser(task); err != nil || actual != owner {
+			return contract.ErrUploadContract
 		}
 		target := int8(0)
 		action := "upload_resume"
@@ -51,8 +58,14 @@ func (r *FileRepo) ControlUploadTask(ctx context.Context, uid int64, id string, 
 			return contract.ErrUploadContract
 		}
 		if !paused {
-			if err := requireWriteParent(tx, uid, task.ParentID); err != nil {
-				return err
+			if task.ContractVersion == 2 {
+				if _, err := versionUploadTarget(tx, task); err != nil {
+					return err
+				}
+			} else {
+				if err := requireWriteParent(tx, uid, task.ParentID); err != nil {
+					return err
+				}
 			}
 		}
 		next := task.TransferEpoch + 1
@@ -65,7 +78,7 @@ func (r *FileRepo) ControlUploadTask(ctx context.Context, uid int64, id string, 
 		}
 		task.Status = target
 		task.TransferEpoch = next
-		if err := quota.Refresh(tx, uid, !paused); err != nil {
+		if err := quota.Refresh(tx, owner, !paused); err != nil {
 			return err
 		}
 		return tx.Create(&model.OperationLog{UserID: &uid, Action: action, Status: "success", Detail: fmt.Sprintf("upload_id=%s epoch=%d", id, next), ClientIP: ip}).Error

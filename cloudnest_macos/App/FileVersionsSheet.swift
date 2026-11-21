@@ -6,6 +6,9 @@ struct FileVersionsSheet: View {
     let onRestored: () -> Void
     @State private var history: FileVersionState
     @State private var confirmation: VersionRestoreConfirmation?
+    @State private var uploadConfirmation: VersionUploadConfirmation?
+    @State private var uploadComment = ""
+    @State private var uploadID: UUID?
     @Environment(\.dismiss) private var dismiss
 
     init(file: FileItem, session: SessionState, transfers: TransferManager, onRestored: @escaping () -> Void) {
@@ -26,6 +29,8 @@ struct FileVersionsSheet: View {
                 }
                 Spacer()
                 if history.busy { ProgressView().controlSize(.small) }
+                Button("上传新版本…", action: chooseUpload)
+                    .disabled(history.busy || !(history.currentVersion.map { $0 > 0 && $0 < 2147483647 } ?? false) || !validComment)
                 Button("刷新") { Task { await history.reload() } }.disabled(history.busy)
             }
             Table(history.items, selection: $history.selection) {
@@ -49,6 +54,9 @@ struct FileVersionsSheet: View {
                     ContentUnavailableView("没有已登记的版本", systemImage: "clock")
                 }
             }
+            TextField("新版本说明（可选，最多 255 个字符）", text: $uploadComment)
+                .disabled(history.busy)
+            if !validComment { Text("说明最多 255 个字符，不能包含空字符。").foregroundStyle(.secondary) }
             if let error = history.error {
                 Label(error, systemImage: "exclamationmark.circle").foregroundStyle(.secondary)
             }
@@ -72,6 +80,10 @@ struct FileVersionsSheet: View {
         .frame(minWidth: 640, idealWidth: 780, maxWidth: 1100, minHeight: 420, idealHeight: 520, maxHeight: 850)
         .interactiveDismissDisabled(history.busy)
         .task { await history.reload() }
+        .onChange(of: uploadPhase) {
+            guard let uploadID else { return }
+            Task { if await history.observeUpload(transfers.records[uploadID]) { onRestored() } }
+        }
         .confirmationDialog("将版本 \(confirmation?.item.version ?? 0) 恢复为当前文件？", isPresented: Binding(
             get: { confirmation != nil }, set: { if !$0 { confirmation = nil } }
         ), presenting: confirmation) { request in
@@ -81,6 +93,32 @@ struct FileVersionsSheet: View {
                 }
             }
         } message: { _ in Text("会新增一个版本，并保留已有历史。") }
+        .confirmationDialog("将所选文件上传为新版本？", isPresented: Binding(
+            get: { uploadConfirmation != nil }, set: { if !$0 { uploadConfirmation = nil } }
+        ), presenting: uploadConfirmation) { request in
+            Button("上传为新版本") {
+                Task { uploadID = await history.upload(request.source, expectedCurrentVersion: request.base,
+                    comment: request.comment, transfers: transfers) }
+            }
+        } message: { request in
+            Text("将「\(request.source.lastPathComponent)」发布至「\(history.file.filename)」，基于当前版本 \(request.base) 追加。文件名与旧历史会保留。")
+        }
+    }
+
+    private var validComment: Bool { uploadComment.unicodeScalars.count <= 255 && !uploadComment.contains("\0") }
+    private var uploadPhase: TransferRecord.Phase? { uploadID.flatMap { transfers.records[$0]?.phase } }
+
+    private func chooseUpload() {
+        guard let base = history.currentVersion, !history.busy, validComment else { return }
+        let comment = uploadComment
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.begin { result in
+            guard result == .OK, let url = panel.url else { return }
+            uploadConfirmation = VersionUploadConfirmation(source: url, base: base, comment: comment)
+        }
     }
 
     private func download() {
@@ -101,4 +139,10 @@ struct FileVersionsSheet: View {
 private struct VersionRestoreConfirmation {
     let item: FileVersionItem
     let base: Int
+}
+
+private struct VersionUploadConfirmation {
+    let source: URL
+    let base: Int
+    let comment: String
 }

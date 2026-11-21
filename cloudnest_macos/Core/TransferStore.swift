@@ -62,6 +62,18 @@ actor TransferStore {
                 guard version > 0, record.direction == .versionDownload, !record.isArchive,
                       record.versionSize.map({ $0 >= 0 && $0 == record.totalBytes }) ?? true else { throw TransferError.invalidCheckpoint }
             } else if record.versionSize != nil || record.direction == .versionDownload { throw TransferError.invalidCheckpoint }
+            if record.direction == .versionUpload {
+                guard record.fileID.map({ $0 > 0 }) ?? false, record.parentID == 0, !record.isArchive,
+                      record.baseVersion.map({ $0 > 0 && $0 < 2147483647 }) ?? false,
+                      record.versionComment.map({ $0.unicodeScalars.count <= 255 && !$0.contains("\0") }) ?? false,
+                      record.versionTargetName.map({ !$0.isEmpty && URL(fileURLWithPath: $0).lastPathComponent == $0 && $0 != "." && $0 != ".." }) ?? false,
+                      record.publishedVersion.map({ $0 == (record.baseVersion ?? 0) + 1 }) ?? true else { throw TransferError.invalidCheckpoint }
+                if record.phase == .completed {
+                    guard record.resultFileID == record.fileID, record.publishedVersion != nil else { throw TransferError.invalidCheckpoint }
+                }
+            } else if record.baseVersion != nil || record.versionComment != nil || record.versionTargetName != nil || record.publishedVersion != nil {
+                throw TransferError.invalidCheckpoint
+            }
             revisions[id] = record.revision
             return record
         }

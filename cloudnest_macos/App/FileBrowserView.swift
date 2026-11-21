@@ -196,7 +196,7 @@ struct FileBrowserView: View {
             }
         }
         .onDisappear { clearPreview() }
-        .onChange(of: transfers.jobs.filter { $0.direction == .upload && $0.phase == .completed }.count) {
+        .onChange(of: transfers.jobs.filter { $0.direction.isUpload && $0.phase == .completed }.count) {
             Task { await browser.reload() }
         }
     }

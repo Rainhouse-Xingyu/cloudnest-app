@@ -8,11 +8,16 @@ struct TransferListView: View {
         VStack(spacing: 0) {
             List(transfers.jobs) { job in
                 HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: job.direction == .upload ? "arrow.up.doc" : "arrow.down.doc")
+                    Image(systemName: job.direction.isUpload ? "arrow.up.doc" : "arrow.down.doc")
                     VStack(alignment: .leading, spacing: 6) {
                         Text(job.resultName ?? job.name).lineLimit(1)
                         if let version = job.fileVersion {
                             Text("历史版本 \(version)").font(.caption).foregroundStyle(.secondary)
+                        }
+                        if job.direction == .versionUpload {
+                            Text("发布至「\(job.versionTargetName ?? "文件")」· 基于版本 \(job.baseVersion ?? 0)")
+                                .font(.caption).foregroundStyle(.secondary)
+                            if let version = job.publishedVersion { Text("已发布为版本 \(version)").font(.caption).foregroundStyle(.secondary) }
                         }
                         if job.phase == .running {
                             TimelineView(.periodic(from: .now, by: 1)) { _ in

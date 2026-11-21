@@ -332,6 +332,16 @@ func (r *CollaborationRepo) CreateFileVersion(ctx context.Context, req contract.
 }
 
 func appendFileVersion(tx *gorm.DB, file model.File, storage model.Storage, uid int64, fileType, comment, action, clientIP string) (model.FileVersion, error) {
+	row, err := appendFileVersionMetadata(tx, file, storage, uid, fileType, comment, action, clientIP)
+	if err != nil {
+		return row, err
+	}
+	return row, quota.Refresh(tx, file.UserID, true)
+}
+
+// The upload completion transaction also consumes a reservation before its
+// final quota refresh. Counting both here would temporarily charge it twice.
+func appendFileVersionMetadata(tx *gorm.DB, file model.File, storage model.Storage, uid int64, fileType, comment, action, clientIP string) (model.FileVersion, error) {
 	if file.CurrentVersion <= 0 || file.CurrentVersion >= 2147483647 {
 		return model.FileVersion{}, contract.ErrConflict
 	}
@@ -348,9 +358,6 @@ func appendFileVersion(tx *gorm.DB, file model.File, storage model.Storage, uid 
 		return row, err
 	}
 	if err := tx.Model(&file).Updates(map[string]any{"current_version": row.Version, "storage_id": storage.ID, "size": size, "file_type": fileType}).Error; err != nil {
-		return row, err
-	}
-	if err := quota.Refresh(tx, file.UserID, true); err != nil {
 		return row, err
 	}
 	if err := indexqueue.Enqueue(tx, file.ID, true); err != nil {

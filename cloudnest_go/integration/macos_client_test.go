@@ -38,6 +38,29 @@ func TestMacOSClientSession(t *testing.T) {
 		return value.(*nativeTelemetryGate)
 	}
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.Header.Get("X-CloudNest-Test-Version-Binding"), "native-version-binding-") && strings.HasSuffix(r.URL.Path, "/versions/upload") {
+			receipt := httptest.NewRecorder()
+			f.router.ServeHTTP(receipt, r)
+			if receipt.Code == 200 {
+				var fields map[string]any
+				if err := json.Unmarshal(receipt.Body.Bytes(), &fields); err != nil {
+					t.Error(err)
+					w.WriteHeader(500)
+					return
+				}
+				fields["file_id"] = int64(987654321)
+				encoded, err := json.Marshal(fields)
+				if err != nil {
+					t.Error(err)
+					w.WriteHeader(500)
+					return
+				}
+				receipt.Body.Reset()
+				receipt.Body.Write(encoded)
+			}
+			copyNativeReceipt(w, receipt)
+			return
+		}
 		// Test-only scheduling at the real router boundary. Authentication,
 		// multipart processing and file writes still run in the shipping router.
 		// Gates prove body flow independently of acknowledged durable progress.

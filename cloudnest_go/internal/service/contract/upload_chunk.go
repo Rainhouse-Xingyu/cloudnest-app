@@ -29,5 +29,5 @@ func ExpectedChunkBytes(t model.UploadTask, index int) (int64, error) {
 // IsEmptyUpload recognizes the only valid zero-byte task shape. No chunk is
 // accepted: completion creates a verified empty object through normal handoff.
 func IsEmptyUpload(t model.UploadTask) bool {
-	return t.ContractVersion == 1 && t.ChunkProtocol == 1 && t.TransferProtocol == 1 && t.TotalSize != nil && *t.TotalSize == 0 && t.ReservedBytes == 0 && t.ChunkSize != nil && *t.ChunkSize > 0 && int64(*t.ChunkSize) <= MaxUploadChunkBytes && t.TotalChunks != nil && *t.TotalChunks == 0 && t.UploadedChunks == 0
+	return (t.ContractVersion == 1 || t.ContractVersion == 2) && t.ChunkProtocol == 1 && t.TransferProtocol == 1 && t.TotalSize != nil && *t.TotalSize == 0 && t.ReservedBytes == 0 && t.ChunkSize != nil && *t.ChunkSize > 0 && int64(*t.ChunkSize) <= MaxUploadChunkBytes && t.TotalChunks != nil && *t.TotalChunks == 0 && t.UploadedChunks == 0
 }

@@ -105,6 +105,26 @@ final class TransferManager {
     }
 
     @discardableResult
+    func enqueueVersionUpload(_ url: URL, file: FileItem, baseVersion: Int, comment: String) async throws -> UUID {
+        try await ensureStore()
+        let context = try session.transferContext()
+        guard !file.isDirectory, file.id > 0, baseVersion > 0, baseVersion < 2147483647,
+              comment.unicodeScalars.count <= 255, !comment.contains("\0") else { throw ServerError.invalidOperation }
+        let name = url.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { throw ServerError.invalidOperation }
+        let bookmark = try await disk.bookmark(url)
+        var job = TransferRecord(id: UUID(), createdAt: Date(), identity: context.identity, direction: .versionUpload,
+            name: name, bookmark: bookmark, parentID: 0, fileID: file.id, isArchive: false, totalBytes: 0)
+        job.baseVersion = baseVersion
+        job.versionComment = comment
+        job.versionTargetName = file.filename
+        error = nil
+        try await persist(job)
+        await schedule()
+        return job.id
+    }
+
+    @discardableResult
     func enqueueVersionDownload(_ file: FileItem, version: FileVersionItem, destination: URL) async throws -> UUID {
         try await ensureStore()
         let context = try session.transferContext()
@@ -302,13 +322,13 @@ final class TransferManager {
         do {
             guard let job = records[id] else { throw TransferError.invalidCheckpoint }
             switch job.direction {
-            case .upload: try await runUpload(job, context: context, generation: generation)
+            case .upload, .versionUpload: try await runUpload(job, context: context, generation: generation)
             case .download, .versionDownload: try await runDownload(job, context: context, generation: generation)
             }
         } catch {
             if generations[id] == generation, var job = records[id], job.phase == .running {
                 job.phase = Task.isCancelled ? .paused : .failed
-                job.error = Task.isCancelled ? nil : message(error)
+                job.error = Task.isCancelled ? nil : failureMessage(error, job: job)
                 records[id] = job
                 do { try await persist(job) } catch { self.error = message(error) }
             }
@@ -339,10 +359,10 @@ final class TransferManager {
         if let id = job.uploadID {
             status = try await context.api.uploadProgress(context, id: id)
         } else {
-            status = try await context.api.initializeUpload(context, requestID: job.id, name: job.name, parentID: job.parentID, source: source)
+            status = try await initializeUpload(job, context: context, source: source)
             job.uploadID = status.uploadID
             job.epoch = status.epoch
-            try validateUpload(status, id: status.uploadID, source: source)
+            try validateUpload(status, id: status.uploadID, source: source, job: job)
             if var current = records[job.id], current.phase == .pausing || current.phase == .cancelling {
                 current.uploadID = status.uploadID
                 current.epoch = status.epoch
@@ -352,11 +372,12 @@ final class TransferManager {
             try await checkpoint(job, generation: generation)
         }
         guard let uploadID = job.uploadID else { throw TransferError.invalidCheckpoint }
-        try validateUpload(status, id: uploadID, source: source)
+        try validateUpload(status, id: uploadID, source: source, job: job)
         if status.status == 2 {
             status = try await context.api.controlUpload(context, id: uploadID, epoch: status.epoch, paused: false)
+            try validateUploadBinding(status, job: job)
             status = try await context.api.uploadProgress(context, id: uploadID)
-            try validateUpload(status, id: uploadID, source: source)
+            try validateUpload(status, id: uploadID, source: source, job: job)
         }
         guard status.status == 0 || status.status == 1 else { throw ServerError.conflict }
         job.epoch = status.epoch
@@ -379,8 +400,9 @@ final class TransferManager {
         }
         telemetry[job.id]?.transition(to: .confirming)
         let result = try await context.api.completeUpload(context, id: uploadID, epoch: job.epoch, parentID: job.parentID)
-        guard result.id > 0, result.size == source.size else { throw ServerError.invalidResponse }
+        try validateUploadReceipt(result, job: job)
         job.resultFileID = result.id
+        if job.direction == .versionUpload { job.publishedVersion = result.currentVersion }
         job.confirmedBytes = source.size
         job.phase = .completed
         try await checkpoint(job, generation: generation)
@@ -499,24 +521,43 @@ final class TransferManager {
         do {
             try await persist(job)
             let context = try session.transferContext()
-            if job.direction == .upload, job.uploadID == nil, let source = job.source {
+            if job.direction.isUpload, cancel, job.uploadID == nil, job.source != nil {
+                do {
+                    let result = try await context.api.cancelUploadInitialization(context, requestID: job.id)
+                    job.uploadID = result.uploadID
+                    if let file = result.item {
+                        try validateUploadReceipt(file, job: job)
+                        job.resultFileID = file.id
+                        if job.direction == .versionUpload { job.publishedVersion = file.currentVersion }
+                        job.confirmedBytes = job.totalBytes
+                        job.phase = .completed
+                    } else { job.phase = .cancelled }
+                    try await persist(job)
+                    return
+                } catch ServerError.notFound where job.direction == .upload {
+                    // Older servers can still resolve the ordinary contract
+                    // with the original idempotent initialization below.
+                }
+            }
+            if job.direction.isUpload, job.uploadID == nil, let source = job.source {
                 // Init may have committed before its response was lost. Resolve
                 // the durable request key before acknowledging pause or cancel.
-                let status = try await context.api.initializeUpload(context, requestID: job.id,
-                    name: job.name, parentID: job.parentID, source: source)
-                try validateUpload(status, id: status.uploadID, source: source)
+                let status = try await initializeUpload(job, context: context, source: source)
+                try validateUpload(status, id: status.uploadID, source: source, job: job)
                 job.uploadID = status.uploadID
                 job.epoch = status.epoch
                 try await persist(job)
             }
-            if job.direction == .upload, let uploadID = job.uploadID {
+            if job.direction.isUpload, let uploadID = job.uploadID {
                 let status = try await context.api.uploadProgress(context, id: uploadID)
                 guard status.uploadID == uploadID, status.epoch >= 0 else { throw ServerError.invalidResponse }
+                try validateUploadBinding(status, job: job)
                 job.epoch = status.epoch
                 if status.status == 1 {
                     let file = try await context.api.completeUpload(context, id: uploadID, epoch: status.epoch, parentID: job.parentID)
-                    guard file.id > 0, file.size == job.totalBytes else { throw ServerError.invalidResponse }
+                    try validateUploadReceipt(file, job: job)
                     job.resultFileID = file.id
+                    if job.direction == .versionUpload { job.publishedVersion = file.currentVersion }
                     job.confirmedBytes = job.totalBytes
                     job.phase = .completed
                     try await persist(job)
@@ -526,6 +567,7 @@ final class TransferManager {
                     try await context.api.cancelUpload(context, id: uploadID)
                 } else if status.status == 0 {
                     let paused = try await context.api.controlUpload(context, id: uploadID, epoch: status.epoch, paused: true)
+                    try validateUploadBinding(paused, job: job)
                     guard paused.status == 2, paused.uploadID == uploadID, paused.epoch >= status.epoch else {
                         throw ServerError.invalidResponse
                     }
@@ -548,7 +590,7 @@ final class TransferManager {
             try await persist(job)
         } catch {
             job.phase = .failed
-            job.error = message(error)
+            job.error = failureMessage(error, job: job)
             records[id] = job
             try? await persist(job)
             session.observeTransferFailure(error, identity: job.identity)
@@ -556,12 +598,46 @@ final class TransferManager {
         await schedule()
     }
 
-    private func validateUpload(_ status: UploadStatus, id: String, source: UploadSource) throws {
+    private func validateUpload(_ status: UploadStatus, id: String, source: UploadSource, job: TransferRecord) throws {
+        try validateUploadBinding(status, job: job)
         let indices = status.uploaded ?? []
         guard status.uploadID == id, !id.isEmpty, id.utf8.count <= 128,
               id.utf8.allSatisfy({ (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || [45, 46, 95].contains($0) }),
               status.epoch >= 0, Set(indices).count == indices.count,
               indices.allSatisfy({ source.chunks.indices.contains($0) }) else { throw ServerError.invalidResponse }
+    }
+
+    private func initializeUpload(_ job: TransferRecord, context: TransferContext, source: UploadSource) async throws -> UploadStatus {
+        if job.direction == .versionUpload {
+            guard let fileID = job.fileID, let base = job.baseVersion, let comment = job.versionComment else { throw TransferError.invalidCheckpoint }
+            return try await context.api.initializeVersionUpload(context, requestID: job.id, name: job.name,
+                fileID: fileID, baseVersion: base, comment: comment, source: source)
+        }
+        return try await context.api.initializeUpload(context, requestID: job.id, name: job.name, parentID: job.parentID, source: source)
+    }
+
+    private func validateUploadBinding(_ status: UploadStatus, job: TransferRecord) throws {
+        if job.direction == .versionUpload {
+            guard status.kind == "file_version", status.fileID == job.fileID, status.baseVersion == job.baseVersion else { throw ServerError.invalidResponse }
+        } else {
+            guard status.kind == nil, status.fileID == nil, status.baseVersion == nil else { throw ServerError.invalidResponse }
+        }
+    }
+
+    private func validateUploadReceipt(_ file: FileItem, job: TransferRecord) throws {
+        guard file.id > 0, !file.isDirectory, file.size == job.totalBytes else { throw ServerError.invalidResponse }
+        if job.direction == .versionUpload {
+            guard file.id == job.fileID, let base = job.baseVersion, file.currentVersion == base + 1 else { throw ServerError.invalidResponse }
+        } else {
+            guard file.parentID == job.parentID else { throw ServerError.invalidResponse }
+        }
+    }
+
+    private func failureMessage(_ error: any Error, job: TransferRecord) -> String {
+        if job.direction == .versionUpload, error as? ServerError == .conflict {
+            return "版本基线或上传状态已变化。请取消此任务，刷新版本历史后重新选择文件上传；不会自动覆盖新版本。"
+        }
+        return message(error)
     }
 
     private func message(_ error: any Error) -> String {

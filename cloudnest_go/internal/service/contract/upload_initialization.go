@@ -13,6 +13,14 @@ type UploadInitialization struct {
 	UserID, ParentID, TotalSize int64
 	Filename                    string
 	ChunkSize, TotalChunks      int
+	Version                     *VersionUpload
+}
+
+type UploadInitializationCancellation struct {
+	UploadID string
+	Status   int8
+	File     *model.File
+	Version  *VersionUpload
 }
 
 // UploadInitializationID scopes an opaque client key to the authenticated owner.
@@ -30,7 +38,16 @@ func UploadInitializationID(uid int64, key string) (string, error) {
 }
 
 func (in UploadInitialization) ValidateReplay(task model.UploadTask) error {
-	if task.UserID == nil || *task.UserID != in.UserID || task.ContractVersion != 1 || task.TransferProtocol != 1 || task.ChunkProtocol != 1 || task.Status < 0 || task.Status > 4 || task.ParentID != in.ParentID || task.Filename != in.Filename || task.TotalSize == nil || *task.TotalSize != in.TotalSize || task.ChunkSize == nil || task.TotalChunks == nil || (in.ChunkSize != 0 && *task.ChunkSize != in.ChunkSize) || (in.TotalChunks != 0 && *task.TotalChunks != in.TotalChunks) {
+	if _, err := UploadQuotaUser(task); err != nil {
+		return err
+	}
+	if in.Version == nil && task.ContractVersion != 1 {
+		return ErrUploadContract
+	}
+	if in.Version != nil && (task.ContractVersion != 2 || task.VersionFileID == nil || *task.VersionFileID != in.Version.FileID || task.VersionBase != in.Version.BaseVersion || task.VersionComment != in.Version.Comment) {
+		return ErrUploadContract
+	}
+	if task.UserID == nil || *task.UserID != in.UserID || task.TransferProtocol != 1 || task.ChunkProtocol != 1 || task.Status < 0 || task.Status > 4 || task.ParentID != in.ParentID || task.Filename != in.Filename || task.TotalSize == nil || *task.TotalSize != in.TotalSize || task.ChunkSize == nil || task.TotalChunks == nil || (in.ChunkSize != 0 && *task.ChunkSize != in.ChunkSize) || (in.TotalChunks != 0 && *task.TotalChunks != in.TotalChunks) {
 		return ErrUploadContract
 	}
 	return nil

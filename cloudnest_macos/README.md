@@ -20,4 +20,4 @@ xcodebuild -project cloudnest_macos/CloudNest.xcodeproj -scheme CloudNest \
 
 登录后，应用将会话保存在 Keychain，在恢复会话时向服务查询账户状态。服务器状态单独检查资源权限，自定义权限账户仍可恢复会话和退出。服务器不可达时可在窗口工具栏重试，或按 Command-R。重新登录时可输入另一台服务器。
 
-文件页提供版本历史、所选历史版本下载及确认后追加恢复。传输页分别显示已确认进度、最近五秒速度及校验/发布阶段，暂停或重新开始时重置速度。协议和验证边界见 [G08](../docs/remediation/G08-MACOS-FILES.md)、[版本](../docs/remediation/MACOS-VERSIONS.md) 和 [速度](../docs/remediation/MACOS-TRANSFER-SPEED.md)。
+文件页提供版本历史、所选历史版本下载、确认后追加恢复，以及选择本地文件上传为新版本。上传捕获确认基线，冲突后需取消并重新确认，不覆盖未见的新版本。传输页分别显示已确认进度、最近五秒速度及校验/发布阶段，暂停或重新开始时重置速度。协议和验证边界见 [G08](../docs/remediation/G08-MACOS-FILES.md)、[版本上传](../docs/remediation/VERSION-UPLOADS.md)、[历史版本](../docs/remediation/MACOS-VERSIONS.md) 和 [速度](../docs/remediation/MACOS-TRANSFER-SPEED.md)。
