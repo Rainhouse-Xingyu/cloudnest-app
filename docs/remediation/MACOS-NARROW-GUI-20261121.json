@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "passed": true,
+  "verified_utc": "2026-11-21T11:16:30.970194+00:00",
+  "product_commit": "168b0269c9366b4c49e68da447d22600913501dc",
+  "environment": "macOS 27.2.1 arm64, independent native app with disposable loopback HTTPS/MySQL/Redis",
+  "test_entry_change": "Only .defaultSize(width: 900, height: 590) changed to .defaultSize(width: 640, height: 440) in a private temporary test-entry copy. Shipping App/Core sources unchanged.",
+  "test_entry_sha256": "75555ba82f21f5b24f69114645a329ebf1975c371d238cc22e5fc5d10533c69f",
+  "binary_sha256": "b193d47b5bec48446cbda721b945e3b4660c95954b2ceeacafd1c418b6bf4d77",
+  "requested_default_points": [
+    640,
+    440
+  ],
+  "observed_main_screenshot_pixels": [
+    1280,
+    984
+  ],
+  "display_scale": 2,
+  "observed_main_window_points": [
+    640,
+    492
+  ],
+  "height_note": "System enforces the content minimum plus toolbar; not a 440-point full-window acceptance.",
+  "version_sheet_screenshot_pixels": [
+    1280,
+    840
+  ],
+  "checks": [
+    "Login fields and actual Go session",
+    "File table selection and name truncation",
+    "Inspector content and native horizontal scrolling",
+    "Hide sidebar retains selection and expands table",
+    "Version history shows real current version and enables selected download",
+    "Version sheet completion and bottom actions remain visible",
+    "Search filters to Preview.txt",
+    "Native toolbar overflow exposes Download, New Folder, Refresh and Inspector"
+  ],
+  "native_process_exited": true,
+  "scope": "Default text size, light appearance, one macOS display; not arbitrary font scaling, all monitors or all smaller dimensions."
+}

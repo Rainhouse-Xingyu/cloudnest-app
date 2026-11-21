@@ -615,6 +615,12 @@ G06 公开分享新增 HTTPS 提取码、下载上限和跨链接限流。11 项
 
 ## 原生连续下载与 opt-in GiB 验收
 
+同提交 168b026 另完成两目录实际批量移动、另一客户端先回收一项后的批量部分失败/重试/回收站 GUI，真实认证 API 回读 ID/父目录/回收结果一致。应用与私有后端均正常退出，范围及原始 JSON 见 [G08 批量验收](G08-MACOS-FILES.md)。这是过期选择场景，不替代权限撤销或中断移动。
+
+同提交的产品 App/Core 另以临时测试入口 defaultSize=640×440 构建，系统实际整窗为 640×492 点（2× 截图 1280×984），已核对 Table/检查器/侧栏/版本 sheet/搜索与原生工具栏溢出。临时入口仅改变初始尺寸、未改产品视图；默认文本大小/浅色的单显示器结果不替代文字缩放。来源指纹、观察与局限见 [尺寸记录](MACOS-NARROW-GUI-20261121.json)，应用及服务均正常退出。
+
+168b026 精确原生 CI 44897677900 与后端 CI 44897677945 全通过。双平台各 27 项基础/Keychain、10 项默认真实后端加 1 项受限会话，以及非 UTC 时间、Universal Release/签名/双架构和 UI 入口；后端普通 394.079s、网络 97.509s、AI 44.528s 及 Agent/HEIF/漏洞全通过。详细平台/用例耗时见 G08，doc-only 后续提交不冒用此 SHA 的 run。
+
 `python3 scripts/test-macos-backend.py --large-file --report /tmp/new-native-large-file.json` 运行四个独立 Swift 进程的真实 GiB 恢复验收；需要 macOS、本机隔离 MySQL/Redis 与至少 8 GiB 临时空闲卷，报告独占创建。不能和 --filter/手动 UI 夹具组合，普通 CI 不隐式跑 GiB。定向请求计数可用 `CLOUDNEST_SWIFT_TEST_FILTER=realBackendStreamingDownloadRequestBudget python3 scripts/test-macos-backend.py`。GUI 使用既有 `CLOUDNEST_NATIVE_UI_FIXTURE_DIR` 与额外 `CLOUDNEST_NATIVE_UI_LARGE_FILE=1`，只给私有夹具设置 10240 KiB/s，不增加产品选项。
 
 2026-11-21：普通 Swift 38 项注册、26 项实际通过/12 条件跳过（0.081s）；完整默认 10 项真实联调和受限 1 项通过（其余 9 项跳过），包 74.745s；最后严格计数版本又通过 24.006s。四进程 1 GiB + 173 字节验收包 242.338s，通过上传/下载暂停退出恢复、后缀截断、强 ETag/Range 与完整摘要，每进程真实峰值 <512 MiB（最高 160.58）。另三进程实际 GUI 正常 Quit/重开恢复通过，结果 SHA/字节一致、无 part，采样峰值最高 212.63 MiB。首轮观察器错误导致失败，原始报告保留；修正观察器 defer 后同门槛完整重跑。具体日志路径、原始成功/失败/GUI JSON 与环境/吞吐率边界见 [大文件验收](MACOS-LARGE-FILES.md)。
