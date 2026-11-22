@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,6 +20,74 @@ import (
 	"cloudenest_go/model"
 	"gorm.io/gorm"
 )
+
+func TestFRPDeviceConditionalEditsAndExplicitAddressClear(t *testing.T) {
+	f := newFixture(t)
+	var created struct{ Item model.Device }
+	decode(t, f.json(t, "POST", "/api/frp/devices", f.alice, map[string]any{"device_name": "Conditional fixture", "device_ip": "198.51.100.8"}, 200), &created)
+	id := created.Item.ID
+	path := fmt.Sprintf("/api/frp/devices/%d", id)
+	baseline := func(d model.Device) contract.FrpDeviceSnapshot {
+		return contract.FrpDeviceSnapshot{Name: d.DeviceName, Address: d.DeviceIP, Status: d.Status}
+	}
+	f.json(t, "PUT", path, f.bob, map[string]any{"device_name": "foreign", "expected": baseline(created.Item)}, 403)
+	var legacy struct{ Item model.Device }
+	decode(t, f.json(t, "PUT", path, f.alice, map[string]any{"device_name": "Legacy compatible", "device_ip": ""}, 200), &legacy)
+	if legacy.Item.DeviceIP != created.Item.DeviceIP {
+		t.Fatal("legacy empty address changed its meaning")
+	}
+	f.json(t, "PUT", path, f.alice, map[string]any{"device_name": "stale overwrite", "expected": baseline(created.Item)}, 409)
+	f.json(t, "PUT", path, f.alice, map[string]any{"clear_device_ip": true, "device_ip": "203.0.113.4"}, 400)
+	var cleared struct{ Item model.Device }
+	decode(t, f.json(t, "PUT", path, f.alice, map[string]any{"clear_device_ip": true, "expected": baseline(legacy.Item)}, 200), &cleared)
+	if cleared.Item.DeviceIP != "" || cleared.Item.DeviceName != legacy.Item.DeviceName {
+		t.Fatal("explicit clear or stale-write protection failed", cleared.Item.ID)
+	}
+	r := repo.NewFrpRepo(f.db, nil)
+	actor := contract.FrpActor{UserID: f.aliceID}
+	countAudits := func() int64 {
+		t.Helper()
+		var count int64
+		if err := f.db.Model(&model.OperationLog{}).Where("action=? AND detail=?", "frp_device_update", fmt.Sprintf("device_id=%d", id)).Count(&count).Error; err != nil {
+			t.Fatal(err)
+		}
+		return count
+	}
+	before := countAudits()
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	var group sync.WaitGroup
+	for _, name := range []string{"Concurrent Alpha", "Concurrent Beta"} {
+		group.Go(func() {
+			<-start
+			_, err := r.UpdateDevice(context.Background(), actor, id, map[string]any{"device_name": name}, baseline(cleared.Item))
+			results <- err
+		})
+	}
+	close(start)
+	group.Wait()
+	close(results)
+	ok, conflict := 0, 0
+	for err := range results {
+		if err == nil {
+			ok++
+		} else if errors.Is(err, contract.ErrConflict) {
+			conflict++
+		} else {
+			t.Fatal(err)
+		}
+	}
+	if ok != 1 || conflict != 1 || countAudits() != before+1 {
+		t.Fatal("conditional edits were not atomic or failed edit was audited", ok, conflict)
+	}
+	current, err := r.GetDeviceByID(context.Background(), id)
+	if err != nil || current.DeviceIP != "" || current.DeviceName != "Concurrent Alpha" && current.DeviceName != "Concurrent Beta" {
+		t.Fatal("unexpected winning device state", err)
+	}
+	// Existing callers still perform ordinary updates without opting into a
+	// baseline; no historical schema or client request is rewritten.
+	f.json(t, "PUT", path, f.alice, map[string]any{"status": 0}, 200)
+}
 
 func TestFRPDeviceRetirementPreservesHistoryAndReservations(t *testing.T) {
 	f := newFixture(t)

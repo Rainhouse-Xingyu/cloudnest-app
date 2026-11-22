@@ -1,6 +1,6 @@
 # macOS 扩展功能
 
-G09 在 `codex/g09-macos-extensions` 上继续 G08，保持独立[草稿 PR #10](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/10)，不合并前置分支。当前完成 AI 首批功能、[FRP 管理概览](MACOS-FRP.md)和[五种命令/原请求回执恢复](MACOS-FRP-COMMANDS.md)。整个 G09、G10、G11 仍进行中/待做；FRP 编辑与注册、协作、分享、设置的真实原生界面继续实施。
+G09 在 `codex/g09-macos-extensions` 上继续 G08，保持独立[草稿 PR #10](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/10)，不合并前置分支。当前已接入 AI 检索/索引、[FRP 管理](MACOS-FRP.md)、[设备管理与退役](MACOS-FRP-DEVICES.md)、[服务器版本编辑](MACOS-FRP-SERVERS.md)、[配置流程](MACOS-FRP-CONFIGS.md)和[持久命令回执恢复](MACOS-FRP-COMMANDS.md)。整个 G09、G10、G11 仍进行中/待做；映射编辑、Agent 注册、协作、分享、设置及扩展 AI 继续实施。
 
 ## AI 检索与索引
 
@@ -46,3 +46,5 @@ CLOUDNEST_TEST_AI_MODEL=1 python3 scripts/test-macos-backend.py --filter '^TestM
 后续命令提交 da24d87 的双平台原生及完整后端 CI 全通过，两平台日志确认实际执行丢回执恢复、非 UTC、Universal Release/签名及独立 UI 构建。新的[服务器原生管理](MACOS-FRP-SERVERS.md)已接入分页、登记/编辑、版本 CAS 与三种 token 处理方式，真实接口和 GUI 通过；设备/映射 CRUD、enrollment、配置生成/预览/回滚及其余 G09–G11 工作继续。
 
 2026-11-22：服务器提交 04539b7 精确双平台与完整后端 CI 全通过。后续[配置流程](MACOS-FRP-CONFIGS.md)已完成脱敏预览、确认后追加保存/复制历史、分别部署配置 2/3 的真实三隧道及停止 GUI；首轮夹具过期保留失败，最终新夹具正常通过退出。设备/映射 CRUD、enrollment、协作/分享/设置和扩展 AI 继续实施，G10/G11 范围不变。
+
+2026-11-22 设备批次：原生添加/内容基线编辑/显式清空地址/退役筛选与保留元数据已完成，第二客户端修改后旧窗口 409、两种历史情况与深浅色/640 点宽 GUI 有实际回执。后端七项设备 race（6.074s）、完整 Swift/Go（84.489s）、Universal Release/双架构/签名通过，见 [设备协议](MACOS-FRP-DEVICES.md)。前一配置提交 95da960 的双平台及完整后端 CI 全通过；本批精确 CI 另核对，其余范围不变。

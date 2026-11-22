@@ -11,6 +11,55 @@ private final class FRPTestVault: SessionVault {
 
 extension RealBackendTests {
     @Test(.enabled(if: ProcessInfo.processInfo.environment["CLOUDNEST_SWIFT_FRP_TEST"] == "1"))
+    @MainActor func realBackendFRPDeviceLifecycle() async throws {
+        let env = ProcessInfo.processInfo.environment
+        let origin = try ServerOrigin(#require(env["CLOUDNEST_SWIFT_ORIGIN"]))
+        let certificate = try #require(env["CLOUDNEST_SWIFT_CERTIFICATE"])
+        let delegate = try FixtureTLSDelegate(der: Data(contentsOf: URL(fileURLWithPath: certificate)))
+        let transport = URLSession(configuration: .ephemeral, delegate: delegate, delegateQueue: nil)
+        defer { transport.invalidateAndCancel() }
+        let session = SessionState(api: ServerAPI(session: transport, delegate: delegate), vault: FRPTestVault())
+        await session.restore()
+        await session.signIn(server: origin.url.absoluteString, username: try #require(env["CLOUDNEST_SWIFT_USERNAME"]),
+                             password: try #require(env["CLOUDNEST_SWIFT_PASSWORD"]))
+        let identity = try #require(session.transferIdentity)
+        if env["CLOUDNEST_SWIFT_FRP_ROLE"] == "restricted" {
+            do {
+                _ = try await session.writeFRPDevice(original: nil, name: "Denied device", address: "", enabled: true, expectedIdentity: identity)
+                Issue.record("Restricted account created a device")
+            } catch { #expect(error as? ServerError == .forbidden) }
+            #expect(session.account != nil)
+        } else {
+            let created = try await session.writeFRPDevice(original: nil, name: "Native created device", address: "198.51.100.42", enabled: true, expectedIdentity: identity)
+            #expect(created.status == 1 && !created.isRetired)
+            let changed = try await session.writeFRPDevice(original: created, name: "Native changed device", address: "", enabled: false, expectedIdentity: identity)
+            #expect(changed.address.isEmpty && changed.status == 0)
+            do {
+                _ = try await session.writeFRPDevice(original: created, name: "Stale native device", address: created.address, enabled: true, expectedIdentity: identity)
+                Issue.record("A stale device edit overwrote newer content")
+            } catch { #expect(error as? ServerError == .conflict) }
+            let active = try await session.frpDevices()
+            let current = try #require(active.first { $0.id == created.id })
+            #expect(current.name == changed.name && current.address.isEmpty && current.status == 0)
+            try await session.retireFRPDevice(id: current.id, expectedIdentity: identity)
+            let after = try await session.frpDevices()
+            #expect(!after.contains { $0.id == current.id })
+            let retired = try await session.frpDevices(retired: true)
+            let preserved = try #require(retired.first { $0.id == current.id })
+            #expect(preserved.isRetired && preserved.status == 0)
+            let archive = try await session.frpDeviceArchive(id: current.id)
+            #expect(archive.device.name == changed.name)
+            #expect(archive.device.isRetired)
+            #expect(archive.mappingCount == 0 && archive.latestConfigTime == nil)
+            do {
+                _ = try await session.writeFRPDevice(original: changed, name: "Reactivate retired", address: "", enabled: true, expectedIdentity: identity)
+                Issue.record("Retired device was reactivated by an old editor")
+            } catch { #expect(error as? ServerError == .notFound) }
+        }
+        await session.signOut()
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["CLOUDNEST_SWIFT_FRP_TEST"] == "1"))
     @MainActor func realBackendFRPConfigPreviewSaveAndHistory() async throws {
         let env = ProcessInfo.processInfo.environment
         let origin = try ServerOrigin(#require(env["CLOUDNEST_SWIFT_ORIGIN"]))

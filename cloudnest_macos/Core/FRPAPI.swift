@@ -6,9 +6,20 @@ struct FRPDevice: Decodable, Identifiable, Sendable {
     let name: String
     let address: String
     let status: Int
+    let retiredAt: String?
+    var isRetired: Bool { retiredAt != nil }
+    init(id: Int64, userID: Int64, name: String, address: String, status: Int, retiredAt: String? = nil) {
+        self.id = id; self.userID = userID; self.name = name; self.address = address; self.status = status; self.retiredAt = retiredAt
+    }
     enum CodingKeys: String, CodingKey {
         case id, status
         case userID = "user_id", name = "device_name", address = "device_ip"
+        case retiredAt = "retired_at"
+    }
+
+    func validate(retired: Bool) throws {
+        guard id > 0, userID > 0, [0, 1].contains(status), name.utf8.count <= 400, address.utf8.count <= 200,
+              isRetired == retired, retiredAt.map({ !$0.isEmpty && $0.utf8.count <= 128 }) ?? true else { throw ServerError.invalidResponse }
     }
 }
 
@@ -116,11 +127,13 @@ extension ServerAPI {
         return item
     }
 
-    func frpDevices(_ origin: ServerOrigin, token: String) async throws -> [FRPDevice] {
-        let result: FRPList<FRPDevice> = try await request(origin, "api/frp/devices", token: token, maximumBytes: 4 * 1024 * 1024)
+    func frpDevices(_ origin: ServerOrigin, token: String, retired: Bool = false) async throws -> [FRPDevice] {
+        let result: FRPList<FRPDevice> = try await request(origin, "api/frp/devices", token: token,
+            query: retired ? [URLQueryItem(name: "retired", value: "1")] : [], maximumBytes: 4 * 1024 * 1024)
         let items = result.items ?? []
         guard items.count <= 5000, Set(items.map(\.id)).count == items.count,
               items.allSatisfy({ $0.id > 0 && $0.userID > 0 && [0, 1].contains($0.status) }) else { throw ServerError.invalidResponse }
+        for item in items { try item.validate(retired: retired) }
         return items
     }
 

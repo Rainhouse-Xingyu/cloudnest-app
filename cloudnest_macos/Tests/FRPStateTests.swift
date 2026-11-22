@@ -31,6 +31,10 @@ private final class FRPStateProtocol: URLProtocol, @unchecked Sendable {
         case "/api/auth/login":
             respond(200, "{\"token\":\"\(UUID())\",\"token_type\":\"Bearer\",\"user\":{\"id\":17,\"username\":\"frp\",\"email\":null,\"is_admin\":false}}")
         case "/api/auth/logout", "/api/resource/health": respond(200, #"{"message":"ok"}"#)
+        case "/api/frp/devices":
+            let retired = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "retired" }?.value
+            if retired == "1" { Self.gate.hold(self) }
+            else { respond(200, #"{"items":[{"id":1,"user_id":17,"device_name":"Active fixture","device_ip":"","status":1,"retired_at":null}]}"#) }
         case "/api/frp/devices/1/status": Self.gate.hold(self)
         case "/api/frp/configs/preview":
             if request.value(forHTTPHeaderField: "X-CloudNest-Test-Preview") == "unredacted" {
@@ -63,6 +67,33 @@ private final class FRPStateProtocol: URLProtocol, @unchecked Sendable {
 
 @Suite(.serialized)
 struct FRPStateTests {
+    @Test @MainActor func switchingRetiredDeviceFilterCancelsOldUnauthorizedAndKeepsActiveList() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [FRPStateProtocol.self]
+        let session = SessionState(api: ServerAPI(configuration: configuration), vault: FRPStateVault())
+        await session.restore()
+        await session.signIn(server: "https://frp-devices.test", username: "fixture", password: "fixture")
+        let browser = FRPBrowserState(session: session)
+        let retired = Task { await browser.reload(retired: true) }
+        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while !FRPStateProtocol.gate.waiting {
+            guard ContinuousClock.now < deadline else { throw ServerError.unavailable }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        await browser.reload()
+        FRPStateProtocol.gate.release()
+        await retired.value
+        #expect(browser.devices.map(\.id) == [1])
+        #expect(browser.devices.first?.isRetired == false)
+        #expect(browser.error == nil)
+        #expect(session.account != nil)
+        await session.signOut()
+        await session.signIn(server: "https://other-frp-devices.test", username: "fixture", password: "fixture")
+        await browser.reload(retired: true)
+        #expect(browser.devices.isEmpty)
+        #expect(browser.error == ServerError.sessionChanged.localizedDescription)
+    }
+
     @Test @MainActor func configPreviewRejectsAnUnredactedResponseBeforeDisplayOrSave() async throws {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [FRPStateProtocol.self]

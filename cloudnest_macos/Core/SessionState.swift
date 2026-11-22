@@ -171,8 +171,22 @@ final class SessionState {
         }
     }
 
-    func frpDevices() async throws -> [FRPDevice] {
-        try await withSession { origin, token in try await api.frpDevices(origin, token: token) }
+    func frpDevices(retired: Bool = false) async throws -> [FRPDevice] {
+        try await withSession { origin, token in try await api.frpDevices(origin, token: token, retired: retired) }
+    }
+
+    func writeFRPDevice(original: FRPDevice?, name: String, address: String, enabled: Bool, expectedIdentity: TransferIdentity?) async throws -> FRPDevice {
+        try requireTransferIdentity(expectedIdentity)
+        return try await withSession { origin, token in try await api.writeFRPDevice(origin, token: token, original: original, name: name, address: address, enabled: enabled) }
+    }
+
+    func retireFRPDevice(id: Int64, expectedIdentity: TransferIdentity?) async throws {
+        try requireTransferIdentity(expectedIdentity)
+        try await withSession { origin, token in try await api.retireFRPDevice(origin, token: token, id: id) }
+    }
+
+    func frpDeviceArchive(id: Int64) async throws -> FRPDeviceArchive {
+        try await withSession { origin, token in try await api.frpDeviceArchive(origin, token: token, id: id) }
     }
 
     func frpMappings(deviceID: Int64) async throws -> [FRPMapping] {

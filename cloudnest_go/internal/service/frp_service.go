@@ -71,6 +71,8 @@ type UpdateDeviceInput struct {
 	DeviceName string
 	DeviceIP   string
 	Status     *int8
+	ClearIP    bool
+	Expected   *contract.FrpDeviceSnapshot
 }
 
 // CreateMappingInput 表示映射创建输入。
@@ -197,7 +199,12 @@ func (s *FrpService) UpdateDevice(ctx context.Context, uid int64, isAdmin bool, 
 	if strings.TrimSpace(req.DeviceName) != "" {
 		updates["device_name"] = strings.TrimSpace(req.DeviceName)
 	}
-	if strings.TrimSpace(req.DeviceIP) != "" {
+	if req.ClearIP {
+		if strings.TrimSpace(req.DeviceIP) != "" {
+			return model.Device{}, contract.ErrInvalidInput
+		}
+		updates["device_ip"] = ""
+	} else if strings.TrimSpace(req.DeviceIP) != "" {
 		updates["device_ip"] = strings.TrimSpace(req.DeviceIP)
 	}
 	if req.Status != nil {
@@ -208,7 +215,11 @@ func (s *FrpService) UpdateDevice(ctx context.Context, uid int64, isAdmin bool, 
 		return model.Device{}, contract.ErrInvalidInput
 	}
 
-	return s.repo.UpdateDevice(ctx, contract.FrpActor{UserID: uid, Admin: isAdmin, ClientIP: req.ClientIP}, deviceID, updates)
+	actor := contract.FrpActor{UserID: uid, Admin: isAdmin, ClientIP: req.ClientIP}
+	if req.Expected != nil {
+		return s.repo.UpdateDevice(ctx, actor, deviceID, updates, *req.Expected)
+	}
+	return s.repo.UpdateDevice(ctx, actor, deviceID, updates)
 }
 
 // DeleteDevice retires the device while preserving its history and reservations.

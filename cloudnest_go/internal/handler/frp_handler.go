@@ -30,9 +30,11 @@ type CreateDeviceRequest struct {
 
 // UpdateDeviceRequest 更新设备请求。
 type UpdateDeviceRequest struct {
-	DeviceName string `json:"device_name"`
-	DeviceIP   string `json:"device_ip"`
-	Status     *int8  `json:"status"`
+	DeviceName string                      `json:"device_name"`
+	DeviceIP   string                      `json:"device_ip"`
+	Status     *int8                       `json:"status"`
+	ClearIP    bool                        `json:"clear_device_ip"`
+	Expected   *contract.FrpDeviceSnapshot `json:"expected"`
 }
 
 // CreateMappingRequest 创建 FRP 映射请求。
@@ -210,6 +212,8 @@ func (h *FrpHandler) UpdateDevice(c *gin.Context) {
 		DeviceName: req.DeviceName,
 		DeviceIP:   req.DeviceIP,
 		Status:     req.Status,
+		ClearIP:    req.ClearIP,
+		Expected:   req.Expected,
 	})
 	if err != nil {
 		h.writeDeviceError(c, err)
@@ -758,6 +762,8 @@ func (h *FrpHandler) writeDeviceError(c *gin.Context, err error) {
 		c.JSON(403, gin.H{"error": "permission denied"})
 	case errors.Is(err, contract.ErrInvalidInput):
 		c.JSON(400, gin.H{"error": "invalid device fields"})
+	case errors.Is(err, contract.ErrConflict):
+		c.JSON(409, gin.H{"error": "device content changed; refresh before editing"})
 	case errors.Is(err, contract.ErrFrpMappingBusy):
 		c.JSON(503, gin.H{"error": "device operation busy; retry later"})
 	default:

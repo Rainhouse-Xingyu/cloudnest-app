@@ -55,8 +55,11 @@ func (r *FrpRepo) CreateDevice(ctx context.Context, actor contract.FrpActor, d m
 	}
 	return d, nil
 }
-func (r *FrpRepo) UpdateDevice(ctx context.Context, actor contract.FrpActor, id int64, updates map[string]interface{}) (model.Device, error) {
-	if len(updates) == 0 {
+func (r *FrpRepo) UpdateDevice(ctx context.Context, actor contract.FrpActor, id int64, updates map[string]interface{}, expected ...contract.FrpDeviceSnapshot) (model.Device, error) {
+	if len(updates) == 0 || len(expected) > 1 {
+		return model.Device{}, contract.ErrInvalidInput
+	}
+	if len(expected) == 1 && (!validDeviceText(expected[0].Name, 100, true) || !validDeviceText(expected[0].Address, 50, true) || expected[0].Status < 0 || expected[0].Status > 1) {
 		return model.Device{}, contract.ErrInvalidInput
 	}
 	for key, value := range updates {
@@ -84,6 +87,16 @@ func (r *FrpRepo) UpdateDevice(ctx context.Context, actor contract.FrpActor, id 
 	err := r.frpTransaction(ctx, func(tx *gorm.DB) error {
 		if err := lockMappingDevice(tx, actor, id, false); err != nil {
 			return err
+		}
+		if len(expected) == 1 {
+			var current model.Device
+			if err := tx.First(&current, id).Error; err != nil {
+				return err
+			}
+			baseline := expected[0]
+			if current.DeviceName != baseline.Name || current.DeviceIP != baseline.Address || current.Status != baseline.Status {
+				return contract.ErrConflict
+			}
 		}
 		if err := tx.Model(&model.Device{}).Where("id=?", id).Updates(updates).Error; err != nil {
 			return err

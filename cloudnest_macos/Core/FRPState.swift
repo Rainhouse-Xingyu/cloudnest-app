@@ -11,6 +11,8 @@ final class FRPBrowserState {
     var filter = ""
     private let session: SessionState
     private let identity: TransferIdentity?
+    private var revision = UUID()
+    private var request: Task<[FRPDevice], any Error>?
 
     init(session: SessionState) {
         self.session = session
@@ -21,24 +23,27 @@ final class FRPBrowserState {
         devices.filter { filter.isEmpty || $0.name.localizedStandardContains(filter) || $0.address.localizedStandardContains(filter) }
     }
 
-    func reload() async {
-        guard !busy else { return }
+    func cancel() { revision = UUID(); request?.cancel(); request = nil; busy = false }
+
+    func reload(retired: Bool = false) async {
+        cancel()
+        let revision = self.revision
         busy = true
+        loaded = false
+        devices = []
         error = nil
-        defer { busy = false }
+        let task = Task { try session.requireTransferIdentity(identity); return try await session.frpDevices(retired: retired) }
+        request = task
+        defer { if self.revision == revision { busy = false; loaded = true; request = nil } }
         do {
-            try session.requireTransferIdentity(identity)
-            let devices = try await session.frpDevices()
+            let devices = try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
             try Task.checkCancellation()
+            guard self.revision == revision else { return }
             try session.requireTransferIdentity(identity)
             self.devices = devices
-            loaded = true
         } catch {
-            devices = []
-            loaded = true
-            if !(error is CancellationError) {
-                self.error = (error as? ServerError)?.localizedDescription ?? "无法读取设备，请检查连接后重试。"
-            }
+            guard self.revision == revision, !task.isCancelled, !(error is CancellationError) else { return }
+            self.error = (error as? ServerError)?.localizedDescription ?? "无法读取设备，请检查连接后重试。"
         }
     }
 }

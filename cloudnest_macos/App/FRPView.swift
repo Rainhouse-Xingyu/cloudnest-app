@@ -6,6 +6,15 @@ struct FRPView: View {
     @State private var browser: FRPBrowserState
     @State private var selected: FRPDevice?
     @State private var showingServers = false
+    @State private var showingRetired = false
+    @State private var archive: FRPDevice?
+    @State private var editor: DeviceEditor?
+    @State private var retirement: Retirement?
+    @State private var retirementBusy = false
+    @State private var attemptedRetirements: Set<Int64> = []
+    @State private var deviceActionMessage: String?
+    private struct DeviceEditor: Identifiable { let id = UUID(); let original: FRPDevice? }
+    private struct Retirement { let device: FRPDevice; let identity: TransferIdentity }
 
     init(session: SessionState, commands: FRPCommandManager) {
         self.session = session
@@ -26,23 +35,39 @@ struct FRPView: View {
 
     private var devicesView: some View {
         VStack(alignment: .leading, spacing: 0) {
+            Toggle("查看退役设备", isOn: $showingRetired).toggleStyle(.switch).padding()
             if let error = browser.error {
                 Label(error, systemImage: "exclamationmark.circle").foregroundStyle(.secondary).padding()
             }
+            if let message = deviceActionMessage { Text(message).foregroundStyle(.secondary).padding(.horizontal) }
             List(browser.visibleDevices) { device in
                 HStack {
                     VStack(alignment: .leading, spacing: 5) {
                         Text(device.name).font(.headline)
                         Text(device.address.isEmpty ? "未填写设备地址" : device.address).foregroundStyle(.secondary)
-                        Text(device.status == 1 ? "设备已启用" : "设备已停用").font(.caption).foregroundStyle(.secondary)
+                        Text(device.isRetired ? "设备已退役" : device.status == 1 ? "设备已启用" : "设备已停用").font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Button("查看详情") { selected = device }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel("查看 \(device.name) 的 FRP 详情")
+                    if device.isRetired {
+                        Button("退役详情") { archive = device }.buttonStyle(.borderless)
+                    } else {
+                        Button("编辑…") { editor = DeviceEditor(original: device) }.buttonStyle(.borderless)
+                            .accessibilityLabel("编辑设备 \(device.name)")
+                        Button("查看详情") { selected = device }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel("查看 \(device.name) 的 FRP 详情")
+                    }
                 }
                 .padding(.vertical, 6)
                 .accessibilityElement(children: .contain)
+                .contextMenu {
+                    if !device.isRetired {
+                        Button("退役设备…", role: .destructive) {
+                            guard let identity = session.transferIdentity else { return }
+                            retirement = Retirement(device: device, identity: identity)
+                        }.disabled(retirementBusy || attemptedRetirements.contains(device.id))
+                    }
+                }
             }
             .overlay {
                 if browser.busy && !browser.loaded { ProgressView("正在读取设备") }
@@ -50,20 +75,49 @@ struct FRPView: View {
                     ContentUnavailableView(browser.devices.isEmpty ? "没有可见设备" : "没有匹配设备", systemImage: "network")
                 }
             }
-            Text("设备启用状态与 Agent 在线、隧道注册及本地服务可达性分别查看。")
+            Text(showingRetired ? "退役保留历史及占用；新增设备在关闭此筛选后查看。" : "设备启用状态与 Agent 在线、隧道注册及本地服务可达性分别查看。右键设备可退役并保留历史。")
                 .font(.callout).foregroundStyle(.secondary).padding()
         }
         .searchable(text: $browser.filter, prompt: "筛选设备名称或地址")
         .toolbar {
+            ToolbarItem { Button("添加设备", systemImage: "plus") { editor = DeviceEditor(original: nil) } }
             ToolbarItem {
-                Button("刷新设备", systemImage: "arrow.clockwise") { Task { await browser.reload() } }
+                Button("刷新设备", systemImage: "arrow.clockwise") { Task { await browser.reload(retired: showingRetired) } }
                     .disabled(browser.busy)
             }
         }
-        .task { await browser.reload() }
+        .task { await browser.reload(retired: showingRetired) }
+        .onChange(of: showingRetired) { Task { await browser.reload(retired: showingRetired) } }
+        .onDisappear { browser.cancel() }
         .sheet(item: $selected) { device in
             FRPDetailView(device: device, session: session, commands: commands)
         }
+        .sheet(item: $archive) { device in FRPDeviceArchiveView(session: session, device: device) }
+        .sheet(item: $editor, onDismiss: { Task { await browser.reload(retired: showingRetired) } }) { item in
+            FRPDeviceEditor(session: session, original: item.original)
+        }
+        .confirmationDialog("退役设备", isPresented: Binding(
+            get: { retirement != nil }, set: { if !$0 { retirement = nil } }
+        ), titleVisibility: .visible, presenting: retirement) { item in
+            Button("确认退役", role: .destructive) { Task { await retire(item) } }
+        } message: { item in
+            Text("设备：\(item.device.name)，ID \(String(item.device.id))。将撤销设备凭据并取消未完成命令，保留配置、历史和端口占用。离线隧道可能尚未停止，退役不自动释放资源；重新接入需创建并注册新设备。")
+        }
+    }
+
+    private func retire(_ item: Retirement) async {
+        guard !retirementBusy, attemptedRetirements.insert(item.device.id).inserted else { return }
+        retirementBusy = true
+        deviceActionMessage = nil
+        defer { retirementBusy = false }
+        do {
+            try await session.retireFRPDevice(id: item.device.id, expectedIdentity: item.identity)
+            try session.requireTransferIdentity(item.identity)
+            deviceActionMessage = "设备已退役，历史和占用保留。开启退役筛选可核对元数据。"
+        } catch {
+            deviceActionMessage = "未取得退役成功回执，请刷新在用和退役列表核对。\((error as? ServerError)?.localizedDescription ?? "连接未能完成。")"
+        }
+        await browser.reload(retired: showingRetired)
     }
 }
 
@@ -180,6 +234,7 @@ private struct FRPDetailView: View {
             if status.online, let runtime = status.runtime {
                 Divider()
                 LabeledContent("隧道采样状态", value: stateName(runtime.state))
+                LabeledContent("采样配置", value: runtime.configID > 0 ? String(runtime.configID) : "尚无部署配置")
                 LabeledContent("采样时间", value: runtime.observedAt)
                 Text("应注册 \(runtime.expected) · 已注册 \(runtime.registered) · 失败 \(runtime.failed) · 等待 \(runtime.pending)")
                 ForEach(Array((status.proxies ?? []).enumerated()), id: \.offset) { _, proxy in
