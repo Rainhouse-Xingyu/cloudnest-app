@@ -1,0 +1,280 @@
+{
+  "passed": false,
+  "generated_utc": "2026-11-22T14:21:39.259056+00:00",
+  "scope": "Initial native config generation/deployment/history-copy GUI; interrupted cohort, not complete acceptance",
+  "git_parent": "04539b7207bd928408f05a6989f727f9b410797a",
+  "source_sha256": {
+    "cloudnest_macos/App/AISearchView.swift": "8aaea5c95be1541e11082295e76e9149ee6a6d5a8e74b77dd0021657b04ce10b",
+    "cloudnest_macos/App/CloudNestApp.swift": "c1694632300b821cbe663059dcdbe853c8f1019aece324191ae7a6dd22bfc7c3",
+    "cloudnest_macos/App/FRPConfigBuilderView.swift": "094b76c020c83a7c767f78f3278819efb46a8a1a7ba0ad0e10c581fa24fe5dfc",
+    "cloudnest_macos/App/FRPServersView.swift": "b4813616e9a1c23f9e47e729f5a0edc16c9618e8b89a9d7ba04f7605703f5cc2",
+    "cloudnest_macos/App/FRPView.swift": "c3b80e4909bbe2475973158ffbe12fa843816ae46789e7f40f08447c5ea70574",
+    "cloudnest_macos/App/FileBrowserCommands.swift": "1744b820661ef09fa3836c67397d2975133a4982444807012c12c5112731d4e8",
+    "cloudnest_macos/App/FileBrowserView.swift": "4f946fbffb7d08c5cd8642cd500d0cee6dfc73933e97c99d5040f26b0aca3e11",
+    "cloudnest_macos/App/FileDestinationSheet.swift": "e687c0269882fd072479942c7a73c96790796ffdcaa6a176657b59c669b51a7d",
+    "cloudnest_macos/App/FileVersionsSheet.swift": "17fe6e46888249269a57f5172de163e8aeb6a7a56b6ecb188c5608f39099920a",
+    "cloudnest_macos/App/TransferListView.swift": "a8e26aa331492e166bea32e406507aa5daa2420cf651c7074d50d718712b6181",
+    "cloudnest_macos/Core/AISearchAPI.swift": "d37a7e8c21134d4f620cebbe09163817b57802ec04074d5eba3ac715ce487c6f",
+    "cloudnest_macos/Core/AISearchState.swift": "e6d670b3b5cbdb56a48b251f8c355bd97b7be125f9d7ab03c31447e757a14d8a",
+    "cloudnest_macos/Core/DownloadPlan.swift": "641b33f9f36001a67bcb3ed583c2ff3e61b40ac2683d10fafdaa70c6b24965b1",
+    "cloudnest_macos/Core/DownloadStream.swift": "a4878ddee1749ae049ca898fac22175dae907ada9b859e961afbe801ad897a15",
+    "cloudnest_macos/Core/FRPAPI.swift": "27780d324b79f931c3581d409953f3807bc60a0d82ad795bf0453e5dfb03457b",
+    "cloudnest_macos/Core/FRPCommandIntent.swift": "dd701f1a334dd0ba1716b74630d81acae20bb4c6e38ce7190d01fd501461523d",
+    "cloudnest_macos/Core/FRPCommandManager.swift": "c61580e09c7651b7c08732491e0974f6f3a10d65a95bc7606fe5c95aa936ac32",
+    "cloudnest_macos/Core/FRPCommandStore.swift": "513044a6403122a9a85ec3f5e03112e00cab263a4fd76ae69e0d21ee3f95c349",
+    "cloudnest_macos/Core/FRPConfigAPI.swift": "3068e978b0a2050c5880bcc9a6489e2c66c9f920b35d6890d683bcef56b9c71d",
+    "cloudnest_macos/Core/FRPConfigState.swift": "3b577158af7f7fd12135754228951f95f79b815f6ba4f0a7d6d0617a604cf04d",
+    "cloudnest_macos/Core/FRPServerAPI.swift": "b1db78ca33b70b9392c67643a956c128bbfc1d7b70028bf67b36f30de82155c7",
+    "cloudnest_macos/Core/FRPServerState.swift": "e84a1bfc4c7fe4f5d0072cac824697c343a17cc054316c7d06ff72b341c129d4",
+    "cloudnest_macos/Core/FRPState.swift": "1135cf4e0c6ee56c07a7457cd016306d143347d8361b4a857d2fb74e3128e6c9",
+    "cloudnest_macos/Core/FileAPI.swift": "f65a045b2e59dba168d72487b16699a875753579a3968141fa739f214600e767",
+    "cloudnest_macos/Core/FileBrowserState.swift": "312b325d054c4b34aa867320570321a010c17359b6bf5413c51253cd767c3380",
+    "cloudnest_macos/Core/FileVersions.swift": "1b009b2cd68dd555325b667186b757b5307dad6a355fd27ebc955da2474b7483",
+    "cloudnest_macos/Core/LegacyPreviewDirectory.swift": "05b9022f6f528de4bff5c4f9c236518b25271537b5794409384d9e5c0329f608",
+    "cloudnest_macos/Core/PreviewCache.swift": "24e5560809afd2d6065a9994d5355c0c36f62128e2a4a256b29c2bdd2c808904",
+    "cloudnest_macos/Core/ServerAPI.swift": "b23f553f42f3fbd7ea4d91b1839621d25d13ee0d01fa619af8573e3d4ab320db",
+    "cloudnest_macos/Core/SessionState.swift": "0b9ea6d14569f6a4000f5c64f795b039a8e27e7cb3e5a4750ba44fd4bd51db57",
+    "cloudnest_macos/Core/SessionVault.swift": "8aaeafe193e99da59b8a5298fe8d2fa5052c21e8fef67e182927be438d8d7495",
+    "cloudnest_macos/Core/TransferAPI.swift": "757fa9919a3cc5d66d20b380d2470165acc2af63cffac5da3811ec298cf4625b",
+    "cloudnest_macos/Core/TransferDisk.swift": "51ca36fc080604b9a6ece8d0b1302e56904984691c9caa22ee77cdd432ceae84",
+    "cloudnest_macos/Core/TransferManager.swift": "d2a1b943c518cc3fffe7208815da8b9299a1336668a91e9493a375e8255256ff",
+    "cloudnest_macos/Core/TransferRecord.swift": "5deba6f800be9fc2ff2428582f5908e1afbe6c227303661764f2ad1d8374f965",
+    "cloudnest_macos/Core/TransferStore.swift": "66cae8a28ba323c0a90e67eec549356c70c88b843fa9bb352ba0f30c4567e17f",
+    "cloudnest_macos/Core/TransferTelemetry.swift": "95eb7bba18223c173ceeead47cc025fb1fc34617985ab3d80db8ce89d9011345"
+  },
+  "binary_sha256": "2059d19184cab84d6fac54ba80d4fe7c28d9163ebe8e45bd83f1fc2d9db469eb",
+  "completed_observations": [
+    "Native preview displays [redacted] and all three actual mappings",
+    "Native save created config 2; disabled repeat save; server remained stopped with zero commands",
+    "Native explicit deployment of config 2 succeeded; all TCP/HTTP/HTTPS upstream body probes passed",
+    "Native explicit history copy of config 1 created config 3; visible not-deployed message and all three histories retained"
+  ],
+  "incomplete": [
+    "Config 3 actual deployment and final normal fixture stop were not reached before the continuation gap"
+  ],
+  "failure": {
+    "message": "native UI fixture expired; all services will stop",
+    "go_test_seconds": 1202.12,
+    "go_package_seconds": 1202.71,
+    "exit_code": 1,
+    "last_gui_operation_utc": "2026-11-22T05:23:41Z",
+    "resumed_utc": "2026-11-22T14:20:36Z"
+  },
+  "api_and_tunnel_evidence": [
+    {
+      "label": "before-native-generation",
+      "utc": "2026-11-22T05:21:08.655482+00:00",
+      "origin": "https://127.0.0.1:56283",
+      "device_id": 1,
+      "status": {
+        "client_version": "cloudnest-agent-0.3.0",
+        "current_config_id": "",
+        "last_error": "",
+        "last_heartbeat": "2026-11-22T05:21:05.910979Z",
+        "online": true,
+        "runtime": {
+          "state": "stopped",
+          "config_id": 0,
+          "observed_at": "2026-11-22T05:21:05.90677Z",
+          "expected": 0,
+          "registered": 0,
+          "failed": 0,
+          "pending": 0
+        },
+        "updated_at": "2026-11-22T05:21:05.910979Z"
+      },
+      "commands": [],
+      "local_intents": [],
+      "probes": [],
+      "mode": "snapshot"
+    },
+    {
+      "label": "native-generated-not-deployed",
+      "utc": "2026-11-22T05:22:52.767011+00:00",
+      "origin": "https://127.0.0.1:56283",
+      "device_id": 1,
+      "status": {
+        "client_version": "cloudnest-agent-0.3.0",
+        "current_config_id": "",
+        "last_error": "",
+        "last_heartbeat": "2026-11-22T05:22:50.770679Z",
+        "online": true,
+        "runtime": {
+          "state": "stopped",
+          "config_id": 0,
+          "observed_at": "2026-11-22T05:22:50.768253Z",
+          "expected": 0,
+          "registered": 0,
+          "failed": 0,
+          "pending": 0
+        },
+        "updated_at": "2026-11-22T05:22:50.770679Z"
+      },
+      "commands": [],
+      "local_intents": [],
+      "probes": [],
+      "mode": "snapshot"
+    },
+    {
+      "label": "generated-history-before-deploy",
+      "utc": "2026-11-22T05:23:05.306709+00:00",
+      "origin": "https://127.0.0.1:56283",
+      "device_id": 1,
+      "status": {
+        "client_version": "cloudnest-agent-0.3.0",
+        "current_config_id": "",
+        "last_error": "",
+        "last_heartbeat": "2026-11-22T05:22:50.770679Z",
+        "online": true,
+        "runtime": {
+          "state": "stopped",
+          "config_id": 0,
+          "observed_at": "2026-11-22T05:22:50.768253Z",
+          "expected": 0,
+          "registered": 0,
+          "failed": 0,
+          "pending": 0
+        },
+        "updated_at": "2026-11-22T05:22:50.770679Z"
+      },
+      "commands": [],
+      "local_intents": [],
+      "probes": [],
+      "mode": "snapshot",
+      "config_metadata": [
+        {
+          "id": 2,
+          "device_id": 1,
+          "server_id": 1,
+          "server_revision_id": 1,
+          "create_time": "2026-11-22T05:22:46Z"
+        },
+        {
+          "id": 1,
+          "device_id": 1,
+          "server_id": 1,
+          "server_revision_id": 1,
+          "create_time": "2026-11-22T05:20:38Z"
+        }
+      ]
+    },
+    {
+      "label": "native-generated-config-deployed",
+      "utc": "2026-11-22T05:23:19.992990+00:00",
+      "origin": "https://127.0.0.1:56283",
+      "device_id": 1,
+      "status": {
+        "client_version": "cloudnest-agent-0.3.0",
+        "current_config_id": "",
+        "last_error": "",
+        "last_heartbeat": "2026-11-22T05:23:16.830313Z",
+        "online": true,
+        "runtime": {
+          "state": "stopped",
+          "config_id": 0,
+          "observed_at": "2026-11-22T05:23:16.827276Z",
+          "expected": 0,
+          "registered": 0,
+          "failed": 0,
+          "pending": 0
+        },
+        "updated_at": "2026-11-22T05:23:16.830313Z"
+      },
+      "commands": [
+        {
+          "command_id": "fd404af94dc6812b0ec69ee339b64c8a",
+          "device_id": 1,
+          "request_id": "6c26a15e0e4d43c98f917d358c80aa36",
+          "action": "deploy_config",
+          "config_id": 2,
+          "config_sha256": "9f9bf0291e3b0cb8b37436f019f54fd51740cc3fb47d45f852edc8136d51f47f",
+          "status": "succeeded",
+          "attempts": 1,
+          "lease_expires_at": "2026-11-22T05:24:18.272658Z",
+          "expires_at": "2026-11-23T05:23:16.405804Z",
+          "created_at": "2026-11-22T05:23:16.405804Z",
+          "completed_at": "2026-11-22T05:23:18.848855Z",
+          "result_code": "ok"
+        }
+      ],
+      "local_intents": [
+        {
+          "createdAt": 817017796.393157,
+          "revision": 1,
+          "commandID": "fd404af94dc6812b0ec69ee339b64c8a",
+          "identity": {
+            "server": "https://127.0.0.1:56283",
+            "userID": 1
+          },
+          "id": "6C26A15E-0E4D-43C9-8F91-7D358C80AA36",
+          "deviceID": 1,
+          "configID": 2,
+          "action": "deploy_config",
+          "outcome": "accepted",
+          "formatVersion": 1
+        }
+      ],
+      "probes": [
+        {
+          "protocol": "tcp",
+          "port": 56290,
+          "status": 200,
+          "body": "cloudnest-native-frp-ok:/native-tcp",
+          "tls_verified": false
+        },
+        {
+          "protocol": "http",
+          "port": 56288,
+          "status": 200,
+          "body": "cloudnest-native-frp-ok:/native-http",
+          "tls_verified": false
+        },
+        {
+          "protocol": "https",
+          "port": 56289,
+          "status": 200,
+          "body": "cloudnest-native-frp-ok:/native-https",
+          "tls_verified": true
+        }
+      ],
+      "mode": "probe",
+      "config_metadata": [
+        {
+          "id": 2,
+          "device_id": 1,
+          "server_id": 1,
+          "server_revision_id": 1,
+          "create_time": "2026-11-22T05:22:46Z"
+        },
+        {
+          "id": 1,
+          "device_id": 1,
+          "server_id": 1,
+          "server_revision_id": 1,
+          "create_time": "2026-11-22T05:20:38Z"
+        }
+      ]
+    }
+  ],
+  "cleanup": {
+    "runtime": {
+      "forced_stop": false,
+      "stopped": true,
+      "utc": "2026-11-22T05:40:39.846965Z"
+    },
+    "ports_closed": {
+      "56283": true,
+      "56287": true,
+      "56288": true,
+      "56289": true,
+      "56290": true,
+      "56285": true,
+      "56286": true
+    },
+    "ui": "Old app closed normally via CUA on resume; absent from subsequent app inventory"
+  },
+  "limitations": [
+    "The stopped runtime sample after config 2 ACK was older than the actual tunnel probes; it is not claimed as a current registered heartbeat.",
+    "This report preserves partial success and timeout failure; a fresh cohort must finish final acceptance."
+  ]
+}

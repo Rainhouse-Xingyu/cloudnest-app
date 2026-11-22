@@ -11,6 +11,74 @@ private final class FRPTestVault: SessionVault {
 
 extension RealBackendTests {
     @Test(.enabled(if: ProcessInfo.processInfo.environment["CLOUDNEST_SWIFT_FRP_TEST"] == "1"))
+    @MainActor func realBackendFRPConfigPreviewSaveAndHistory() async throws {
+        let env = ProcessInfo.processInfo.environment
+        let origin = try ServerOrigin(#require(env["CLOUDNEST_SWIFT_ORIGIN"]))
+        let certificate = try #require(env["CLOUDNEST_SWIFT_CERTIFICATE"])
+        let delegate = try FixtureTLSDelegate(der: Data(contentsOf: URL(fileURLWithPath: certificate)))
+        let transport = URLSession(configuration: .ephemeral, delegate: delegate, delegateQueue: nil)
+        defer { transport.invalidateAndCancel() }
+        let session = SessionState(api: ServerAPI(session: transport, delegate: delegate), vault: FRPTestVault())
+        await session.restore()
+        await session.signIn(server: origin.url.absoluteString, username: try #require(env["CLOUDNEST_SWIFT_USERNAME"]),
+                             password: try #require(env["CLOUDNEST_SWIFT_PASSWORD"]))
+        let deviceText = try #require(env["CLOUDNEST_SWIFT_FRP_DEVICE"])
+        let sourceText = try #require(env["CLOUDNEST_SWIFT_FRP_CONFIG"])
+        let deviceID = try #require(Int64(deviceText))
+        let sourceID = try #require(Int64(sourceText))
+        let builder = FRPConfigState(session: session)
+        if env["CLOUDNEST_SWIFT_FRP_ROLE"] == "restricted" {
+            await builder.loadPreview(FRPConfigSelection(device_id: deviceID, server_id: 1, server_revision_id: 1))
+            #expect(builder.preview == nil)
+            #expect(builder.error == ServerError.forbidden.localizedDescription)
+            do {
+                _ = try await session.rollbackFRPConfig(configID: sourceID, deviceID: deviceID, expectedIdentity: session.transferIdentity)
+                Issue.record("Restricted account appended a historical configuration")
+            } catch { #expect(error as? ServerError == .forbidden) }
+            #expect(session.account != nil)
+        } else {
+            let configs = try await session.frpConfigs(deviceID: deviceID)
+            let commandsBefore = try await session.frpCommands(deviceID: deviceID)
+            let original = try #require(configs.first { $0.id == sourceID })
+            let server = try await session.frpServer(id: original.serverID)
+            let selection = FRPConfigSelection(device_id: deviceID, server_id: server.id, server_revision_id: server.revisionID)
+            await builder.loadPreview(selection)
+            let preview = try #require(builder.preview)
+            #expect(preview.contains("[redacted]"))
+            #expect(preview.contains("32000"))
+            #expect(builder.error == nil)
+            await builder.save(expectedSelection: selection)
+            let saved = try #require(builder.saved)
+            #expect(saved.id != original.id)
+            #expect(saved.serverRevisionID == server.revisionID)
+            #expect(builder.preview == nil)
+            // Double save through the same state cannot append another row.
+            await builder.save(expectedSelection: selection)
+            let afterSave = try await session.frpConfigs(deviceID: deviceID)
+            #expect(afterSave.count == configs.count + 1)
+            let restored = try await session.rollbackFRPConfig(configID: original.id, deviceID: deviceID, expectedIdentity: session.transferIdentity)
+            #expect(restored.id != saved.id && restored.id != original.id)
+            #expect(restored.serverID == original.serverID)
+            #expect(restored.serverRevisionID == original.serverRevisionID)
+            let afterRollback = try await session.frpConfigs(deviceID: deviceID)
+            #expect(afterRollback.count == configs.count + 2)
+            #expect(afterRollback.contains { $0.id == original.id })
+            let commandsAfter = try await session.frpCommands(deviceID: deviceID)
+            #expect(commandsAfter.map(\.id) == commandsBefore.map(\.id))
+            let advanced = FRPServerInput(name: server.name, server_addr: server.address, server_port: server.port,
+                tcp_start: server.tcpStart, tcp_end: server.tcpEnd, http_port: server.httpPort, https_port: server.httpsPort,
+                enabled: server.enabled, expected_revision_id: server.revisionID, token: nil)
+            _ = try await session.writeFRPServer(id: server.id, input: advanced, expectedIdentity: session.transferIdentity)
+            let stale = FRPConfigState(session: session)
+            await stale.loadPreview(selection)
+            #expect(stale.preview == nil)
+            #expect(stale.error?.contains("服务器版本") == true)
+            #expect(session.account != nil)
+        }
+        await session.signOut()
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["CLOUDNEST_SWIFT_FRP_TEST"] == "1"))
     @MainActor func realBackendFRPServerRevisionAndSecretChoices() async throws {
         let env = ProcessInfo.processInfo.environment
         let origin = try ServerOrigin(#require(env["CLOUDNEST_SWIFT_ORIGIN"]))
@@ -169,8 +237,9 @@ extension RealBackendTests {
             await detail.load(.configs)
             #expect(detail.error == nil)
             guard case .configs(let configs) = detail.snapshot else { Issue.record("Missing config metadata"); return }
-            #expect(configs.map(\.id) == [try number("CLOUDNEST_SWIFT_FRP_CONFIG")])
-            #expect(configs.first?.serverID == mappings.first?.serverID)
+            let sourceConfigID = try number("CLOUDNEST_SWIFT_FRP_CONFIG")
+            let originalConfig = try #require(configs.first { $0.id == sourceConfigID })
+            #expect(originalConfig.serverID == mappings.first?.serverID)
             await detail.load(.commands)
             #expect(detail.error == nil)
             guard case .commands(let commands) = detail.snapshot else { Issue.record("Missing command metadata"); return }

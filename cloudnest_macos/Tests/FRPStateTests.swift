@@ -32,6 +32,10 @@ private final class FRPStateProtocol: URLProtocol, @unchecked Sendable {
             respond(200, "{\"token\":\"\(UUID())\",\"token_type\":\"Bearer\",\"user\":{\"id\":17,\"username\":\"frp\",\"email\":null,\"is_admin\":false}}")
         case "/api/auth/logout", "/api/resource/health": respond(200, #"{"message":"ok"}"#)
         case "/api/frp/devices/1/status": Self.gate.hold(self)
+        case "/api/frp/configs/preview":
+            if request.value(forHTTPHeaderField: "X-CloudNest-Test-Preview") == "unredacted" {
+                respond(200, #"{"device_id":1,"config_text":"unredacted-fixture-marker","config_text_redacted":false}"#)
+            } else { Self.gate.hold(self) }
         case "/api/frp/devices/1/mappings":
             respond(200, #"{"items":[{"id":9,"device_id":1,"server_id":2,"local_port":8080,"remote_port":32000,"domain":"","status":1}]}"#)
         case "/api/frp/devices/1/configs":
@@ -59,6 +63,52 @@ private final class FRPStateProtocol: URLProtocol, @unchecked Sendable {
 
 @Suite(.serialized)
 struct FRPStateTests {
+    @Test @MainActor func configPreviewRejectsAnUnredactedResponseBeforeDisplayOrSave() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [FRPStateProtocol.self]
+        configuration.httpAdditionalHeaders = ["X-CloudNest-Test-Preview": "unredacted"]
+        let session = SessionState(api: ServerAPI(configuration: configuration), vault: FRPStateVault())
+        await session.restore()
+        await session.signIn(server: "https://frp-redaction.test", username: "fixture", password: "fixture")
+        let state = FRPConfigState(session: session)
+        let selection = FRPConfigSelection(device_id: 1, server_id: 2, server_revision_id: 3)
+        await state.loadPreview(selection)
+        #expect(state.preview == nil)
+        #expect(state.selection == nil)
+        #expect(state.error == ServerError.invalidResponse.localizedDescription)
+        await state.save(expectedSelection: selection)
+        #expect(!state.submitted)
+        #expect(state.saved == nil)
+        #expect(session.account != nil)
+    }
+
+    @Test @MainActor func clearingAConfigPreviewCancelsLateUnauthorizedAndCannotSaveUnseenContent() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [FRPStateProtocol.self]
+        let session = SessionState(api: ServerAPI(configuration: configuration), vault: FRPStateVault())
+        await session.restore()
+        await session.signIn(server: "https://frp-preview.test", username: "fixture", password: "fixture")
+        let state = FRPConfigState(session: session)
+        let selection = FRPConfigSelection(device_id: 1, server_id: 2, server_revision_id: 3)
+        let old = Task { await state.loadPreview(selection) }
+        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while !FRPStateProtocol.gate.waiting {
+            guard ContinuousClock.now < deadline else { throw ServerError.unavailable }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        state.clearPreview()
+        FRPStateProtocol.gate.release()
+        await old.value
+        #expect(state.preview == nil)
+        #expect(state.selection == nil)
+        #expect(state.error == nil)
+        #expect(!state.busy)
+        #expect(session.account != nil)
+        await state.save(expectedSelection: selection)
+        #expect(!state.submitted)
+        #expect(state.saved == nil)
+    }
+
     @Test @MainActor func serverPageReplacementCancelsOldUnauthorizedAndRejectsInvalidCursor() async throws {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [FRPStateProtocol.self]

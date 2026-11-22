@@ -75,10 +75,14 @@ private struct FRPDetailView: View {
     @State private var section = FRPSection.status
     @State private var confirmation: CommandConfirmation?
     @State private var actionError: String?
+    @State private var buildingConfig = false
+    @State private var rollbackBusy = false
+    @State private var attemptedRollbacks: Set<Int64> = []
 
     private enum CommandConfirmation {
         case send(FRPCommandAction, Int64, TransferIdentity)
         case abandon(UUID)
+        case rollback(Int64, TransferIdentity)
     }
 
     init(device: FRPDevice, session: SessionState, commands: FRPCommandManager) {
@@ -135,6 +139,9 @@ private struct FRPDetailView: View {
         .frame(minWidth: 480, idealWidth: 580, minHeight: 380, idealHeight: 500)
         .task(id: section) { await state.load(section) }
         .onDisappear { state.cancel() }
+        .sheet(isPresented: $buildingConfig, onDismiss: { Task { await state.load(.configs) } }) {
+            FRPConfigBuilderView(device: state.device, session: session)
+        }
         .confirmationDialog("确认远程操作", isPresented: Binding(
             get: { confirmation != nil }, set: { if !$0 { confirmation = nil } }
         ), titleVisibility: .visible, presenting: confirmation) { item in
@@ -150,12 +157,16 @@ private struct FRPDetailView: View {
                 }
             case .abandon(let id):
                 Button("停止本地重试") { Task { await perform { try await commands.abandon(id) } } }
+            case .rollback(let configID, let identity):
+                Button("追加为新配置") { Task { await rollback(configID, identity: identity) } }
             }
         } message: { item in
             switch item {
             case .send(let action, let configID, _): Text(commandDescription(action, configID: configID))
             case .abandon:
                 Text("服务器可能已接收此命令。停止本地重试不会撤销远程操作，记录会保留供核对。")
+            case .rollback(let configID, _):
+                Text("将设备 \(state.device.name) 的历史配置 \(String(configID)) 复制为新记录，保留原服务器版本和历史，不自动部署。请核对旧端口策略和认证是否仍可用。")
             }
         }
     }
@@ -196,6 +207,7 @@ private struct FRPDetailView: View {
     }
 
     @ViewBuilder private func configView(_ items: [FRPConfig]) -> some View {
+        Button("生成新配置…") { buildingConfig = true }.disabled(rollbackBusy)
         Text("配置内容由服务器保管，此处仅显示历史元数据。配置保存不等于已部署。")
             .font(.callout).foregroundStyle(.secondary)
         if items.isEmpty { Text("尚无保存的配置。") }
@@ -206,6 +218,10 @@ private struct FRPDetailView: View {
                 Text(config.createdAt).foregroundStyle(.secondary)
                 Button("部署此配置…") { request(.deployConfig, configID: config.id) }
                     .disabled(commands.busy(deviceID: state.device.id))
+                Button("从此历史追加新配置…") {
+                    guard let identity = session.transferIdentity else { return }
+                    confirmation = .rollback(config.id, identity)
+                }.disabled(rollbackBusy || attemptedRollbacks.contains(config.id))
             }
             Divider()
         }
@@ -256,6 +272,21 @@ private struct FRPDetailView: View {
     private func request(_ action: FRPCommandAction, configID: Int64 = 0) {
         guard let identity = session.transferIdentity else { return }
         confirmation = .send(action, configID, identity)
+    }
+    private func rollback(_ configID: Int64, identity: TransferIdentity) async {
+        guard !rollbackBusy, attemptedRollbacks.insert(configID).inserted else { return }
+        rollbackBusy = true
+        actionError = nil
+        defer { rollbackBusy = false }
+        do {
+            let created = try await session.rollbackFRPConfig(configID: configID, deviceID: state.device.id, expectedIdentity: identity)
+            try session.requireTransferIdentity(identity)
+            actionError = "已追加配置 \(String(created.id))，尚未部署。请核对历史记录后另行确认部署。"
+        } catch {
+            actionError = "未取得回滚成功回执。\((error as? ServerError)?.localizedDescription ?? "连接未能完成。")请刷新历史核对，避免重复追加。"
+        }
+        section = .configs
+        await state.load(.configs)
     }
     private func perform(_ operation: () async throws -> Void) async {
         actionError = nil

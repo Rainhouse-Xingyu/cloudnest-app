@@ -44,3 +44,5 @@ CLOUDNEST_TEST_AI_MODEL=1 python3 scripts/test-macos-backend.py --filter '^TestM
 2026-11-21 后续：af4f3ef 的 macOS 26/Xcode 27 与完整后端 CI 全部通过。已新增原生命令持久意图、确认和原键重试；实际 Agent/官方 frpc/frps 的三隧道与五操作 GUI、真实 TLS 丢回执恢复均有独立证据，见[命令说明](MACOS-FRP-COMMANDS.md)。同日恢复并实际评估视觉模型，2B 的两组合成图片场景通过，4B 失败保留，见[模型资源复测](MACOS-FRP.md#ai-模型资源复测)。新提交 CI 另按精确 SHA 核对，未完成范围不变。
 
 后续命令提交 da24d87 的双平台原生及完整后端 CI 全通过，两平台日志确认实际执行丢回执恢复、非 UTC、Universal Release/签名及独立 UI 构建。新的[服务器原生管理](MACOS-FRP-SERVERS.md)已接入分页、登记/编辑、版本 CAS 与三种 token 处理方式，真实接口和 GUI 通过；设备/映射 CRUD、enrollment、配置生成/预览/回滚及其余 G09–G11 工作继续。
+
+2026-11-22：服务器提交 04539b7 精确双平台与完整后端 CI 全通过。后续[配置流程](MACOS-FRP-CONFIGS.md)已完成脱敏预览、确认后追加保存/复制历史、分别部署配置 2/3 的真实三隧道及停止 GUI；首轮夹具过期保留失败，最终新夹具正常通过退出。设备/映射 CRUD、enrollment、协作/分享/设置和扩展 AI 继续实施，G10/G11 范围不变。

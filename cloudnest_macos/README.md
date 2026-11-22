@@ -27,3 +27,5 @@ xcodebuild -project cloudnest_macos/CloudNest.xcodeproj -scheme CloudNest \
 AI 页支持真实自然语言检索、原文片段、来源、索引状态与确认后重建；远程连接页支持设备/映射/配置历史/运行状态、五种命令确认和持久原请求重试。入队回执与 Agent 执行成功分别显示，应用重开不会自动重放远程操作。边界和验收见 [G09](../docs/remediation/G09-MACOS-EXTENSIONS.md) 与[命令恢复](../docs/remediation/MACOS-FRP-COMMANDS.md)。设备/映射编辑及注册、协作、分享和扩展设置继续实施。
 
 服务器分段已接入[登记与编辑](../docs/remediation/MACOS-FRP-SERVERS.md)、每页 50 项、版本冲突核对和保留/替换/清除 token。服务资料保存、Agent 部署和正在运行的隧道分别处理；设备/映射编辑及注册等剩余界面继续实施。
+
+配置历史支持[脱敏预览、生成保存与历史复制](../docs/remediation/MACOS-FRP-CONFIGS.md)。保存/历史追加先确认，成功后仍须在历史中另行确认部署；实际 Agent 三隧道与停止已有独立 GUI 验证，配置追加故障恢复的剩余边界见协议。
