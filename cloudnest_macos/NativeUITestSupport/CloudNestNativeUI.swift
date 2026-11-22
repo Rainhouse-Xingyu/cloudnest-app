@@ -46,6 +46,7 @@ private final class NativeUITLSPolicy: NSObject, URLSessionTaskDelegate, @unchec
 struct CloudNestNativeUI: App {
     @State private var session: SessionState
     @State private var transfers: TransferManager
+    @State private var frpCommands: FRPCommandManager
     @State private var acceptanceColorScheme: ColorScheme?
 
     init() {
@@ -66,18 +67,22 @@ struct CloudNestNativeUI: App {
             let state = SessionState(api: api, vault: NativeUISessionVault())
             _session = State(initialValue: state)
             _transfers = State(initialValue: TransferManager(session: state, directory: root.appending(path: "journal")))
+            _frpCommands = State(initialValue: FRPCommandManager(session: state, directory: root.appending(path: "frp-commands")))
         } catch { fatalError("Could not open the dedicated native UI fixture: \(error)") }
     }
 
     var body: some Scene {
         WindowGroup("CloudNest Native UI", id: "workspace") {
-            WorkspaceWindow(session: session, transfers: transfers)
+            WorkspaceWindow(session: session, transfers: transfers, frpCommands: frpCommands)
                 .preferredColorScheme(acceptanceColorScheme)
                 .frame(minWidth: 640, minHeight: 440)
-                .task { await session.restore(); await transfers.restore() }
+                .task { await session.restore(); await transfers.restore(); await frpCommands.restore() }
         }
         .defaultSize(width: 900, height: 590)
-        .onChange(of: session.transferIdentity) { Task { await transfers.synchronizeIdentity() } }
+        .onChange(of: session.transferIdentity) {
+            frpCommands.synchronizeIdentity()
+            Task { await transfers.synchronizeIdentity() }
+        }
         .commands {
             FileBrowserCommands()
             // Exercise the shipping views in both environments without changing

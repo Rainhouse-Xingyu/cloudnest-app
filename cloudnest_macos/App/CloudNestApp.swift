@@ -4,24 +4,30 @@ import SwiftUI
 struct CloudNestApp: App {
     @State private var session: SessionState
     @State private var transfers: TransferManager
+    @State private var frpCommands: FRPCommandManager
 
     init() {
         let session = SessionState(api: ServerAPI(), vault: KeychainSessionVault(service: "org.cloudnest.macos.session"))
         _session = State(initialValue: session)
         _transfers = State(initialValue: TransferManager(session: session))
+        _frpCommands = State(initialValue: FRPCommandManager(session: session))
     }
 
     var body: some Scene {
         WindowGroup("CloudNest", id: "workspace") {
-            WorkspaceWindow(session: session, transfers: transfers)
+            WorkspaceWindow(session: session, transfers: transfers, frpCommands: frpCommands)
                 .frame(minWidth: 640, minHeight: 440)
                 .task {
                     await session.restore()
                     await transfers.restore()
+                    await frpCommands.restore()
                 }
         }
         .defaultSize(width: 900, height: 590)
-        .onChange(of: session.transferIdentity) { Task { await transfers.synchronizeIdentity() } }
+        .onChange(of: session.transferIdentity) {
+            frpCommands.synchronizeIdentity()
+            Task { await transfers.synchronizeIdentity() }
+        }
         .commands {
             FileBrowserCommands()
             CommandMenu("服务器") {
@@ -65,6 +71,7 @@ private enum Page: String, CaseIterable, Identifiable {
 struct WorkspaceWindow: View {
     let session: SessionState
     let transfers: TransferManager
+    let frpCommands: FRPCommandManager
     @State private var selection: Page? = .files
 
     var body: some View {
@@ -95,7 +102,7 @@ struct WorkspaceWindow: View {
                         AISearchView(session: session, transfers: transfers)
                             .id(session.transferIdentity)
                     case .frp:
-                        FRPView(session: session)
+                        FRPView(session: session, commands: frpCommands)
                             .id(session.transferIdentity)
                     case .connection:
                         ConnectionDetails(session: session)

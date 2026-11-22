@@ -191,6 +191,11 @@ final class SessionState {
         try await withSession { origin, token in try await api.frpCommands(origin, token: token, deviceID: deviceID) }
     }
 
+    func enqueueFRPCommand(_ intent: FRPCommandIntent) async throws -> FRPCommand {
+        try requireTransferIdentity(intent.identity)
+        return try await withSession { origin, token in try await api.enqueueFRPCommand(origin, token: token, intent: intent) }
+    }
+
     private func withSession<T: Sendable>(_ operation: (ServerOrigin, String) async throws -> T) async throws -> T {
         guard let saved, let origin, account != nil else { throw ServerError.unauthorized }
         do {

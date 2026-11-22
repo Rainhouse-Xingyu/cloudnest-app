@@ -98,6 +98,24 @@ extension ServerAPI {
     private struct FRPList<T: Decodable>: Decodable { let items: [T]? }
     private struct FRPItem<T: Decodable>: Decodable { let item: T }
 
+    func enqueueFRPCommand(_ origin: ServerOrigin, token: String, intent: FRPCommandIntent) async throws -> FRPCommand {
+        struct Input: Encodable { let request_id: String; let action: String; let config_id: Int64 }
+        struct Receipt: Decodable { let item: FRPCommand; let command_id: String }
+        try intent.validate()
+        guard intent.outcome == .unconfirmed else { throw ServerError.invalidOperation }
+        let body = try JSONEncoder().encode(Input(request_id: intent.requestID, action: intent.action.rawValue, config_id: intent.configID))
+        let receipt: Receipt = try await request(origin, "api/frp/devices/\(intent.deviceID)/commands", token: token,
+            body: body, method: "POST", maximumBytes: 512 * 1024)
+        let item = receipt.item
+        guard FRPCommandIntent.validID(item.id), receipt.command_id == item.id,
+              item.requestID == intent.requestID, item.deviceID == intent.deviceID,
+              item.action == intent.action.rawValue, item.configID == intent.configID, item.attempts >= 0,
+              ["pending", "leased", "succeeded", "failed", "cancelled", "timed_out"].contains(item.status) else {
+            throw ServerError.invalidResponse
+        }
+        return item
+    }
+
     func frpDevices(_ origin: ServerOrigin, token: String) async throws -> [FRPDevice] {
         let result: FRPList<FRPDevice> = try await request(origin, "api/frp/devices", token: token, maximumBytes: 4 * 1024 * 1024)
         let items = result.items ?? []

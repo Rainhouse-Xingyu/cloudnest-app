@@ -3,13 +3,18 @@
 package integration
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"io"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"cloudenest_go/internal/agentcommand"
@@ -66,7 +71,53 @@ func TestMacOSClientFRPRead(t *testing.T) {
 	f := newFixture(t)
 	seed := fixtureNativeFRP(t, f)
 	f.router = fixtureRouter(app.NewContainer(f.cfg, f.db, f.rdb).NewRouter())
-	server := httptest.NewTLSServer(f.router)
+	var lost sync.Map
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" && strings.HasSuffix(r.URL.Path, "/commands") && r.Header.Get("X-CloudNest-Test-FRP-Lost") == "native-command-receipt" {
+			raw, err := io.ReadAll(io.LimitReader(r.Body, (16<<10)+1))
+			if err != nil || len(raw) > 16<<10 {
+				w.WriteHeader(400)
+				return
+			}
+			_ = r.Body.Close()
+			r.Body = io.NopCloser(bytes.NewReader(raw))
+			var body struct {
+				RequestID string `json:"request_id"`
+			}
+			if json.Unmarshal(raw, &body) != nil || !agentcommand.ValidID(body.RequestID) {
+				w.WriteHeader(400)
+				return
+			}
+			receipt := httptest.NewRecorder()
+			f.router.ServeHTTP(receipt, r)
+			if receipt.Code == 200 {
+				if _, exists := lost.LoadOrStore(body.RequestID, true); !exists {
+					// The production transaction committed. Send actual HTTP
+					// headers and only one response byte, then drop this socket.
+					for name, values := range receipt.Header() {
+						w.Header()[name] = values
+					}
+					w.Header().Set("Content-Length", strconv.Itoa(receipt.Body.Len()))
+					w.WriteHeader(200)
+					_, _ = w.Write(receipt.Body.Bytes()[:1])
+					if err := http.NewResponseController(w).Flush(); err != nil {
+						t.Error(err)
+						return
+					}
+					connection, _, err := http.NewResponseController(w).Hijack()
+					if err != nil {
+						t.Error(err)
+						return
+					}
+					_ = connection.Close()
+					return
+				}
+			}
+			copyNativeReceipt(w, receipt)
+			return
+		}
+		f.router.ServeHTTP(w, r)
+	}))
 	defer server.Close()
 	certificate := filepath.Join(t.TempDir(), "server.der")
 	if err := os.WriteFile(certificate, server.Certificate().Raw, 0600); err != nil {
@@ -90,7 +141,7 @@ func TestMacOSClientFRPRead(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			test := exec.Command("swift", "test", "--package-path", packagePath, "--filter", "realBackendFRPRead")
+			test := exec.Command("swift", "test", "--package-path", packagePath, "--filter", "realBackendFRP")
 			test.Env = append(os.Environ(), "CLOUDNEST_SWIFT_FRP_TEST=1", "CLOUDNEST_SWIFT_ORIGIN="+server.URL,
 				"CLOUDNEST_SWIFT_USERNAME="+user.Username, "CLOUDNEST_SWIFT_PASSWORD=disposable-fixture-password",
 				"CLOUDNEST_SWIFT_CERTIFICATE="+certificate, "CLOUDNEST_SWIFT_FRP_ROLE="+tc.name,

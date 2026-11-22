@@ -1,0 +1,1020 @@
+{
+  "passed": false,
+  "functional_commands_passed": true,
+  "generated_utc": "2026-11-22T04:47:41.265865+00:00",
+  "local_date": "2026-11-21 America/Phoenix",
+  "scope": "Actual native GUI -> shipping Go API -> Agent CLI -> official frpc/frps -> local TCP/HTTP/HTTPS upstreams; not public frps retest",
+  "observations": [
+    "Initial Agent online with stopped/zero runtime, no success invented",
+    "Native confirmation deployed explicit saved config1; actual final server ACK succeeded",
+    "Native diagnose returned registered3/failed0/pending0 and three reachable local TCP states",
+    "Native stop ACK succeeded and actual remote TCP listener absent",
+    "Native start ACK succeeded and three tunnel bodies verified again",
+    "Native reload ACK succeeded and three tunnel bodies verified again",
+    "Local acceptance and final server execution states displayed separately",
+    "Normal Escape/Command-Q, app absent from inventory"
+  ],
+  "failure": "Complete runtime status content extended below viewport and hid footer Close; Escape still worked. Fix flexible ScrollView layout before final UI acceptance.",
+  "source_sha256": {
+    "cloudnest_macos/App/AISearchView.swift": "8aaea5c95be1541e11082295e76e9149ee6a6d5a8e74b77dd0021657b04ce10b",
+    "cloudnest_macos/App/CloudNestApp.swift": "c1694632300b821cbe663059dcdbe853c8f1019aece324191ae7a6dd22bfc7c3",
+    "cloudnest_macos/App/FRPView.swift": "126f77775026deb45610a1f709f21749a5142840b9822ddafdd90124782ebd64",
+    "cloudnest_macos/App/FileBrowserCommands.swift": "1744b820661ef09fa3836c67397d2975133a4982444807012c12c5112731d4e8",
+    "cloudnest_macos/App/FileBrowserView.swift": "4f946fbffb7d08c5cd8642cd500d0cee6dfc73933e97c99d5040f26b0aca3e11",
+    "cloudnest_macos/App/FileDestinationSheet.swift": "e687c0269882fd072479942c7a73c96790796ffdcaa6a176657b59c669b51a7d",
+    "cloudnest_macos/App/FileVersionsSheet.swift": "17fe6e46888249269a57f5172de163e8aeb6a7a56b6ecb188c5608f39099920a",
+    "cloudnest_macos/App/TransferListView.swift": "a8e26aa331492e166bea32e406507aa5daa2420cf651c7074d50d718712b6181",
+    "cloudnest_macos/Core/AISearchAPI.swift": "d37a7e8c21134d4f620cebbe09163817b57802ec04074d5eba3ac715ce487c6f",
+    "cloudnest_macos/Core/AISearchState.swift": "e6d670b3b5cbdb56a48b251f8c355bd97b7be125f9d7ab03c31447e757a14d8a",
+    "cloudnest_macos/Core/DownloadPlan.swift": "641b33f9f36001a67bcb3ed583c2ff3e61b40ac2683d10fafdaa70c6b24965b1",
+    "cloudnest_macos/Core/DownloadStream.swift": "a4878ddee1749ae049ca898fac22175dae907ada9b859e961afbe801ad897a15",
+    "cloudnest_macos/Core/FRPAPI.swift": "27780d324b79f931c3581d409953f3807bc60a0d82ad795bf0453e5dfb03457b",
+    "cloudnest_macos/Core/FRPCommandIntent.swift": "dd701f1a334dd0ba1716b74630d81acae20bb4c6e38ce7190d01fd501461523d",
+    "cloudnest_macos/Core/FRPCommandManager.swift": "c61580e09c7651b7c08732491e0974f6f3a10d65a95bc7606fe5c95aa936ac32",
+    "cloudnest_macos/Core/FRPCommandStore.swift": "513044a6403122a9a85ec3f5e03112e00cab263a4fd76ae69e0d21ee3f95c349",
+    "cloudnest_macos/Core/FRPState.swift": "1135cf4e0c6ee56c07a7457cd016306d143347d8361b4a857d2fb74e3128e6c9",
+    "cloudnest_macos/Core/FileAPI.swift": "f65a045b2e59dba168d72487b16699a875753579a3968141fa739f214600e767",
+    "cloudnest_macos/Core/FileBrowserState.swift": "312b325d054c4b34aa867320570321a010c17359b6bf5413c51253cd767c3380",
+    "cloudnest_macos/Core/FileVersions.swift": "1b009b2cd68dd555325b667186b757b5307dad6a355fd27ebc955da2474b7483",
+    "cloudnest_macos/Core/LegacyPreviewDirectory.swift": "05b9022f6f528de4bff5c4f9c236518b25271537b5794409384d9e5c0329f608",
+    "cloudnest_macos/Core/PreviewCache.swift": "24e5560809afd2d6065a9994d5355c0c36f62128e2a4a256b29c2bdd2c808904",
+    "cloudnest_macos/Core/ServerAPI.swift": "b23f553f42f3fbd7ea4d91b1839621d25d13ee0d01fa619af8573e3d4ab320db",
+    "cloudnest_macos/Core/SessionState.swift": "1dfd5d7ca35a5fbb0a202186e65a66c4ec66546600bc7ff5a2478f0a1917b304",
+    "cloudnest_macos/Core/SessionVault.swift": "8aaeafe193e99da59b8a5298fe8d2fa5052c21e8fef67e182927be438d8d7495",
+    "cloudnest_macos/Core/TransferAPI.swift": "757fa9919a3cc5d66d20b380d2470165acc2af63cffac5da3811ec298cf4625b",
+    "cloudnest_macos/Core/TransferDisk.swift": "51ca36fc080604b9a6ece8d0b1302e56904984691c9caa22ee77cdd432ceae84",
+    "cloudnest_macos/Core/TransferManager.swift": "d2a1b943c518cc3fffe7208815da8b9299a1336668a91e9493a375e8255256ff",
+    "cloudnest_macos/Core/TransferRecord.swift": "5deba6f800be9fc2ff2428582f5908e1afbe6c227303661764f2ad1d8374f965",
+    "cloudnest_macos/Core/TransferStore.swift": "66cae8a28ba323c0a90e67eec549356c70c88b843fa9bb352ba0f30c4567e17f",
+    "cloudnest_macos/Core/TransferTelemetry.swift": "95eb7bba18223c173ceeead47cc025fb1fc34617985ab3d80db8ce89d9011345"
+  },
+  "binary_sha256": "10480d013b7d40fb7ea80412a43b082b65b0bfb1f511cd37e27c08943ae5db00",
+  "runtime_ports": {
+    "control": 54627,
+    "http": 54628,
+    "https": 54629,
+    "tcp": 54630,
+    "upstream_http": 54625,
+    "upstream_https": 54626
+  },
+  "runtime_binary_sha256": {
+    "agent": "12ffc74466addf13f3da2da0a68f2691b21508cc33f69253938afedf21984919",
+    "frpc": "7aaaba058dbeeedc86be876c44912c4f33756ab3e6e7a085f8d7af7814a073c1",
+    "frps": "96165f1f8bb462d234d1c374e35176d5cf05c24dd16f710b75e33af45376dc74"
+  },
+  "backend_certificate_sha256": "468174fd18ae990a0a1e10568e30f9819a8acd23224c319f4ec3eb4f6f2980d9",
+  "frps_ca_sha256": "4bf9786af942540c8b9f0b5275dbf658d9950f523b199b77b07aa8921c6cbdbf",
+  "api_and_tunnel_evidence": [
+    {
+      "label": "initial",
+      "utc": "2026-11-22T04:41:22.603509+00:00",
+      "origin": "https://127.0.0.1:54624",
+      "device_id": 1,
+      "status": {
+        "client_version": "cloudnest-agent-0.3.0",
+        "current_config_id": "",
+        "last_error": "",
+        "last_heartbeat": "2026-11-22T04:41:02.526133Z",
+        "online": true,
+        "runtime": {
+          "state": "stopped",
+          "config_id": 0,
+          "observed_at": "2026-11-22T04:41:02.523426Z",
+          "expected": 0,
+          "registered": 0,
+          "failed": 0,
+          "pending": 0
+        },
+        "updated_at": "2026-11-22T04:41:02.526133Z"
+      },
+      "commands": [],
+      "local_intents": [],
+      "probes": [],
+      "mode": "snapshot"
+    },
+    {
+      "label": "deployed",
+      "utc": "2026-11-22T04:42:29.445092+00:00",
+      "origin": "https://127.0.0.1:54624",
+      "device_id": 1,
+      "status": {
+        "client_version": "cloudnest-agent-0.3.0",
+        "current_config_id": "",
+        "last_error": "",
+        "last_heartbeat": "2026-11-22T04:42:20.830827Z",
+        "online": true,
+        "runtime": {
+          "state": "stopped",
+          "config_id": 0,
+          "observed_at": "2026-11-22T04:42:20.82902Z",
+          "expected": 0,
+          "registered": 0,
+          "failed": 0,
+          "pending": 0
+        },
+        "updated_at": "2026-11-22T04:42:20.830827Z"
+      },
+      "commands": [
+        {
+          "command_id": "171a86b2570c94e07da20f8f0ea3a7f0",
+          "device_id": 1,
+          "request_id": "7dd46497a5e84750bfd8e65702cd8fda",
+          "action": "deploy_config",
+          "config_id": 1,
+          "config_sha256": "dbbd694e796fc57231b3c30164543c825b5522be20c63ef062f81ee25bd3ffa2",
+          "status": "succeeded",
+          "attempts": 1,
+          "lease_expires_at": "2026-11-22T04:43:21.381298Z",
+          "expires_at": "2026-11-23T04:42:20.428721Z",
+          "created_at": "2026-11-22T04:42:20.428721Z",
+          "completed_at": "2026-11-22T04:42:21.960151Z",
+          "result_code": "ok"
+        }
+      ],
+      "local_intents": [
+        {
+          "revision": 1,
+          "action": "deploy_config",
+          "id": "7DD46497-A5E8-4750-BFD8-E65702CD8FDA",
+          "identity": {
+            "userID": 1,
+            "server": "https://127.0.0.1:54624"
+          },
+          "deviceID": 1,
+          "createdAt": 817015340.415131,
+          "outcome": "accepted",
+          "configID": 1,
+          "commandID": "171a86b2570c94e07da20f8f0ea3a7f0",
+          "formatVersion": 1
+        }
+      ],
+      "probes": [
+        {
+          "protocol": "tcp",
+          "port": 54630,
+          "status": 200,
+          "body": "cloudnest-native-frp-ok:/native-tcp",
+          "tls_verified": false
+        },
+        {
+          "protocol": "http",
+          "port": 54628,
+          "status": 200,
+          "body": "cloudnest-native-frp-ok:/native-http",
+          "tls_verified": false
+        },
+        {
+          "protocol": "https",
+          "port": 54629,
+          "status": 200,
+          "body": "cloudnest-native-frp-ok:/native-https",
+          "tls_verified": true
+        }
+      ],
+      "mode": "probe"
+    },
+    {
+      "label": "diagnosed",
+      "utc": "2026-11-22T04:43:07.601885+00:00",
+      "origin": "https://127.0.0.1:54624",
+      "device_id": 1,
+      "status": {
+        "client_version": "cloudnest-agent-0.3.0",
+        "current_config_id": "",
+        "last_error": "",
+        "last_heartbeat": "2026-11-22T04:42:46.04705Z",
+        "online": true,
+        "runtime": {
+          "state": "registered",
+          "config_id": 1,
+          "observed_at": "2026-11-22T04:42:46.045512Z",
+          "expected": 3,
+          "registered": 3,
+          "failed": 0,
+          "pending": 0,
+          "proxy_states": "FQ==",
+          "upstream_states": "FQ=="
+        },
+        "runtime_proxies": [
+          {
+            "mapping_id": 1,
+            "state": "registered",
+            "upstream_tcp": "reachable"
+          },
+          {
+            "mapping_id": 2,
+            "state": "registered",
+            "upstream_tcp": "reachable"
+          },
+          {
+            "mapping_id": 3,
+            "state": "registered",
+            "upstream_tcp": "reachable"
+          }
+        ],
+        "updated_at": "2026-11-22T04:42:46.04705Z"
+      },
+      "commands": [
+        {
+          "command_id": "f830d911c4f48e983046e0da09596c1a",
+          "device_id": 1,
+          "request_id": "fd53bebc0336421381b00d4eac9e8763",
+          "action": "diagnose",
+          "config_id": 0,
+          "config_sha256": "",
+          "status": "succeeded",
+          "attempts": 1,
+          "lease_expires_at": "2026-11-22T04:44:02.112701Z",
+          "expires_at": "2026-11-23T04:43:00.145215Z",
+          "created_at": "2026-11-22T04:43:00.145215Z",
+          "completed_at": "2026-11-22T04:43:02.127414Z",
+          "diagnostic_proxies": [
+            {
+              "mapping_id": 1,
+              "state": "registered"
+            },
+            {
+              "mapping_id": 2,
+              "state": "registered"
+            },
+            {
+              "mapping_id": 3,
+              "state": "registered"
+            }
+          ],
+          "diagnostic": {
+            "state": "registered",
+            "config_id": 1,
+            "observed_at": "2026-11-22T04:43:02.114995Z",
+            "expected": 3,
+            "registered": 3,
+            "failed": 0,
+            "pending": 0,
+            "proxy_states": "FQ=="
+          },
+          "result_code": "ok"
+        },
+        {
+          "command_id": "171a86b2570c94e07da20f8f0ea3a7f0",
+          "device_id": 1,
+          "request_id": "7dd46497a5e84750bfd8e65702cd8fda",
+          "action": "deploy_config",
+          "config_id": 1,
+          "config_sha256": "dbbd694e796fc57231b3c30164543c825b5522be20c63ef062f81ee25bd3ffa2",
+          "status": "succeeded",
+          "attempts": 1,
+          "lease_expires_at": "2026-11-22T04:43:21.381298Z",
+          "expires_at": "2026-11-23T04:42:20.428721Z",
+          "created_at": "2026-11-22T04:42:20.428721Z",
+          "completed_at": "2026-11-22T04:42:21.960151Z",
+          "result_code": "ok"
+        }
+      ],
+      "local_intents": [
+        {
+          "revision": 1,
+          "action": "deploy_config",
+          "id": "7DD46497-A5E8-4750-BFD8-E65702CD8FDA",
+          "identity": {
+            "userID": 1,
+            "server": "https://127.0.0.1:54624"
+          },
+          "deviceID": 1,
+          "createdAt": 817015340.415131,
+          "outcome": "accepted",
+          "configID": 1,
+          "commandID": "171a86b2570c94e07da20f8f0ea3a7f0",
+          "formatVersion": 1
+        },
+        {
+          "deviceID": 1,
+          "id": "FD53BEBC-0336-4213-81B0-0D4EAC9E8763",
+          "configID": 0,
+          "formatVersion": 1,
+          "createdAt": 817015380.13168,
+          "commandID": "f830d911c4f48e983046e0da09596c1a",
+          "action": "diagnose",
+          "outcome": "accepted",
+          "identity": {
+            "userID": 1,
+            "server": "https://127.0.0.1:54624"
+          },
+          "revision": 1
+        }
+      ],
+      "probes": [
+        {
+          "protocol": "tcp",
+          "port": 54630,
+          "status": 200,
+          "body": "cloudnest-native-frp-ok:/native-tcp",
+          "tls_verified": false
+        },
+        {
+          "protocol": "http",
+          "port": 54628,
+          "status": 200,
+          "body": "cloudnest-native-frp-ok:/native-http",
+          "tls_verified": false
+        },
+        {
+          "protocol": "https",
+          "port": 54629,
+          "status": 200,
+          "body": "cloudnest-native-frp-ok:/native-https",
+          "tls_verified": true
+        }
+      ],
+      "mode": "probe"
+    },
+    {
+      "label": "stopped",
+      "utc": "2026-11-22T04:44:29.851108+00:00",
+      "origin": "https://127.0.0.1:54624",
+      "device_id": 1,
+      "status": {
+        "client_version": "cloudnest-agent-0.3.0",
+        "current_config_id": "",
+        "last_error": "",
+        "last_heartbeat": "2026-11-22T04:44:04.321901Z",
+        "online": true,
+        "runtime": {
+          "state": "registered",
+          "config_id": 1,
+          "observed_at": "2026-11-22T04:44:04.319932Z",
+          "expected": 3,
+          "registered": 3,
+          "failed": 0,
+          "pending": 0,
+          "proxy_states": "FQ==",
+          "upstream_states": "FQ=="
+        },
+        "runtime_proxies": [
+          {
+            "mapping_id": 1,
+            "state": "registered",
+            "upstream_tcp": "reachable"
+          },
+          {
+            "mapping_id": 2,
+            "state": "registered",
+            "upstream_tcp": "reachable"
+          },
+          {
+            "mapping_id": 3,
+            "state": "registered",
+            "upstream_tcp": "reachable"
+          }
+        ],
+        "updated_at": "2026-11-22T04:44:04.321901Z"
+      },
+      "commands": [
+        {
+          "command_id": "93816e44bf02e1a70a72f46345d18d96",
+          "device_id": 1,
+          "request_id": "bbc749d4e2094f77a186918f35308c5c",
+          "action": "stop",
+          "config_id": 0,
+          "config_sha256": "",
+          "status": "succeeded",
+          "attempts": 1,
+          "lease_expires_at": "2026-11-22T04:45:26.387554Z",
+          "expires_at": "2026-11-23T04:44:25.462186Z",
+          "created_at": "2026-11-22T04:44:25.462186Z",
+          "completed_at": "2026-11-22T04:44:26.408633Z",
+          "result_code": "ok"
+        },
+        {
+          "command_id": "f830d911c4f48e983046e0da09596c1a",
+          "device_id": 1,
+          "request_id": "fd53bebc0336421381b00d4eac9e8763",
+          "action": "diagnose",
+          "config_id": 0,
+          "config_sha256": "",
+          "status": "succeeded",
+          "attempts": 1,
+          "lease_expires_at": "2026-11-22T04:44:02.112701Z",
+          "expires_at": "2026-11-23T04:43:00.145215Z",
+          "created_at": "2026-11-22T04:43:00.145215Z",
+          "completed_at": "2026-11-22T04:43:02.127414Z",
+          "diagnostic_proxies": [
+            {
+              "mapping_id": 1,
+              "state": "registered"
+            },
+            {
+              "mapping_id": 2,
+              "state": "registered"
+            },
+            {
+              "mapping_id": 3,
+              "state": "registered"
+            }
+          ],
+          "diagnostic": {
+            "state": "registered",
+            "config_id": 1,
+            "observed_at": "2026-11-22T04:43:02.114995Z",
+            "expected": 3,
+            "registered": 3,
+            "failed": 0,
+            "pending": 0,
+            "proxy_states": "FQ=="
+          },
+          "result_code": "ok"
+        },
+        {
+          "command_id": "171a86b2570c94e07da20f8f0ea3a7f0",
+          "device_id": 1,
+          "request_id": "7dd46497a5e84750bfd8e65702cd8fda",
+          "action": "deploy_config",
+          "config_id": 1,
+          "config_sha256": "dbbd694e796fc57231b3c30164543c825b5522be20c63ef062f81ee25bd3ffa2",
+          "status": "succeeded",
+          "attempts": 1,
+          "lease_expires_at": "2026-11-22T04:43:21.381298Z",
+          "expires_at": "2026-11-23T04:42:20.428721Z",
+          "created_at": "2026-11-22T04:42:20.428721Z",
+          "completed_at": "2026-11-22T04:42:21.960151Z",
+          "result_code": "ok"
+        }
+      ],
+      "local_intents": [
+        {
+          "revision": 1,
+          "action": "deploy_config",
+          "id": "7DD46497-A5E8-4750-BFD8-E65702CD8FDA",
+          "identity": {
+            "userID": 1,
+            "server": "https://127.0.0.1:54624"
+          },
+          "deviceID": 1,
+          "createdAt": 817015340.415131,
+          "outcome": "accepted",
+          "configID": 1,
+          "commandID": "171a86b2570c94e07da20f8f0ea3a7f0",
+          "formatVersion": 1
+        },
+        {
+          "deviceID": 1,
+          "id": "FD53BEBC-0336-4213-81B0-0D4EAC9E8763",
+          "configID": 0,
+          "formatVersion": 1,
+          "createdAt": 817015380.13168,
+          "commandID": "f830d911c4f48e983046e0da09596c1a",
+          "action": "diagnose",
+          "outcome": "accepted",
+          "identity": {
+            "userID": 1,
+            "server": "https://127.0.0.1:54624"
+          },
+          "revision": 1
+        },
+        {
+          "configID": 0,
+          "id": "BBC749D4-E209-4F77-A186-918F35308C5C",
+          "action": "stop",
+          "commandID": "93816e44bf02e1a70a72f46345d18d96",
+          "outcome": "accepted",
+          "createdAt": 817015465.443963,
+          "formatVersion": 1,
+          "identity": {
+            "userID": 1,
+            "server": "https://127.0.0.1:54624"
+          },
+          "deviceID": 1,
+          "revision": 1
+        }
+      ],
+      "probes": [
+        {
+          "protocol": "tcp",
+          "port": 54630,
+          "listening": false
+        }
+      ],
+      "mode": "stopped"
+    },
+    {
+      "label": "restarted",
+      "utc": "2026-11-22T04:44:56.417841+00:00",
+      "origin": "https://127.0.0.1:54624",
+      "device_id": 1,
+      "status": {
+        "client_version": "cloudnest-agent-0.3.0",
+        "current_config_id": "",
+        "last_error": "",
+        "last_heartbeat": "2026-11-22T04:44:30.42835Z",
+        "online": true,
+        "runtime": {
+          "state": "stopped",
+          "config_id": 1,
+          "observed_at": "2026-11-22T04:44:30.426452Z",
+          "expected": 0,
+          "registered": 0,
+          "failed": 0,
+          "pending": 0
+        },
+        "updated_at": "2026-11-22T04:44:30.42835Z"
+      },
+      "commands": [
+        {
+          "command_id": "4366af5304a33f689b4a36bac4d97c7b",
+          "device_id": 1,
+          "request_id": "cde48d816c024297b6c761bf57580a49",
+          "action": "start",
+          "config_id": 0,
+          "config_sha256": "",
+          "status": "succeeded",
+          "attempts": 1,
+          "lease_expires_at": "2026-11-22T04:45:54.498081Z",
+          "expires_at": "2026-11-23T04:44:52.525637Z",
+          "created_at": "2026-11-22T04:44:52.525637Z",
+          "completed_at": "2026-11-22T04:44:55.067607Z",
+          "result_code": "ok"
+        },
+        {
+          "command_id": "93816e44bf02e1a70a72f46345d18d96",
+          "device_id": 1,
+          "request_id": "bbc749d4e2094f77a186918f35308c5c",
+          "action": "stop",
+          "config_id": 0,
+          "config_sha256": "",
+          "status": "succeeded",
+          "attempts": 1,
+          "lease_expires_at": "2026-11-22T04:45:26.387554Z",
+          "expires_at": "2026-11-23T04:44:25.462186Z",
+          "created_at": "2026-11-22T04:44:25.462186Z",
+          "completed_at": "2026-11-22T04:44:26.408633Z",
+          "result_code": "ok"
+        },
+        {
+          "command_id": "f830d911c4f48e983046e0da09596c1a",
+          "device_id": 1,
+          "request_id": "fd53bebc0336421381b00d4eac9e8763",
+          "action": "diagnose",
+          "config_id": 0,
+          "config_sha256": "",
+          "status": "succeeded",
+          "attempts": 1,
+          "lease_expires_at": "2026-11-22T04:44:02.112701Z",
+          "expires_at": "2026-11-23T04:43:00.145215Z",
+          "created_at": "2026-11-22T04:43:00.145215Z",
+          "completed_at": "2026-11-22T04:43:02.127414Z",
+          "diagnostic_proxies": [
+            {
+              "mapping_id": 1,
+              "state": "registered"
+            },
+            {
+              "mapping_id": 2,
+              "state": "registered"
+            },
+            {
+              "mapping_id": 3,
+              "state": "registered"
+            }
+          ],
+          "diagnostic": {
+            "state": "registered",
+            "config_id": 1,
+            "observed_at": "2026-11-22T04:43:02.114995Z",
+            "expected": 3,
+            "registered": 3,
+            "failed": 0,
+            "pending": 0,
+            "proxy_states": "FQ=="
+          },
+          "result_code": "ok"
+        },
+        {
+          "command_id": "171a86b2570c94e07da20f8f0ea3a7f0",
+          "device_id": 1,
+          "request_id": "7dd46497a5e84750bfd8e65702cd8fda",
+          "action": "deploy_config",
+          "config_id": 1,
+          "config_sha256": "dbbd694e796fc57231b3c30164543c825b5522be20c63ef062f81ee25bd3ffa2",
+          "status": "succeeded",
+          "attempts": 1,
+          "lease_expires_at": "2026-11-22T04:43:21.381298Z",
+          "expires_at": "2026-11-23T04:42:20.428721Z",
+          "created_at": "2026-11-22T04:42:20.428721Z",
+          "completed_at": "2026-11-22T04:42:21.960151Z",
+          "result_code": "ok"
+        }
+      ],
+      "local_intents": [
+        {
+          "revision": 1,
+          "action": "deploy_config",
+          "id": "7DD46497-A5E8-4750-BFD8-E65702CD8FDA",
+          "identity": {
+            "userID": 1,
+            "server": "https://127.0.0.1:54624"
+          },
+          "deviceID": 1,
+          "createdAt": 817015340.415131,
+          "outcome": "accepted",
+          "configID": 1,
+          "commandID": "171a86b2570c94e07da20f8f0ea3a7f0",
+          "formatVersion": 1
+        },
+        {
+          "deviceID": 1,
+          "id": "FD53BEBC-0336-4213-81B0-0D4EAC9E8763",
+          "configID": 0,
+          "formatVersion": 1,
+          "createdAt": 817015380.13168,
+          "commandID": "f830d911c4f48e983046e0da09596c1a",
+          "action": "diagnose",
+          "outcome": "accepted",
+          "identity": {
+            "userID": 1,
+            "server": "https://127.0.0.1:54624"
+          },
+          "revision": 1
+        },
+        {
+          "configID": 0,
+          "id": "BBC749D4-E209-4F77-A186-918F35308C5C",
+          "action": "stop",
+          "commandID": "93816e44bf02e1a70a72f46345d18d96",
+          "outcome": "accepted",
+          "createdAt": 817015465.443963,
+          "formatVersion": 1,
+          "identity": {
+            "userID": 1,
+            "server": "https://127.0.0.1:54624"
+          },
+          "deviceID": 1,
+          "revision": 1
+        },
+        {
+          "formatVersion": 1,
+          "id": "CDE48D81-6C02-4297-B6C7-61BF57580A49",
+          "createdAt": 817015492.51141,
+          "deviceID": 1,
+          "revision": 1,
+          "outcome": "accepted",
+          "configID": 0,
+          "identity": {
+            "userID": 1,
+            "server": "https://127.0.0.1:54624"
+          },
+          "action": "start",
+          "commandID": "4366af5304a33f689b4a36bac4d97c7b"
+        }
+      ],
+      "probes": [
+        {
+          "protocol": "tcp",
+          "port": 54630,
+          "status": 200,
+          "body": "cloudnest-native-frp-ok:/native-tcp",
+          "tls_verified": false
+        },
+        {
+          "protocol": "http",
+          "port": 54628,
+          "status": 200,
+          "body": "cloudnest-native-frp-ok:/native-http",
+          "tls_verified": false
+        },
+        {
+          "protocol": "https",
+          "port": 54629,
+          "status": 200,
+          "body": "cloudnest-native-frp-ok:/native-https",
+          "tls_verified": true
+        }
+      ],
+      "mode": "probe"
+    },
+    {
+      "label": "reloaded",
+      "utc": "2026-11-22T04:45:17.217787+00:00",
+      "origin": "https://127.0.0.1:54624",
+      "device_id": 1,
+      "status": {
+        "client_version": "cloudnest-agent-0.3.0",
+        "current_config_id": "",
+        "last_error": "",
+        "last_heartbeat": "2026-11-22T04:44:57.079916Z",
+        "online": true,
+        "runtime": {
+          "state": "registered",
+          "config_id": 1,
+          "observed_at": "2026-11-22T04:44:57.078187Z",
+          "expected": 3,
+          "registered": 3,
+          "failed": 0,
+          "pending": 0,
+          "proxy_states": "FQ==",
+          "upstream_states": "FQ=="
+        },
+        "runtime_proxies": [
+          {
+            "mapping_id": 1,
+            "state": "registered",
+            "upstream_tcp": "reachable"
+          },
+          {
+            "mapping_id": 2,
+            "state": "registered",
+            "upstream_tcp": "reachable"
+          },
+          {
+            "mapping_id": 3,
+            "state": "registered",
+            "upstream_tcp": "reachable"
+          }
+        ],
+        "updated_at": "2026-11-22T04:44:57.079916Z"
+      },
+      "commands": [
+        {
+          "command_id": "155e6b6f97eaa66c850576b750a5d08f",
+          "device_id": 1,
+          "request_id": "e15216dabfaf4064a01aed88e99989fc",
+          "action": "reload",
+          "config_id": 0,
+          "config_sha256": "",
+          "status": "succeeded",
+          "attempts": 1,
+          "lease_expires_at": "2026-11-22T04:46:13.134422Z",
+          "expires_at": "2026-11-23T04:45:12.711729Z",
+          "created_at": "2026-11-22T04:45:12.711729Z",
+          "completed_at": "2026-11-22T04:45:13.705896Z",
+          "result_code": "ok"
+        },
+        {
+          "command_id": "4366af5304a33f689b4a36bac4d97c7b",
+          "device_id": 1,
+          "request_id": "cde48d816c024297b6c761bf57580a49",
+          "action": "start",
+          "config_id": 0,
+          "config_sha256": "",
+          "status": "succeeded",
+          "attempts": 1,
+          "lease_expires_at": "2026-11-22T04:45:54.498081Z",
+          "expires_at": "2026-11-23T04:44:52.525637Z",
+          "created_at": "2026-11-22T04:44:52.525637Z",
+          "completed_at": "2026-11-22T04:44:55.067607Z",
+          "result_code": "ok"
+        },
+        {
+          "command_id": "93816e44bf02e1a70a72f46345d18d96",
+          "device_id": 1,
+          "request_id": "bbc749d4e2094f77a186918f35308c5c",
+          "action": "stop",
+          "config_id": 0,
+          "config_sha256": "",
+          "status": "succeeded",
+          "attempts": 1,
+          "lease_expires_at": "2026-11-22T04:45:26.387554Z",
+          "expires_at": "2026-11-23T04:44:25.462186Z",
+          "created_at": "2026-11-22T04:44:25.462186Z",
+          "completed_at": "2026-11-22T04:44:26.408633Z",
+          "result_code": "ok"
+        },
+        {
+          "command_id": "f830d911c4f48e983046e0da09596c1a",
+          "device_id": 1,
+          "request_id": "fd53bebc0336421381b00d4eac9e8763",
+          "action": "diagnose",
+          "config_id": 0,
+          "config_sha256": "",
+          "status": "succeeded",
+          "attempts": 1,
+          "lease_expires_at": "2026-11-22T04:44:02.112701Z",
+          "expires_at": "2026-11-23T04:43:00.145215Z",
+          "created_at": "2026-11-22T04:43:00.145215Z",
+          "completed_at": "2026-11-22T04:43:02.127414Z",
+          "diagnostic_proxies": [
+            {
+              "mapping_id": 1,
+              "state": "registered"
+            },
+            {
+              "mapping_id": 2,
+              "state": "registered"
+            },
+            {
+              "mapping_id": 3,
+              "state": "registered"
+            }
+          ],
+          "diagnostic": {
+            "state": "registered",
+            "config_id": 1,
+            "observed_at": "2026-11-22T04:43:02.114995Z",
+            "expected": 3,
+            "registered": 3,
+            "failed": 0,
+            "pending": 0,
+            "proxy_states": "FQ=="
+          },
+          "result_code": "ok"
+        },
+        {
+          "command_id": "171a86b2570c94e07da20f8f0ea3a7f0",
+          "device_id": 1,
+          "request_id": "7dd46497a5e84750bfd8e65702cd8fda",
+          "action": "deploy_config",
+          "config_id": 1,
+          "config_sha256": "dbbd694e796fc57231b3c30164543c825b5522be20c63ef062f81ee25bd3ffa2",
+          "status": "succeeded",
+          "attempts": 1,
+          "lease_expires_at": "2026-11-22T04:43:21.381298Z",
+          "expires_at": "2026-11-23T04:42:20.428721Z",
+          "created_at": "2026-11-22T04:42:20.428721Z",
+          "completed_at": "2026-11-22T04:42:21.960151Z",
+          "result_code": "ok"
+        }
+      ],
+      "local_intents": [
+        {
+          "revision": 1,
+          "action": "deploy_config",
+          "id": "7DD46497-A5E8-4750-BFD8-E65702CD8FDA",
+          "identity": {
+            "userID": 1,
+            "server": "https://127.0.0.1:54624"
+          },
+          "deviceID": 1,
+          "createdAt": 817015340.415131,
+          "outcome": "accepted",
+          "configID": 1,
+          "commandID": "171a86b2570c94e07da20f8f0ea3a7f0",
+          "formatVersion": 1
+        },
+        {
+          "configID": 0,
+          "formatVersion": 1,
+          "createdAt": 817015512.694717,
+          "action": "reload",
+          "outcome": "accepted",
+          "identity": {
+            "userID": 1,
+            "server": "https://127.0.0.1:54624"
+          },
+          "deviceID": 1,
+          "commandID": "155e6b6f97eaa66c850576b750a5d08f",
+          "id": "E15216DA-BFAF-4064-A01A-ED88E99989FC",
+          "revision": 1
+        },
+        {
+          "deviceID": 1,
+          "id": "FD53BEBC-0336-4213-81B0-0D4EAC9E8763",
+          "configID": 0,
+          "formatVersion": 1,
+          "createdAt": 817015380.13168,
+          "commandID": "f830d911c4f48e983046e0da09596c1a",
+          "action": "diagnose",
+          "outcome": "accepted",
+          "identity": {
+            "userID": 1,
+            "server": "https://127.0.0.1:54624"
+          },
+          "revision": 1
+        },
+        {
+          "configID": 0,
+          "id": "BBC749D4-E209-4F77-A186-918F35308C5C",
+          "action": "stop",
+          "commandID": "93816e44bf02e1a70a72f46345d18d96",
+          "outcome": "accepted",
+          "createdAt": 817015465.443963,
+          "formatVersion": 1,
+          "identity": {
+            "userID": 1,
+            "server": "https://127.0.0.1:54624"
+          },
+          "deviceID": 1,
+          "revision": 1
+        },
+        {
+          "formatVersion": 1,
+          "id": "CDE48D81-6C02-4297-B6C7-61BF57580A49",
+          "createdAt": 817015492.51141,
+          "deviceID": 1,
+          "revision": 1,
+          "outcome": "accepted",
+          "configID": 0,
+          "identity": {
+            "userID": 1,
+            "server": "https://127.0.0.1:54624"
+          },
+          "action": "start",
+          "commandID": "4366af5304a33f689b4a36bac4d97c7b"
+        }
+      ],
+      "probes": [
+        {
+          "protocol": "tcp",
+          "port": 54630,
+          "status": 200,
+          "body": "cloudnest-native-frp-ok:/native-tcp",
+          "tls_verified": false
+        },
+        {
+          "protocol": "http",
+          "port": 54628,
+          "status": 200,
+          "body": "cloudnest-native-frp-ok:/native-http",
+          "tls_verified": false
+        },
+        {
+          "protocol": "https",
+          "port": 54629,
+          "status": 200,
+          "body": "cloudnest-native-frp-ok:/native-https",
+          "tls_verified": true
+        }
+      ],
+      "mode": "probe"
+    }
+  ],
+  "journals": {
+    "7DD46497-A5E8-4750-BFD8-E65702CD8FDA.json": {
+      "revision": 1,
+      "action": "deploy_config",
+      "id": "7DD46497-A5E8-4750-BFD8-E65702CD8FDA",
+      "identity": {
+        "userID": 1,
+        "server": "https://127.0.0.1:54624"
+      },
+      "deviceID": 1,
+      "createdAt": 817015340.415131,
+      "outcome": "accepted",
+      "configID": 1,
+      "commandID": "171a86b2570c94e07da20f8f0ea3a7f0",
+      "formatVersion": 1
+    },
+    "E15216DA-BFAF-4064-A01A-ED88E99989FC.json": {
+      "configID": 0,
+      "formatVersion": 1,
+      "createdAt": 817015512.694717,
+      "action": "reload",
+      "outcome": "accepted",
+      "identity": {
+        "userID": 1,
+        "server": "https://127.0.0.1:54624"
+      },
+      "deviceID": 1,
+      "commandID": "155e6b6f97eaa66c850576b750a5d08f",
+      "id": "E15216DA-BFAF-4064-A01A-ED88E99989FC",
+      "revision": 1
+    },
+    "FD53BEBC-0336-4213-81B0-0D4EAC9E8763.json": {
+      "deviceID": 1,
+      "id": "FD53BEBC-0336-4213-81B0-0D4EAC9E8763",
+      "configID": 0,
+      "formatVersion": 1,
+      "createdAt": 817015380.13168,
+      "commandID": "f830d911c4f48e983046e0da09596c1a",
+      "action": "diagnose",
+      "outcome": "accepted",
+      "identity": {
+        "userID": 1,
+        "server": "https://127.0.0.1:54624"
+      },
+      "revision": 1
+    },
+    "BBC749D4-E209-4F77-A186-918F35308C5C.json": {
+      "configID": 0,
+      "id": "BBC749D4-E209-4F77-A186-918F35308C5C",
+      "action": "stop",
+      "commandID": "93816e44bf02e1a70a72f46345d18d96",
+      "outcome": "accepted",
+      "createdAt": 817015465.443963,
+      "formatVersion": 1,
+      "identity": {
+        "userID": 1,
+        "server": "https://127.0.0.1:54624"
+      },
+      "deviceID": 1,
+      "revision": 1
+    },
+    "CDE48D81-6C02-4297-B6C7-61BF57580A49.json": {
+      "formatVersion": 1,
+      "id": "CDE48D81-6C02-4297-B6C7-61BF57580A49",
+      "createdAt": 817015492.51141,
+      "deviceID": 1,
+      "revision": 1,
+      "outcome": "accepted",
+      "configID": 0,
+      "identity": {
+        "userID": 1,
+        "server": "https://127.0.0.1:54624"
+      },
+      "action": "start",
+      "commandID": "4366af5304a33f689b4a36bac4d97c7b"
+    }
+  },
+  "limitations": [
+    "Loopback real frps, not 129.146.81.189; original public service untouched",
+    "No actual process kill/power loss or GUI response-loss injection in this cohort; separate Core test uses real truncated HTTP response",
+    "Device/server/mapping edits, enrollment UI and config generation UI still pending"
+  ]
+}

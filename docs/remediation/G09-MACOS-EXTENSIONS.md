@@ -1,6 +1,6 @@
 # macOS 扩展功能
 
-G09 在 `codex/g09-macos-extensions` 上继续 G08，保持独立[草稿 PR #10](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/10)，不合并前置分支。当前完成 AI 首批功能和 [FRP 只读管理概览](MACOS-FRP.md)，整个 G09、G10、G11 仍进行中/待做；FRP 写操作、协作、分享、设置的真实原生界面继续实施。
+G09 在 `codex/g09-macos-extensions` 上继续 G08，保持独立[草稿 PR #10](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/10)，不合并前置分支。当前完成 AI 首批功能、[FRP 管理概览](MACOS-FRP.md)和[五种命令/原请求回执恢复](MACOS-FRP-COMMANDS.md)。整个 G09、G10、G11 仍进行中/待做；FRP 编辑与注册、协作、分享、设置的真实原生界面继续实施。
 
 ## AI 检索与索引
 
@@ -39,4 +39,6 @@ CLOUDNEST_TEST_AI_MODEL=1 python3 scripts/test-macos-backend.py --filter '^TestM
 
 ## 后续范围
 
-继续接入 FRP 设备/映射/服务器编辑、凭据注册、配置预览/部署和持久幂等命令提交、实际诊断，协作空间/成员和文件授权、分享创建/限制/撤销、用户/系统设置。AI 照片/视觉端到端、多页并发变化、真实模型中断及更多辅助功能/文字缩放验收继续补齐。G10 保留历史迁移、备份恢复、磁盘治理、异常/压力和发布门槛，G11 保留全部交付材料。指定 G01/G02 正式 Review 仍按用户要求留到整个 Goal 完成后读取。
+继续接入 FRP 设备/映射/服务器编辑、凭据注册、配置预览/生成/回滚，协作空间/成员和文件授权、分享创建/限制/撤销、用户/系统设置。AI 照片/视觉端到端、多页并发变化、真实模型中断及更多辅助功能/文字缩放验收继续补齐。G10 保留历史迁移、备份恢复、磁盘治理、异常/压力和发布门槛，G11 保留全部交付材料。指定 G01/G02 正式 Review 仍按用户要求留到整个 Goal 完成后读取。
+
+2026-11-21 后续：af4f3ef 的 macOS 26/Xcode 27 与完整后端 CI 全部通过。已新增原生命令持久意图、确认和原键重试；实际 Agent/官方 frpc/frps 的三隧道与五操作 GUI、真实 TLS 丢回执恢复均有独立证据，见[命令说明](MACOS-FRP-COMMANDS.md)。同日恢复并实际评估视觉模型，2B 的两组合成图片场景通过，4B 失败保留，见[模型资源复测](MACOS-FRP.md#ai-模型资源复测)。新提交 CI 另按精确 SHA 核对，未完成范围不变。

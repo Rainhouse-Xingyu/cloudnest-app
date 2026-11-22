@@ -21,6 +21,9 @@ import (
 	"cloudenest_go/model"
 )
 
+// Populated only by the opt-in frpnative build; ordinary UI/CI needs no FRP binary.
+var nativeUIFRPAgentSetup func(*testing.T, *fixture, *httptest.Server, string, map[string]any, *func())
+
 // TestMacOSNativeUIFixture serves real disposable routes for the dedicated native
 // UI harness. Normal CI skips this manual, bounded fixture.
 func TestMacOSNativeUIFixture(t *testing.T) {
@@ -141,7 +144,18 @@ func TestMacOSNativeUIFixture(t *testing.T) {
 		"password": "disposable-fixture-password", "directory": absolute, "seed_file_id": seed.ID, "upload_source": source,
 		"version_file_id": versioned.ID,
 	}
-	if os.Getenv("CLOUDNEST_NATIVE_UI_FRP") == "1" {
+	var runtimeCleanup func()
+	defer func() {
+		if runtimeCleanup != nil {
+			runtimeCleanup()
+		}
+	}()
+	if os.Getenv("CLOUDNEST_NATIVE_UI_FRP_AGENT") == "1" {
+		if nativeUIFRPAgentSetup == nil {
+			t.Fatal("live Agent UI requires --go-tags integration,frpnative")
+		}
+		nativeUIFRPAgentSetup(t, f, server, absolute, manifest, &runtimeCleanup)
+	} else if os.Getenv("CLOUDNEST_NATIVE_UI_FRP") == "1" {
 		seed := fixtureNativeFRP(t, f)
 		f.router = fixtureRouter(app.NewContainer(f.cfg, f.db, f.rdb).NewRouter())
 		manifest["frp_device_id"] = seed.Devices[0]

@@ -2,11 +2,13 @@ import SwiftUI
 
 struct FRPView: View {
     let session: SessionState
+    let commands: FRPCommandManager
     @State private var browser: FRPBrowserState
     @State private var selected: FRPDevice?
 
-    init(session: SessionState) {
+    init(session: SessionState, commands: FRPCommandManager) {
         self.session = session
+        self.commands = commands
         _browser = State(initialValue: FRPBrowserState(session: session))
     }
 
@@ -48,17 +50,28 @@ struct FRPView: View {
         }
         .task { await browser.reload() }
         .sheet(item: $selected) { device in
-            FRPDetailView(device: device, session: session)
+            FRPDetailView(device: device, session: session, commands: commands)
         }
     }
 }
 
 private struct FRPDetailView: View {
+    let session: SessionState
+    let commands: FRPCommandManager
     @Environment(\.dismiss) private var dismiss
     @State private var state: FRPDetailState
     @State private var section = FRPSection.status
+    @State private var confirmation: CommandConfirmation?
+    @State private var actionError: String?
 
-    init(device: FRPDevice, session: SessionState) {
+    private enum CommandConfirmation {
+        case send(FRPCommandAction, Int64, TransferIdentity)
+        case abandon(UUID)
+    }
+
+    init(device: FRPDevice, session: SessionState, commands: FRPCommandManager) {
+        self.session = session
+        self.commands = commands
         _state = State(initialValue: FRPDetailState(device: device, session: session))
     }
 
@@ -72,6 +85,12 @@ private struct FRPDetailView: View {
             HStack {
                 Button("刷新", systemImage: "arrow.clockwise") { Task { await state.load(section) } }
                     .disabled(state.busy)
+                Menu("设备操作") {
+                    ForEach([FRPCommandAction.start, .stop, .reload, .diagnose], id: \.self) { action in
+                        Button(actionName(action.rawValue) + "…") { request(action) }
+                    }
+                }
+                .disabled(commands.busy(deviceID: state.device.id))
                 if let checked = state.checkedAt {
                     Text("查询于 \(checked.formatted(date: .omitted, time: .standard))").font(.caption).foregroundStyle(.secondary)
                 }
@@ -79,8 +98,11 @@ private struct FRPDetailView: View {
                 if state.busy { ProgressView().controlSize(.small) }
             }
             if let error = state.error { Label(error, systemImage: "exclamationmark.circle").foregroundStyle(.secondary) }
+            if let error = commands.error { Text(error).foregroundStyle(.secondary) }
+            if let error = actionError { Text(error).foregroundStyle(.secondary) }
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    if section == .commands { localCommandView }
                     switch state.snapshot {
                     case .status(let status): statusView(status)
                     case .mappings(let items): mappingView(items)
@@ -92,12 +114,38 @@ private struct FRPDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .textSelection(.enabled)
             }
+            .frame(minHeight: 0, maxHeight: .infinity)
+            .layoutPriority(-1)
             HStack { Spacer(); Button("关闭") { dismiss() }.keyboardShortcut(.cancelAction) }
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(24)
         .frame(minWidth: 480, idealWidth: 580, minHeight: 380, idealHeight: 500)
         .task(id: section) { await state.load(section) }
         .onDisappear { state.cancel() }
+        .confirmationDialog("确认远程操作", isPresented: Binding(
+            get: { confirmation != nil }, set: { if !$0 { confirmation = nil } }
+        ), titleVisibility: .visible, presenting: confirmation) { item in
+            switch item {
+            case .send(let action, let configID, let identity):
+                Button("提交\(actionName(action.rawValue))") {
+                    Task {
+                        await perform {
+                            _ = try await commands.submit(deviceID: state.device.id, action: action,
+                                                          configID: configID, expectedIdentity: identity)
+                        }
+                    }
+                }
+            case .abandon(let id):
+                Button("停止本地重试") { Task { await perform { try await commands.abandon(id) } } }
+            }
+        } message: { item in
+            switch item {
+            case .send(let action, let configID, _): Text(commandDescription(action, configID: configID))
+            case .abandon:
+                Text("服务器可能已接收此命令。停止本地重试不会撤销远程操作，记录会保留供核对。")
+            }
+        }
     }
 
     private func statusView(_ status: FRPStatus) -> some View {
@@ -144,12 +192,36 @@ private struct FRPDetailView: View {
                 Text("配置 \(String(config.id))").font(.headline)
                 Text("服务器 \(String(config.serverID)) · 服务器版本 \(String(config.serverRevisionID))")
                 Text(config.createdAt).foregroundStyle(.secondary)
+                Button("部署此配置…") { request(.deployConfig, configID: config.id) }
+                    .disabled(commands.busy(deviceID: state.device.id))
             }
             Divider()
         }
     }
 
+    @ViewBuilder private var localCommandView: some View {
+        if !commands.jobs.filter({ $0.deviceID == state.device.id }).isEmpty {
+            Text("本地提交记录").font(.headline)
+            ForEach(Array(commands.jobs.filter { $0.deviceID == state.device.id }.prefix(20))) { record in
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("\(actionName(record.action.rawValue)) · \(localOutcome(record.outcome))")
+                    if let id = record.commandID { Text("命令 ID：\(id)").font(.caption) }
+                    if let error = record.error { Text(error).font(.callout).foregroundStyle(.secondary) }
+                    if record.outcome == .unconfirmed {
+                        HStack {
+                            Button("使用原请求重试") { Task { await perform { _ = try await commands.retry(record.id) } } }
+                            Button("停止本地重试…") { confirmation = .abandon(record.id) }
+                        }
+                        .disabled(commands.busy(deviceID: state.device.id))
+                    }
+                }
+                Divider()
+            }
+        }
+    }
+
     @ViewBuilder private func commandView(_ items: [FRPCommand]) -> some View {
+        Text("服务器命令记录").font(.headline)
         Text("最近 20 条命令。排队或送达不等于执行成功，以最终回执与运行采样为准。")
             .font(.callout).foregroundStyle(.secondary)
         if items.isEmpty { Text("尚无命令记录。") }
@@ -168,6 +240,34 @@ private struct FRPDetailView: View {
     private func stateName(_ value: String) -> String {
         ["registered": "已注册", "starting": "正在注册", "degraded": "部分失败", "stopped": "已停止",
          "unavailable": "不可用", "pending": "等待注册", "failed": "注册失败"] [value] ?? value
+    }
+    private func request(_ action: FRPCommandAction, configID: Int64 = 0) {
+        guard let identity = session.transferIdentity else { return }
+        confirmation = .send(action, configID, identity)
+    }
+    private func perform(_ operation: () async throws -> Void) async {
+        actionError = nil
+        do { try await operation() }
+        catch { actionError = (error as? LocalizedError)?.errorDescription ?? "命令提交未完成，请核对本地记录。" }
+        section = .commands
+        await state.load(.commands)
+    }
+    private func localOutcome(_ value: FRPCommandIntent.Outcome) -> String {
+        switch value {
+        case .unconfirmed: "结果未确认"
+        case .accepted: "服务器已接收，执行结果见下方"
+        case .abandoned: "已停止本地重试"
+        }
+    }
+    private func commandDescription(_ action: FRPCommandAction, configID: Int64) -> String {
+        let effect: String = switch action {
+        case .deployConfig: "部署配置 \(String(configID)) 会替换运行配置，可能中断现有隧道。"
+        case .start: "将启动此设备已部署的 FRP 配置。"
+        case .stop: "将停止此设备正在运行的 FRP 隧道。"
+        case .reload: "将重载此设备已部署的配置。"
+        case .diagnose: "将采样隧道注册与本地 TCP 状态，不验证上游应用协议。"
+        }
+        return "设备：\(state.device.name)。\(effect)命令可能排队等待 Agent 上线，提交成功不表示已经执行。"
     }
     private func upstreamName(_ value: String?) -> String {
         guard let value, !value.isEmpty else { return "未检测" }
