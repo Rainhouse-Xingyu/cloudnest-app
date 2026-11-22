@@ -24,4 +24,6 @@ xcodebuild -project cloudnest_macos/CloudNest.xcodeproj -scheme CloudNest \
 
 文件页提供版本历史、所选历史版本下载、确认后追加恢复，以及选择本地文件上传为新版本。上传捕获确认基线，冲突后需取消并重新确认，不覆盖未见的新版本。传输页分别显示已确认进度、最近五秒速度及校验/发布阶段，暂停或重新开始时重置速度。协议和验证边界见 [G08](../docs/remediation/G08-MACOS-FILES.md)、[版本上传](../docs/remediation/VERSION-UPLOADS.md)、[历史版本](../docs/remediation/MACOS-VERSIONS.md) 和 [速度](../docs/remediation/MACOS-TRANSFER-SPEED.md)。
 
-AI 页支持真实自然语言检索、原文片段、来源、索引状态与确认后重建；远程连接页支持设备/映射/配置历史/运行状态、五种命令确认和持久原请求重试。入队回执与 Agent 执行成功分别显示，应用重开不会自动重放远程操作。边界和验收见 [G09](../docs/remediation/G09-MACOS-EXTENSIONS.md) 与[命令恢复](../docs/remediation/MACOS-FRP-COMMANDS.md)。设备/映射/服务器编辑及注册、协作、分享和扩展设置继续实施。
+AI 页支持真实自然语言检索、原文片段、来源、索引状态与确认后重建；远程连接页支持设备/映射/配置历史/运行状态、五种命令确认和持久原请求重试。入队回执与 Agent 执行成功分别显示，应用重开不会自动重放远程操作。边界和验收见 [G09](../docs/remediation/G09-MACOS-EXTENSIONS.md) 与[命令恢复](../docs/remediation/MACOS-FRP-COMMANDS.md)。设备/映射编辑及注册、协作、分享和扩展设置继续实施。
+
+服务器分段已接入[登记与编辑](../docs/remediation/MACOS-FRP-SERVERS.md)、每页 50 项、版本冲突核对和保留/替换/清除 token。服务资料保存、Agent 部署和正在运行的隧道分别处理；设备/映射编辑及注册等剩余界面继续实施。

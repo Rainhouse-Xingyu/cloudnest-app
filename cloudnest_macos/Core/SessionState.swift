@@ -196,6 +196,20 @@ final class SessionState {
         return try await withSession { origin, token in try await api.enqueueFRPCommand(origin, token: token, intent: intent) }
     }
 
+
+    func frpServers(afterID: Int64 = 0) async throws -> FRPServerPage {
+        try await withSession { origin, token in try await api.frpServers(origin, token: token, afterID: afterID) }
+    }
+
+    func frpServer(id: Int64) async throws -> FRPServer {
+        try await withSession { origin, token in try await api.frpServer(origin, token: token, id: id) }
+    }
+
+    func writeFRPServer(id: Int64?, input: FRPServerInput, expectedIdentity: TransferIdentity?) async throws -> FRPServer {
+        try requireTransferIdentity(expectedIdentity)
+        return try await withSession { origin, token in try await api.writeFRPServer(origin, token: token, id: id, input: input) }
+    }
+
     private func withSession<T: Sendable>(_ operation: (ServerOrigin, String) async throws -> T) async throws -> T {
         guard let saved, let origin, account != nil else { throw ServerError.unauthorized }
         do {

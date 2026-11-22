@@ -5,6 +5,7 @@ struct FRPView: View {
     let commands: FRPCommandManager
     @State private var browser: FRPBrowserState
     @State private var selected: FRPDevice?
+    @State private var showingServers = false
 
     init(session: SessionState, commands: FRPCommandManager) {
         self.session = session
@@ -13,6 +14,17 @@ struct FRPView: View {
     }
 
     var body: some View {
+        VStack(spacing: 0) {
+            Picker("远程连接管理", selection: $showingServers) {
+                Text("设备").tag(false)
+                Text("服务器").tag(true)
+            }.pickerStyle(.segmented).padding()
+            if showingServers { FRPServersView(session: session) }
+            else { devicesView }
+        }
+    }
+
+    private var devicesView: some View {
         VStack(alignment: .leading, spacing: 0) {
             if let error = browser.error {
                 Label(error, systemImage: "exclamationmark.circle").foregroundStyle(.secondary).padding()

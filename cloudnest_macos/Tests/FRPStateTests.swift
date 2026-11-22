@@ -37,6 +37,12 @@ private final class FRPStateProtocol: URLProtocol, @unchecked Sendable {
         case "/api/frp/devices/1/configs":
             // A misbound response must not display another device's metadata.
             respond(200, #"{"items":[{"id":3,"device_id":7,"server_id":2,"server_revision_id":4,"create_time":"2026-11-21T00:00:00Z"}]}"#)
+        case "/api/frp/servers":
+            let after = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "after_id" }?.value
+            let row = #"{"id":2,"user_id":17,"revision_id":4,"name":"Fixture server","server_addr":"frps.test","server_port":7000,"tcp_start":20000,"tcp_end":20999,"http_port":0,"https_port":0,"enabled":true,"token_configured":true}"#
+            if after == "0" { Self.gate.hold(self) }
+            else if after == "1" { respond(200, "{\"items\":[\(row)],\"next_after_id\":2}") }
+            else { respond(200, "{\"items\":[\(row),\(row)],\"next_after_id\":2}") }
         default: respond(403, #"{"error":"forbidden"}"#)
         }
     }
@@ -53,6 +59,44 @@ private final class FRPStateProtocol: URLProtocol, @unchecked Sendable {
 
 @Suite(.serialized)
 struct FRPStateTests {
+    @Test @MainActor func serverPageReplacementCancelsOldUnauthorizedAndRejectsInvalidCursor() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [FRPStateProtocol.self]
+        let session = SessionState(api: ServerAPI(configuration: configuration), vault: FRPStateVault())
+        await session.restore()
+        await session.signIn(server: "https://frp-servers.test", username: "fixture", password: "fixture")
+        let browser = FRPServerState(session: session)
+        let old = Task { await browser.load() }
+        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while !FRPStateProtocol.gate.waiting {
+            guard ContinuousClock.now < deadline else { throw ServerError.unavailable }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        await browser.load(afterID: 1)
+        FRPStateProtocol.gate.release()
+        await old.value
+        #expect(browser.items.map(\.id) == [2])
+        #expect(browser.nextAfterID == 2)
+        #expect(browser.error == nil)
+        #expect(session.account != nil)
+        await browser.load(afterID: 2)
+        #expect(browser.items.isEmpty)
+        #expect(browser.error == ServerError.invalidResponse.localizedDescription)
+        await session.signOut()
+        await session.signIn(server: "https://another-frp-servers.test", username: "fixture", password: "fixture")
+        await browser.load(afterID: 1)
+        #expect(browser.items.isEmpty)
+        #expect(browser.error == ServerError.sessionChanged.localizedDescription)
+        let input = FRPServerInput(name: "Old confirmation", server_addr: "frps.test", server_port: 7000,
+            tcp_start: 20000, tcp_end: 20999, http_port: 0, https_port: 0, enabled: true, expected_revision_id: 4, token: nil)
+        let oldIdentity = TransferIdentity(server: "https://frp-servers.test/", userID: 17)
+        do {
+            _ = try await session.writeFRPServer(id: 2, input: input, expectedIdentity: oldIdentity)
+            Issue.record("Old server editor saved on a different origin")
+        } catch { #expect(error as? ServerError == .sessionChanged) }
+        #expect(session.account != nil)
+    }
+
     @Test @MainActor func switchingSectionsCancelsOldRequestsAndRejectsMisboundMetadata() async throws {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [FRPStateProtocol.self]

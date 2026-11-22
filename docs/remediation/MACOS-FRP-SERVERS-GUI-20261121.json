@@ -1,0 +1,546 @@
+{
+  "passed": true,
+  "generated_utc": "2026-11-22T05:10:19.469040+00:00",
+  "scope": "Native UI with real isolated TLS Go/MySQL/Redis server registry APIs; no live frps or production edits",
+  "git_parent": "da24d87668e19b71f05f787368f9e040ce54033a",
+  "git_dirty": true,
+  "source_sha256": {
+    "cloudnest_macos/App/AISearchView.swift": "8aaea5c95be1541e11082295e76e9149ee6a6d5a8e74b77dd0021657b04ce10b",
+    "cloudnest_macos/App/CloudNestApp.swift": "c1694632300b821cbe663059dcdbe853c8f1019aece324191ae7a6dd22bfc7c3",
+    "cloudnest_macos/App/FRPServersView.swift": "b4813616e9a1c23f9e47e729f5a0edc16c9618e8b89a9d7ba04f7605703f5cc2",
+    "cloudnest_macos/App/FRPView.swift": "89f64088804cfa4c978a043f4f304abdbd152dfbcf56c4c3609e21f7f69cf146",
+    "cloudnest_macos/App/FileBrowserCommands.swift": "1744b820661ef09fa3836c67397d2975133a4982444807012c12c5112731d4e8",
+    "cloudnest_macos/App/FileBrowserView.swift": "4f946fbffb7d08c5cd8642cd500d0cee6dfc73933e97c99d5040f26b0aca3e11",
+    "cloudnest_macos/App/FileDestinationSheet.swift": "e687c0269882fd072479942c7a73c96790796ffdcaa6a176657b59c669b51a7d",
+    "cloudnest_macos/App/FileVersionsSheet.swift": "17fe6e46888249269a57f5172de163e8aeb6a7a56b6ecb188c5608f39099920a",
+    "cloudnest_macos/App/TransferListView.swift": "a8e26aa331492e166bea32e406507aa5daa2420cf651c7074d50d718712b6181",
+    "cloudnest_macos/Core/AISearchAPI.swift": "d37a7e8c21134d4f620cebbe09163817b57802ec04074d5eba3ac715ce487c6f",
+    "cloudnest_macos/Core/AISearchState.swift": "e6d670b3b5cbdb56a48b251f8c355bd97b7be125f9d7ab03c31447e757a14d8a",
+    "cloudnest_macos/Core/DownloadPlan.swift": "641b33f9f36001a67bcb3ed583c2ff3e61b40ac2683d10fafdaa70c6b24965b1",
+    "cloudnest_macos/Core/DownloadStream.swift": "a4878ddee1749ae049ca898fac22175dae907ada9b859e961afbe801ad897a15",
+    "cloudnest_macos/Core/FRPAPI.swift": "27780d324b79f931c3581d409953f3807bc60a0d82ad795bf0453e5dfb03457b",
+    "cloudnest_macos/Core/FRPCommandIntent.swift": "dd701f1a334dd0ba1716b74630d81acae20bb4c6e38ce7190d01fd501461523d",
+    "cloudnest_macos/Core/FRPCommandManager.swift": "c61580e09c7651b7c08732491e0974f6f3a10d65a95bc7606fe5c95aa936ac32",
+    "cloudnest_macos/Core/FRPCommandStore.swift": "513044a6403122a9a85ec3f5e03112e00cab263a4fd76ae69e0d21ee3f95c349",
+    "cloudnest_macos/Core/FRPServerAPI.swift": "35f1f9bf2f6eddce98fe059c79b53c0e2d6d7b70ab1ab22f5997b38b8e172360",
+    "cloudnest_macos/Core/FRPServerState.swift": "e84a1bfc4c7fe4f5d0072cac824697c343a17cc054316c7d06ff72b341c129d4",
+    "cloudnest_macos/Core/FRPState.swift": "1135cf4e0c6ee56c07a7457cd016306d143347d8361b4a857d2fb74e3128e6c9",
+    "cloudnest_macos/Core/FileAPI.swift": "f65a045b2e59dba168d72487b16699a875753579a3968141fa739f214600e767",
+    "cloudnest_macos/Core/FileBrowserState.swift": "312b325d054c4b34aa867320570321a010c17359b6bf5413c51253cd767c3380",
+    "cloudnest_macos/Core/FileVersions.swift": "1b009b2cd68dd555325b667186b757b5307dad6a355fd27ebc955da2474b7483",
+    "cloudnest_macos/Core/LegacyPreviewDirectory.swift": "05b9022f6f528de4bff5c4f9c236518b25271537b5794409384d9e5c0329f608",
+    "cloudnest_macos/Core/PreviewCache.swift": "24e5560809afd2d6065a9994d5355c0c36f62128e2a4a256b29c2bdd2c808904",
+    "cloudnest_macos/Core/ServerAPI.swift": "b23f553f42f3fbd7ea4d91b1839621d25d13ee0d01fa619af8573e3d4ab320db",
+    "cloudnest_macos/Core/SessionState.swift": "13b9a8d6522ba947551739a181447af70b3496620dcfa3ae4cb5b4a4a8da742f",
+    "cloudnest_macos/Core/SessionVault.swift": "8aaeafe193e99da59b8a5298fe8d2fa5052c21e8fef67e182927be438d8d7495",
+    "cloudnest_macos/Core/TransferAPI.swift": "757fa9919a3cc5d66d20b380d2470165acc2af63cffac5da3811ec298cf4625b",
+    "cloudnest_macos/Core/TransferDisk.swift": "51ca36fc080604b9a6ece8d0b1302e56904984691c9caa22ee77cdd432ceae84",
+    "cloudnest_macos/Core/TransferManager.swift": "d2a1b943c518cc3fffe7208815da8b9299a1336668a91e9493a375e8255256ff",
+    "cloudnest_macos/Core/TransferRecord.swift": "5deba6f800be9fc2ff2428582f5908e1afbe6c227303661764f2ad1d8374f965",
+    "cloudnest_macos/Core/TransferStore.swift": "66cae8a28ba323c0a90e67eec549356c70c88b843fa9bb352ba0f30c4567e17f",
+    "cloudnest_macos/Core/TransferTelemetry.swift": "95eb7bba18223c173ceeead47cc025fb1fc34617985ab3d80db8ce89d9011345"
+  },
+  "binary_sha256": "fddb5a995d20ea689304a3349ef5ffc0661d3a33a075c0028cb90e32a9a419d2",
+  "probe_source_sha256": "0c1931f6ab5e47a0a5d5f582718cdd7f8f48899cf04201ef9c0aff022bf761ac",
+  "observations": [
+    {
+      "step": "create",
+      "visible": "Native GUI server / native-ui-server.test / control 7000 / TCP 20000-20999 / enabled / revision 2 / token configured",
+      "confirmation_clicked": true
+    },
+    {
+      "step": "edit-keep",
+      "visible": "Native GUI server revised / disabled / revision 3 / token configured",
+      "confirmation_clicked": true
+    },
+    {
+      "step": "concurrent-update",
+      "mechanism": "Second actual API client advances revision 3 to 4 while native editor remains open at revision 3"
+    },
+    {
+      "step": "stale-native-save",
+      "visible": "Server revision, port policy or address conflict; close and refresh; save disabled",
+      "latest_server_value_preserved": true
+    },
+    {
+      "step": "clear-token",
+      "visible": "revision 5 / token not configured",
+      "confirmation_clicked": true
+    },
+    {
+      "step": "replace-token",
+      "visible": "revision 6 / token configured",
+      "secure_input": true,
+      "confirmation_clicked": true
+    },
+    {
+      "step": "invalid-host",
+      "input": "https://invalid.test",
+      "visible": "Server rejected data; check host, port policy and token; fields and save enabled",
+      "server_count_unchanged": true
+    },
+    {
+      "step": "appearance",
+      "light_window_pixels": [
+        1800,
+        1180
+      ],
+      "dark_window_pixels": [
+        1280,
+        1180
+      ],
+      "scale": 2,
+      "dark_editor_sheet_pixels": [
+        1080,
+        952
+      ],
+      "description": "Both light/dark; 640-point width; editor fields, policy text, cancel and save visible"
+    },
+    {
+      "step": "cleanup-ui",
+      "description": "Cancelled editor, Command-Q; subsequent CUA listApps no longer contains test app"
+    }
+  ],
+  "api_evidence": [
+    {
+      "phase": "native-edit-keep-token",
+      "utc": "2026-11-22T05:07:07.419103+00:00",
+      "origin": "https://127.0.0.1:55530",
+      "list": {
+        "items": [
+          {
+            "id": 1,
+            "user_id": 1,
+            "revision_id": 1,
+            "name": "scope fixture",
+            "server_addr": "scope-1-1.example",
+            "server_port": 7000,
+            "tcp_start": 32000,
+            "tcp_end": 32002,
+            "http_port": 18080,
+            "https_port": 18443,
+            "enabled": true,
+            "token_configured": true,
+            "created_at": "2026-11-22T05:03:51.608475Z"
+          },
+          {
+            "id": 2,
+            "user_id": 1,
+            "revision_id": 3,
+            "name": "Native GUI server revised",
+            "server_addr": "native-ui-server.test",
+            "server_port": 7000,
+            "tcp_start": 20000,
+            "tcp_end": 20999,
+            "http_port": 0,
+            "https_port": 0,
+            "enabled": false,
+            "token_configured": true,
+            "created_at": "2026-11-22T05:06:19.080518Z"
+          }
+        ],
+        "next_after_id": 2
+      },
+      "selected": {
+        "id": 2,
+        "user_id": 1,
+        "revision_id": 3,
+        "name": "Native GUI server revised",
+        "server_addr": "native-ui-server.test",
+        "server_port": 7000,
+        "tcp_start": 20000,
+        "tcp_end": 20999,
+        "http_port": 0,
+        "https_port": 0,
+        "enabled": false,
+        "token_configured": true,
+        "created_at": "2026-11-22T05:06:19.080518Z"
+      },
+      "detail": {
+        "id": 2,
+        "user_id": 1,
+        "revision_id": 3,
+        "name": "Native GUI server revised",
+        "server_addr": "native-ui-server.test",
+        "server_port": 7000,
+        "tcp_start": 20000,
+        "tcp_end": 20999,
+        "http_port": 0,
+        "https_port": 0,
+        "enabled": false,
+        "token_configured": true,
+        "created_at": "2026-11-22T05:06:19.080518Z"
+      }
+    },
+    {
+      "phase": "concurrent-client-advance",
+      "utc": "2026-11-22T05:07:16.381461+00:00",
+      "origin": "https://127.0.0.1:55530",
+      "list": {
+        "items": [
+          {
+            "id": 1,
+            "user_id": 1,
+            "revision_id": 1,
+            "name": "scope fixture",
+            "server_addr": "scope-1-1.example",
+            "server_port": 7000,
+            "tcp_start": 32000,
+            "tcp_end": 32002,
+            "http_port": 18080,
+            "https_port": 18443,
+            "enabled": true,
+            "token_configured": true,
+            "created_at": "2026-11-22T05:03:51.608475Z"
+          },
+          {
+            "id": 2,
+            "user_id": 1,
+            "revision_id": 4,
+            "name": "Concurrent revision",
+            "server_addr": "native-ui-server.test",
+            "server_port": 7000,
+            "tcp_start": 20000,
+            "tcp_end": 20999,
+            "http_port": 0,
+            "https_port": 0,
+            "enabled": false,
+            "token_configured": true,
+            "created_at": "2026-11-22T05:06:19.080518Z"
+          }
+        ],
+        "next_after_id": 2
+      },
+      "selected": {
+        "id": 2,
+        "user_id": 1,
+        "revision_id": 4,
+        "name": "Concurrent revision",
+        "server_addr": "native-ui-server.test",
+        "server_port": 7000,
+        "tcp_start": 20000,
+        "tcp_end": 20999,
+        "http_port": 0,
+        "https_port": 0,
+        "enabled": false,
+        "token_configured": true,
+        "created_at": "2026-11-22T05:06:19.080518Z"
+      },
+      "detail": {
+        "id": 2,
+        "user_id": 1,
+        "revision_id": 4,
+        "name": "Concurrent revision",
+        "server_addr": "native-ui-server.test",
+        "server_port": 7000,
+        "tcp_start": 20000,
+        "tcp_end": 20999,
+        "http_port": 0,
+        "https_port": 0,
+        "enabled": false,
+        "token_configured": true,
+        "created_at": "2026-11-22T05:06:19.080518Z"
+      }
+    },
+    {
+      "phase": "native-stale-rejected",
+      "utc": "2026-11-22T05:07:32.260247+00:00",
+      "origin": "https://127.0.0.1:55530",
+      "list": {
+        "items": [
+          {
+            "id": 1,
+            "user_id": 1,
+            "revision_id": 1,
+            "name": "scope fixture",
+            "server_addr": "scope-1-1.example",
+            "server_port": 7000,
+            "tcp_start": 32000,
+            "tcp_end": 32002,
+            "http_port": 18080,
+            "https_port": 18443,
+            "enabled": true,
+            "token_configured": true,
+            "created_at": "2026-11-22T05:03:51.608475Z"
+          },
+          {
+            "id": 2,
+            "user_id": 1,
+            "revision_id": 4,
+            "name": "Concurrent revision",
+            "server_addr": "native-ui-server.test",
+            "server_port": 7000,
+            "tcp_start": 20000,
+            "tcp_end": 20999,
+            "http_port": 0,
+            "https_port": 0,
+            "enabled": false,
+            "token_configured": true,
+            "created_at": "2026-11-22T05:06:19.080518Z"
+          }
+        ],
+        "next_after_id": 2
+      },
+      "selected": {
+        "id": 2,
+        "user_id": 1,
+        "revision_id": 4,
+        "name": "Concurrent revision",
+        "server_addr": "native-ui-server.test",
+        "server_port": 7000,
+        "tcp_start": 20000,
+        "tcp_end": 20999,
+        "http_port": 0,
+        "https_port": 0,
+        "enabled": false,
+        "token_configured": true,
+        "created_at": "2026-11-22T05:06:19.080518Z"
+      },
+      "detail": {
+        "id": 2,
+        "user_id": 1,
+        "revision_id": 4,
+        "name": "Concurrent revision",
+        "server_addr": "native-ui-server.test",
+        "server_port": 7000,
+        "tcp_start": 20000,
+        "tcp_end": 20999,
+        "http_port": 0,
+        "https_port": 0,
+        "enabled": false,
+        "token_configured": true,
+        "created_at": "2026-11-22T05:06:19.080518Z"
+      }
+    },
+    {
+      "phase": "native-clear-token",
+      "utc": "2026-11-22T05:07:57.152739+00:00",
+      "origin": "https://127.0.0.1:55530",
+      "list": {
+        "items": [
+          {
+            "id": 1,
+            "user_id": 1,
+            "revision_id": 1,
+            "name": "scope fixture",
+            "server_addr": "scope-1-1.example",
+            "server_port": 7000,
+            "tcp_start": 32000,
+            "tcp_end": 32002,
+            "http_port": 18080,
+            "https_port": 18443,
+            "enabled": true,
+            "token_configured": true,
+            "created_at": "2026-11-22T05:03:51.608475Z"
+          },
+          {
+            "id": 2,
+            "user_id": 1,
+            "revision_id": 5,
+            "name": "Concurrent revision",
+            "server_addr": "native-ui-server.test",
+            "server_port": 7000,
+            "tcp_start": 20000,
+            "tcp_end": 20999,
+            "http_port": 0,
+            "https_port": 0,
+            "enabled": false,
+            "token_configured": false,
+            "created_at": "2026-11-22T05:06:19.080518Z"
+          }
+        ],
+        "next_after_id": 2
+      },
+      "selected": {
+        "id": 2,
+        "user_id": 1,
+        "revision_id": 5,
+        "name": "Concurrent revision",
+        "server_addr": "native-ui-server.test",
+        "server_port": 7000,
+        "tcp_start": 20000,
+        "tcp_end": 20999,
+        "http_port": 0,
+        "https_port": 0,
+        "enabled": false,
+        "token_configured": false,
+        "created_at": "2026-11-22T05:06:19.080518Z"
+      },
+      "detail": {
+        "id": 2,
+        "user_id": 1,
+        "revision_id": 5,
+        "name": "Concurrent revision",
+        "server_addr": "native-ui-server.test",
+        "server_port": 7000,
+        "tcp_start": 20000,
+        "tcp_end": 20999,
+        "http_port": 0,
+        "https_port": 0,
+        "enabled": false,
+        "token_configured": false,
+        "created_at": "2026-11-22T05:06:19.080518Z"
+      }
+    },
+    {
+      "phase": "native-replace-token",
+      "utc": "2026-11-22T05:08:24.865160+00:00",
+      "origin": "https://127.0.0.1:55530",
+      "list": {
+        "items": [
+          {
+            "id": 1,
+            "user_id": 1,
+            "revision_id": 1,
+            "name": "scope fixture",
+            "server_addr": "scope-1-1.example",
+            "server_port": 7000,
+            "tcp_start": 32000,
+            "tcp_end": 32002,
+            "http_port": 18080,
+            "https_port": 18443,
+            "enabled": true,
+            "token_configured": true,
+            "created_at": "2026-11-22T05:03:51.608475Z"
+          },
+          {
+            "id": 2,
+            "user_id": 1,
+            "revision_id": 6,
+            "name": "Concurrent revision",
+            "server_addr": "native-ui-server.test",
+            "server_port": 7000,
+            "tcp_start": 20000,
+            "tcp_end": 20999,
+            "http_port": 0,
+            "https_port": 0,
+            "enabled": false,
+            "token_configured": true,
+            "created_at": "2026-11-22T05:06:19.080518Z"
+          }
+        ],
+        "next_after_id": 2
+      },
+      "selected": {
+        "id": 2,
+        "user_id": 1,
+        "revision_id": 6,
+        "name": "Concurrent revision",
+        "server_addr": "native-ui-server.test",
+        "server_port": 7000,
+        "tcp_start": 20000,
+        "tcp_end": 20999,
+        "http_port": 0,
+        "https_port": 0,
+        "enabled": false,
+        "token_configured": true,
+        "created_at": "2026-11-22T05:06:19.080518Z"
+      },
+      "detail": {
+        "id": 2,
+        "user_id": 1,
+        "revision_id": 6,
+        "name": "Concurrent revision",
+        "server_addr": "native-ui-server.test",
+        "server_port": 7000,
+        "tcp_start": 20000,
+        "tcp_end": 20999,
+        "http_port": 0,
+        "https_port": 0,
+        "enabled": false,
+        "token_configured": true,
+        "created_at": "2026-11-22T05:06:19.080518Z"
+      }
+    },
+    {
+      "phase": "final-after-invalid-host-rejection",
+      "utc": "2026-11-22T05:10:19.387157+00:00",
+      "origin": "https://127.0.0.1:55530",
+      "list": {
+        "items": [
+          {
+            "id": 1,
+            "user_id": 1,
+            "revision_id": 1,
+            "name": "scope fixture",
+            "server_addr": "scope-1-1.example",
+            "server_port": 7000,
+            "tcp_start": 32000,
+            "tcp_end": 32002,
+            "http_port": 18080,
+            "https_port": 18443,
+            "enabled": true,
+            "token_configured": true,
+            "created_at": "2026-11-22T05:03:51.608475Z"
+          },
+          {
+            "id": 2,
+            "user_id": 1,
+            "revision_id": 6,
+            "name": "Concurrent revision",
+            "server_addr": "native-ui-server.test",
+            "server_port": 7000,
+            "tcp_start": 20000,
+            "tcp_end": 20999,
+            "http_port": 0,
+            "https_port": 0,
+            "enabled": false,
+            "token_configured": true,
+            "created_at": "2026-11-22T05:06:19.080518Z"
+          }
+        ],
+        "next_after_id": 2
+      },
+      "selected": {
+        "id": 2,
+        "user_id": 1,
+        "revision_id": 6,
+        "name": "Concurrent revision",
+        "server_addr": "native-ui-server.test",
+        "server_port": 7000,
+        "tcp_start": 20000,
+        "tcp_end": 20999,
+        "http_port": 0,
+        "https_port": 0,
+        "enabled": false,
+        "token_configured": true,
+        "created_at": "2026-11-22T05:06:19.080518Z"
+      },
+      "detail": {
+        "id": 2,
+        "user_id": 1,
+        "revision_id": 6,
+        "name": "Concurrent revision",
+        "server_addr": "native-ui-server.test",
+        "server_port": 7000,
+        "tcp_start": 20000,
+        "tcp_end": 20999,
+        "http_port": 0,
+        "https_port": 0,
+        "enabled": false,
+        "token_configured": true,
+        "created_at": "2026-11-22T05:06:19.080518Z"
+      }
+    }
+  ],
+  "limitations": [
+    "No running FRP tunnel in this server-registry cohort; separate command GUI report proves actual tunnels.",
+    "Two server rows do not prove a full 50-row GUI pagination case; client malformed cursor/replacement test is separate.",
+    "CUA aggregates edit button into List row; screenshot coordinates used for actual button clicks; not a full VoiceOver audit.",
+    "Height resizing attempts did not change the observed 590-point window height; no minimum-height claim.",
+    "No actual power loss, production migration, native enrollment or config generation covered here."
+  ],
+  "fixture_cleanup": {
+    "stop_marker": true,
+    "backend_port_closed": 55530,
+    "observed_utc": "2026-11-22T05:10:31.947394+00:00",
+    "exec_exit_code": 0
+  },
+  "post_validation_source_change": {
+    "path": "cloudnest_macos/Core/FRPServerAPI.swift",
+    "change": "Removed one trailing blank line reported by staged diff check; no code or behavior change. GUI fingerprints above remain the actual tested bytes.",
+    "before_sha256": "35f1f9bf2f6eddce98fe059c79b53c0e2d6d7b70ab1ab22f5997b38b8e172360",
+    "after_sha256": "b1db78ca33b70b9392c67643a956c128bbfc1d7b70028bf67b36f30de82155c7",
+    "verification": "assert before == after + one newline"
+  }
+}

@@ -11,6 +11,63 @@ private final class FRPTestVault: SessionVault {
 
 extension RealBackendTests {
     @Test(.enabled(if: ProcessInfo.processInfo.environment["CLOUDNEST_SWIFT_FRP_TEST"] == "1"))
+    @MainActor func realBackendFRPServerRevisionAndSecretChoices() async throws {
+        let env = ProcessInfo.processInfo.environment
+        let origin = try ServerOrigin(#require(env["CLOUDNEST_SWIFT_ORIGIN"]))
+        let certificate = try #require(env["CLOUDNEST_SWIFT_CERTIFICATE"])
+        let delegate = try FixtureTLSDelegate(der: Data(contentsOf: URL(fileURLWithPath: certificate)))
+        let transport = URLSession(configuration: .ephemeral, delegate: delegate, delegateQueue: nil)
+        defer { transport.invalidateAndCancel() }
+        let state = SessionState(api: ServerAPI(session: transport, delegate: delegate), vault: FRPTestVault())
+        await state.restore()
+        await state.signIn(server: origin.url.absoluteString, username: try #require(env["CLOUDNEST_SWIFT_USERNAME"]),
+                           password: try #require(env["CLOUDNEST_SWIFT_PASSWORD"]))
+        let browser = FRPServerState(session: state)
+        await browser.load()
+        if env["CLOUDNEST_SWIFT_FRP_ROLE"] == "restricted" {
+            #expect(browser.items.isEmpty)
+            #expect(browser.error == ServerError.forbidden.localizedDescription)
+            #expect(state.account != nil)
+            await state.signOut()
+            return
+        }
+        #expect(browser.error == nil)
+        let identity = try #require(state.transferIdentity)
+        let host = "native-\(UUID().uuidString.lowercased()).test"
+        func input(_ revision: Int64, token: String?, name: String = "Native server") -> FRPServerInput {
+            FRPServerInput(name: name, server_addr: host, server_port: 7001, tcp_start: 36000, tcp_end: 36099,
+                           http_port: 18081, https_port: 18444, enabled: true, expected_revision_id: revision, token: token)
+        }
+        let created = try await state.writeFRPServer(id: nil, input: input(0, token: "disposable-native-secret"), expectedIdentity: identity)
+        #expect(created.tokenConfigured)
+        #expect(created.address == host)
+        let kept = try await state.writeFRPServer(id: created.id, input: input(created.revisionID, token: nil, name: "Kept secret"), expectedIdentity: identity)
+        #expect(kept.tokenConfigured)
+        #expect(kept.revisionID != created.revisionID)
+        do {
+            _ = try await state.writeFRPServer(id: created.id, input: input(created.revisionID, token: "stale-secret"), expectedIdentity: identity)
+            Issue.record("An old server revision overwrote a newer revision")
+        } catch { #expect(error as? ServerError == .conflict) }
+        let unchanged = try await state.frpServer(id: created.id)
+        #expect(unchanged.revisionID == kept.revisionID)
+        #expect(unchanged.name == "Kept secret")
+        let cleared = try await state.writeFRPServer(id: created.id, input: input(kept.revisionID, token: ""), expectedIdentity: identity)
+        #expect(!cleared.tokenConfigured)
+        let replaced = try await state.writeFRPServer(id: created.id, input: input(cleared.revisionID, token: "replacement-native-secret"), expectedIdentity: identity)
+        #expect(replaced.tokenConfigured)
+        let page = try await state.frpServers(afterID: created.id - 1)
+        #expect(page.items.first?.id == created.id)
+        #expect(page.nextAfterID == page.items.last?.id)
+        let empty = try await state.frpServers(afterID: try #require(page.items.last?.id))
+        #expect(empty.items.isEmpty)
+        #expect(empty.nextAfterID == 0)
+        await state.signOut()
+        await browser.load()
+        #expect(browser.items.isEmpty)
+        #expect(browser.error == ServerError.unauthorized.localizedDescription)
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["CLOUDNEST_SWIFT_FRP_TEST"] == "1"))
     @MainActor func realBackendFRPCommandReceiptRecovery() async throws {
         let env = ProcessInfo.processInfo.environment
         let origin = try ServerOrigin(#require(env["CLOUDNEST_SWIFT_ORIGIN"]))
