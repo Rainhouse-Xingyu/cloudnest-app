@@ -11,6 +11,92 @@ private final class FRPTestVault: SessionVault {
 
 extension RealBackendTests {
     @Test(.enabled(if: ProcessInfo.processInfo.environment["CLOUDNEST_SWIFT_FRP_TEST"] == "1"))
+    @MainActor func realBackendFRPEnrollmentRotationAndRevocation() async throws {
+        let env = ProcessInfo.processInfo.environment
+        let origin = try ServerOrigin(#require(env["CLOUDNEST_SWIFT_ORIGIN"]))
+        let certificate = try #require(env["CLOUDNEST_SWIFT_CERTIFICATE"])
+        let delegate = try FixtureTLSDelegate(der: Data(contentsOf: URL(fileURLWithPath: certificate)))
+        let transport = URLSession(configuration: .ephemeral, delegate: delegate, delegateQueue: nil)
+        defer { transport.invalidateAndCancel() }
+        let api = ServerAPI(session: transport, delegate: delegate)
+        let session = SessionState(api: api, vault: FRPTestVault())
+        await session.restore()
+        let password = try #require(env["CLOUDNEST_SWIFT_PASSWORD"])
+        await session.signIn(server: origin.url.absoluteString, username: try #require(env["CLOUDNEST_SWIFT_USERNAME"]), password: password)
+        let identity = try #require(session.transferIdentity)
+        let sourceText = try #require(env["CLOUDNEST_SWIFT_FRP_DEVICE"])
+        let sourceID = try #require(Int64(sourceText))
+        if env["CLOUDNEST_SWIFT_FRP_ROLE"] == "restricted" {
+            let denied = FRPEnrollmentState(session: session, deviceID: sourceID, operation: .issue)
+            await denied.submit(password: password)
+            #expect(denied.error == ServerError.forbidden.localizedDescription)
+            #expect(session.account != nil)
+        } else {
+            let device = try await session.writeFRPDevice(original: nil, name: "Native enrollment fixture", address: "", enabled: true, expectedIdentity: identity)
+            let first = FRPEnrollmentState(session: session, deviceID: device.id, operation: .issue)
+            await first.submit(password: "incorrect-disposable-password")
+            #expect(first.error == ServerError.reauthenticationRejected.localizedDescription)
+            #expect(!first.submitted && session.account != nil)
+            await first.submit(password: password)
+            let firstReceipt = try #require(first.receipt)
+            // Same-window resubmission cannot rotate a pending code.
+            await first.submit(password: password)
+            struct Exchange: Encodable { let enrollment: String }
+            struct Credential: Decodable { let device_id: Int64; let credential: String }
+            struct Beat: Encodable { let client_version = "native-enrollment-fixture" }
+            struct Heartbeat: Decodable { let device_id: Int64 }
+            let context = try session.transferContext()
+            let second = try await session.issueFRPEnrollment(deviceID: device.id, password: password, expectedIdentity: identity)
+            do {
+                let _: Credential = try await api.request(origin, "api/agent/enroll", body: JSONEncoder().encode(Exchange(enrollment: firstReceipt.code)), method: "POST", successStatus: 201)
+                Issue.record("Superseded registration code was accepted")
+            } catch { #expect(error as? ServerError == .unauthorized) }
+            let credential: Credential = try await api.request(origin, "api/agent/enroll", body: JSONEncoder().encode(Exchange(enrollment: second.code)), method: "POST", successStatus: 201)
+            #expect(credential.device_id == device.id)
+            do {
+                let _: Credential = try await api.request(origin, "api/agent/enroll", body: JSONEncoder().encode(Exchange(enrollment: second.code)), method: "POST", successStatus: 201)
+                Issue.record("One-time code exchanged twice")
+            } catch { #expect(error as? ServerError == .unauthorized) }
+            let third = try await session.issueFRPEnrollment(deviceID: device.id, password: password, expectedIdentity: identity)
+            let stillValid: Heartbeat = try await api.request(origin, "api/agent/heartbeat", token: credential.credential, body: JSONEncoder().encode(Beat()), method: "POST")
+            #expect(stillValid.device_id == device.id)
+            let rotated: Credential = try await api.request(origin, "api/agent/enroll", body: JSONEncoder().encode(Exchange(enrollment: third.code)), method: "POST", successStatus: 201)
+            do {
+                let _: Heartbeat = try await api.request(origin, "api/agent/heartbeat", token: credential.credential, body: JSONEncoder().encode(Beat()), method: "POST")
+                Issue.record("Previous credential survived code exchange")
+            } catch { #expect(error as? ServerError == .unauthorized) }
+            let active: Heartbeat = try await api.request(origin, "api/agent/heartbeat", token: rotated.credential, body: JSONEncoder().encode(Beat()), method: "POST")
+            #expect(active.device_id == device.id)
+            let pending = try await session.issueFRPEnrollment(deviceID: device.id, password: password, expectedIdentity: identity)
+            let revoke = FRPEnrollmentState(session: session, deviceID: device.id, operation: .revoke)
+            await revoke.submit(password: "incorrect-disposable-password")
+            #expect(revoke.error == ServerError.reauthenticationRejected.localizedDescription && session.account != nil)
+            await revoke.submit(password: password)
+            #expect(revoke.revoked && revoke.error == nil)
+            for path in ["api/agent/heartbeat", "api/agent/enroll"] {
+                do {
+                    if path.hasSuffix("enroll") {
+                        let _: Credential = try await api.request(origin, path, body: JSONEncoder().encode(Exchange(enrollment: pending.code)), method: "POST", successStatus: 201)
+                    } else {
+                        let _: Heartbeat = try await api.request(origin, path, token: rotated.credential, body: JSONEncoder().encode(Beat()), method: "POST")
+                    }
+                    Issue.record("Revoked device authentication was accepted")
+                } catch { #expect(error as? ServerError == .unauthorized) }
+            }
+            first.close()
+            try await session.retireFRPDevice(id: device.id, expectedIdentity: identity)
+            // A truly expired/revoked JWT must still clear the session.
+            try await api.logout(origin, token: context.token)
+            do {
+                _ = try await session.issueFRPEnrollment(deviceID: sourceID, password: password, expectedIdentity: identity)
+                Issue.record("Revoked user session issued a registration code")
+            } catch { #expect(error as? ServerError == .unauthorized) }
+            #expect(session.account == nil)
+        }
+        await session.signOut()
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["CLOUDNEST_SWIFT_FRP_TEST"] == "1"))
     @MainActor func realBackendFRPMappingLifecycleAndHistoryRetention() async throws {
         let env = ProcessInfo.processInfo.environment
         let origin = try ServerOrigin(#require(env["CLOUDNEST_SWIFT_ORIGIN"]))

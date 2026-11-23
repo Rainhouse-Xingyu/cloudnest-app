@@ -28,12 +28,14 @@ struct ServerOrigin: Equatable, Sendable {
 enum ServerError: LocalizedError, Equatable {
     case invalidAddress, invalidResponse, signInRejected, unauthorized, forbidden, rateLimited, unavailable
     case invalidOperation, notFound, conflict, capacityExceeded, sessionChanged
+    case reauthenticationRejected
 
     var errorDescription: String? {
         switch self {
         case .invalidAddress: "请输入 HTTPS 服务器地址，可包含端口。"
         case .invalidResponse: "服务器返回了无法识别的响应。"
         case .signInRejected: "用户名或密码有误。"
+        case .reauthenticationRejected: "当前密码验证未通过，请重新输入。"
         case .unauthorized: "会话已失效，请重新登录。"
         case .sessionChanged: "账户或服务器已切换，请重新选择文件或操作。"
         case .forbidden: "当前账户没有权限执行此操作。"
@@ -79,6 +81,7 @@ private final class NoRedirect: NSObject, URLSessionTaskDelegate {
 }
 
 struct ServerAPI: Sendable {
+    struct EmptyResponse: Decodable, Sendable {}
     private struct Credentials: Encodable { let username: String; let password: String }
     private struct Profile: Decodable { let user: Account }
     private struct Message: Decodable { let message: String }
@@ -159,6 +162,10 @@ struct ServerAPI: Sendable {
         for try await byte in bytes {
             guard data.count < maximumBytes else { throw ServerError.invalidResponse }
             data.append(byte)
+        }
+        if successStatus == 204 {
+            guard data.isEmpty, let value = EmptyResponse() as? T else { throw ServerError.invalidResponse }
+            return value
         }
         do {
             return try JSONDecoder().decode(T.self, from: data)

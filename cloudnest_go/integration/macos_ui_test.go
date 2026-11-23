@@ -59,8 +59,31 @@ func TestMacOSNativeUIFixture(t *testing.T) {
 		rateSetting(t, f, "download_speed_limit_kbps", "10240")
 	}
 	slow := os.Getenv("CLOUDNEST_NATIVE_UI_SLOW_TRANSFERS") == "1"
+	captureEnrollment := os.Getenv("CLOUDNEST_NATIVE_UI_CAPTURE_ENROLLMENT") == "1"
 	var traceMu sync.Mutex
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Opt-in private capability handoff to an actual Agent CLI. The real
+		// handler executes once; neither the token nor the password is logged.
+		if captureEnrollment && r.Method == "POST" && strings.HasPrefix(r.URL.Path, "/api/frp/devices/") && strings.HasSuffix(r.URL.Path, "/enrollment") {
+			receipt := httptest.NewRecorder()
+			f.router.ServeHTTP(receipt, r)
+			if receipt.Code == http.StatusCreated {
+				name := filepath.Join(absolute, fmt.Sprintf("enrollment-receipt-%d.json", time.Now().UnixNano()))
+				file, err := os.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+				if err != nil {
+					t.Error("private enrollment handoff could not be created")
+				} else {
+					if _, err := file.Write(receipt.Body.Bytes()); err != nil {
+						t.Error("private enrollment handoff could not be written")
+					}
+					if err := file.Close(); err != nil {
+						t.Error("private enrollment handoff could not be closed")
+					}
+				}
+			}
+			copyNativeReceipt(w, receipt)
+			return
+		}
 		if strings.HasSuffix(r.URL.Path, "/download") {
 			if _, err := os.Stat(filepath.Join(absolute, "trace-downloads")); err == nil {
 				observed := &nativeUIResponseWriter{ResponseWriter: w}

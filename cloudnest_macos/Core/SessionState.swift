@@ -252,6 +252,16 @@ final class SessionState {
         return try await withSession { origin, token in try await api.rollbackFRPConfig(origin, token: token, configID: configID, deviceID: deviceID) }
     }
 
+    func issueFRPEnrollment(deviceID: Int64, password: String, expectedIdentity: TransferIdentity?) async throws -> FRPEnrollment {
+        try requireTransferIdentity(expectedIdentity)
+        return try await withSession { origin, token in try await api.issueFRPEnrollment(origin, token: token, deviceID: deviceID, password: password) }
+    }
+
+    func revokeFRPCredential(deviceID: Int64, password: String, expectedIdentity: TransferIdentity?) async throws {
+        try requireTransferIdentity(expectedIdentity)
+        try await withSession { origin, token in try await api.revokeFRPCredential(origin, token: token, deviceID: deviceID, password: password) }
+    }
+
     private func withSession<T: Sendable>(_ operation: (ServerOrigin, String) async throws -> T) async throws -> T {
         guard let saved, let origin, account != nil else { throw ServerError.unauthorized }
         do {

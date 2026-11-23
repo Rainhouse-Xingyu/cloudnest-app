@@ -135,6 +135,7 @@ private struct FRPDetailView: View {
     @State private var mappingEditor: MappingEditor?
     @State private var mappingBusy = false
     @State private var attemptedMappingRemovals: Set<Int64> = []
+    @State private var credentialOperation: FRPCredentialOperation?
     private struct MappingEditor: Identifiable { let id = UUID(); let original: FRPMapping? }
 
     private enum CommandConfirmation {
@@ -164,6 +165,9 @@ private struct FRPDetailView: View {
                     ForEach([FRPCommandAction.start, .stop, .reload, .diagnose], id: \.self) { action in
                         Button(actionName(action.rawValue) + "…") { request(action) }
                     }
+                    Divider()
+                    Button("申请 Agent 注册码…") { credentialOperation = .issue }.disabled(state.device.status != 1)
+                    Button("撤销设备凭据…", role: .destructive) { credentialOperation = .revoke }.disabled(state.device.status != 1)
                 }
                 .disabled(commands.busy(deviceID: state.device.id))
                 if let checked = state.checkedAt {
@@ -203,6 +207,9 @@ private struct FRPDetailView: View {
         }
         .sheet(item: $mappingEditor, onDismiss: { Task { await state.load(.mappings) } }) { item in
             FRPMappingEditor(session: session, device: state.device, original: item.original)
+        }
+        .sheet(item: $credentialOperation, onDismiss: { Task { await state.load(section) } }) { operation in
+            FRPEnrollmentView(session: session, device: state.device, operation: operation)
         }
         .confirmationDialog("确认远程操作", isPresented: Binding(
             get: { confirmation != nil }, set: { if !$0 { confirmation = nil } }
