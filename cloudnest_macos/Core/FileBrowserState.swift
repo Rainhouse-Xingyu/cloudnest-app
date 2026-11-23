@@ -13,20 +13,22 @@ final class FileBrowserState {
     var filter = ""
     var sortOrder = [KeyPathComparator(\FileItem.filename, comparator: .localizedStandard)]
     let recycleBin: Bool
+    let root: FileBrowserRoot
     private let session: SessionState
     private let identity: TransferIdentity?
 
-    var parentID: Int64 { folders.last?.id ?? 0 }
-    var title: String { recycleBin ? "回收站" : folders.last?.filename ?? "我的文件" }
+    var parentID: Int64 { folders.last?.id ?? root.id }
+    var title: String { recycleBin ? "回收站" : folders.last?.filename ?? root.title }
     var selectedItems: [FileItem] { visibleItems.filter { selection.contains($0.id) } }
     var visibleItems: [FileItem] {
         items.filter { filter.isEmpty || $0.filename.localizedStandardContains(filter) }.sorted(using: sortOrder)
     }
 
-    init(session: SessionState, recycleBin: Bool) {
+    init(session: SessionState, recycleBin: Bool, root: FileBrowserRoot = .personal) {
         self.session = session
         identity = session.transferIdentity
         self.recycleBin = recycleBin
+        self.root = root
     }
 
     func reload() async { await load(folders: folders) }
@@ -53,6 +55,7 @@ final class FileBrowserState {
 
     func trashSelected() async {
         guard !busy, !recycleBin else { return }
+        guard root.canWrite else { error = ServerError.forbidden.localizedDescription; return }
         let ids = selectedItems.map(\.id)
         guard !ids.isEmpty else { return }
         busy = true
@@ -90,7 +93,7 @@ final class FileBrowserState {
         defer { busy = false }
         do {
             try checkIdentity()
-            let result = try await session.listFiles(parentID: next.last?.id ?? 0, recycleBin: recycleBin)
+            let result = try await session.listFiles(parentID: next.last?.id ?? root.id, recycleBin: recycleBin)
             try Task.checkCancellation()
             try checkIdentity()
             let changedDirectory = folders.map(\.id) != next.map(\.id)
@@ -114,6 +117,7 @@ final class FileBrowserState {
 
     private func mutate(_ operation: () async throws -> Void) async {
         guard !busy else { return }
+        guard root.canWrite else { error = ServerError.forbidden.localizedDescription; return }
         busy = true
         error = nil
         do {

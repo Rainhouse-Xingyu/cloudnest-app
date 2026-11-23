@@ -16,10 +16,10 @@ struct FileBrowserView: View {
     @State private var presentedPreview: UUID?
     @State private var previewGeneration = UUID()
 
-    init(session: SessionState, transfers: TransferManager, recycleBin: Bool) {
+    init(session: SessionState, transfers: TransferManager, recycleBin: Bool, root: FileBrowserRoot = .personal) {
         self.transfers = transfers
         self.session = session
-        _browser = State(initialValue: FileBrowserState(session: session, recycleBin: recycleBin))
+        _browser = State(initialValue: FileBrowserState(session: session, recycleBin: recycleBin, root: root))
     }
 
     var body: some View {
@@ -53,14 +53,14 @@ struct FileBrowserView: View {
                 }
             }
             .dropDestination(for: URL.self) { urls, _ in
-                guard !browser.recycleBin, !urls.isEmpty, urls.allSatisfy(\.isFileURL),
+                guard !browser.recycleBin, browser.root.canWrite, !urls.isEmpty, urls.allSatisfy(\.isFileURL),
                       let identity = session.transferIdentity else { return false }
                 let parentID = browser.parentID
                 Task { await queueUploads(urls, parentID: parentID, identity: identity) }
                 return true
             }
             .onDeleteCommand {
-                if !browser.recycleBin && !browser.selectedItems.isEmpty { confirmingTrash = true }
+                if !browser.recycleBin && browser.root.canWrite && !browser.selectedItems.isEmpty { confirmingTrash = true }
             }
             .focusedValue(\.fileTableActions, fileActions)
             .onKeyPress(keys: [.space, .return]) { press in
@@ -71,7 +71,7 @@ struct FileBrowserView: View {
                     preparePreview(item)
                     return .handled
                 }
-                if press.key == .return {
+                if press.key == .return, browser.root.canWrite {
                     naming = .rename(item)
                     return .handled
                 }
@@ -121,6 +121,7 @@ struct FileBrowserView: View {
             ToolbarItemGroup {
                 if !browser.recycleBin {
                     Button("上传", systemImage: "arrow.up.doc", action: chooseUploads)
+                        .disabled(!browser.root.canWrite)
                     Button("下载", systemImage: "arrow.down.doc") { chooseDownloads(browser.selectedItems) }
                         .disabled(browser.selectedItems.isEmpty)
                     Button {
@@ -128,6 +129,7 @@ struct FileBrowserView: View {
                     } label: {
                         Label("新建文件夹", systemImage: "folder.badge.plus")
                     }
+                    .disabled(!browser.root.canWrite)
                 } else {
                     Button("恢复", systemImage: "arrow.uturn.backward") {
                         Task { await browser.restoreSelected() }
@@ -154,12 +156,12 @@ struct FileBrowserView: View {
         }
         .quickLookPreview($previewURL)
         .sheet(item: $destination) { action in
-            FileDestinationSheet(session: session, action: action) { target in
+            FileDestinationSheet(session: session, action: action, root: browser.root) { target in
                 Task { await browser.relocate(ids: action.ids, parentID: target, copy: action.copy) }
             }
         }
         .sheet(item: $versionFile) { item in
-            FileVersionsSheet(file: item, session: session, transfers: transfers) {
+            FileVersionsSheet(file: item, session: session, transfers: transfers, canWrite: browser.root.canWrite) {
                 Task { await browser.reload() }
             }
         }
@@ -239,16 +241,20 @@ struct FileBrowserView: View {
             if selected.count == 1 { actions.restore = { Task { await browser.restoreSelected() } } }
             return actions
         }
-        actions.createFolder = { naming = .create }
-        actions.upload = chooseUploads
+        if browser.root.canWrite {
+            actions.createFolder = { naming = .create }
+            actions.upload = chooseUploads
+        }
         if !selected.isEmpty {
             actions.download = { chooseDownloads(browser.selectedItems) }
-            actions.move = { destination = FileDestinationAction(ids: browser.selection.sorted(), copy: false) }
-            actions.copy = { destination = FileDestinationAction(ids: browser.selection.sorted(), copy: true) }
-            actions.trash = { confirmingTrash = true }
+            if browser.root.canWrite {
+                actions.move = { destination = FileDestinationAction(ids: browser.selection.sorted(), copy: false) }
+                actions.copy = { destination = FileDestinationAction(ids: browser.selection.sorted(), copy: true) }
+                actions.trash = { confirmingTrash = true }
+            }
         }
         if selected.count == 1, let item = selected.first {
-            actions.rename = { naming = .rename(item) }
+            if browser.root.canWrite { actions.rename = { naming = .rename(item) } }
             if !item.isDirectory {
                 actions.preview = { preparePreview(item) }
                 actions.versions = { versionFile = item }
@@ -258,6 +264,7 @@ struct FileBrowserView: View {
     }
 
     private func chooseUploads() {
+        guard browser.root.canWrite else { return }
         guard let identity = session.transferIdentity else { return }
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
@@ -323,7 +330,7 @@ struct FileBrowserView: View {
     private var breadcrumbs: some View {
         ScrollView(.horizontal) {
             HStack(spacing: 6) {
-                Button("我的文件") { Task { await browser.navigate(to: 0) } }
+                Button(browser.root.title) { Task { await browser.navigate(to: 0) } }
                 ForEach(Array(browser.folders.enumerated()), id: \.element.id) { index, folder in
                     Image(systemName: "chevron.right").foregroundStyle(.secondary)
                     Button(folder.filename) { Task { await browser.navigate(to: index + 1) } }
@@ -344,19 +351,23 @@ struct FileBrowserView: View {
                 .disabled(ids.count != 1)
             } else {
                 Button("下载…") { chooseDownloads(browser.items.filter { ids.contains($0.id) }) }
-                Button("移动到…") { destination = FileDestinationAction(ids: ids.sorted(), copy: false) }
-                Button("复制到…") { destination = FileDestinationAction(ids: ids.sorted(), copy: true) }
+                if browser.root.canWrite {
+                    Button("移动到…") { destination = FileDestinationAction(ids: ids.sorted(), copy: false) }
+                    Button("复制到…") { destination = FileDestinationAction(ids: ids.sorted(), copy: true) }
+                }
                 if ids.count == 1, let item = browser.items.first(where: { ids.contains($0.id) }) {
                     if item.isDirectory {
                         Button("打开") { Task { await browser.open(item) } }
                     }
                     if !item.isDirectory { Button("快速查看") { preparePreview(item) } }
                     if !item.isDirectory { Button("版本历史…") { versionFile = item } }
-                    Button("重新命名") { naming = .rename(item) }
+                    if browser.root.canWrite { Button("重新命名") { naming = .rename(item) } }
                 }
-                Button("移入回收站", role: .destructive) {
-                    browser.selection = ids
-                    confirmingTrash = true
+                if browser.root.canWrite {
+                    Button("移入回收站", role: .destructive) {
+                        browser.selection = ids
+                        confirmingTrash = true
+                    }
                 }
             }
         }

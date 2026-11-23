@@ -186,6 +186,28 @@ func TestMacOSNativeUIFixture(t *testing.T) {
 		manifest["frp_config_id"] = seed.Config.ID
 		manifest["frp_command_id"] = seed.Command.ID
 	}
+	if os.Getenv("CLOUDNEST_NATIVE_UI_WORKSPACES") == "1" {
+		var peer model.User
+		if err := f.db.First(&peer, f.bobID).Error; err != nil {
+			t.Fatal(err)
+		}
+		legacy := model.Workspace{Name: "Legacy UI workspace", OwnerID: user.ID}
+		if err := f.db.Create(&legacy).Error; err != nil {
+			t.Fatal(err)
+		}
+		if err := f.db.Create(&model.WorkspaceUser{WorkspaceID: legacy.ID, UserID: user.ID, Role: "owner"}).Error; err != nil {
+			t.Fatal(err)
+		}
+		var private struct{ Item model.Workspace }
+		decode(t, f.json(t, "POST", "/api/workspaces", f.bob, map[string]string{"name": "Peer private workspace"}, 200), &private)
+		third := model.User{Username: fmt.Sprintf("native-ui-colleague-%d", user.ID), Password: user.Password, Status: 1}
+		if err := f.db.Create(&third).Error; err != nil {
+			t.Fatal(err)
+		}
+		manifest["workspace_peer_username"], manifest["workspace_peer_id"] = peer.Username, peer.ID
+		manifest["workspace_third_username"], manifest["workspace_third_id"] = third.Username, third.ID
+		manifest["workspace_legacy_id"], manifest["workspace_peer_private_id"] = legacy.ID, private.Item.ID
+	}
 	if aiLive {
 		content := "数据库迁移方案：MySQL 升级前先备份，并验证迁移后的数据一致性。迁移失败时回滚到已验证的备份。"
 		file := f.upload(t, f.alice, "Project Atlas.md", []byte(content))

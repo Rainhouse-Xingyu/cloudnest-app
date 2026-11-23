@@ -1,6 +1,6 @@
 # macOS 扩展功能
 
-G09 在 `codex/g09-macos-extensions` 上继续 G08，保持独立[草稿 PR #10](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/10)，不合并前置分支。当前已接入 AI 检索/索引、[FRP 管理](MACOS-FRP.md)、[设备管理与退役](MACOS-FRP-DEVICES.md)、[映射编辑](MACOS-FRP-MAPPINGS.md)、[Agent 注册/撤销](MACOS-FRP-ENROLLMENT.md)、[服务器版本编辑](MACOS-FRP-SERVERS.md)、[配置流程](MACOS-FRP-CONFIGS.md)和[持久命令回执恢复](MACOS-FRP-COMMANDS.md)。整个 G09、G10、G11 仍进行中/待做；协作、分享、设置及扩展 AI 继续实施。
+G09 在 `codex/g09-macos-extensions` 上继续 G08，保持独立[草稿 PR #10](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/10)，不合并前置分支。当前已接入 AI 检索/索引、[FRP 管理](MACOS-FRP.md)、[设备管理与退役](MACOS-FRP-DEVICES.md)、[映射编辑](MACOS-FRP-MAPPINGS.md)、[Agent 注册/撤销](MACOS-FRP-ENROLLMENT.md)、[服务器版本编辑](MACOS-FRP-SERVERS.md)、[配置流程](MACOS-FRP-CONFIGS.md)、[持久命令回执恢复](MACOS-FRP-COMMANDS.md)和[协作空间](MACOS-WORKSPACES.md)。整个 G09、G10、G11 仍进行中/待做；单文件协作者、分享、设置及扩展 AI 继续实施。
 
 ## AI 检索与索引
 
@@ -52,3 +52,5 @@ CLOUDNEST_TEST_AI_MODEL=1 python3 scripts/test-macos-backend.py --filter '^TestM
 2026-11-22 映射批次：f5d09bc 的双平台原生与完整后端 CI 全通过。后续[映射 CRUD](MACOS-FRP-MAPPINGS.md)完成服务器作用域端口语义、可选内容基线和旧调用兼容；真实 GUI 创建 TCP/HTTP/HTTPS、旧表单冲突、单独生成/部署、移除映射资料仍保留三隧道、单独停止及正常清理通过。首轮过期夹具失败保留，最终完整原生联调 80.404s，Go 检查/四种目标构建和 Universal Release/签名通过。新提交 CI 另核对；注册、协作/分享/设置、扩展 AI 和 G10/G11 范围不变。
 
 2026-11-22 注册批次：d8cb382 的双平台原生与完整后端 CI 全通过，实际新映射用例在日志中执行。后续[Agent 注册/撤销](MACOS-FRP-ENROLLMENT.md)已接入当前密码验证、设备确认、遮罩码/到期/显式复制和关闭清除。真实 GUI 发出的码由实际 Agent CLI 从私有交接 stdin 兑换，随后新心跳、第二待兑换码与旧凭据并存、撤销后 Agent 自行 HTTP 401 退出及待兑换码拒绝均通过。完整联调 73.955s，普通 Swift 70 注册/50 实际/20 跳过（启用 Keychain，0.128s），Universal Release/双架构/签名通过。未将空设备注册验收冒充隧道停止/资源释放，G09 其余扩展和 G10/G11 保留。
+
+2026-11-22 协作空间批次：9bd004a 的双平台原生及完整后端 CI 全通过，日志确认注册/轮换/撤销用例实际执行。后续[空间与成员](MACOS-WORKSPACES.md)接入空间根浏览、角色受限文件操作、个人复制入空间、成员 create-only/可选角色基线以及真实上传下载/撤销。四项 Workspace race（4.695s）、最终完整原生联调（81.381s）、普通 Swift 73 注册/52 实际/21 跳过（Keychain，0.127s）、Universal Release/双架构/签名通过。原生创建/复制、成员冲突/保存/移除与文件专项分开记录；行高/顶部裁剪及续接过期报告保留，最后用系统工具栏修复文件布局。另修复普通回归发现的下载取消与正常完成竞争，保留取消错误断言并重复 32 轮。单文件协作者、分享/设置、扩展 AI 和 G10/G11 范围不变。

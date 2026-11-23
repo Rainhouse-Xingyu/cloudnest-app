@@ -139,6 +139,12 @@ private final class StreamFixtureProtocol: URLProtocol, @unchecked Sendable {
 private final class StreamFixturePolicy: NSObject, URLSessionTaskDelegate {}
 
 @Test func cancellingDownloadReleasesAnUnacknowledgedBlock() async throws {
+    // Exercise the terminal callback race repeatedly: releasing the blocked
+    // delegate can deliver normal URLSession completion while cancel finishes.
+    for _ in 0..<32 { try await cancelUnacknowledgedStream() }
+}
+
+private func cancelUnacknowledgedStream() async throws {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.protocolClasses = [StreamFixtureProtocol.self]
     let stream = DownloadStream(configuration: configuration, policy: StreamFixturePolicy())

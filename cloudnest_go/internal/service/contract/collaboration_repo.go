@@ -68,6 +68,8 @@ type WorkspaceMemberChange struct {
 	WorkspaceID, ActorID, TargetID int64
 	Role, ClientIP                 string
 	UpdateOnly                     bool
+	CreateOnly                     bool
+	ExpectedRole                   *string
 }
 
 func ValidWorkspaceMemberRole(role string) bool {

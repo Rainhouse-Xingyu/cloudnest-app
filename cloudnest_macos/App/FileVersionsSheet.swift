@@ -4,6 +4,7 @@ import AppKit
 struct FileVersionsSheet: View {
     let transfers: TransferManager
     let onRestored: () -> Void
+    let canWrite: Bool
     @State private var history: FileVersionState
     @State private var confirmation: VersionRestoreConfirmation?
     @State private var uploadConfirmation: VersionUploadConfirmation?
@@ -11,9 +12,10 @@ struct FileVersionsSheet: View {
     @State private var uploadID: UUID?
     @Environment(\.dismiss) private var dismiss
 
-    init(file: FileItem, session: SessionState, transfers: TransferManager, onRestored: @escaping () -> Void) {
+    init(file: FileItem, session: SessionState, transfers: TransferManager, canWrite: Bool = true, onRestored: @escaping () -> Void) {
         self.transfers = transfers
         self.onRestored = onRestored
+        self.canWrite = canWrite
         _history = State(initialValue: FileVersionState(file: file, session: session))
     }
 
@@ -30,7 +32,7 @@ struct FileVersionsSheet: View {
                 Spacer()
                 if history.busy { ProgressView().controlSize(.small) }
                 Button("上传新版本…", action: chooseUpload)
-                    .disabled(history.busy || !(history.currentVersion.map { $0 > 0 && $0 < 2147483647 } ?? false) || !validComment)
+                    .disabled(!canWrite || history.busy || !(history.currentVersion.map { $0 > 0 && $0 < 2147483647 } ?? false) || !validComment)
                 Button("刷新") { Task { await history.reload() } }.disabled(history.busy)
             }
             Table(history.items, selection: $history.selection) {
@@ -64,7 +66,7 @@ struct FileVersionsSheet: View {
                 }
             }
             TextField("新版本说明（可选，最多 255 个字符）", text: $uploadComment)
-                .disabled(history.busy)
+                .disabled(!canWrite || history.busy)
             if !validComment { Text("说明最多 255 个字符，不能包含空字符。").foregroundStyle(.secondary) }
             if let error = history.error {
                 Label(error, systemImage: "exclamationmark.circle").foregroundStyle(.secondary)
@@ -78,7 +80,7 @@ struct FileVersionsSheet: View {
                         confirmation = VersionRestoreConfirmation(item: item, base: base)
                     }
                 }
-                .disabled(history.busy || history.selected == nil || history.selected?.version == history.currentVersion)
+                .disabled(!canWrite || history.busy || history.selected == nil || history.selected?.version == history.currentVersion)
                 Spacer()
                 Button("完成") { dismiss() }
                     .keyboardShortcut(.cancelAction)

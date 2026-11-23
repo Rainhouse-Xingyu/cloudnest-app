@@ -262,6 +262,30 @@ final class SessionState {
         try await withSession { origin, token in try await api.revokeFRPCredential(origin, token: token, deviceID: deviceID, password: password) }
     }
 
+    func workspaces() async throws -> [Workspace] {
+        try await withSession { origin, token in try await api.workspaces(origin, token: token) }
+    }
+
+    func createWorkspace(name: String, expectedIdentity: TransferIdentity?) async throws -> Workspace {
+        try requireTransferIdentity(expectedIdentity)
+        guard let ownerID = expectedIdentity?.userID else { throw ServerError.unauthorized }
+        return try await withSession { origin, token in try await api.createWorkspace(origin, token: token, name: name, expectedOwnerID: ownerID) }
+    }
+
+    func workspaceMembers(workspaceID: Int64) async throws -> [WorkspaceMember] {
+        try await withSession { origin, token in try await api.workspaceMembers(origin, token: token, workspaceID: workspaceID) }
+    }
+
+    func addWorkspaceMember(workspaceID: Int64, username: String, role: WorkspaceRole, expectedIdentity: TransferIdentity?) async throws {
+        try requireTransferIdentity(expectedIdentity)
+        try await withSession { origin, token in try await api.addWorkspaceMember(origin, token: token, workspaceID: workspaceID, username: username, role: role) }
+    }
+
+    func changeWorkspaceMember(workspaceID: Int64, original: WorkspaceMember, role: WorkspaceRole?, expectedIdentity: TransferIdentity?) async throws {
+        try requireTransferIdentity(expectedIdentity)
+        try await withSession { origin, token in try await api.changeWorkspaceMember(origin, token: token, workspaceID: workspaceID, original: original, role: role) }
+    }
+
     private func withSession<T: Sendable>(_ operation: (ServerOrigin, String) async throws -> T) async throws -> T {
         guard let saved, let origin, account != nil else { throw ServerError.unauthorized }
         do {

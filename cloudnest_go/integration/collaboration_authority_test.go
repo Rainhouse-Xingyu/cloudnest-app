@@ -3,12 +3,81 @@
 package integration
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	"sync"
 	"testing"
 
+	"cloudenest_go/internal/service/contract"
+	storageMysql "cloudenest_go/internal/storage/mysql"
 	"cloudenest_go/model"
 )
+
+func TestWorkspaceMemberConditionalEditsAndCreateOnly(t *testing.T) {
+	f := newFixture(t)
+	var created struct{ Item model.Workspace }
+	decode(t, f.json(t, "POST", "/api/workspaces", f.alice, map[string]string{"name": "Conditional members"}, 200), &created)
+	base := fmt.Sprintf("/api/workspaces/%d/members", created.Item.ID)
+	target := fmt.Sprintf("%s/%d", base, f.bobID)
+	f.json(t, "POST", base, f.alice, map[string]any{"user_id": f.bobID, "role": "viewer", "create_only": true}, 200)
+	f.json(t, "POST", base, f.alice, map[string]any{"user_id": f.bobID, "role": "admin", "create_only": true}, 409)
+	f.json(t, "PUT", target, f.bob, map[string]any{"role": "editor", "expected_role": "viewer"}, 403)
+	// Legacy calls retain their original behavior; new callers opt into CAS.
+	f.json(t, "PUT", target, f.alice, map[string]string{"role": "editor"}, 200)
+	f.json(t, "PUT", target, f.alice, map[string]string{"role": "admin", "expected_role": "viewer"}, 409)
+	f.json(t, "DELETE", target, f.alice, map[string]string{"expected_role": "viewer"}, 409)
+	f.json(t, "PUT", target, f.alice, map[string]string{"role": "viewer", "expected_role": "invalid"}, 400)
+	f.json(t, "DELETE", fmt.Sprintf("%s/%d", base, f.aliceID), f.alice, map[string]string{"expected_role": "viewer"}, 403)
+	count := func() int64 {
+		t.Helper()
+		var n int64
+		if err := f.db.Model(&model.OperationLog{}).Where("action LIKE 'workspace_member_%' AND detail LIKE ?", fmt.Sprintf("workspace_id=%d %%", created.Item.ID)).Count(&n).Error; err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	before := count()
+	repo := storageMysql.NewCollaborationRepo(f.db)
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	var group sync.WaitGroup
+	for _, role := range []string{"viewer", "member"} {
+		group.Go(func() {
+			<-start
+			expected := "editor"
+			results <- repo.ChangeWorkspaceMember(context.Background(), contract.WorkspaceMemberChange{
+				WorkspaceID: created.Item.ID, ActorID: f.aliceID, TargetID: f.bobID, Role: role, ExpectedRole: &expected, UpdateOnly: true,
+			})
+		})
+	}
+	close(start)
+	group.Wait()
+	close(results)
+	writes, conflicts := 0, 0
+	for err := range results {
+		if err == nil {
+			writes++
+		} else if errors.Is(err, contract.ErrConflict) {
+			conflicts++
+		} else {
+			t.Fatal(err)
+		}
+	}
+	if writes != 1 || conflicts != 1 || count() != before+1 {
+		t.Fatal("membership CAS was not atomic", writes, conflicts)
+	}
+	var saved model.WorkspaceUser
+	if err := f.db.First(&saved, "workspace_id=? AND user_id=?", created.Item.ID, f.bobID).Error; err != nil || saved.Role != "viewer" && saved.Role != "member" {
+		t.Fatal("wrong winning membership", err)
+	}
+	f.json(t, "DELETE", target, f.alice, map[string]string{"expected_role": saved.Role}, 200)
+	f.json(t, "DELETE", target, f.alice, map[string]string{"expected_role": saved.Role}, 409)
+	f.json(t, "POST", base, f.alice, map[string]any{"user_id": f.bobID, "role": "viewer"}, 200)
+	f.json(t, "POST", base, f.alice, map[string]any{"user_id": f.bobID, "role": "editor"}, 200)
+	f.json(t, "DELETE", target, f.alice, nil, 200)
+}
 
 func TestWorkspaceMembershipAuthorityAndAudit(t *testing.T) {
 	f := newFixture(t)

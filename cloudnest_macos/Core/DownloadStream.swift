@@ -103,6 +103,13 @@ final class DownloadStream: NSObject, URLSessionDataDelegate, @unchecked Sendabl
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: (any Error)?) {
         gate.lock()
+        // cancel() owns the terminal result once it sets finished, even if
+        // waking the delegate lets this callback run before finish(throwing:).
+        guard !finished else {
+            gate.unlock()
+            session.finishTasksAndInvalidate()
+            return
+        }
         finished = true
         waiting = false
         let waiter = responseWaiter

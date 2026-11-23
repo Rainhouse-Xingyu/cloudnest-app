@@ -52,6 +52,7 @@ private enum Page: String, CaseIterable, Identifiable {
     case transfers = "传输"
     case ai = "AI 检索"
     case frp = "远程连接"
+    case workspaces = "协作空间"
     case connection = "服务器连接"
     case account = "账户"
     var id: Self { self }
@@ -62,6 +63,7 @@ private enum Page: String, CaseIterable, Identifiable {
         case .transfers: "arrow.up.arrow.down"
         case .ai: "sparkle.magnifyingglass"
         case .frp: "point.3.connected.trianglepath.dotted"
+        case .workspaces: "person.2"
         case .connection: "network"
         case .account: "person.crop.circle"
         }
@@ -103,6 +105,9 @@ struct WorkspaceWindow: View {
                             .id(session.transferIdentity)
                     case .frp:
                         FRPView(session: session, commands: frpCommands)
+                            .id(session.transferIdentity)
+                    case .workspaces:
+                        WorkspacesView(session: session, transfers: transfers)
                             .id(session.transferIdentity)
                     case .connection:
                         ConnectionDetails(session: session)

@@ -9,20 +9,33 @@ struct FileDestinationAction: Identifiable {
 struct FileDestinationSheet: View {
     let action: FileDestinationAction
     let submit: (Int64) -> Void
+    let session: SessionState
+    let sourceRoot: FileBrowserRoot
+    private let identity: TransferIdentity?
     @State private var browser: FileBrowserState
+    @State private var roots: [FileBrowserRoot]
+    @State private var selectedRootID: Int64
+    @State private var rootsError: String?
     @Environment(\.dismiss) private var dismiss
 
-    init(session: SessionState, action: FileDestinationAction, submit: @escaping (Int64) -> Void) {
+    init(session: SessionState, action: FileDestinationAction, root: FileBrowserRoot = .personal, submit: @escaping (Int64) -> Void) {
         self.action = action
         self.submit = submit
-        _browser = State(initialValue: FileBrowserState(session: session, recycleBin: false))
+        self.session = session; sourceRoot = root; identity = session.transferIdentity
+        _browser = State(initialValue: FileBrowserState(session: session, recycleBin: false, root: root))
+        _roots = State(initialValue: [root]); _selectedRootID = State(initialValue: root.id)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(action.copy ? "复制到" : "移动到").font(.headline)
+            if roots.count > 1 {
+                Picker("目标范围", selection: $selectedRootID) {
+                    ForEach(roots, id: \.id) { root in Text(root.title).tag(root.id) }
+                }
+            }
             HStack {
-                Button("我的文件") { Task { await browser.navigate(to: 0) } }
+                Button(browser.root.title) { Task { await browser.navigate(to: 0) } }
                 ForEach(Array(browser.folders.enumerated()), id: \.element.id) { index, item in
                     Image(systemName: "chevron.right").foregroundStyle(.secondary)
                     Button(item.filename) { Task { await browser.navigate(to: index + 1) } }
@@ -51,6 +64,11 @@ struct FileDestinationSheet: View {
             Text("同名项目将自动分配新名称。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            if sourceRoot.workspaceID != nil {
+                Text("仅选择同一空间目录，不能移出或复制出空间。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if let rootsError { Text(rootsError).font(.caption).foregroundStyle(.secondary) }
             HStack {
                 Text(browser.title).foregroundStyle(.secondary)
                 Spacer()
@@ -61,11 +79,28 @@ struct FileDestinationSheet: View {
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(browser.busy || !browser.loaded || browser.error != nil || action.ids.contains(browser.parentID))
+                .disabled(!browser.root.canWrite || browser.busy || !browser.loaded || browser.error != nil || action.ids.contains(browser.parentID))
             }
         }
         .padding(22)
         .frame(width: 520, height: 400)
-        .task { await browser.reload() }
+        .task {
+            await browser.reload()
+            guard sourceRoot.workspaceID == nil, action.copy else { return }
+            do {
+                try session.requireTransferIdentity(identity)
+                let spaces = try await session.workspaces()
+                try Task.checkCancellation()
+                try session.requireTransferIdentity(identity)
+                roots = [.personal] + spaces.filter { $0.role.canWrite }.compactMap(FileBrowserRoot.init(workspace:))
+            } catch is CancellationError { return }
+            catch { rootsError = "未能读取可写空间，仍可选择个人目录。" }
+        }
+        .onChange(of: selectedRootID) { _, id in
+            guard let root = roots.first(where: { $0.id == id }) else { return }
+            let next = FileBrowserState(session: session, recycleBin: false, root: root)
+            browser = next
+            Task { await next.reload() }
+        }
     }
 }

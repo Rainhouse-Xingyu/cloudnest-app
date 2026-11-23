@@ -99,6 +99,9 @@ func (r *CollaborationRepo) ChangeWorkspaceMember(ctx context.Context, change co
 	if change.Role != "" && !contract.ValidWorkspaceMemberRole(change.Role) {
 		return contract.ErrInvalidInput
 	}
+	if change.ExpectedRole != nil && !contract.ValidWorkspaceMemberRole(*change.ExpectedRole) {
+		return contract.ErrInvalidInput
+	}
 	return fileMetadataTransaction(ctx, r.db, func(tx *gorm.DB) error {
 		// Serialize all membership decisions for this workspace, including
 		// a change that removes the authority of another pending request.
@@ -134,6 +137,9 @@ func (r *CollaborationRepo) ChangeWorkspaceMember(ctx context.Context, change co
 		}
 		if change.TargetID == workspace.OwnerID || target.Role == "owner" || (actorRole == "admin" && target.Role == "admin") {
 			return contract.ErrForbidden
+		}
+		if change.CreateOnly && exists || change.ExpectedRole != nil && (!exists || target.Role != *change.ExpectedRole) {
+			return contract.ErrConflict
 		}
 		action := "workspace_member_upsert"
 		switch {
