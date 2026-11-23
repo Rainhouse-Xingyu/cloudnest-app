@@ -204,8 +204,14 @@ func (r *CollaborationRepo) CanAccessFile(ctx context.Context, uid, id int64, wr
 	return canAccessFileForFileRepo(ctx, r.db, uid, id, write)
 }
 
-func (r *CollaborationRepo) ChangeFilePermission(ctx context.Context, actorID, fileID, targetUserID int64, permission, clientIP string) error {
+func (r *CollaborationRepo) ChangeFilePermission(ctx context.Context, change contract.FilePermissionChange) error {
+	actorID, fileID, targetUserID := change.ActorID, change.FileID, change.TargetID
+	permission, clientIP := change.Permission, change.ClientIP
 	if permission != "" && permission != "read" && permission != "write" {
+		return contract.ErrInvalidInput
+	}
+	if change.CreateOnly && (permission == "" || change.ExpectedPermission != nil) ||
+		change.ExpectedPermission != nil && *change.ExpectedPermission != "read" && *change.ExpectedPermission != "write" {
 		return contract.ErrInvalidInput
 	}
 	return fileMetadataTransaction(ctx, r.db, func(tx *gorm.DB) error {
@@ -226,6 +232,31 @@ func (r *CollaborationRepo) ChangeFilePermission(ctx context.Context, actorID, f
 		}
 		if ws.ID != 0 {
 			return contract.ErrForbidden
+		}
+		if change.CreateOnly || change.ExpectedPermission != nil {
+			var existing []model.FilePermission
+			if err := tx.Where("file_id=? AND user_id=?", fileID, targetUserID).Find(&existing).Error; err != nil {
+				return err
+			}
+			if change.CreateOnly && len(existing) != 0 {
+				return contract.ErrConflict
+			}
+			if change.ExpectedPermission != nil {
+				// Legacy duplicate rows grant the union of read/write access. Compare
+				// that effective permission before updating or deleting all duplicates.
+				effective := ""
+				for _, grant := range existing {
+					if grant.Permission != "read" && grant.Permission != "write" {
+						return contract.ErrConflict
+					}
+					if effective == "" || grant.Permission == "write" {
+						effective = grant.Permission
+					}
+				}
+				if effective != *change.ExpectedPermission {
+					return contract.ErrConflict
+				}
+			}
 		}
 		action := "file_permission_revoke"
 		if permission == "" {

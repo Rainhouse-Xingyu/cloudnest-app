@@ -92,8 +92,8 @@ func (s *CollaborationService) OwnsFile(ctx context.Context, actorID, fileID int
 	return err == nil && file.UserID == actorID, err
 }
 
-func (s *CollaborationService) ChangeFilePermission(ctx context.Context, actorID, fileID, targetUserID int64, permission, clientIP string) error {
-	return s.repo.ChangeFilePermission(ctx, actorID, fileID, targetUserID, permission, clientIP)
+func (s *CollaborationService) ChangeFilePermission(ctx context.Context, change contract.FilePermissionChange) error {
+	return s.repo.ChangeFilePermission(ctx, change)
 }
 
 // ListFilePermissions 查询文件协作权限列表。

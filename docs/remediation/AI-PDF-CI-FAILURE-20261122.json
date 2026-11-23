@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "passed": false,
+  "status": "Investigating; unchanged-SHA CI retry requested, not a confirmed product fix.",
+  "commit": "58e28262901342ae091c653d3b89edc30ad1eb07",
+  "workflow_run": 45123676654,
+  "original_job": 137523007703,
+  "failure_utc": "2026-11-23T06:36:29.8051926Z",
+  "test": "TestAIPDFExtractionFailureStatesNeverPublishPartialResults/scanned-invoice.pdfmodel_unavailable",
+  "original_error": "ai_pdf_processor_test.go:47: failed extraction_failed",
+  "expected": {
+    "status": "retry",
+    "error_code": "model_unavailable"
+  },
+  "actual": {
+    "status": "failed",
+    "error_code": "extraction_failed"
+  },
+  "environment": {
+    "platform": "Linux GitHub Actions",
+    "poppler_package": "26.01.0-2ubuntu0.3",
+    "model": "Unavailable synthetic provider; no live model needed for this failure-state protocol test."
+  },
+  "unchanged_code_followups": [
+    {
+      "platform": "macOS local",
+      "poppler": "26.05.0",
+      "command": "CLOUDNEST_TEST_POPPLER_BIN=<bundled native Poppler> go test -race -count=1 -v ./internal/pdfextract",
+      "passed": true,
+      "seconds": 3.299,
+      "log_sha256": "186f0d6b20177b7b715dfbd0a02f436d12654b60401d93fefc73b15ed66bb566"
+    },
+    {
+      "platform": "macOS local",
+      "command": "GOFLAGS=-race scripts/test-macos-backend.py --go-tags integration,aisearch --filter ^TestAI(Hybrid|IndexControl|IndexIncremental|Office|PDF|Image)",
+      "passed": true,
+      "seconds": 27.455,
+      "log_sha256": "768947addacdab7b9b738f57b114fddf00f2ab2b455f1f0ad585fe0c0bf66daf"
+    }
+  ],
+  "limits": "Neither local pass proves Linux failure resolved. Original failure retained; inspect retry/new-head logs before calling backend CI green. No model download or default model change is implied."
+}

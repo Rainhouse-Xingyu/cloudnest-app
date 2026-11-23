@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -42,9 +43,11 @@ type UpdateWorkspaceMemberRoleRequest struct {
 
 // GrantFilePermissionRequest 授予文件协作权限请求。
 type GrantFilePermissionRequest struct {
-	UserID     *int64 `json:"user_id"`
-	Username   string `json:"username"`
-	Permission string `json:"permission" binding:"required"`
+	UserID             *int64  `json:"user_id"`
+	Username           string  `json:"username"`
+	Permission         string  `json:"permission" binding:"required"`
+	CreateOnly         bool    `json:"create_only"`
+	ExpectedPermission *string `json:"expected_permission"`
 }
 
 // CreateFileVersionRequest 创建文件版本请求。
@@ -254,6 +257,7 @@ func (h *CollaborationHandler) GrantFilePermission(c *gin.Context) {
 	}
 
 	var req GrantFilePermissionRequest
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
 		return
@@ -288,7 +292,10 @@ func (h *CollaborationHandler) GrantFilePermission(c *gin.Context) {
 		return
 	}
 
-	if err := h.Svc.ChangeFilePermission(c.Request.Context(), uid, fileID, targetUser.ID, req.Permission, c.ClientIP()); err != nil {
+	if err := h.Svc.ChangeFilePermission(c.Request.Context(), contract.FilePermissionChange{
+		ActorID: uid, FileID: fileID, TargetID: targetUser.ID, Permission: req.Permission, ClientIP: c.ClientIP(),
+		CreateOnly: req.CreateOnly, ExpectedPermission: req.ExpectedPermission,
+	}); err != nil {
 		writeFilePermissionError(c, err)
 		return
 	}
@@ -337,7 +344,17 @@ func (h *CollaborationHandler) RevokeFilePermission(c *gin.Context) {
 		return
 	}
 
-	if err := h.Svc.ChangeFilePermission(c.Request.Context(), uid, fileID, targetUserID, "", c.ClientIP()); err != nil {
+	var req struct {
+		ExpectedPermission *string `json:"expected_permission"`
+	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+	if err := h.Svc.ChangeFilePermission(c.Request.Context(), contract.FilePermissionChange{
+		ActorID: uid, FileID: fileID, TargetID: targetUserID, ClientIP: c.ClientIP(), ExpectedPermission: req.ExpectedPermission,
+	}); err != nil {
 		writeFilePermissionError(c, err)
 		return
 	}
@@ -346,6 +363,10 @@ func (h *CollaborationHandler) RevokeFilePermission(c *gin.Context) {
 
 func writeFilePermissionError(c *gin.Context, err error) {
 	switch {
+	case errors.Is(err, contract.ErrInvalidInput):
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid file permission condition"})
+	case errors.Is(err, contract.ErrConflict):
+		c.JSON(http.StatusConflict, gin.H{"error": "file permission changed; refresh before retrying"})
 	case errors.Is(err, contract.ErrForbidden):
 		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
 	case errors.Is(err, gorm.ErrRecordNotFound):

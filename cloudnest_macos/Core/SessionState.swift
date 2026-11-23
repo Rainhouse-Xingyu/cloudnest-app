@@ -286,6 +286,22 @@ final class SessionState {
         try await withSession { origin, token in try await api.changeWorkspaceMember(origin, token: token, workspaceID: workspaceID, original: original, role: role) }
     }
 
+    func fileCollaborators(fileID: Int64) async throws -> [FileCollaborator] {
+        try await withSession { origin, token in try await api.fileCollaborators(origin, token: token, fileID: fileID) }
+    }
+
+    func addFileCollaborator(file: FileItem, username: String, permission: FilePermission, expectedIdentity: TransferIdentity?) async throws {
+        try requireTransferIdentity(expectedIdentity)
+        guard file.canManageCollaborators(userID: expectedIdentity?.userID) else { throw ServerError.forbidden }
+        try await withSession { origin, token in try await api.addFileCollaborator(origin, token: token, fileID: file.id, username: username, permission: permission) }
+    }
+
+    func changeFileCollaborator(file: FileItem, original: FileCollaborator, permission: FilePermission?, expectedIdentity: TransferIdentity?) async throws {
+        try requireTransferIdentity(expectedIdentity)
+        guard file.canManageCollaborators(userID: expectedIdentity?.userID) else { throw ServerError.forbidden }
+        try await withSession { origin, token in try await api.changeFileCollaborator(origin, token: token, fileID: file.id, original: original, permission: permission) }
+    }
+
     private func withSession<T: Sendable>(_ operation: (ServerOrigin, String) async throws -> T) async throws -> T {
         guard let saved, let origin, account != nil else { throw ServerError.unauthorized }
         do {
