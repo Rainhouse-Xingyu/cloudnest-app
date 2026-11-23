@@ -132,6 +132,9 @@ func (r *FrpRepo) UpdateMapping(ctx context.Context, req contract.FrpUpdateMappi
 	if req.LocalPort == nil && req.RemotePort == nil && req.Domain == nil && req.Status == nil {
 		return m, contract.ErrInvalidInput
 	}
+	if b := req.Expected; b != nil && (b.DeviceID <= 0 || b.ServerID < 0 || b.LocalPort < 1 || b.LocalPort > 65535 || b.RemotePort < 0 || b.RemotePort > 65535 || len(b.Domain) > 400 || b.Status < 0 || b.Status > 1) {
+		return m, contract.ErrInvalidInput
+	}
 	err := r.frpTransaction(ctx, func(tx *gorm.DB) error {
 		var hint model.FrpMapping
 		if err := tx.First(&hint, "id=?", req.MappingID).Error; err != nil {
@@ -145,6 +148,9 @@ func (r *FrpRepo) UpdateMapping(ctx context.Context, req contract.FrpUpdateMappi
 		}
 		if m.DeviceID != hint.DeviceID {
 			return contract.ErrForbidden
+		}
+		if b := req.Expected; b != nil && (m.DeviceID != b.DeviceID || m.ServerID != b.ServerID || m.LocalPort != b.LocalPort || m.RemotePort != b.RemotePort || m.Domain != b.Domain || m.Status != b.Status) {
+			return contract.ErrConflict
 		}
 		old := m
 		if req.LocalPort != nil {

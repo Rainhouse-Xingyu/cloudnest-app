@@ -93,6 +93,7 @@ type UpdateMappingInput struct {
 	RemotePort *int
 	Domain     *string
 	Status     *int8
+	Expected   *contract.FrpMappingSnapshot
 }
 
 // DeviceDetailResult 表示设备详情结果。
@@ -268,6 +269,7 @@ func (s *FrpService) UpdateMapping(ctx context.Context, uid int64, isAdmin bool,
 		RemotePort: req.RemotePort,
 		Domain:     req.Domain,
 		Status:     req.Status,
+		Expected:   req.Expected,
 	})
 }
 

@@ -42,6 +42,16 @@ type FrpUpdateMappingInput struct {
 	RemotePort *int
 	Domain     *string
 	Status     *int8
+	Expected   *FrpMappingSnapshot
+}
+
+type FrpMappingSnapshot struct {
+	DeviceID   int64  `json:"device_id"`
+	ServerID   int64  `json:"server_id"`
+	LocalPort  int    `json:"local_port"`
+	RemotePort int    `json:"remote_port"`
+	Domain     string `json:"domain"`
+	Status     int8   `json:"status"`
 }
 
 // FrpDeviceDetailMeta 定义设备详情附加信息。

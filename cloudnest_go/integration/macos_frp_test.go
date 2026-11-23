@@ -70,6 +70,14 @@ func TestMacOSClientFRPRead(t *testing.T) {
 	}
 	f := newFixture(t)
 	seed := fixtureNativeFRP(t, f)
+	legacyPort := 20010
+	legacy, err := storageMysql.NewFrpRepo(f.db, f.cfg.FRPKeys).CreateMapping(context.Background(), contract.FrpCreateMappingInput{
+		FrpActor: contract.FrpActor{UserID: f.aliceID}, DeviceID: seed.Devices[1], LocalPort: 8090, RemotePort: &legacyPort,
+		Domain: "legacy-native.example", Status: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	f.router = fixtureRouter(app.NewContainer(f.cfg, f.db, f.rdb).NewRouter())
 	var lost sync.Map
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -148,6 +156,7 @@ func TestMacOSClientFRPRead(t *testing.T) {
 				"CLOUDNEST_SWIFT_FRP_DEVICE="+strconv.FormatInt(seed.Devices[0], 10),
 				"CLOUDNEST_SWIFT_FRP_OTHER="+strconv.FormatInt(seed.Devices[2], 10),
 				"CLOUDNEST_SWIFT_FRP_MAPPING="+strconv.FormatInt(seed.Mapping.ID, 10),
+				"CLOUDNEST_SWIFT_FRP_LEGACY_MAPPING="+strconv.FormatInt(legacy.ID, 10),
 				"CLOUDNEST_SWIFT_FRP_CONFIG="+strconv.FormatInt(seed.Config.ID, 10), "CLOUDNEST_SWIFT_FRP_COMMAND="+seed.Command.ID)
 			output, err := test.CombinedOutput()
 			t.Log(string(output))

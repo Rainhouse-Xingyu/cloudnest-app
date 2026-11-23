@@ -193,6 +193,19 @@ final class SessionState {
         try await withSession { origin, token in try await api.frpMappings(origin, token: token, deviceID: deviceID) }
     }
 
+    func writeFRPMapping(original: FRPMapping?, deviceID: Int64, serverID: Int64, localPort: Int, remotePort: Int?, domain: String, enabled: Bool, expectedIdentity: TransferIdentity?) async throws -> FRPMapping {
+        try requireTransferIdentity(expectedIdentity)
+        return try await withSession { origin, token in
+            try await api.writeFRPMapping(origin, token: token, original: original, deviceID: deviceID,
+                serverID: serverID, localPort: localPort, remotePort: remotePort, domain: domain, enabled: enabled)
+        }
+    }
+
+    func deleteFRPMapping(id: Int64, expectedIdentity: TransferIdentity?) async throws {
+        try requireTransferIdentity(expectedIdentity)
+        try await withSession { origin, token in try await api.deleteFRPMapping(origin, token: token, id: id) }
+    }
+
     func frpStatus(deviceID: Int64) async throws -> FRPStatus {
         try await withSession { origin, token in try await api.frpStatus(origin, token: token, deviceID: deviceID) }
     }

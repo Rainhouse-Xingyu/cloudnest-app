@@ -49,11 +49,12 @@ type CreateMappingRequest struct {
 
 // UpdateMappingRequest 更新 FRP 映射请求。
 type UpdateMappingRequest struct {
-	ServerID   *int64  `json:"server_id"`
-	LocalPort  *int    `json:"local_port"`
-	RemotePort *int    `json:"remote_port"`
-	Domain     *string `json:"domain"`
-	Status     *int8   `json:"status"`
+	ServerID   *int64                       `json:"server_id"`
+	LocalPort  *int                         `json:"local_port"`
+	RemotePort *int                         `json:"remote_port"`
+	Domain     *string                      `json:"domain"`
+	Status     *int8                        `json:"status"`
+	Expected   *contract.FrpMappingSnapshot `json:"expected"`
 }
 
 // PreviewConfigRequest 预览 FRPC 配置请求。
@@ -326,6 +327,7 @@ func (h *FrpHandler) UpdateMapping(c *gin.Context) {
 		RemotePort: req.RemotePort,
 		Domain:     req.Domain,
 		Status:     req.Status,
+		Expected:   req.Expected,
 	})
 	if err != nil {
 		h.writeMappingError(c, err)
@@ -743,8 +745,10 @@ func (h *FrpHandler) writeMappingError(c *gin.Context, err error) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "mapping server policy unavailable"})
 	case errors.Is(err, contract.ErrFrpMappingBusy):
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "mapping operation busy; retry later"})
-	case errors.Is(err, contract.ErrFrpMappingConflict), errors.Is(err, contract.ErrConflict):
+	case errors.Is(err, contract.ErrFrpMappingConflict):
 		c.JSON(409, gin.H{"error": "mapping port or domain already exists"})
+	case errors.Is(err, contract.ErrConflict):
+		c.JSON(409, gin.H{"error": "mapping content or policy changed; refresh before editing"})
 	case errors.Is(err, contract.ErrFrpPortExhausted):
 		c.JSON(409, gin.H{"error": "remote port pool exhausted"})
 	case errors.Is(err, contract.ErrFrpDeviceDisabled):

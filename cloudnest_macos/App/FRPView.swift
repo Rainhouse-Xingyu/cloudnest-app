@@ -132,11 +132,16 @@ private struct FRPDetailView: View {
     @State private var buildingConfig = false
     @State private var rollbackBusy = false
     @State private var attemptedRollbacks: Set<Int64> = []
+    @State private var mappingEditor: MappingEditor?
+    @State private var mappingBusy = false
+    @State private var attemptedMappingRemovals: Set<Int64> = []
+    private struct MappingEditor: Identifiable { let id = UUID(); let original: FRPMapping? }
 
     private enum CommandConfirmation {
         case send(FRPCommandAction, Int64, TransferIdentity)
         case abandon(UUID)
         case rollback(Int64, TransferIdentity)
+        case removeMapping(FRPMapping, TransferIdentity)
     }
 
     init(device: FRPDevice, session: SessionState, commands: FRPCommandManager) {
@@ -196,6 +201,9 @@ private struct FRPDetailView: View {
         .sheet(isPresented: $buildingConfig, onDismiss: { Task { await state.load(.configs) } }) {
             FRPConfigBuilderView(device: state.device, session: session)
         }
+        .sheet(item: $mappingEditor, onDismiss: { Task { await state.load(.mappings) } }) { item in
+            FRPMappingEditor(session: session, device: state.device, original: item.original)
+        }
         .confirmationDialog("确认远程操作", isPresented: Binding(
             get: { confirmation != nil }, set: { if !$0 { confirmation = nil } }
         ), titleVisibility: .visible, presenting: confirmation) { item in
@@ -213,6 +221,8 @@ private struct FRPDetailView: View {
                 Button("停止本地重试") { Task { await perform { try await commands.abandon(id) } } }
             case .rollback(let configID, let identity):
                 Button("追加为新配置") { Task { await rollback(configID, identity: identity) } }
+            case .removeMapping(let item, let identity):
+                Button("移除映射资料", role: .destructive) { Task { await removeMapping(item, identity: identity) } }
             }
         } message: { item in
             switch item {
@@ -221,6 +231,8 @@ private struct FRPDetailView: View {
                 Text("服务器可能已接收此命令。停止本地重试不会撤销远程操作，记录会保留供核对。")
             case .rollback(let configID, _):
                 Text("将设备 \(state.device.name) 的历史配置 \(String(configID)) 复制为新记录，保留原服务器版本和历史，不自动部署。请核对旧端口策略和认证是否仍可用。")
+            case .removeMapping(let item, _):
+                Text("设备：\(state.device.name)，映射 \(String(item.id))，服务器作用域 \(String(item.serverID))。只移除映射资料，历史配置和运行占用保留；不会自动停止现有隧道或释放其端口。变更运行配置需另行生成并部署。")
             }
         }
     }
@@ -251,11 +263,21 @@ private struct FRPDetailView: View {
     }
 
     @ViewBuilder private func mappingView(_ items: [FRPMapping]) -> some View {
+        Button("添加映射…") { mappingEditor = MappingEditor(original: nil) }.disabled(mappingBusy)
+        Text("映射保存不改变当前运行隧道。编辑核对已读内容，作用域不能变更；配置需另行生成并部署。")
+            .font(.callout).foregroundStyle(.secondary)
         if items.isEmpty { Text("此设备没有映射。") }
         ForEach(items) { mapping in
             VStack(alignment: .leading, spacing: 5) {
                 Text("本地端口 \(String(mapping.localPort)) → \(mapping.domain.isEmpty ? String(mapping.remotePort) : mapping.domain)").font(.headline)
                 Text("服务器 \(String(mapping.serverID)) · \(mapping.status == 1 ? "映射已启用" : "映射已停用")").foregroundStyle(.secondary)
+                HStack {
+                    Button("编辑映射…") { mappingEditor = MappingEditor(original: mapping) }.disabled(mappingBusy)
+                    Button("移除映射…") {
+                        guard let identity = session.transferIdentity else { return }
+                        confirmation = .removeMapping(mapping, identity)
+                    }.disabled(mappingBusy || attemptedMappingRemovals.contains(mapping.id))
+                }
             }
             Divider()
         }
@@ -342,6 +364,21 @@ private struct FRPDetailView: View {
         }
         section = .configs
         await state.load(.configs)
+    }
+    private func removeMapping(_ item: FRPMapping, identity: TransferIdentity) async {
+        guard !mappingBusy, attemptedMappingRemovals.insert(item.id).inserted else { return }
+        mappingBusy = true
+        actionError = nil
+        defer { mappingBusy = false }
+        do {
+            try await session.deleteFRPMapping(id: item.id, expectedIdentity: identity)
+            try session.requireTransferIdentity(identity)
+            actionError = "映射资料已移除，历史配置和运行占用保留，当前隧道不自动切换。"
+        } catch {
+            actionError = "未取得移除成功回执，请刷新映射核对。\((error as? ServerError)?.localizedDescription ?? "连接未能完成。")"
+        }
+        section = .mappings
+        await state.load(.mappings)
     }
     private func perform(_ operation: () async throws -> Void) async {
         actionError = nil

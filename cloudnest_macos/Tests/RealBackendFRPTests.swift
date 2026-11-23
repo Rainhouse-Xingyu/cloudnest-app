@@ -11,6 +11,86 @@ private final class FRPTestVault: SessionVault {
 
 extension RealBackendTests {
     @Test(.enabled(if: ProcessInfo.processInfo.environment["CLOUDNEST_SWIFT_FRP_TEST"] == "1"))
+    @MainActor func realBackendFRPMappingLifecycleAndHistoryRetention() async throws {
+        let env = ProcessInfo.processInfo.environment
+        let origin = try ServerOrigin(#require(env["CLOUDNEST_SWIFT_ORIGIN"]))
+        let certificate = try #require(env["CLOUDNEST_SWIFT_CERTIFICATE"])
+        let delegate = try FixtureTLSDelegate(der: Data(contentsOf: URL(fileURLWithPath: certificate)))
+        let transport = URLSession(configuration: .ephemeral, delegate: delegate, delegateQueue: nil)
+        defer { transport.invalidateAndCancel() }
+        let session = SessionState(api: ServerAPI(session: transport, delegate: delegate), vault: FRPTestVault())
+        await session.restore()
+        await session.signIn(server: origin.url.absoluteString, username: try #require(env["CLOUDNEST_SWIFT_USERNAME"]),
+                             password: try #require(env["CLOUDNEST_SWIFT_PASSWORD"]))
+        let identity = try #require(session.transferIdentity)
+        let sourceText = try #require(env["CLOUDNEST_SWIFT_FRP_DEVICE"])
+        let sourceID = try #require(Int64(sourceText))
+        if env["CLOUDNEST_SWIFT_FRP_ROLE"] == "restricted" {
+            do {
+                _ = try await session.writeFRPMapping(original: nil, deviceID: sourceID, serverID: 1, localPort: 8123,
+                    remotePort: nil, domain: "", enabled: true, expectedIdentity: identity)
+                Issue.record("Restricted account created a mapping")
+            } catch { #expect(error as? ServerError == .forbidden) }
+            #expect(session.account != nil)
+        } else {
+            let devices = try await session.frpDevices()
+            let spare = try #require(devices.first { $0.id != sourceID })
+            let legacyText = try #require(env["CLOUDNEST_SWIFT_FRP_LEGACY_MAPPING"])
+            let legacyID = try #require(Int64(legacyText))
+            let oldMappings = try await session.frpMappings(deviceID: spare.id)
+            let legacy = try #require(oldMappings.first { $0.id == legacyID })
+            let legacyEdited = try await session.writeFRPMapping(original: legacy, deviceID: spare.id, serverID: 0,
+                localPort: 8091, remotePort: legacy.remotePort, domain: "http://Legacy-Revised.Example.", enabled: true, expectedIdentity: identity)
+            #expect(legacyEdited.serverID == 0 && legacyEdited.remotePort == legacy.remotePort)
+            #expect(legacyEdited.domain == "legacy-revised.example")
+            try await session.deleteFRPMapping(id: legacy.id, expectedIdentity: identity)
+            let configs = try await session.frpConfigs(deviceID: sourceID)
+            let source = try #require(configs.first)
+            let server = try await session.frpServer(id: source.serverID)
+            let created = try await session.writeFRPMapping(original: nil, deviceID: spare.id, serverID: server.id,
+                localPort: 8123, remotePort: nil, domain: "", enabled: false, expectedIdentity: identity)
+            #expect(created.remotePort >= server.tcpStart && created.remotePort <= server.tcpEnd)
+            #expect(created.status == 0)
+            let changed = try await session.writeFRPMapping(original: created, deviceID: spare.id, serverID: server.id,
+                localPort: 8124, remotePort: created.remotePort, domain: "", enabled: true, expectedIdentity: identity)
+            do {
+                _ = try await session.writeFRPMapping(original: changed, deviceID: sourceID, serverID: server.id,
+                    localPort: 8225, remotePort: changed.remotePort, domain: "", enabled: true, expectedIdentity: identity)
+                Issue.record("Mapping editor submitted under a different device selection")
+            } catch { #expect(error as? ServerError == .invalidOperation) }
+            let boundRows = try await session.frpMappings(deviceID: spare.id)
+            #expect(boundRows.first { $0.id == changed.id }?.localPort == changed.localPort)
+            do {
+                _ = try await session.writeFRPMapping(original: created, deviceID: spare.id, serverID: server.id,
+                    localPort: 8125, remotePort: created.remotePort, domain: "", enabled: true, expectedIdentity: identity)
+                Issue.record("Stale mapping edit overwrote newer fields")
+            } catch { #expect(error as? ServerError == .conflict) }
+            let secure = try await session.writeFRPMapping(original: changed, deviceID: spare.id, serverID: server.id,
+                localPort: 8124, remotePort: nil, domain: "HTTPS://Native-Maps.Example.", enabled: true, expectedIdentity: identity)
+            #expect(secure.remotePort == 0 && secure.domain == "https://native-maps.example")
+            let plain = try await session.writeFRPMapping(original: nil, deviceID: spare.id, serverID: server.id,
+                localPort: 8126, remotePort: nil, domain: "http://Native-Http.Example.", enabled: true, expectedIdentity: identity)
+            #expect(plain.remotePort == 0 && plain.domain == "native-http.example")
+            let latest = try await session.frpServer(id: server.id)
+            let saved = try await session.saveFRPConfig(FRPConfigSelection(device_id: spare.id, server_id: server.id,
+                server_revision_id: latest.revisionID), expectedIdentity: identity)
+            let tcp = try await session.writeFRPMapping(original: secure, deviceID: spare.id, serverID: server.id,
+                localPort: 8124, remotePort: nil, domain: "", enabled: true, expectedIdentity: identity)
+            #expect(tcp.remotePort >= server.tcpStart && tcp.remotePort <= server.tcpEnd)
+            #expect(tcp.domain.isEmpty)
+            try await session.deleteFRPMapping(id: plain.id, expectedIdentity: identity)
+            try await session.deleteFRPMapping(id: tcp.id, expectedIdentity: identity)
+            let after = try await session.frpMappings(deviceID: spare.id)
+            #expect(after.isEmpty)
+            let retained = try await session.frpConfigs(deviceID: spare.id)
+            #expect(retained.contains { $0.id == saved.id })
+            let commands = try await session.frpCommands(deviceID: spare.id)
+            #expect(commands.isEmpty)
+        }
+        await session.signOut()
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["CLOUDNEST_SWIFT_FRP_TEST"] == "1"))
     @MainActor func realBackendFRPDeviceLifecycle() async throws {
         let env = ProcessInfo.processInfo.environment
         let origin = try ServerOrigin(#require(env["CLOUDNEST_SWIFT_ORIGIN"]))

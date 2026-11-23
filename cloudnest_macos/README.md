@@ -1,6 +1,6 @@
 # CloudNest for macOS
 
-CloudNest 使用 SwiftUI 原生分栏、窗口、工具栏和设置场景，跟随系统外观。G07 提供登录、会话恢复和退出、账户信息及服务器状态，G08 接入文件和传输。G09 已接入 AI 检索、FRP 设备/服务器/配置和命令；映射、注册、协作等扩展继续实施。
+CloudNest 使用 SwiftUI 原生分栏、窗口、工具栏和设置场景，跟随系统外观。G07 提供登录、会话恢复和退出、账户信息及服务器状态，G08 接入文件和传输。G09 已接入 AI 检索、FRP 设备/服务器/配置和命令；映射编辑已接入，注册、协作等扩展继续实施。
 
 ## 构建与测试
 
@@ -24,10 +24,12 @@ xcodebuild -project cloudnest_macos/CloudNest.xcodeproj -scheme CloudNest \
 
 文件页提供版本历史、所选历史版本下载、确认后追加恢复，以及选择本地文件上传为新版本。上传捕获确认基线，冲突后需取消并重新确认，不覆盖未见的新版本。传输页分别显示已确认进度、最近五秒速度及校验/发布阶段，暂停或重新开始时重置速度。协议和验证边界见 [G08](../docs/remediation/G08-MACOS-FILES.md)、[版本上传](../docs/remediation/VERSION-UPLOADS.md)、[历史版本](../docs/remediation/MACOS-VERSIONS.md) 和 [速度](../docs/remediation/MACOS-TRANSFER-SPEED.md)。
 
-AI 页支持真实自然语言检索、原文片段、来源、索引状态与确认后重建；远程连接页支持设备/映射/配置历史/运行状态、五种命令确认和持久原请求重试。入队回执与 Agent 执行成功分别显示，应用重开不会自动重放远程操作。边界和验收见 [G09](../docs/remediation/G09-MACOS-EXTENSIONS.md) 与[命令恢复](../docs/remediation/MACOS-FRP-COMMANDS.md)。设备/映射编辑及注册、协作、分享和扩展设置继续实施。
+AI 页支持真实自然语言检索、原文片段、来源、索引状态与确认后重建；远程连接页支持设备/映射/配置历史/运行状态、五种命令确认和持久原请求重试。入队回执与 Agent 执行成功分别显示，应用重开不会自动重放远程操作。边界和验收见 [G09](../docs/remediation/G09-MACOS-EXTENSIONS.md) 与[命令恢复](../docs/remediation/MACOS-FRP-COMMANDS.md)。设备/映射编辑已接入；注册、协作、分享和扩展设置继续实施。
 
-服务器分段已接入[登记与编辑](../docs/remediation/MACOS-FRP-SERVERS.md)、每页 50 项、版本冲突核对和保留/替换/清除 token。服务资料保存、Agent 部署和正在运行的隧道分别处理；设备/映射编辑及注册等剩余界面继续实施。
+服务器分段已接入[登记与编辑](../docs/remediation/MACOS-FRP-SERVERS.md)、每页 50 项、版本冲突核对和保留/替换/清除 token。服务资料保存、Agent 部署和正在运行的隧道分别处理；设备/映射编辑已接入；注册等剩余界面继续实施。
 
 配置历史支持[脱敏预览、生成保存与历史复制](../docs/remediation/MACOS-FRP-CONFIGS.md)。保存/历史追加先确认，成功后仍须在历史中另行确认部署；实际 Agent 三隧道与停止已有独立 GUI 验证，配置追加故障恢复的剩余边界见协议。
 
 设备支持[添加、内容基线编辑、显式清空地址、退役及保留详情](../docs/remediation/MACOS-FRP-DEVICES.md)。退役保留历史/占用，不表示离线隧道已停止；新客户端遇到内容冲突需刷新重新核对，旧客户端调用保持兼容。
+
+映射支持[添加、内容基线编辑和确认移除](../docs/remediation/MACOS-FRP-MAPPINGS.md)，区分服务器作用域与旧全局记录的端口语义。映射资料变更不自动部署，运行采样显示配置 ID；实际三隧道、并发编辑冲突、移除资料后保留运行及分别停止已通过独立 GUI 验证。
