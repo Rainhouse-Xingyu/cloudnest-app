@@ -7,6 +7,7 @@ struct SharesView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var state: SharesState
     @State private var creating = false
+    @State private var receiving = false
     @State private var revoking: ShareLink?
     @State private var attempted: Set<Int64> = []
     @State private var writing = false
@@ -26,6 +27,7 @@ struct SharesView: View {
             Text(file.map { "\($0.filename) 的分享" } ?? "我创建的分享").font(.title2).lineLimit(3)
             HStack {
                 Button("刷新分享") { Task { await state.load() } }.disabled(state.busy || writing)
+                Button("打开分享链接…") { receiving = true }.disabled(writing)
                 if let file, file.workspaceID == nil {
                     Button("创建分享…") { creating = true }.disabled(state.busy || writing || !state.loaded || state.error != nil)
                 }
@@ -67,6 +69,7 @@ struct SharesView: View {
         .sheet(isPresented: $creating, onDismiss: { Task { await state.load() } }) {
             if let file { CreateShareView(session: session, file: file) }
         }
+        .sheet(isPresented: $receiving) { PublicShareView(client: session.publicShareClient) }
         .confirmationDialog("撤销分享链接", isPresented: Binding(get: { revoking != nil }, set: { if !$0 { revoking = nil } }), presenting: revoking) { share in
             Button("确认撤销", role: .destructive) { Task { await revoke(share) } }
         } message: { share in

@@ -1,5 +1,25 @@
 import Foundation
 
+struct DownloadIdentity: Sendable {
+    let length: Int64
+    let etag: String
+    let sha256: String
+
+    init(response: HTTPURLResponse) throws {
+        guard let etag = response.value(forHTTPHeaderField: "ETag"),
+              etag.hasPrefix("\"sha256-"), etag.hasSuffix("\""), etag.utf8.count == 73 else { throw TransferError.invalidDownload }
+        let hash = String(etag.dropFirst(8).dropLast())
+        guard hash.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }),
+              let digest = response.value(forHTTPHeaderField: "Repr-Digest"),
+              digest.hasPrefix("sha-256=:"), digest.hasSuffix(":"),
+              let raw = Data(base64Encoded: String(digest.dropFirst(9).dropLast())),
+              raw.count == 32, TransferDisk.hex(raw) == hash,
+              response.value(forHTTPHeaderField: "Content-Encoding").map({ $0 == "identity" }) ?? true,
+              let length = response.value(forHTTPHeaderField: "Content-Length").flatMap(Int64.init), length >= 0 else { throw TransferError.invalidDownload }
+        self.etag = etag; sha256 = hash; self.length = length
+    }
+}
+
 struct DownloadPlan: Sendable {
     let total: Int64
     let length: Int64
@@ -8,22 +28,10 @@ struct DownloadPlan: Sendable {
     let replaces: Bool
 
     init(response: HTTPURLResponse, record: TransferRecord, requestedStart: Int64, requestedEnd: Int64) throws {
-        guard let etag = response.value(forHTTPHeaderField: "ETag"),
-              etag.hasPrefix("\"sha256-"), etag.hasSuffix("\""), etag.utf8.count == 73 else {
-            throw TransferError.invalidDownload
-        }
-        let hash = String(etag.dropFirst(8).dropLast())
-        guard hash.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }),
-              let digest = response.value(forHTTPHeaderField: "Repr-Digest"),
-              digest.hasPrefix("sha-256=:"), digest.hasSuffix(":"),
-              let raw = Data(base64Encoded: String(digest.dropFirst(9).dropLast())),
-              raw.count == 32, TransferDisk.hex(raw) == hash,
-              response.value(forHTTPHeaderField: "Content-Encoding").map({ $0 == "identity" }) ?? true,
-              let length = response.value(forHTTPHeaderField: "Content-Length").flatMap(Int64.init), length >= 0 else {
-            throw TransferError.invalidDownload
-        }
+        let identity = try DownloadIdentity(response: response)
+        let etag = identity.etag, length = identity.length
         self.etag = etag
-        sha256 = hash
+        sha256 = identity.sha256
         self.length = length
         replaces = response.statusCode == 200
         if replaces {

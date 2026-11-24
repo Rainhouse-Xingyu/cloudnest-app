@@ -108,6 +108,17 @@ actor TransferDisk {
         try handle.synchronize()
     }
 
+    // An anonymous transfer has no account or durable capability record. It
+    // still uses the same private part, bounded writer and verified publisher.
+    func openTransientDownload(_ id: UUID, directory: URL) throws {
+        guard downloads[id] == nil else { throw TransferError.alreadyRunning }
+        let access = directory.startAccessingSecurityScopedResource()
+        defer { if access { directory.stopAccessingSecurityScopedResource() } }
+        let descriptor = open(partURL(id, directory: directory).path, O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600)
+        guard descriptor >= 0 else { throw TransferError.localStorage }
+        downloads[id] = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+    }
+
     func appendDownload(_ id: UUID, data: Data, offset: Int64) throws {
         guard let handle = downloads[id] else { throw TransferError.invalidCheckpoint }
         verified.remove(id)
@@ -121,9 +132,15 @@ actor TransferDisk {
     }
 
     func publishDownload(_ record: TransferRecord, directory: URL) async throws -> String {
-        guard let handle = downloads[record.id], let expected = record.sha256 else { throw TransferError.invalidCheckpoint }
-        guard try handle.seekToEnd() == UInt64(record.totalBytes) else { throw TransferError.integrity }
-        if !verified.contains(record.id) {
+        guard let expected = record.sha256, let name = record.resultName else { throw TransferError.invalidCheckpoint }
+        return try await publishVerifiedDownload(record.id, totalBytes: record.totalBytes, sha256: expected, name: name, directory: directory)
+    }
+
+    func publishVerifiedDownload(_ id: UUID, totalBytes: Int64, sha256 expected: String, name: String, directory: URL) async throws -> String {
+        guard totalBytes >= 0, let handle = downloads[id], !name.isEmpty, name != ".", name != "..",
+              URL(fileURLWithPath: name).lastPathComponent == name else { throw TransferError.invalidCheckpoint }
+        guard try handle.seekToEnd() == UInt64(totalBytes) else { throw TransferError.integrity }
+        if !verified.contains(id) {
             try handle.seek(toOffset: 0)
             var digest = SHA256()
             while true {
@@ -134,17 +151,24 @@ actor TransferDisk {
                 await Task.yield()
             }
             guard Self.hex(digest.finalize()) == expected else { throw TransferError.integrity }
-            verified.insert(record.id)
+            verified.insert(id)
         }
         try handle.synchronize()
-        let source = partURL(record.id, directory: directory)
-        guard let name = record.resultName else { throw TransferError.invalidCheckpoint }
+        let source = partURL(id, directory: directory)
         let target = directory.appending(path: name)
         var sourceInfo = stat()
+        var pathInfo = stat()
         var targetInfo = stat()
+        // Hashing the open handle does not authenticate a replacement at the
+        // part pathname. Refuse stale/replaced names before linking it.
+        guard fstat(handle.fileDescriptor, &sourceInfo) == 0,
+              lstat(source.path, &pathInfo) == 0,
+              pathInfo.st_mode & S_IFMT == S_IFREG,
+              sourceInfo.st_dev == pathInfo.st_dev, sourceInfo.st_ino == pathInfo.st_ino else {
+            throw TransferError.invalidCheckpoint
+        }
         if lstat(target.path, &targetInfo) == 0 {
-            guard fstat(handle.fileDescriptor, &sourceInfo) == 0,
-                  sourceInfo.st_dev == targetInfo.st_dev, sourceInfo.st_ino == targetInfo.st_ino else {
+            guard sourceInfo.st_dev == targetInfo.st_dev, sourceInfo.st_ino == targetInfo.st_ino else {
                 throw TransferError.destinationExists
             }
             return name

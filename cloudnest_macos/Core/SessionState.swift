@@ -19,6 +19,7 @@ final class SessionState {
     private let vault: any SessionVault
 
     var hasSavedSession: Bool { saved != nil }
+    var publicShareClient: PublicShareClient { PublicShareClient(api: api) }
 
     init(api: ServerAPI, vault: any SessionVault) {
         self.api = api

@@ -60,8 +60,26 @@ func TestMacOSNativeUIFixture(t *testing.T) {
 	}
 	slow := os.Getenv("CLOUDNEST_NATIVE_UI_SLOW_TRANSFERS") == "1"
 	captureEnrollment := os.Getenv("CLOUDNEST_NATIVE_UI_CAPTURE_ENROLLMENT") == "1"
+	tracePublic := os.Getenv("CLOUDNEST_NATIVE_UI_PUBLIC_SHARE_TRACE") == "1"
 	var traceMu sync.Mutex
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if tracePublic && strings.HasPrefix(r.URL.Path, "/api/public/shares/") {
+			// Observe only presence, never credentials, capability paths, query
+			// values or body bytes. Pass the actual streaming writer through.
+			event := map[string]any{"utc": time.Now().UTC(), "method": r.Method,
+				"download": strings.HasSuffix(r.URL.Path, "/download"), "authorization": r.Header.Get("Authorization") != "",
+				"cookie": r.Header.Get("Cookie") != "", "passcode": r.Header.Get("X-Share-Passcode") != ""}
+			traceMu.Lock()
+			file, err := os.OpenFile(filepath.Join(absolute, "public-share-requests.jsonl"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+			if err == nil {
+				err = json.NewEncoder(file).Encode(event)
+				_ = file.Close()
+			}
+			traceMu.Unlock()
+			if err != nil {
+				t.Error("private public-request observation failed")
+			}
+		}
 		// Opt-in private capability handoff to an actual Agent CLI. The real
 		// handler executes once; neither the token nor the password is logged.
 		if captureEnrollment && r.Method == "POST" && strings.HasPrefix(r.URL.Path, "/api/frp/devices/") && strings.HasSuffix(r.URL.Path, "/enrollment") {

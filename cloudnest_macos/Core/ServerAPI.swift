@@ -80,6 +80,19 @@ private final class NoRedirect: NSObject, URLSessionTaskDelegate {
     }
 }
 
+private final class AnonymousTLSPolicy: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    let policy: any URLSessionTaskDelegate
+    init(policy: any URLSessionTaskDelegate) { self.policy = policy }
+    func urlSession(_ session: URLSession, task: URLSessionTask, didReceive challenge: URLAuthenticationChallenge,
+                    completionHandler: @escaping @Sendable (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+        guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust else {
+            completionHandler(.cancelAuthenticationChallenge, nil); return
+        }
+        policy.urlSession?(session, task: task, didReceive: challenge, completionHandler: completionHandler)
+            ?? completionHandler(.performDefaultHandling, nil)
+    }
+}
+
 struct ServerAPI: Sendable {
     struct EmptyResponse: Decodable, Sendable {}
     private struct Credentials: Encodable { let username: String; let password: String }
@@ -195,6 +208,39 @@ struct ServerAPI: Sendable {
             stream.cancel()
             throw error
         }
+    }
+
+    func publicShareResponse(_ target: PublicShareTarget, passcode: String, download: Bool) async throws -> (DownloadStream, HTTPURLResponse) {
+        guard ShareContract.validPasscode(passcode) else { throw PublicShareError.invalidPasscode }
+        let configuration = transferSession.configuration.copy() as! URLSessionConfiguration
+        // Even a caller-provided test/custom transport cannot leak account
+        // headers, cookies or URL credentials into an anonymous share request.
+        configuration.httpAdditionalHeaders = nil
+        configuration.httpCookieStorage = nil
+        configuration.httpShouldSetCookies = false
+        configuration.urlCredentialStorage = nil
+        configuration.urlCache = nil
+        configuration.timeoutIntervalForRequest = download ? 90 : 15
+        configuration.timeoutIntervalForResource = download ? 24 * 60 * 60 : 30
+        var request = URLRequest(url: try ShareContract.url(origin: target.origin, code: target.code), cachePolicy: .reloadIgnoringLocalCacheData)
+        if download { request.url?.append(path: "download") }
+        request.httpShouldHandleCookies = false
+        request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
+        if !passcode.isEmpty { request.setValue(passcode, forHTTPHeaderField: "X-Share-Passcode") }
+        let stream = DownloadStream(configuration: configuration, policy: AnonymousTLSPolicy(policy: requestDelegate))
+        do {
+            let response = try await stream.start(request)
+            switch response.statusCode {
+            case 200: return (stream, response)
+            case 400, 422: throw PublicShareError.invalidLink
+            case 401, 404: throw PublicShareError.notFound
+            case 403: throw PublicShareError.passcodeRejected
+            case 410: throw PublicShareError.expiredOrExhausted
+            case 429: throw PublicShareError.rateLimited
+            case 500...599: throw PublicShareError.unavailable
+            default: throw PublicShareError.invalidResponse
+            }
+        } catch { stream.cancel(); throw error }
     }
 
     private func validateStatus(_ status: Int, login: Bool = false, successStatus: Int = 200) throws {

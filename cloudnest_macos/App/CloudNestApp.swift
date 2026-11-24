@@ -168,6 +168,7 @@ private struct SignInView: View {
     @State private var server = ""
     @State private var username = ""
     @State private var password = ""
+    @State private var showingShare = false
     @ScaledMetric(relativeTo: .body) private var formHeight: CGFloat = 168
 
     var body: some View {
@@ -189,6 +190,7 @@ private struct SignInView: View {
                     .foregroundStyle(.secondary)
             }
             HStack {
+                Button("打开分享链接…") { showingShare = true }.disabled(session.busy)
                 Spacer()
                 if session.busy { ProgressView().controlSize(.small) }
                 Button("登录", action: signIn)
@@ -200,6 +202,7 @@ private struct SignInView: View {
         .frame(maxWidth: 410)
         .padding(28)
         .onAppear { server = session.origin?.url.absoluteString ?? lastServer }
+        .sheet(isPresented: $showingShare) { PublicShareView(client: session.publicShareClient) }
     }
 
     private func signIn() {
