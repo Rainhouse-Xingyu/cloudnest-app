@@ -302,6 +302,25 @@ final class SessionState {
         try await withSession { origin, token in try await api.changeFileCollaborator(origin, token: token, fileID: file.id, original: original, permission: permission) }
     }
 
+    func shares() async throws -> [ShareLink] {
+        guard let ownerID = transferIdentity?.userID else { throw ServerError.unauthorized }
+        return try await withSession { origin, token in try await api.shares(origin, token: token, expectedOwnerID: ownerID) }
+    }
+
+    func createShare(file: FileItem, expireHours: Int, passcode: String, maxDownloads: Int64, expectedIdentity: TransferIdentity?) async throws -> CreatedShare {
+        try requireTransferIdentity(expectedIdentity)
+        guard file.workspaceID == nil else { throw ServerError.forbidden }
+        return try await withSession { origin, token in
+            try await api.createShare(origin, token: token, fileID: file.id, expireHours: expireHours, passcode: passcode, maxDownloads: maxDownloads)
+        }
+    }
+
+    func revokeShare(_ share: ShareLink, expectedIdentity: TransferIdentity?) async throws {
+        try requireTransferIdentity(expectedIdentity)
+        guard share.ownerID == expectedIdentity?.userID else { throw ServerError.forbidden }
+        try await withSession { origin, token in try await api.revokeShare(origin, token: token, code: share.code) }
+    }
+
     private func withSession<T: Sendable>(_ operation: (ServerOrigin, String) async throws -> T) async throws -> T {
         guard let saved, let origin, account != nil else { throw ServerError.unauthorized }
         do {

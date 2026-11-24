@@ -1,6 +1,6 @@
 # macOS 扩展功能
 
-G09 在 `codex/g09-macos-extensions` 上继续 G08，保持独立[草稿 PR #10](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/10)，不合并前置分支。当前已接入 AI 检索/索引、[FRP 管理](MACOS-FRP.md)、[设备管理与退役](MACOS-FRP-DEVICES.md)、[映射编辑](MACOS-FRP-MAPPINGS.md)、[Agent 注册/撤销](MACOS-FRP-ENROLLMENT.md)、[服务器版本编辑](MACOS-FRP-SERVERS.md)、[配置流程](MACOS-FRP-CONFIGS.md)、[持久命令回执恢复](MACOS-FRP-COMMANDS.md)和[协作空间](MACOS-WORKSPACES.md)。整个 G09、G10、G11 仍进行中/待做；单文件协作者、分享、设置及扩展 AI 继续实施。
+G09 在 `codex/g09-macos-extensions` 上继续 G08，保持独立[草稿 PR #10](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/10)，不合并前置分支。当前已接入 AI 检索/索引、[FRP 管理](MACOS-FRP.md)、[设备管理与退役](MACOS-FRP-DEVICES.md)、[映射编辑](MACOS-FRP-MAPPINGS.md)、[Agent 注册/撤销](MACOS-FRP-ENROLLMENT.md)、[服务器版本编辑](MACOS-FRP-SERVERS.md)、[配置流程](MACOS-FRP-CONFIGS.md)、[持久命令回执恢复](MACOS-FRP-COMMANDS.md)、[协作空间](MACOS-WORKSPACES.md)、[单文件协作者](MACOS-FILE-COLLABORATORS.md)及[分享管理](MACOS-SHARES.md)。整个 G09、G10、G11 仍进行中/待做；原生接收分享、设置及扩展 AI 继续实施。
 
 ## AI 检索与索引
 
@@ -56,3 +56,5 @@ CLOUDNEST_TEST_AI_MODEL=1 python3 scripts/test-macos-backend.py --filter '^TestM
 2026-11-22 协作空间批次：9bd004a 的双平台原生及完整后端 CI 全通过，日志确认注册/轮换/撤销用例实际执行。后续[空间与成员](MACOS-WORKSPACES.md)接入空间根浏览、角色受限文件操作、个人复制入空间、成员 create-only/可选角色基线以及真实上传下载/撤销。四项 Workspace race（4.695s）、最终完整原生联调（81.381s）、普通 Swift 73 注册/52 实际/21 跳过（Keychain，0.127s）、Universal Release/双架构/签名通过。原生创建/复制、成员冲突/保存/移除与文件专项分开记录；行高/顶部裁剪及续接过期报告保留，最后用系统工具栏修复文件布局。另修复普通回归发现的下载取消与正常完成竞争，保留取消错误断言并重复 32 轮。单文件协作者、分享/设置、扩展 AI 和 G10/G11 范围不变。
 
 2026-11-22 单文件协作者批次：[原生授权管理](MACOS-FILE-COLLABORATORS.md)已完成只新增、当前权限条件修改/撤销、历史重复行并集、所有者管理/可读者只查看、旧窗口冲突和撤销后清理。普通 Swift 77 注册/55 实际/22 跳过，完整原生联调 81.987s，文件授权两项 race 2.603s、Universal Release/签名及双账户 GUI 通过，夹具正常退出 244.038s。前一空间提交 58e2826 原生双平台 CI 通过；后端首次扫描 PDF 状态断言失败，本机 PDF/完整 AI 协议 race 复查通过，Linux 重试及原因继续核对，原始失败保留。分享/设置、扩展 AI 和 G10/G11 继续，不把后端整体标绿。
+
+2026-11-24 分享管理批次：[原生分享](MACOS-SHARES.md)已接入文件/侧栏列表、确认创建、有效期/可选提取码/次数、显式复制和确认撤销。文件名按当前读取权限返回，无 schema 变更；完整原生联调 89.420s、七项分享 race 10.757s、普通 Swift 81 注册/58 实际/23 跳过、Universal Release/双架构/签名通过。新 GUI 原生创建两种保护配置、计数刷新/耗尽、全账户列表和逐条撤销通过，另行匿名校验正文/额度及被捕获第二链接的 404，正常退出 229.545s。未完成的隔日首轮及工具链启动失败保留，不冒充通过。原生接收分享/匿名流式下载、设置、扩展 AI 继续；9948d10 原生 CI 全通过，后端缩略图测试同步已修正并三次真实 TCP race 通过，PDF 首轮失败仍待核对，G10/G11 不缩减。

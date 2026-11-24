@@ -435,16 +435,23 @@ func TestThumbnailCacheTCPDisconnectReleasesReaderForExpiry(t *testing.T) {
 	defer server.Close()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/api/files/%d/thumbnail?size=1024&rate_kbps=1", server.URL, file.ID), nil)
+	// One 16 KiB paced write arrives in about a second; the larger JPEG still
+	// keeps the body in flight while expiry and cancellation are exercised.
+	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/api/files/%d/thumbnail?size=1024&rate_kbps=16", server.URL, file.ID), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	req.Header.Set("Authorization", "Bearer "+f.alice)
 	done := make(chan error, 1)
+	responses := make(chan int, 1)
 	go func() {
 		resp, err := server.Client().Do(req)
 		if resp != nil {
-			io.Copy(io.Discard, resp.Body)
+			responses <- resp.StatusCode
+			_, readErr := io.Copy(io.Discard, resp.Body)
+			if err == nil {
+				err = readErr
+			}
 			resp.Body.Close()
 		}
 		done <- err
@@ -461,6 +468,19 @@ func TestThumbnailCacheTCPDisconnectReleasesReaderForExpiry(t *testing.T) {
 			t.Fatal("TCP cache never published", err)
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+	// Publication precedes acquiring the HTTP reader's kernel pin. Expiring
+	// immediately after seeing the cache row can delete it before the request
+	// opens it, producing a legitimate 409 instead of exercising disconnection.
+	select {
+	case status := <-responses:
+		if status != http.StatusOK {
+			t.Fatal("thumbnail request did not begin streaming", status)
+		}
+	case err := <-done:
+		t.Fatal("thumbnail request ended before streaming", err)
+	case <-time.After(8 * time.Second):
+		t.Fatal("thumbnail response did not begin before deadline")
 	}
 	transferExpire(t, f, row.Token)
 	r, err := transferManager(f).Reconcile(context.Background())

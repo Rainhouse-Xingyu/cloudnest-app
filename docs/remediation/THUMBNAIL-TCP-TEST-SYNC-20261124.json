@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "passed": true,
+  "scope": "Synchronize the existing real TCP thumbnail disconnect regression with the reader actually beginning its response. Production code is unchanged by this test correction.",
+  "original_ci": {
+    "sha": "9948d102e20d46cc587430c30935d1f91e2f602e",
+    "run": 45126528405,
+    "job": 137532112328,
+    "utc": "2026-11-23T06:54:20.3764683Z",
+    "test": "TestThumbnailCacheTCPDisconnectReleasesReaderForExpiry",
+    "error": "thumbnail_cache_test.go:468: HTTP reader has no kernel pin; response had returned 409, reconcile Busy=0."
+  },
+  "cause": "Source-level sequencing error: state=cached publication occurs before OpenThumbnail acquires its kernel read pin. Test could expire/delete the artifact between those events. CI 409 is consistent with that race; this does not establish causes of unrelated failures.",
+  "change": [
+    "Wait for an actual successful HTTP response before expiring the row.",
+    "Capture the body-read error so cancellation after headers is tested instead of relying on Client.Do to fail before headers.",
+    "Use 16 KiB/s so the first 16 KiB paced write reaches the client near one second; the larger JPEG stays in flight. Preserve 8-second response watchdog, Busy=1/pending assertion, actual cancellation, 3-second release/reconcile checks and zero remaining charge."
+  ],
+  "initial_local_attempt": {
+    "passed": false,
+    "log": "/tmp/cloudnest-g09-thumbnail-barrier-1.log",
+    "error": "thumbnail response did not begin before deadline",
+    "detail": "Waiting for a client response at the old 1 KiB/s rate conflicts with a 16 KiB paced chunk and 8-second watchdog. This failed attempt is retained; no deadline assertion was widened."
+  },
+  "final_race_repeats": [
+    {
+      "run": 1,
+      "passed": true,
+      "sha256": "5e5bbc3290e4507415b44bf49dd371b0ab1a7ad4c95ded6f97f16a17de578d8d",
+      "package_seconds": 5.427,
+      "test_seconds": 2.58
+    },
+    {
+      "run": 2,
+      "passed": true,
+      "sha256": "d9231b0e594147d171b4a9a32b08f2ff12d1bb3b97f3eba1e94a1f8102d18826",
+      "package_seconds": 4.214,
+      "test_seconds": 2.51
+    },
+    {
+      "run": 3,
+      "passed": true,
+      "sha256": "7f5eec850a32abbf0594b9cd0c16dc30dc1d6e10a90d7d941b3c1a9ad2991a93",
+      "package_seconds": 4.197,
+      "test_seconds": 2.5
+    }
+  ],
+  "limits": "Three local real TCP race runs are evidence for the corrected synchronization; new-head Linux CI is still required. The unrelated PDF CI regression remains open.",
+  "test_source_sha256": "ddbbc3422e6f6bdcb45ffbec6d23961c47b39ff39703ed682b8cd553708ad6c4"
+}

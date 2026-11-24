@@ -813,7 +813,7 @@ func (s *FileService) CreateShare(ctx context.Context, uid int64, fileID int64, 
 }
 
 // ListShares 查询当前用户的分享记录。
-func (s *FileService) ListShares(ctx context.Context, uid int64) ([]model.Share, error) {
+func (s *FileService) ListShares(ctx context.Context, uid int64) ([]contract.FileShareListRow, error) {
 	return s.fileRepo.ListShares(ctx, uid)
 }
 

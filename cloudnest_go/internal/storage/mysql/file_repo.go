@@ -1051,9 +1051,12 @@ func (r *FileRepo) CreateOperationLog(ctx context.Context, userID int64, fileID 
 	return r.db.WithContext(ctx).Create(&row).Error
 }
 
-func (r *FileRepo) ListShares(ctx context.Context, uid int64) ([]model.Share, error) {
-	var shares []model.Share
-	if err := r.db.WithContext(ctx).Where("user_id = ?", uid).Order("create_time DESC").Find(&shares).Error; err != nil {
+func (r *FileRepo) ListShares(ctx context.Context, uid int64) ([]contract.FileShareListRow, error) {
+	var shares []contract.FileShareListRow
+	readable := fileAccessScope(r.db.WithContext(ctx).Table("file f").Select("f.id, f.filename").Where("f.is_deleted=0"), "f", uid, false)
+	if err := r.db.WithContext(ctx).Table("share s").Select("s.*, f.filename AS file_name").
+		Joins("LEFT JOIN (?) AS f ON f.id=s.file_id", readable).
+		Where("s.user_id=?", uid).Order("s.create_time DESC, s.id DESC").Scan(&shares).Error; err != nil {
 		return nil, err
 	}
 	return shares, nil

@@ -12,6 +12,7 @@ struct FileBrowserView: View {
     @State private var destination: FileDestinationAction?
     @State private var versionFile: FileItem?
     @State private var collaboratorsFile: FileItem?
+    @State private var sharingFile: FileItem?
     @State private var previewRequest: UUID?
     @State private var previewURL: URL?
     @State private var presentedPreview: UUID?
@@ -133,6 +134,8 @@ struct FileBrowserView: View {
                     .disabled(!browser.root.canWrite)
                     Button("协作者", systemImage: "person.2") { collaboratorsFile = browser.selectedItems.first }
                         .disabled(browser.selectedItems.count != 1 || browser.selectedItems.first?.workspaceID != nil)
+                    Button("分享", systemImage: "link") { sharingFile = browser.selectedItems.first }
+                        .disabled(browser.selectedItems.count != 1 || browser.selectedItems.first?.workspaceID != nil)
                 } else {
                     Button("恢复", systemImage: "arrow.uturn.backward") {
                         Task { await browser.restoreSelected() }
@@ -170,6 +173,9 @@ struct FileBrowserView: View {
         }
         .sheet(item: $collaboratorsFile) { item in
             FileCollaboratorsView(session: session, file: item)
+        }
+        .sheet(item: $sharingFile) { item in
+            SharesView(session: session, file: item).frame(width: 580, height: 520)
         }
         .sheet(item: $naming) { action in
             FileNameSheet(action: action) { name in
@@ -239,7 +245,7 @@ struct FileBrowserView: View {
 
     private var fileActions: FileBrowserActions {
         var actions = FileBrowserActions()
-        guard !browser.busy, naming == nil, destination == nil, versionFile == nil, collaboratorsFile == nil, !confirmingTrash else { return actions }
+        guard !browser.busy, naming == nil, destination == nil, versionFile == nil, collaboratorsFile == nil, sharingFile == nil, !confirmingTrash else { return actions }
         actions.refresh = { Task { await browser.reload() } }
         actions.inspector = { showingInspector.toggle() }
         let selected = browser.selectedItems
@@ -368,6 +374,7 @@ struct FileBrowserView: View {
                     if !item.isDirectory { Button("快速查看") { preparePreview(item) } }
                     if !item.isDirectory { Button("版本历史…") { versionFile = item } }
                     if item.workspaceID == nil { Button("协作者…") { collaboratorsFile = item } }
+                    if item.workspaceID == nil { Button("分享…") { sharingFile = item } }
                     if browser.root.canWrite { Button("重新命名") { naming = .rename(item) } }
                 }
                 if browser.root.canWrite {

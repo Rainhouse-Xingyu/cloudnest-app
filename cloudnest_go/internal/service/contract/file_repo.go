@@ -6,6 +6,12 @@ import (
 	"cloudenest_go/model"
 )
 
+// FileShareListRow adds a name only while the sharer still has read access.
+type FileShareListRow struct {
+	model.Share `gorm:"embedded"`
+	FileName    *string `json:"file_name"`
+}
+
 // FileSearchQuery 定义文件检索参数。
 type FileSearchQuery struct {
 	ParentID  int64
@@ -88,7 +94,7 @@ type FileRepository interface {
 	CompleteUploadPersist(ctx context.Context, uid int64, parentID int64, uploadID string, task model.UploadTask, totalChunks int, storagePath, storageRoot string, mergedSize int64, fileHash, artifactToken string, clientIP string) (UploadCommit, error)
 	CreateShare(ctx context.Context, share model.Share, clientIP string) (model.Share, error)
 	CreateOperationLog(ctx context.Context, userID int64, fileID *int64, action string, status string, detail string, clientIP string) error
-	ListShares(ctx context.Context, uid int64) ([]model.Share, error)
+	ListShares(ctx context.Context, uid int64) ([]FileShareListRow, error)
 	RevokeShare(ctx context.Context, uid int64, code string, clientIP string) error
 	ListOperationLogs(ctx context.Context, uid int64, isAdmin bool, q FileOperationLogQuery) ([]model.OperationLog, int64, error)
 	ExportOperationLogs(ctx context.Context, uid int64, isAdmin bool, q FileOperationLogQuery) ([]model.OperationLog, error)

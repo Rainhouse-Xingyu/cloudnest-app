@@ -920,12 +920,12 @@ func (h *FileHandler) ListShares(c *gin.Context) {
 	}
 
 	type shareItem struct {
-		model.Share
+		contract.FileShareListRow
 		RequiresPasscode bool `json:"requires_passcode"`
 	}
 	items := make([]shareItem, 0, len(shares))
 	for _, share := range shares {
-		items = append(items, shareItem{Share: share, RequiresPasscode: share.PasscodeHash != ""})
+		items = append(items, shareItem{FileShareListRow: share, RequiresPasscode: share.PasscodeHash != ""})
 	}
 	c.Header("Cache-Control", privateDownloadCache)
 	c.JSON(http.StatusOK, gin.H{"items": items})
