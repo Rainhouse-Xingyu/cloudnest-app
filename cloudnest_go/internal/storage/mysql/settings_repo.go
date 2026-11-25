@@ -28,10 +28,29 @@ func (r *SettingsRepo) ListSystemSettings(ctx context.Context) ([]model.SystemSe
 	return rows, nil
 }
 
-func (r *SettingsRepo) UpsertSystemSettings(ctx context.Context, uid int64, items []contract.SettingUpsertItem, action, clientIP string) error {
+func (r *SettingsRepo) UpsertSystemSettings(ctx context.Context, uid int64, items []contract.SettingUpsertItem, action, clientIP string, expected ...map[string]*string) error {
+	if len(expected) > 1 {
+		return contract.ErrInvalidInput
+	}
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := quota.LockPolicy(tx, true); err != nil {
 			return err
+		}
+		if len(expected) == 1 && expected[0] != nil {
+			keys := make([]string, 0, len(expected[0]))
+			for key := range expected[0] {
+				keys = append(keys, key)
+			}
+			actual, err := settingValues(tx, keys)
+			if err != nil {
+				return err
+			}
+			for key, before := range expected[0] {
+				after := actual[key]
+				if (before == nil) != (after == nil) || before != nil && *before != *after {
+					return contract.ErrConflict
+				}
+			}
 		}
 		keys := make([]string, 0, len(items))
 		for _, item := range items {
@@ -45,6 +64,33 @@ func (r *SettingsRepo) UpsertSystemSettings(ctx context.Context, uid int64, item
 			Detail: "keys=" + strings.Join(keys, ","),
 		}).Error
 	})
+}
+
+// One SELECT provides a coherent snapshot, including explicit absent keys.
+func (r *SettingsRepo) GetSystemSettingValues(ctx context.Context, keys []string) (map[string]*string, error) {
+	return settingValues(r.db.WithContext(ctx), keys)
+}
+
+func settingValues(db *gorm.DB, keys []string) (map[string]*string, error) {
+	values := make(map[string]*string, len(keys))
+	for _, key := range keys {
+		values[key] = nil
+	}
+	if len(keys) == 0 {
+		return values, nil
+	}
+	var rows []model.SystemSetting
+	if err := db.Where("setting_key IN ?", keys).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		if _, exists := values[row.SettingKey]; !exists || values[row.SettingKey] != nil {
+			return nil, contract.ErrInvalidInput
+		}
+		value := row.SettingValue
+		values[row.SettingKey] = &value
+	}
+	return values, nil
 }
 
 func saveSystemSetting(tx *gorm.DB, item contract.SettingUpsertItem) error {

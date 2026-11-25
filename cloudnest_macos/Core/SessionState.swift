@@ -308,6 +308,27 @@ final class SessionState {
         return try await withSession { origin, token in try await api.shares(origin, token: token, expectedOwnerID: ownerID) }
     }
 
+    func systemSettings() async throws -> SystemSettingsSnapshot {
+        try await withSession { origin, token in try await api.systemSettings(origin, token: token) }
+    }
+
+    func rateWindow() async throws -> UserRateWindow {
+        guard let userID = transferIdentity?.userID else { throw ServerError.unauthorized }
+        return try await withSession { origin, token in try await api.rateWindow(origin, token: token, userID: userID) }
+    }
+
+    func saveSystemSetting(key: SystemSettingKey, value: String, original: String?, expectedIdentity: TransferIdentity?) async throws {
+        try requireTransferIdentity(expectedIdentity)
+        guard account?.isAdmin == true else { throw ServerError.forbidden }
+        try await withSession { origin, token in try await api.saveSystemSetting(origin, token: token, key: key, value: value, original: original) }
+    }
+
+    func saveRateWindow(original: UserRateWindow, enabled: Bool, start: String, end: String, expectedIdentity: TransferIdentity?) async throws {
+        try requireTransferIdentity(expectedIdentity)
+        guard let userID = expectedIdentity?.userID else { throw ServerError.unauthorized }
+        try await withSession { origin, token in try await api.saveRateWindow(origin, token: token, userID: userID, original: original, enabled: enabled, start: start, end: end) }
+    }
+
     func createShare(file: FileItem, expireHours: Int, passcode: String, maxDownloads: Int64, expectedIdentity: TransferIdentity?) async throws -> CreatedShare {
         try requireTransferIdentity(expectedIdentity)
         guard file.workspaceID == nil else { throw ServerError.forbidden }

@@ -53,10 +53,11 @@ type PermissionSummaryResult struct {
 
 // RateWindowResult 表示用户速率时间窗配置。
 type RateWindowResult struct {
-	Enabled bool   `json:"enabled"`
-	Start   string `json:"start"`
-	End     string `json:"end"`
-	Source  string `json:"source"`
+	Enabled  bool               `json:"enabled"`
+	Start    string             `json:"start"`
+	End      string             `json:"end"`
+	Source   string             `json:"source"`
+	Expected map[string]*string `json:"expected"`
 }
 
 var allowedSystemSettingKeys = map[string]struct{}{
@@ -96,7 +97,7 @@ func (s *SettingsService) GetSettings(ctx context.Context, isAdmin bool) ([]mode
 }
 
 // UpsertSettings 批量新增/更新系统设置。
-func (s *SettingsService) UpsertSettings(ctx context.Context, uid int64, items []SettingUpsertItem, clientIP string) error {
+func (s *SettingsService) UpsertSettings(ctx context.Context, uid int64, items []SettingUpsertItem, clientIP string, expected ...map[string]*string) error {
 	if len(items) == 0 || len(items) > len(allowedSystemSettingKeys) {
 		return gorm.ErrInvalidData
 	}
@@ -113,7 +114,15 @@ func (s *SettingsService) UpsertSettings(ctx context.Context, uid int64, items [
 		seen[normalized.SettingKey] = true
 		repoItems = append(repoItems, normalized)
 	}
-	return s.repo.UpsertSystemSettings(ctx, uid, repoItems, "settings_update", clientIP)
+	keys := make([]string, 0, len(repoItems))
+	for _, item := range repoItems {
+		keys = append(keys, item.SettingKey)
+	}
+	baseline, err := validateSettingExpectations(expected, keys)
+	if err != nil {
+		return err
+	}
+	return s.repo.UpsertSystemSettings(ctx, uid, repoItems, "settings_update", clientIP, baseline)
 }
 
 // GetPermissionSummary 聚合展示角色、空间角色与文件授权规则。
@@ -151,51 +160,54 @@ func (s *SettingsService) GetPermissionSummary(ctx context.Context, uid int64, a
 }
 
 // GetMyRateWindow 返回当前用户高峰时段配置（无用户配置时回落全局配置）。
+func rateWindowKeys(uid int64) []string {
+	suffix := "_user_" + strconv.FormatInt(uid, 10)
+	return []string{"peak_window_enabled", "peak_window_start", "peak_window_end", "peak_window_enabled" + suffix, "peak_window_start" + suffix, "peak_window_end" + suffix}
+}
+
+func validateSettingExpectations(inputs []map[string]*string, keys []string) (map[string]*string, error) {
+	if len(inputs) > 1 {
+		return nil, contract.ErrInvalidInput
+	}
+	if len(inputs) == 0 || inputs[0] == nil {
+		return nil, nil
+	}
+	expected := inputs[0]
+	if len(expected) != len(keys) {
+		return nil, contract.ErrInvalidInput
+	}
+	for _, key := range keys {
+		value, exists := expected[key]
+		if !exists || value != nil && len(*value) > 128 {
+			return nil, contract.ErrInvalidInput
+		}
+	}
+	return expected, nil
+}
+
 func (s *SettingsService) GetMyRateWindow(ctx context.Context, uid int64) (RateWindowResult, error) {
-	enabledKey := "peak_window_enabled_user_" + strconv.FormatInt(uid, 10)
-	startKey := "peak_window_start_user_" + strconv.FormatInt(uid, 10)
-	endKey := "peak_window_end_user_" + strconv.FormatInt(uid, 10)
-
-	enabled, err := s.readSettingValue(ctx, enabledKey)
+	keys := rateWindowKeys(uid)
+	values, err := s.repo.GetSystemSettingValues(ctx, keys)
 	if err != nil {
 		return RateWindowResult{}, err
 	}
-	start, err := s.readSettingValue(ctx, startKey)
-	if err != nil {
-		return RateWindowResult{}, err
+	value := func(key string) string {
+		if v := values[key]; v != nil {
+			return strings.TrimSpace(*v)
+		}
+		return ""
 	}
-	end, err := s.readSettingValue(ctx, endKey)
-	if err != nil {
-		return RateWindowResult{}, err
-	}
-
+	enabled, start, end := value(keys[3]), value(keys[4]), value(keys[5])
 	source := "user"
 	if enabled == "" && start == "" && end == "" {
-		enabled, err = s.readSettingValue(ctx, "peak_window_enabled")
-		if err != nil {
-			return RateWindowResult{}, err
-		}
-		start, err = s.readSettingValue(ctx, "peak_window_start")
-		if err != nil {
-			return RateWindowResult{}, err
-		}
-		end, err = s.readSettingValue(ctx, "peak_window_end")
-		if err != nil {
-			return RateWindowResult{}, err
-		}
+		enabled, start, end = value(keys[0]), value(keys[1]), value(keys[2])
 		source = "global"
 	}
-
-	return RateWindowResult{
-		Enabled: strings.TrimSpace(enabled) == "1",
-		Start:   strings.TrimSpace(start),
-		End:     strings.TrimSpace(end),
-		Source:  source,
-	}, nil
+	return RateWindowResult{Enabled: enabled == "1", Start: start, End: end, Source: source, Expected: values}, nil
 }
 
 // UpdateMyRateWindow 更新当前用户高峰时段配置。
-func (s *SettingsService) UpdateMyRateWindow(ctx context.Context, uid int64, enabled bool, start, end, clientIP string) error {
+func (s *SettingsService) UpdateMyRateWindow(ctx context.Context, uid int64, enabled bool, start, end, clientIP string, expected ...map[string]*string) error {
 	enabledKey := "peak_window_enabled_user_" + strconv.FormatInt(uid, 10)
 	startKey := "peak_window_start_user_" + strconv.FormatInt(uid, 10)
 	endKey := "peak_window_end_user_" + strconv.FormatInt(uid, 10)
@@ -207,7 +219,11 @@ func (s *SettingsService) UpdateMyRateWindow(ctx context.Context, uid int64, ena
 		}
 		items = append(items, contract.SettingUpsertItem{SettingKey: startKey, SettingValue: start, Description: "用户自定义高峰开始时刻 HH:MM"}, contract.SettingUpsertItem{SettingKey: endKey, SettingValue: end, Description: "用户自定义高峰结束时刻 HH:MM"})
 	}
-	return s.repo.UpsertSystemSettings(ctx, uid, items, "rate_window_update", clientIP)
+	baseline, err := validateSettingExpectations(expected, rateWindowKeys(uid))
+	if err != nil {
+		return err
+	}
+	return s.repo.UpsertSystemSettings(ctx, uid, items, "rate_window_update", clientIP, baseline)
 }
 
 func (s *SettingsService) readSettingValue(ctx context.Context, key string) (string, error) {

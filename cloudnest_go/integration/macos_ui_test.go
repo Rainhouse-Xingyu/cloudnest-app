@@ -48,6 +48,21 @@ func TestMacOSNativeUIFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	f := newFixture(t)
+	if os.Getenv("CLOUDNEST_NATIVE_UI_SETTINGS") == "1" {
+		admin := model.Role{RoleName: "admin"}
+		if err := f.db.Where("role_name=?", "admin").FirstOrCreate(&admin).Error; err != nil {
+			t.Fatal(err)
+		}
+		if err := f.db.Create(&model.UserRole{UserID: f.aliceID, RoleID: admin.ID}).Error; err != nil {
+			t.Fatal(err)
+		}
+		keys := []string{"share_default_expire_hours", "peak_window_enabled", "peak_window_start", "peak_window_end"}
+		preserveSettings(t, f, keys)
+		rateSetting(t, f, keys[0], "24")
+		rateSetting(t, f, keys[1], "0")
+		rateSetting(t, f, keys[2], "08:00")
+		rateSetting(t, f, keys[3], "20:00")
+	}
 	aiLive := os.Getenv("CLOUDNEST_NATIVE_UI_AI") == "1"
 	if aiLive {
 		f.cfg.AIOllamaBaseURL = "http://127.0.0.1:11434"
@@ -184,6 +199,13 @@ func TestMacOSNativeUIFixture(t *testing.T) {
 		"origin": server.URL, "certificate": certificate, "username": user.Username,
 		"password": "disposable-fixture-password", "directory": absolute, "seed_file_id": seed.ID, "upload_source": source,
 		"version_file_id": versioned.ID,
+	}
+	if os.Getenv("CLOUDNEST_NATIVE_UI_SETTINGS") == "1" {
+		var peer model.User
+		if err := f.db.First(&peer, f.bobID).Error; err != nil {
+			t.Fatal(err)
+		}
+		manifest["settings_peer_username"] = peer.Username
 	}
 	var runtimeCleanup func()
 	defer func() {
