@@ -312,6 +312,32 @@ final class SessionState {
         try await withSession { origin, token in try await api.systemSettings(origin, token: token) }
     }
 
+    func photos(query: PhotoQuery, page: Int) async throws -> PhotoPage {
+        try await withSession { origin, token in try await api.photos(origin,token:token,query:query,page:page) }
+    }
+
+    func livePhotos(page: Int) async throws -> LivePhotoPage {
+        try await withSession { origin, token in try await api.livePhotos(origin,token:token,page:page) }
+    }
+    func livePhoto(id: Int64) async throws -> LivePhotoPair {
+        try await withSession { origin, token in try await api.livePhoto(origin,token:token,id:id) }
+    }
+    func bindLivePhoto(imageID: Int64, videoID: Int64, expectedIdentity: TransferIdentity?) async throws -> LivePhotoPair {
+        try requireTransferIdentity(expectedIdentity)
+        return try await withSession { origin, token in try await api.bindLivePhoto(origin,token:token,imageID:imageID,videoID:videoID) }
+    }
+    func unbindLivePhoto(id: Int64, expectedIdentity: TransferIdentity?) async throws {
+        try requireTransferIdentity(expectedIdentity)
+        try await withSession { origin, token in try await api.unbindLivePhoto(origin,token:token,id:id) }
+    }
+    func motionCandidates(query: PhotoQuery, page: Int) async throws -> MotionCandidatePage {
+        try await withSession { origin, token in try await api.motionCandidates(origin,token:token,query:query,page:page) }
+    }
+
+    func photoThumbnail(fileID: Int64) async throws -> Data {
+        try await withSession { origin, token in try await api.photoThumbnail(origin,token:token,fileID:fileID) }
+    }
+
     func auditPage(query: AuditQuery, snapshotID: Int64 = 0, beforeID: Int64 = 0, afterID: Int64 = 0) async throws -> AuditPage {
         guard let userID = transferIdentity?.userID else { throw ServerError.unauthorized }
         guard !query.all || account?.isAdmin == true else { throw ServerError.forbidden }

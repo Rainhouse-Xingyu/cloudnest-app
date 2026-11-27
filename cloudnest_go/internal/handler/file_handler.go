@@ -96,6 +96,7 @@ type FileSearchQuery struct {
 	ParentID  int64  `form:"parent_id"`
 	Name      string `form:"name"`
 	FileType  string `form:"file_type"`
+	MediaKind string `form:"media_kind"`
 	StartTime string `form:"start_time"`
 	EndTime   string `form:"end_time"`
 	Page      int    `form:"page"`
@@ -739,6 +740,7 @@ func (h *FileHandler) SearchFiles(c *gin.Context) {
 	}
 	q.Name = strings.TrimSpace(q.Name)
 	q.FileType = strings.ToLower(strings.TrimSpace(q.FileType))
+	q.MediaKind = strings.ToLower(strings.TrimSpace(q.MediaKind))
 	q.StartTime = strings.TrimSpace(q.StartTime)
 	q.EndTime = strings.TrimSpace(q.EndTime)
 	if q.Page <= 0 {
@@ -747,11 +749,16 @@ func (h *FileHandler) SearchFiles(c *gin.Context) {
 	if q.Limit <= 0 || q.Limit > 200 {
 		q.Limit = 50
 	}
+	if q.MediaKind != "" && q.MediaKind != "image" && q.MediaKind != "live_photo_motion" || q.ParentID < 0 || q.Page > int(^uint(0)>>1)/q.Limit {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid file search scope or page"})
+		return
+	}
 
 	res, err := h.Svc.SearchFiles(c.Request.Context(), uid, service.FileSearchQuery{
 		ParentID:  q.ParentID,
 		Name:      q.Name,
 		FileType:  q.FileType,
+		MediaKind: q.MediaKind,
 		StartTime: q.StartTime,
 		EndTime:   q.EndTime,
 		Page:      q.Page,
@@ -771,8 +778,10 @@ func (h *FileHandler) SearchFiles(c *gin.Context) {
 		return
 	}
 
+	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, gin.H{
-		"items": res.Items,
+		"items":      res.Items,
+		"media_kind": q.MediaKind,
 		"pagination": gin.H{
 			"page":  q.Page,
 			"limit": q.Limit,

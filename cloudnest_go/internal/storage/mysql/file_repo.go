@@ -34,6 +34,7 @@ func NewFileRepo(db *gorm.DB) *FileRepo {
 func (r *FileRepo) SearchFiles(ctx context.Context, uid int64, q contract.FileSearchQuery) ([]model.File, int64, error) {
 	q.Name = strings.TrimSpace(q.Name)
 	q.FileType = strings.ToLower(strings.TrimSpace(q.FileType))
+	q.MediaKind = strings.ToLower(strings.TrimSpace(q.MediaKind))
 	q.StartTime = strings.TrimSpace(q.StartTime)
 	q.EndTime = strings.TrimSpace(q.EndTime)
 	if q.Page <= 0 {
@@ -41,6 +42,9 @@ func (r *FileRepo) SearchFiles(ctx context.Context, uid int64, q contract.FileSe
 	}
 	if q.Limit <= 0 || q.Limit > 200 {
 		q.Limit = 50
+	}
+	if q.MediaKind != "" && q.MediaKind != "image" && q.MediaKind != "live_photo_motion" || q.ParentID < 0 || q.Page > int(^uint(0)>>1)/q.Limit {
+		return nil, 0, contract.ErrInvalidInput
 	}
 
 	dbq := r.db.WithContext(ctx).
@@ -57,6 +61,15 @@ func (r *FileRepo) SearchFiles(ctx context.Context, uid int64, q contract.FileSe
 	}
 	if q.FileType != "" {
 		dbq = dbq.Where("LOWER(f.file_type) = ?", q.FileType)
+	}
+	if q.MediaKind != "" {
+		// Classification is metadata, not proof that bytes can be decoded.
+		// Legacy blank file_type rows still appear using their filename suffix.
+		types := []string{"jpg", "jpeg", "png", "gif", "webp", "heic", "heif", "tif", "tiff", "bmp", "avif"}
+		if q.MediaKind == "live_photo_motion" {
+			types = []string{"mov"}
+		}
+		dbq = dbq.Where("f.is_folder = 0").Where("LOWER(f.file_type) IN ? OR (COALESCE(f.file_type,'') = '' AND LOWER(SUBSTRING_INDEX(f.filename,'.',-1)) IN ?)", types, types)
 	}
 	if q.StartTime != "" {
 		startAt, err := parseFlexibleTimeForFileRepo(q.StartTime)
@@ -80,7 +93,7 @@ func (r *FileRepo) SearchFiles(ctx context.Context, uid int64, q contract.FileSe
 
 	offset := (q.Page - 1) * q.Limit
 	var rows []model.File
-	if err := dbq.Order("f.is_folder DESC, f.filename ASC").Limit(q.Limit).Offset(offset).Find(&rows).Error; err != nil {
+	if err := dbq.Order("f.is_folder DESC, f.filename ASC, f.id ASC").Limit(q.Limit).Offset(offset).Find(&rows).Error; err != nil {
 		return nil, 0, err
 	}
 

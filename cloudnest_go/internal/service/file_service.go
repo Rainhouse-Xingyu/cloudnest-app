@@ -80,6 +80,7 @@ type FileSearchQuery struct {
 	ParentID  int64
 	Name      string
 	FileType  string
+	MediaKind string
 	StartTime string
 	EndTime   string
 	Page      int
@@ -898,6 +899,7 @@ func (s *FileService) SearchFiles(ctx context.Context, uid int64, q FileSearchQu
 		ParentID:  q.ParentID,
 		Name:      q.Name,
 		FileType:  q.FileType,
+		MediaKind: q.MediaKind,
 		StartTime: q.StartTime,
 		EndTime:   q.EndTime,
 		Page:      q.Page,

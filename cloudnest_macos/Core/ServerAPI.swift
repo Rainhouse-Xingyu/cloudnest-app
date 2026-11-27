@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 struct ServerOrigin: Equatable, Sendable {
     let url: URL
@@ -186,6 +187,30 @@ struct ServerAPI: Sendable {
             throw ServerError.invalidResponse
         }
     }
+    func photoThumbnail(_ origin: ServerOrigin, token: String, fileID: Int64) async throws -> Data {
+        guard fileID > 0 else { throw ServerError.invalidOperation }
+        let url = origin.endpoint("api/files/\(fileID)/thumbnail").appending(queryItems:[URLQueryItem(name:"size",value:"256")])
+        var request = URLRequest(url:url,cachePolicy:.reloadIgnoringLocalCacheData)
+        request.setValue("Bearer \(token)",forHTTPHeaderField:"Authorization")
+        request.setValue("image/jpeg",forHTTPHeaderField:"Accept")
+        request.setValue("identity",forHTTPHeaderField:"Accept-Encoding")
+        let (bytes,response) = try await session.bytes(for:request,delegate:requestDelegate)
+        defer { bytes.task.cancel() }
+        guard let response = response as? HTTPURLResponse else { throw ServerError.invalidResponse }
+        try validateStatus(response.statusCode,login:false,successStatus:200)
+        let identity = try DownloadIdentity(response:response)
+        guard identity.length > 0, identity.length <= 512*1024,
+              response.value(forHTTPHeaderField:"Content-Type")?.lowercased() == "image/jpeg" else { throw ServerError.invalidResponse }
+        var data = Data()
+        for try await byte in bytes {
+            try Task.checkCancellation()
+            guard data.count < identity.length else { throw ServerError.invalidResponse }
+            data.append(byte)
+        }
+        guard data.count == identity.length, TransferDisk.hex(SHA256.hash(data:data)) == identity.sha256 else { throw TransferError.integrity }
+        return data
+    }
+
     func downloadResponse(_ origin: ServerOrigin, token: String, fileID: Int64, archive: Bool,
                           version: Int? = nil, start: Int64?, end: Int64?, etag: String?) async throws -> (DownloadStream, HTTPURLResponse) {
         guard fileID > 0, version.map({ $0 > 0 && !archive }) ?? true else { throw ServerError.invalidOperation }

@@ -17,6 +17,7 @@ type FileSearchQuery struct {
 	ParentID  int64
 	Name      string
 	FileType  string
+	MediaKind string
 	StartTime string
 	EndTime   string
 	Page      int

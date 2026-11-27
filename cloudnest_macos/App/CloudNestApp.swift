@@ -48,6 +48,7 @@ struct CloudNestApp: App {
 
 private enum Page: String, CaseIterable, Identifiable {
     case files = "我的文件"
+    case photos = "照片"
     case recycleBin = "回收站"
     case transfers = "传输"
     case ai = "AI 检索"
@@ -62,6 +63,7 @@ private enum Page: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .files: "folder"
+        case .photos: "photo.on.rectangle"
         case .recycleBin: "trash"
         case .transfers: "arrow.up.arrow.down"
         case .ai: "sparkle.magnifyingglass"
@@ -101,6 +103,8 @@ struct WorkspaceWindow: View {
                     case .files:
                         FileBrowserView(session: session, transfers: transfers, recycleBin: false)
                             .id(session.account?.id)
+                    case .photos:
+                        PhotosView(session:session,transfers:transfers).id(session.transferIdentity)
                     case .recycleBin:
                         FileBrowserView(session: session, transfers: transfers, recycleBin: true)
                             .id(session.account?.id)

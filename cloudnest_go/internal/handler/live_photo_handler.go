@@ -172,6 +172,10 @@ func (h *LivePhotoHandler) List(c *gin.Context) {
 	if q.Limit > 100 {
 		q.Limit = 100
 	}
+	if q.Page > int(^uint(0)>>1)/q.Limit {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid live photo page"})
+		return
+	}
 	res, err := h.Svc.List(c.Request.Context(), uid, service.LivePhotoListInput{ParentID: q.ParentID, Page: q.Page, Limit: q.Limit})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
@@ -190,6 +194,7 @@ func (h *LivePhotoHandler) List(c *gin.Context) {
 		})
 	}
 
+	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, gin.H{
 		"items": items,
 		"pagination": gin.H{
@@ -287,13 +292,14 @@ func (h *LivePhotoHandler) AutoBind(c *gin.Context) {
 // toSimpleFileView 返回文件基础信息，便于前端展示。
 func toSimpleFileView(f model.File) gin.H {
 	return gin.H{
-		"id":          f.ID,
-		"filename":    f.Filename,
-		"parent_id":   f.ParentID,
-		"file_type":   f.FileType,
-		"size":        f.Size,
-		"user_id":     f.UserID,
-		"create_time": f.CreateTime,
-		"update_time": f.UpdateTime,
+		"id":              f.ID,
+		"filename":        f.Filename,
+		"parent_id":       f.ParentID,
+		"file_type":       f.FileType,
+		"current_version": f.CurrentVersion,
+		"size":            f.Size,
+		"user_id":         f.UserID,
+		"create_time":     f.CreateTime,
+		"update_time":     f.UpdateTime,
 	}
 }

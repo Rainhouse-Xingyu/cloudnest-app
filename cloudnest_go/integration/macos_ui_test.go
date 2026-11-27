@@ -247,6 +247,17 @@ func TestMacOSNativeUIFixture(t *testing.T) {
 		manifest["audit_owner_id"], manifest["audit_peer_id"] = f.aliceID, f.bobID
 		manifest["audit_first_owner_id"] = auditSeed.OwnerIDs[len(auditSeed.OwnerIDs)-1]
 	}
+	if os.Getenv("CLOUDNEST_NATIVE_UI_PHOTOS") == "1" {
+		media := seedNativeMedia(t, f)
+		var peer model.User
+		if err := f.db.First(&peer, f.bobID).Error; err != nil {
+			t.Fatal(err)
+		}
+		manifest["photo_image_id"], manifest["photo_video_id"], manifest["photo_static_id"], manifest["photo_private_id"] = media.Image.ID, media.Video.ID, media.Static.ID, media.Private.ID
+		manifest["photo_image_sha256"], manifest["photo_video_sha256"], manifest["photo_static_sha256"] = media.ImageHash, media.VideoHash, media.StaticHash
+		manifest["photo_peer_username"], manifest["photo_peer_id"] = peer.Username, peer.ID
+		manifest["photo_generator"] = media.Generator
+	}
 	if os.Getenv("CLOUDNEST_NATIVE_UI_SETTINGS") == "1" {
 		var peer model.User
 		if err := f.db.First(&peer, f.bobID).Error; err != nil {

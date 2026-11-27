@@ -186,14 +186,14 @@ final class TransferManager {
         return job.id
     }
 
-    func enqueuePreview(_ file: FileItem, expectedIdentity: TransferIdentity? = nil) async throws -> UUID {
+    func enqueuePreview(_ file: some DownloadableFile, version: Int? = nil, expectedIdentity: TransferIdentity? = nil) async throws -> UUID {
         try beginAdmission()
         defer { finishAdmission() }
         let context = try session.transferContext()
         try requireIdentity(context.identity, expected: expectedIdentity)
         try await ensureStore()
         try requireIdentity(context.identity, expected: expectedIdentity)
-        guard file.id > 0, !file.isDirectory, !file.filename.isEmpty, file.filename != ".", file.filename != "..",
+        guard file.id > 0, version.map({ $0 > 0 }) ?? true, !file.isDirectory, !file.filename.isEmpty, file.filename != ".", file.filename != "..",
               URL(fileURLWithPath: file.filename).lastPathComponent == file.filename else { throw ServerError.invalidResponse }
         for id in Array(abandonedPreviews) { await dismissPreview(id) }
         error = nil
@@ -201,11 +201,13 @@ final class TransferManager {
         let folder = try await previews.reserve(id, bytes: file.size)
         do {
             let bookmark = try await disk.bookmark(folder)
-            var job = TransferRecord(id: id, createdAt: Date(), identity: context.identity, direction: .download,
+            var job = TransferRecord(id: id, createdAt: Date(), identity: context.identity, direction: version == nil ? .download : .versionDownload,
                                      name: file.filename, bookmark: bookmark, parentID: 0, fileID: file.id,
                                      isArchive: false, totalBytes: file.size)
             try requireIdentity(context.identity, expected: expectedIdentity)
             job.previewID = id
+            job.fileVersion = version
+            job.versionSize = version == nil ? nil : file.size
             try await persist(job)
             await schedule()
             return id

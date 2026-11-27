@@ -115,3 +115,7 @@ G03 ZIP 保持普通/批量内嵌/公开分享结构和下载路由，但损坏�
 ## 2026-11-27 审计游标与 CSV
 
 `GET /api/operation-logs` 未指定 cursor_mode 时保留 page/limit/pagination 及普通 all=1 仅本人行为；新增 cursor_mode=1 返回 scope/user_id/pagination{limit,total}/cursor{snapshot_id,next_before_id,next_after_id}，普通 all=1 明确 403。before_id/after_id 互斥且须带 snapshot_id；上界仅固定新插入范围，历史保留可删除旧行。CSV 仍为原八列、保留时间格式并明确 UTC，最多 5000 行/16 MiB，添加范围/行数/截断/UTC 回执与已有下载摘要；公式样式文本加单引号，不修改数据库历史值。新原生协议用独立路径严格校验，旧客户端无需增加游标参数，真实新旧协议兼容与权限用例通过，见 [审计协议](MACOS-AUDIT.md)。
+
+## 2026-11-27 照片分类与配对版本
+
+`GET /api/files/search` 新可选 media_kind=image/live_photo_motion，并回显 media_kind；未指定保持旧检索，既有 file_type 与新分类取交集。照片/动态候选只含活动非目录且当前可读文件，旧空 file_type 按后缀分类，不迁移表。排序补同名ID次序，非法分类/负目录/溢出页400。Live Photo的原资源字段保留，补 current_version 供固定版本预览，并限制分页乘法溢出。旧客户端可忽略新增字段；新照片界面要求新分类回显/资源版本，不把旧服务器忽略参数当作支持。无新schema，真实旧检索/空类型/权限/绑定/迁移回归通过，见 [照片协议](MACOS-PHOTOS.md)。
