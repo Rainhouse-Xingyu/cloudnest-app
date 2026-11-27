@@ -38,7 +38,7 @@ func TestMacOSClientSession(t *testing.T) {
 		value, _ := telemetryGates.LoadOrStore(key, &nativeTelemetryGate{done: make(chan struct{})})
 		return value.(*nativeTelemetryGate)
 	}
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newNativeTLSServer(f, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-CloudNest-Test-Stream") == "native-single-stream" {
 			if strings.HasSuffix(r.URL.Path, "/download") {
 				streamingDownloads.Add(1)
@@ -169,7 +169,7 @@ func TestMacOSClientSession(t *testing.T) {
 		f.router.ServeHTTP(w, r)
 	}))
 	defer server.Close()
-	redirectServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	redirectServer := newNativeTLSServer(f, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/auth/login" {
 			t.Error("Swift followed the credential-bearing redirect")
 			w.WriteHeader(http.StatusTeapot)

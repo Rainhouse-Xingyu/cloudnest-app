@@ -4,7 +4,6 @@ package integration
 
 import (
 	"fmt"
-	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -31,7 +30,7 @@ func TestMacOSClientFileCollaboration(t *testing.T) {
 		t.Fatal(err)
 	}
 	file := f.upload(t, f.alice, "Native collaboration source.txt", []byte("Native file collaboration download.\n"))
-	server := httptest.NewTLSServer(f.router)
+	server := newNativeTLSServer(f, f.router)
 	defer server.Close()
 	certificate := filepath.Join(t.TempDir(), "server.der")
 	if err := os.WriteFile(certificate, server.Certificate().Raw, 0600); err != nil {

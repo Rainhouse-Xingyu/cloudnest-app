@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -99,7 +98,7 @@ func TestMacOSPublicShareReceiver(t *testing.T) {
 		t.Fatal(err)
 	}
 	var redirects atomic.Int32
-	other := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { redirects.Add(1); w.WriteHeader(200) }))
+	other := newNativeTLSServer(f, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { redirects.Add(1); w.WriteHeader(200) }))
 	defer other.Close()
 	type partialResponse struct {
 		status           int
@@ -110,7 +109,7 @@ func TestMacOSPublicShareReceiver(t *testing.T) {
 	cancelled := make(chan partialResponse, 1)
 	var downloads atomic.Int32
 	var slowRequests atomic.Int32
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newNativeTLSServer(f, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/public/shares/") {
 			if r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" || r.Header.Get("Proxy-Authorization") != "" || r.Header.Get("Range") != "" || r.URL.RawQuery != "" {
 				t.Error("anonymous native request leaked account state or introduced a range/query")

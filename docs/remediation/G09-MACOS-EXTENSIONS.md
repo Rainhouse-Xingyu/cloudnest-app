@@ -62,3 +62,5 @@ CLOUDNEST_TEST_AI_MODEL=1 python3 scripts/test-macos-backend.py --filter '^TestM
 2026-11-24 接收端批次：[匿名分享接收](MACOS-PUBLIC-SHARES.md)已完成来源/保存确认、隔离请求、完整摘要校验与取消，未登录 GUI 实际复制粘贴/保存及 SHA 校验通过，输入关闭清空，浅深色已观察。普通 Swift 90 注册/66 实际/24 跳过，完整真实服务 race 136.057s、双架构 Release/签名通过。早期观察/ZIP 断言和发布路径替换失败均保留，未修改原 DownloadStream 取消行为。ea4c42d 双平台原生/完整后端 CI 全通过，PDF 首轮根因仍未确认。设置、扩展 AI/照片/Live Photo、G10/G11 继续。
 
 2026-11-25（UTC）设置批次：[原生设置](MACOS-SETTINGS.md)完成系统公开键/管理员条件保存和个人时段；scope 能力确认、严格键集合/缺失 null、原策略锁事务内比较，兼容旧协议且不迁移表。普通 Swift 97 注册/72 实际/25 跳过，设置专项 race 23.959s、完整原生联调 140.016s、双架构 Release/签名、Go 检查/单元 race/四目标服务与 Agent 构建通过。双账户 GUI 的系统/个人旧窗口冲突、刷新确认、跨午夜/关闭和只读边界均与 API 一致，应用和服务正常退出 244.358s。测试夹具体读取/注销失败单独保留；分享接收 eb5019e 全部 CI 已通过。审计界面、扩展 AI/照片/Live Photo、G10/G11 继续。
+
+2026-11-27（UTC）：设置提交 95b8554 的完整后端及 Xcode 27 CI 成功，macOS 26 最后受限 Workspace 登录失败 429，原因是独立原生套件共享同一物理回环 peer 的短时预算。仅测试服务器采用已有夹具 peer 身份，不修改生产保护，原并发/不可伪造/故障/恢复断言保留；新增真实 TLS 同夹具 30 次后 429、另一夹具独立，完整原生 race 143.183s 通过。细节及原始失败见 [隔离说明](NATIVE-FIXTURE-PEER-BUDGET.md)。后续精确 CI 另核对，整体 Goal 不变。

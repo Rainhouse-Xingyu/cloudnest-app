@@ -80,7 +80,7 @@ func TestMacOSClientFRPRead(t *testing.T) {
 	}
 	f.router = fixtureRouter(app.NewContainer(f.cfg, f.db, f.rdb).NewRouter())
 	var lost sync.Map
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newNativeTLSServer(f, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "POST" && strings.HasSuffix(r.URL.Path, "/commands") && r.Header.Get("X-CloudNest-Test-FRP-Lost") == "native-command-receipt" {
 			raw, err := io.ReadAll(io.LimitReader(r.Body, (16<<10)+1))
 			if err != nil || len(raw) > 16<<10 {

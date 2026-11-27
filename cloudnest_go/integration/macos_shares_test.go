@@ -3,7 +3,6 @@
 package integration
 
 import (
-	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,7 +25,7 @@ func TestMacOSClientShares(t *testing.T) {
 		t.Fatal(err)
 	}
 	file := f.upload(t, f.alice, "Native share source.txt", []byte("Native limited public share download.\n"))
-	server := httptest.NewTLSServer(f.router)
+	server := newNativeTLSServer(f, f.router)
 	defer server.Close()
 	certificate := filepath.Join(t.TempDir(), "server.der")
 	if err := os.WriteFile(certificate, server.Certificate().Raw, 0600); err != nil {
