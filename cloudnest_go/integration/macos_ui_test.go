@@ -48,6 +48,19 @@ func TestMacOSNativeUIFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	f := newFixture(t)
+	var auditSeed *nativeAuditSeed
+	var advanceAudit sync.Once
+	if os.Getenv("CLOUDNEST_NATIVE_UI_AUDIT") == "1" {
+		admin := model.Role{RoleName: "admin"}
+		if err := f.db.Where("role_name=?", "admin").FirstOrCreate(&admin).Error; err != nil {
+			t.Fatal(err)
+		}
+		if err := f.db.Create(&model.UserRole{UserID: f.aliceID, RoleID: admin.ID}).Error; err != nil {
+			t.Fatal(err)
+		}
+		seed := seedNativeAudit(t, f, false)
+		auditSeed = &seed
+	}
 	if os.Getenv("CLOUDNEST_NATIVE_UI_SETTINGS") == "1" {
 		admin := model.Role{RoleName: "admin"}
 		if err := f.db.Where("role_name=?", "admin").FirstOrCreate(&admin).Error; err != nil {
@@ -78,6 +91,30 @@ func TestMacOSNativeUIFixture(t *testing.T) {
 	tracePublic := os.Getenv("CLOUDNEST_NATIVE_UI_PUBLIC_SHARE_TRACE") == "1"
 	var traceMu sync.Mutex
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if auditSeed != nil && r.URL.Path == "/api/operation-logs" && r.URL.Query().Get("cursor_mode") == "1" && r.URL.Query().Get("action") == auditSeed.Action && r.URL.Query().Get("all") == "0" && r.URL.Query().Get("snapshot_id") == "" {
+			handled := false
+			advanceAudit.Do(func() {
+				handled = true
+				recorder := httptest.NewRecorder()
+				f.router.ServeHTTP(recorder, r)
+				var page auditCursorResponse
+				if err := json.Unmarshal(recorder.Body.Bytes(), &page); err != nil || recorder.Code != 200 || page.Pagination.Total != 55 {
+					t.Error("initial native GUI audit range not captured")
+				}
+				row := model.OperationLog{UserID: &f.aliceID, Action: auditSeed.Action, Status: "success", Detail: "inserted after native first range", CreateTime: auditSeed.Date}
+				if err := f.db.Create(&row).Error; err != nil {
+					t.Error(err)
+				}
+				for key, values := range recorder.Header() {
+					w.Header()[key] = values
+				}
+				w.WriteHeader(recorder.Code)
+				_, _ = w.Write(recorder.Body.Bytes())
+			})
+			if handled {
+				return
+			}
+		}
 		if tracePublic && strings.HasPrefix(r.URL.Path, "/api/public/shares/") {
 			// Observe only presence, never credentials, capability paths, query
 			// values or body bytes. Pass the actual streaming writer through.
@@ -199,6 +236,16 @@ func TestMacOSNativeUIFixture(t *testing.T) {
 		"origin": server.URL, "certificate": certificate, "username": user.Username,
 		"password": "disposable-fixture-password", "directory": absolute, "seed_file_id": seed.ID, "upload_source": source,
 		"version_file_id": versioned.ID,
+	}
+	if auditSeed != nil {
+		var peer model.User
+		if err := f.db.First(&peer, f.bobID).Error; err != nil {
+			t.Fatal(err)
+		}
+		manifest["audit_action"] = auditSeed.Action
+		manifest["audit_peer_username"] = peer.Username
+		manifest["audit_owner_id"], manifest["audit_peer_id"] = f.aliceID, f.bobID
+		manifest["audit_first_owner_id"] = auditSeed.OwnerIDs[len(auditSeed.OwnerIDs)-1]
 	}
 	if os.Getenv("CLOUDNEST_NATIVE_UI_SETTINGS") == "1" {
 		var peer model.User

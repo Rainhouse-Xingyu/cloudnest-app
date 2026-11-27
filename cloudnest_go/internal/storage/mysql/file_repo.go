@@ -1076,29 +1076,9 @@ func (r *FileRepo) RevokeShare(ctx context.Context, uid int64, code, clientIP st
 }
 
 func (r *FileRepo) ListOperationLogs(ctx context.Context, uid int64, isAdmin bool, q contract.FileOperationLogQuery) ([]model.OperationLog, int64, error) {
-	dbq := r.db.WithContext(ctx).Model(&model.OperationLog{})
-	if !(isAdmin && q.All == 1) {
-		dbq = dbq.Where("user_id = ?", uid)
-	}
-	if q.Action != "" {
-		dbq = dbq.Where("action = ?", q.Action)
-	}
-	if q.Status != "" {
-		dbq = dbq.Where("status = ?", q.Status)
-	}
-	if q.StartTime != "" {
-		startAt, err := parseFlexibleTimeForFileRepo(q.StartTime)
-		if err != nil {
-			return nil, 0, fmt.Errorf("invalid start_time")
-		}
-		dbq = dbq.Where("create_time >= ?", startAt)
-	}
-	if q.EndTime != "" {
-		endAt, err := parseFlexibleTimeForFileRepo(q.EndTime)
-		if err != nil {
-			return nil, 0, fmt.Errorf("invalid end_time")
-		}
-		dbq = dbq.Where("create_time <= ?", endAt)
+	dbq, err := operationLogScope(r.db.WithContext(ctx), uid, isAdmin, q)
+	if err != nil {
+		return nil, 0, err
 	}
 
 	var total int64
@@ -1116,29 +1096,9 @@ func (r *FileRepo) ListOperationLogs(ctx context.Context, uid int64, isAdmin boo
 }
 
 func (r *FileRepo) ExportOperationLogs(ctx context.Context, uid int64, isAdmin bool, q contract.FileOperationLogQuery) ([]model.OperationLog, error) {
-	dbq := r.db.WithContext(ctx).Model(&model.OperationLog{})
-	if !(isAdmin && q.All == 1) {
-		dbq = dbq.Where("user_id = ?", uid)
-	}
-	if q.Action != "" {
-		dbq = dbq.Where("action = ?", q.Action)
-	}
-	if q.Status != "" {
-		dbq = dbq.Where("status = ?", q.Status)
-	}
-	if q.StartTime != "" {
-		startAt, err := parseFlexibleTimeForFileRepo(q.StartTime)
-		if err != nil {
-			return nil, fmt.Errorf("invalid start_time")
-		}
-		dbq = dbq.Where("create_time >= ?", startAt)
-	}
-	if q.EndTime != "" {
-		endAt, err := parseFlexibleTimeForFileRepo(q.EndTime)
-		if err != nil {
-			return nil, fmt.Errorf("invalid end_time")
-		}
-		dbq = dbq.Where("create_time <= ?", endAt)
+	dbq, err := operationLogScope(r.db.WithContext(ctx), uid, isAdmin, q)
+	if err != nil {
+		return nil, err
 	}
 
 	var rows []model.OperationLog

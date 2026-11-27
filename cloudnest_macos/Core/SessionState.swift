@@ -312,6 +312,33 @@ final class SessionState {
         try await withSession { origin, token in try await api.systemSettings(origin, token: token) }
     }
 
+    func auditPage(query: AuditQuery, snapshotID: Int64 = 0, beforeID: Int64 = 0, afterID: Int64 = 0) async throws -> AuditPage {
+        guard let userID = transferIdentity?.userID else { throw ServerError.unauthorized }
+        guard !query.all || account?.isAdmin == true else { throw ServerError.forbidden }
+        return try await withSession { origin, token in try await api.auditPage(origin,token:token,userID:userID,query:query,snapshotID:snapshotID,beforeID:beforeID,afterID:afterID) }
+    }
+
+    func auditExportResponse(selection: AuditExportSelection, expectedIdentity: TransferIdentity?) async throws -> AuditExportStream {
+        try requireTransferIdentity(expectedIdentity)
+        guard let expectedIdentity, let saved, let origin else { throw ServerError.unauthorized }
+        guard !selection.query.all || account?.isAdmin == true else { throw ServerError.forbidden }
+        var opened: AuditExportStream?
+        do {
+            let result = try await api.auditExportResponse(origin,token:saved.token,userID:expectedIdentity.userID,selection:selection)
+            opened = result
+            try Task.checkCancellation()
+            guard self.saved == saved else { throw CancellationError() }
+            try requireTransferIdentity(expectedIdentity)
+            guard !selection.query.all || account?.isAdmin == true else { throw ServerError.forbidden }
+            return result
+        } catch {
+            opened?.stream.cancel()
+            guard self.saved == saved else { throw CancellationError() }
+            if error as? ServerError == .unauthorized { invalidateSession() }
+            throw error
+        }
+    }
+
     func rateWindow() async throws -> UserRateWindow {
         guard let userID = transferIdentity?.userID else { throw ServerError.unauthorized }
         return try await withSession { origin, token in try await api.rateWindow(origin, token: token, userID: userID) }

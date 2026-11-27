@@ -111,3 +111,7 @@ G03 ZIP 保持普通/批量内嵌/公开分享结构和下载路由，但损坏�
 现有冻结的 iOS FRP 源码未调用 deploy-config、reload 或命令接口，本批未扩展旧客户端。管理端新增 POST /api/frp/devices/:id/commands，普通默认权限允许、自定义权限账号需明确授权；资源级所有权检查仍执行。既有 deploy-config/reload 入口要求 HTTPS、有效设备注册及 32 位小写十六进制 Idempotency-Key，reload 还需 JSON 空对象。新历史列表来自 MySQL，状态和字段见 [命令协议](FRP-DURABLE-COMMANDS.md)。新 macOS 和 Agent 必须实现相应契约，不能继续用用户 JWT 执行设备命令。
 
 2026-11-25（UTC）G09 设置扩展：原 GET /settings 和 PUT 请求保持兼容；新增 GET /settings?scope=system 仅返回允许的公开配置并标记 conditional_writes=true。新 PUT /settings 可带 expected 对象，键须准确等于本批写入项，字符串代表原值、null 代表不存在；冲突 409，无写入/成功审计。省略/null 保留旧无条件协议。GET /settings/rate-window 在原字段外新增六个系统/本人键的 expected 一致快照；PUT 可回传同集合，相关系统/本人内容改变时 409。自定义路径权限及管理员限制保持，前置客户端忽略额外响应字段；内容比较不是单调 revision。完整协议见 [原生设置](MACOS-SETTINGS.md)。
+
+## 2026-11-27 审计游标与 CSV
+
+`GET /api/operation-logs` 未指定 cursor_mode 时保留 page/limit/pagination 及普通 all=1 仅本人行为；新增 cursor_mode=1 返回 scope/user_id/pagination{limit,total}/cursor{snapshot_id,next_before_id,next_after_id}，普通 all=1 明确 403。before_id/after_id 互斥且须带 snapshot_id；上界仅固定新插入范围，历史保留可删除旧行。CSV 仍为原八列、保留时间格式并明确 UTC，最多 5000 行/16 MiB，添加范围/行数/截断/UTC 回执与已有下载摘要；公式样式文本加单引号，不修改数据库历史值。新原生协议用独立路径严格校验，旧客户端无需增加游标参数，真实新旧协议兼容与权限用例通过，见 [审计协议](MACOS-AUDIT.md)。

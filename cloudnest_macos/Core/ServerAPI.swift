@@ -243,6 +243,22 @@ struct ServerAPI: Sendable {
         } catch { stream.cancel(); throw error }
     }
 
+    func auditExportResponse(_ origin: ServerOrigin, token: String, userID: Int64, selection: AuditExportSelection) async throws -> AuditExportStream {
+        guard userID > 0, selection.snapshotID > 0 else { throw ServerError.invalidOperation }
+        let query = selection.query.parameters + [URLQueryItem(name:"cursor_mode",value:"1"),URLQueryItem(name:"snapshot_id",value:String(selection.snapshotID)),URLQueryItem(name:"limit",value:"5000")]
+        var request = URLRequest(url:origin.endpoint("api/operation-logs/export").appending(queryItems:query),cachePolicy:.reloadIgnoringLocalCacheData)
+        request.setValue("Bearer \(token)",forHTTPHeaderField:"Authorization")
+        request.setValue("identity",forHTTPHeaderField:"Accept-Encoding")
+        let stream = DownloadStream(configuration:transferSession.configuration,policy:requestDelegate)
+        do {
+            let response = try await stream.start(request)
+            try validateStatus(response.statusCode)
+            let descriptor = try AuditExportDescriptor(response:response,selection:selection,userID:userID)
+            try Task.checkCancellation()
+            return AuditExportStream(stream:stream,descriptor:descriptor)
+        } catch { stream.cancel(); throw error }
+    }
+
     private func validateStatus(_ status: Int, login: Bool = false, successStatus: Int = 200) throws {
         if status == successStatus { return }
         switch status {
