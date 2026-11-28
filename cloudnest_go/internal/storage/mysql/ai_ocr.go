@@ -16,6 +16,14 @@ import (
 // before this transaction. Revoke/delete/source changes cannot commit stale
 // metadata or a success history row after the publication check.
 func (r *AIRepo) PublishOCR(ctx context.Context, uid int64, source model.File, hash, tags, description, text string) (model.AiMetadata, error) {
+	return r.publishManualAnalysis(ctx, uid, source, hash, tags, description, text, "ocr", text, "ai_ocr", "manual OCR published from verified image")
+}
+
+func (r *AIRepo) PublishSummary(ctx context.Context, uid int64, source model.File, hash, tags, description, text, summary string) (model.AiMetadata, error) {
+	return r.publishManualAnalysis(ctx, uid, source, hash, tags, description, text, "document_summary", summary, "ai_summary", "manual summary published from verified source")
+}
+
+func (r *AIRepo) publishManualAnalysis(ctx context.Context, uid int64, source model.File, hash, tags, description, text, taskType, taskResult, action, detail string) (model.AiMetadata, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	var result model.AiMetadata
@@ -59,10 +67,10 @@ func (r *AIRepo) PublishOCR(ctx context.Context, uid int64, source model.File, h
 			result.Tags, result.Description, result.OcrText = tags, description, text
 			result.SourceHash = hash
 		}
-		if err := tx.Create(&model.AiTask{UserID: &uid, FileID: &current.ID, TaskType: "ocr", Status: "success", Result: text}).Error; err != nil {
+		if err := tx.Create(&model.AiTask{UserID: &uid, FileID: &current.ID, TaskType: taskType, Status: "success", Result: taskResult}).Error; err != nil {
 			return err
 		}
-		return tx.Create(&model.OperationLog{UserID: &uid, FileID: &current.ID, Action: "ai_ocr", Status: "success", Detail: "manual OCR published from verified image"}).Error
+		return tx.Create(&model.OperationLog{UserID: &uid, FileID: &current.ID, Action: action, Status: "success", Detail: detail}).Error
 	}, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		return model.AiMetadata{}, err

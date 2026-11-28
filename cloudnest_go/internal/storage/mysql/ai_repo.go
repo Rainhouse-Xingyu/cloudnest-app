@@ -108,31 +108,6 @@ func (r *AIRepo) CanAccessFile(ctx context.Context, uid, id int64, write bool) (
 	return canAccessFileForFileRepo(ctx, r.db, uid, id, write)
 }
 
-func (r *AIRepo) GetAIMetadataByFileID(ctx context.Context, fileID int64) (model.AiMetadata, error) {
-	var row model.AiMetadata
-	if err := r.db.WithContext(ctx).Where("file_id = ?", fileID).First(&row).Error; err != nil {
-		return model.AiMetadata{}, err
-	}
-	return row, nil
-}
-
-func (r *AIRepo) CreateAIMetadata(ctx context.Context, row model.AiMetadata) (model.AiMetadata, error) {
-	if err := r.db.WithContext(ctx).Create(&row).Error; err != nil {
-		return model.AiMetadata{}, err
-	}
-	return row, nil
-}
-
-func (r *AIRepo) UpdateAIMetadata(ctx context.Context, row model.AiMetadata, tags string, desc string, ocrText string) (model.AiMetadata, error) {
-	if err := r.db.WithContext(ctx).Model(&row).Updates(map[string]interface{}{"tags": tags, "description": desc, "ocr_text": ocrText}).Error; err != nil {
-		return model.AiMetadata{}, err
-	}
-	if err := r.db.WithContext(ctx).First(&row, row.ID).Error; err != nil {
-		return model.AiMetadata{}, err
-	}
-	return row, nil
-}
-
 func (r *AIRepo) CreateAITask(ctx context.Context, row model.AiTask) error {
 	return r.db.WithContext(ctx).Create(&row).Error
 }

@@ -1,0 +1,24 @@
+{
+  "commit": "36cd4d49ada4a0782033d83fe9f453095e83070e",
+  "tree": "97518ba0697603a89489d4a4ddb1868915dcd33f",
+  "all_jobs_completed_successfully": true,
+  "native_run": 46155064649,
+  "backend_run": 46155064647,
+  "actual_logs_read": [141009794628, 141009794967, 141009795266],
+  "native": [
+    {"platform": "macos-26", "job": 141009794967, "integration_seconds": 148.542, "non_utc_seconds": 13.486, "photos_seconds": 16.85},
+    {"platform": "xcode-27", "job": 141009794628, "integration_seconds": 215.230, "non_utc_seconds": 10.188, "photos_seconds": 55.91}
+  ],
+  "native_verified": ["Actual photos six roles and fixed-version request counts 4/3/1, no latest downloads", "Universal Release arm64 and x86_64", "Strict signature verification", "Isolated native UI harness build and artifact packaging"],
+  "backend": {
+    "job": 141009795266,
+    "integration_seconds": 448.610,
+    "network_seconds": 97.896,
+    "ai_seconds": 89.401,
+    "vision_diagnostics_seconds": 37.62,
+    "scanned_pdf_output_limit_seconds": 0.93,
+    "retained_historical_scanned_pdf_failure_case_seconds": 0.91
+  },
+  "other_successful_jobs": {"heif_native": 141009794868, "vulnerabilities": 141009795102, "agent_keychain": 141009795218, "agent_native": 141009795220},
+  "limitations": ["CI does not run real local model quality evaluation.", "Native harness build is not a new interactive GUI acceptance claim.", "Subsequent scanned-PDF case success does not prove the first historical failure root cause.", "Subsequent generation/summary changes are not covered by this commit's CI."]
+}

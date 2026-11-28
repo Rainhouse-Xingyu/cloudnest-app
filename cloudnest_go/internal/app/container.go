@@ -90,7 +90,7 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 	operationLogService := service.NewOperationLogService(operationLogRepo)
 	frpService := service.NewFrpService(frpRepo, rdb)
 	livePhotoService := service.NewLivePhotoService(livePhotoRepo)
-	aiService := service.NewAIService(aiRepo, cfg, nil)
+	aiService := service.NewAIService(aiRepo, cfg)
 	fileService := service.NewFileService(fileRepo)
 
 	return &Container{
@@ -130,7 +130,7 @@ func NewContainer(cfg config.Config, db *gorm.DB, rdb *redis.Client) *Container 
 		SettingsHandler:      &handler.SettingsHandler{Svc: settingsService},
 		StorageHandler:       &handler.StorageHandler{Svc: storageService},
 		CollaborationHandler: &handler.CollaborationHandler{Svc: collaborationService},
-		AIHandler:            &handler.AIHandler{Cfg: cfg, Svc: aiService},
+		AIHandler:            &handler.AIHandler{Svc: aiService},
 		FrpHandler:           &handler.FrpHandler{Svc: frpService},
 		LivePhotoHandler:     &handler.LivePhotoHandler{Svc: livePhotoService},
 	}

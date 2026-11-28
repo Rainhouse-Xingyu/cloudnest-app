@@ -59,6 +59,7 @@ func TestAIPDFExtractionFailureStatesNeverPublishPartialResults(t *testing.T) {
 
 func TestAIPDFManualSummaryUsesVerifiedParserAndPreservesAuthorization(t *testing.T) {
 	f, _ := indexFixture(t)
+	f.cfg.AIOllamaModel = "qwen3-vl:4b" // Explicit legacy model matches this protocol fixture.
 	f.cfg.AIPDFBinDir = os.Getenv("CLOUDNEST_TEST_POPPLER_BIN")
 	if f.cfg.AIPDFBinDir == "" {
 		t.Skip("CLOUDNEST_TEST_POPPLER_BIN required")
@@ -66,6 +67,10 @@ func TestAIPDFManualSummaryUsesVerifiedParserAndPreservesAuthorization(t *testin
 	f.cfg.AIOCRModel = "qwen3-vl:4b"
 	received := make(chan string, 1)
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/tags" {
+			json.NewEncoder(w).Encode(map[string]any{"models": []any{map[string]string{"name": "qwen3-vl:4b", "digest": strings.Repeat("a", 64)}}})
+			return
+		}
 		if r.URL.Path != "/api/generate" {
 			t.Error("wrong summary endpoint", r.URL.Path)
 		}

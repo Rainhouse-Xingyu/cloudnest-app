@@ -108,7 +108,7 @@ func (r hybridFixtureRepo) ValidateHybrid(context.Context, int64, []contract.AIH
 
 func TestHybridKeywordFallbackRevalidatesBeforeReturningSnippets(t *testing.T) {
 	repo := hybridFixtureRepo{rows: []contract.AIHybridRow{{ID: 1, Filename: "safe.md", Content: "数据库迁移", Generation: 1}, {ID: 2, Filename: "revoked.md", Content: "数据库迁移 secret", Generation: 1}}, allowed: map[int64]bool{1: true}}
-	s := NewAIService(repo, config.Config{}, nil)
+	s := NewAIService(repo, config.Config{})
 	result, err := s.NLSearch(context.Background(), 1, "数据库迁移", 1, 20)
 	if err != nil || result.Source != "keyword_fallback" || len(result.Search.Items) != 1 || result.Search.Items[0]["id"] != int64(1) {
 		t.Fatal(result, err)
@@ -126,7 +126,7 @@ func TestHybridGenericFragmentsDoNotOutrankCompleteSubject(t *testing.T) {
 		{ID: 1, Filename: "neutral.md", Content: "季度报告：系统维护工作已经结束。", Generation: 1},
 		{ID: 2, Filename: "neutral.md", Content: "水稻基因测序实验报告。", Generation: 1},
 	}, allowed: map[int64]bool{1: true, 2: true}}
-	s := NewAIService(repo, config.Config{}, nil)
+	s := NewAIService(repo, config.Config{})
 	result, err := s.NLSearch(context.Background(), 1, "寻找水稻基因测序实验报告", 1, 20)
 	if err != nil || len(result.Search.Items) != 1 || result.Search.Items[0]["id"] != int64(2) {
 		t.Fatal("generic report fragment survived", result, err)
