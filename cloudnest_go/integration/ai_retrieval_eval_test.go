@@ -20,6 +20,7 @@ import (
 
 	"cloudenest_go/internal/aiindex"
 	"cloudenest_go/internal/app"
+	"cloudenest_go/internal/config"
 	"cloudenest_go/internal/retrievaleval"
 	"cloudenest_go/internal/service"
 	"cloudenest_go/model"
@@ -192,7 +193,10 @@ func TestAIRetrievalEvaluation(t *testing.T) {
 	}
 	report.OllamaVersion = version.Version
 	report.EmbeddingModel = "qwen3-embedding:0.6b"
-	report.VisionModel = "qwen3-vl:4b"
+	report.VisionModel = strings.TrimSpace(os.Getenv("CLOUDNEST_TEST_IMAGE_VISION_MODEL"))
+	if report.VisionModel == "" {
+		report.VisionModel = config.DefaultVisionModel
+	}
 	digest := func(name string) string {
 		p, e := aiindex.NewOllama(base, name)
 		if e != nil {
@@ -287,7 +291,7 @@ func TestAIRetrievalEvaluation(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		if worked, e := textWorker(t, f, base).Step(context.Background()); !worked || e != nil {
+		if worked, e := textWorkerWithVision(t, f, base, report.VisionModel).Step(context.Background()); !worked || e != nil {
 			t.Fatalf("index %s: worked=%v error=%v", d.ID, worked, e)
 		}
 		job := readIndex(t, f, file.ID)
@@ -296,7 +300,7 @@ func TestAIRetrievalEvaluation(t *testing.T) {
 			t.Fatal(err)
 		}
 		sourceHash := fmt.Sprintf("%x", sha256.Sum256(body))
-		if job.Status != "done" || doc.Generation != job.Generation || doc.SourceHash != sourceHash || doc.Dimensions != 1024 || doc.ModelDigest != report.EmbeddingDigest || (doc.VisionDigest != "" && doc.VisionDigest != report.VisionDigest) {
+		if job.Status != "done" || doc.Generation != job.Generation || doc.SourceHash != sourceHash || doc.Dimensions != 1024 || doc.ModelDigest != report.EmbeddingDigest || (doc.VisionDigest != "" && (doc.VisionDigest != report.VisionDigest || doc.VisionModel != report.VisionModel)) {
 			t.Fatalf("index provenance mismatch for %s", d.ID)
 		}
 		if capture != "" && (doc.CapturedAtLocal == nil || doc.CapturedAtLocal.Format("2006-01-02 15:04:05") != capture || doc.CaptureOffset != "+08:00") {

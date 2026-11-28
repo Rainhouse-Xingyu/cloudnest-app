@@ -12,7 +12,7 @@ JPEG APP1 和 PNG eXIf 解析有界，最多检查 4096 个标记/块，PNG EXIF
 
 ## 真实视觉输出及来源
 
-沿用 `AI_OCR_MODEL`（默认 `qwen3-vl:4b`），向 `/api/chat` 提交准备后的真实像素、结构化 JSON Schema 与禁止执行图内指令的提示。返回简短中文场景描述、最多十二个标签、原语言可见文字和 has_text。没有文字的场景允许空 OCR；不会插入“未识别到有效文本”作为搜索内容。
+沿用 `AI_OCR_MODEL`（新安装默认 `qwen3-vl:2b-instruct`，现有显式设置优先；见[模型选择](AI-MODEL-SELECTION.md)），向 `/api/chat` 提交准备后的真实像素、结构化 JSON Schema 与禁止执行图内指令的提示。返回简短中文场景描述、最多十二个标签、原语言可见文字和 has_text。没有文字的场景允许空 OCR；不会插入“未识别到有效文本”作为搜索内容。
 
 生成上限 4096 token，HTTP 响应 2 MiB/120 秒；验证模型名、完成状态/stop、assistant、必需字段/类型和文本边界。描述最多 4096 字节、每标签 192 字节、转录 32 KiB，拒绝 NUL、非法 UTF-8、矛盾 has_text、超长和截断响应。模型端 Schema 不设置字符串 maxLength：本机 Ollama 0.31.1 的 grammar 编译拒绝 8192 次重复；边界继续由服务端强制校验。
 

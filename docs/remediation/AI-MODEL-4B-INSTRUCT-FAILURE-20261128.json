@@ -1,0 +1,136 @@
+{
+  "utc": "2026-11-28T14:15:01.330657+00:00",
+  "completed": true,
+  "passed": false,
+  "test": "TestAITextLiveImagesUsePixelsEXIFAndRealSemanticSearch",
+  "case_seconds": 128.31,
+  "package_seconds": 130.295,
+  "failure": "actual image indexing true AI index processing failed: model_unavailable",
+  "vision_model": "qwen3-vl:4b-instruct",
+  "preflight": {
+    "commit": "020a47bc421bb6310914380900d3cc62bf646c74",
+    "models": [
+      {
+        "name": "qwen3-vl:4b-instruct",
+        "model": "qwen3-vl:4b-instruct",
+        "modified_at": "2026-11-28T07:07:57.692373488-07:00",
+        "size": 3337225651,
+        "digest": "84f7ed8042fa7cdbd902f7dcb7d0370e032095047cc3244179f263b77b5bc318",
+        "details": {
+          "parent_model": "dhiltgen/qwen3-vl:4b-instruct-q4_K_M-llamacpp",
+          "format": "gguf",
+          "family": "qwen3vl",
+          "families": [
+            "qwen3vl",
+            "clip"
+          ],
+          "parameter_size": "4.0B",
+          "quantization_level": "Q4_K_M",
+          "context_length": 262144,
+          "embedding_length": 2560,
+          "runner": "llamacpp"
+        },
+        "capabilities": [
+          "completion",
+          "vision",
+          "tools"
+        ]
+      },
+      {
+        "name": "qwen3-embedding:0.6b",
+        "model": "qwen3-embedding:0.6b",
+        "modified_at": "2026-11-21T16:13:11.38968153-07:00",
+        "size": 639150858,
+        "digest": "ac6da0dfba84a81fdbfbaf330198c33cd77c4cdfc53e8bc50eb581914a15621d",
+        "details": {
+          "parent_model": "/Users/ollama/.ollama/models/blobs/sha256-06507c7b42688469c4e7298b0a1e16deff06caf291cf0a5b278c308249c3e439",
+          "format": "gguf",
+          "family": "qwen3",
+          "families": [
+            "qwen3"
+          ],
+          "parameter_size": "595.78M",
+          "quantization_level": "Q8_0",
+          "context_length": 32768,
+          "embedding_length": 1024,
+          "runner": "ggml"
+        },
+        "capabilities": [
+          "tools",
+          "thinking",
+          "embedding"
+        ]
+      }
+    ],
+    "capabilities": [
+      "completion",
+      "vision",
+      "tools"
+    ],
+    "model_parameters": "temperature                    1\ntop_k                          20\ntop_p                          0.95",
+    "loaded_before": {
+      "models": []
+    },
+    "ollama": {
+      "version": "0.40.17"
+    },
+    "sw_vers": "ProductName:\t\tmacOS\nProductVersion:\t\t27.2.1\nBuildVersion:\t\t26B131\n",
+    "sampler_sha256": "f44d4829a24d6a202bb67be62288a00b43afbb2ad81ace71eed9de9b1b4ad456",
+    "note": "Only the evaluation-model selector and resource sampler are uncommitted. Production sources match 020a47b; no builds during real inference."
+  },
+  "compiled_source_commit": "020a47bc421bb6310914380900d3cc62bf646c74",
+  "compiled_source_sha256": {
+    "cloudnest_go/internal/aiindex/image.go": "c73df94b7a8e50b008eedd274d58da7817bc26618231ae7996883e0ae0fabd94",
+    "cloudnest_go/internal/aiindex/vision.go": "72ae34efdadbdb3e6b827bf182d40f6ce4a54789a2da088f525e0d83a5ffc9c8",
+    "cloudnest_go/internal/aiindex/processor.go": "abccfa1cafc17fde8f0d822d75fb7ad936d6a51196fa811c73bce2b5ae574d5c",
+    "cloudnest_go/integration/ai_text_live_test.go": "3f745c367f9b0fa0ea6c066fc2b7bf247c7aa3c17a7207783e133ecd3cf40c8a"
+  },
+  "no_parallel_builds_or_inference_started_by_agent": true,
+  "inference_budget_changes": false,
+  "observed_server_events": [
+    "time=2026-11-28T07:08:57.351-07:00 level=INFO source=sched.go:1180 msg=\"disabling mmap for llama-server load by default\" model=/Users/xingyuzhao/.ollama/models/blobs/sha256-3a859c4dca6883593e389a08987f04762f2a374d475cabc1538360473a72b1da reason=metal_partial_offload",
+    "time=2026-11-28T07:08:57.358-07:00 level=INFO source=sched.go:656 msg=\"system memory\" total=\"8.0 GiB\" free=\"1.9 GiB\" free_swap=\"0 B\"",
+    "time=2026-11-28T07:08:57.358-07:00 level=INFO source=sched.go:663 msg=\"gpu memory\" id=0 library=Metal available=\"4.8 GiB\" free=\"5.3 GiB\" minimum=\"512.0 MiB\" overhead=\"0 B\"",
+    "time=2026-11-28T07:09:09.485-07:00 level=INFO source=llama_server.go:1467 msg=\"llama-server started in 12.12 seconds\"",
+    "time=2026-11-28T07:09:09.510-07:00 level=INFO source=images.go:431 msg=\"template selection\" model=registry.ollama.ai/library/qwen3-vl:4b-instruct selected=renderer_parser renderer=qwen3-vl-instruct parser=qwen3-vl-instruct go_template=null chat_template=\"[tools completion vision]\" harmony=null renderer_parser=\"[completion vision tools]\"",
+    "time=2026-11-28T07:09:09.519-07:00 level=INFO source=sched.go:779 msg=\"loaded runners\" count=1",
+    "time=2026-11-28T07:09:09.536-07:00 level=INFO source=llama_server.go:1467 msg=\"llama-server started in 12.18 seconds\"",
+    "slot   operator(): id  0 | task 0 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 1666",
+    "image decoded (batch 1/3) in 8809 ms",
+    "image decoded (batch 2/3) in 11215 ms",
+    "image decoded (batch 3/3) in 10131 ms",
+    "[GIN] 2026/11/28 - 07:10:57 | 500 |     2m0s |       127.0.0.1 | POST     \"/api/chat\""
+  ],
+  "test_log": {
+    "path": "/tmp/cloudnest-g09-ai-vision-4b-instruct-baseline-20261128.log",
+    "bytes": 5442,
+    "sha256": "aff8271198ca4387509e253cee2177b60cd001ca7191b0bd8e2117db50deec1d"
+  },
+  "limitations": [
+    "First synthetic image failed; OCR, semantic/date/ACL assertions were not reached.",
+    "Observed partial Metal offload and HTTP500 at two minutes; not a demonstrated OOM or proof of every historical 4B root cause.",
+    "One 8GiB host/runtime combination, not a claim about all 4B deployments.",
+    "Model and completed failure retained; no timeout, context or output cap was relaxed."
+  ],
+  "resources": {
+    "artifact": {
+      "path": "/tmp/cloudnest-g09-4b-instruct-resources-20261128.jsonl",
+      "bytes": 194990,
+      "sha256": "c54447a628e26ee0c8622949d6bd40264ff957a04265ffd9cc4e2744b843c9eb"
+    },
+    "total_samples": 300,
+    "window_utc": [
+      "2026-11-28T14:08:41+00:00",
+      "2026-11-28T14:11:01+00:00"
+    ],
+    "selected_samples": 70,
+    "model_reported_vram_max_bytes": {
+      "qwen3-vl:4b-instruct": 2967186963
+    },
+    "single_runner_rss_max_kib": 3379152,
+    "sampled_sum_runner_rss_max_kib": 3379152,
+    "max_other_loaded_model_count": 0,
+    "final_sample_models": [],
+    "limitation": "Read-only two-second samples, not a hard memory bound, peak proof, or an SLA. The full 4B collector later overlaps the separately executed 2B matrix; only the specified failure window is attributed to 4B."
+  }
+}

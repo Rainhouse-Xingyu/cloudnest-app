@@ -12,6 +12,10 @@ import (
 	"cloudenest_go/internal/frpconfig"
 )
 
+// DefaultVisionModel names the explicit non-thinking package validated on an
+// 8 GiB host. Existing AI_OCR_MODEL settings always take precedence.
+const DefaultVisionModel = "qwen3-vl:2b-instruct"
+
 /*
 Config结构体定义了应用程序的配置项，包括AppPort、MySQLDSN、RedisAddr、RedisPassword、RedisDB、JWTSecret和JWTExpireHours等字段。
 Load函数从环境变量加载配置项，并提供默认值。JWTTTL方法计算JWT的过期时间，getEnv和getEnvInt函数用于获取环境变量的值并提供默认值。
@@ -75,7 +79,7 @@ func Load() Config {
 		AIOllamaModel:      getEnv("AI_OLLAMA_MODEL", "qwen3-vl:4b"),
 		AIPDFBinDir:        os.Getenv("AI_PDF_BIN_DIR"),
 		ImageHEIFHelper:    strings.TrimSpace(os.Getenv("IMAGE_HEIF_HELPER")),
-		AIOCRModel:         getEnv("AI_OCR_MODEL", "qwen3-vl:4b"),
+		AIOCRModel:         getEnv("AI_OCR_MODEL", DefaultVisionModel),
 		AIEmbeddingModel:   getEnv("AI_EMBEDDING_MODEL", "qwen3-embedding:0.6b"),
 		AIRerankModel:      strings.TrimSpace(os.Getenv("AI_RERANK_MODEL")),
 		AIRerankBatchURL:   strings.TrimSpace(os.Getenv("AI_RERANK_BATCH_URL")),

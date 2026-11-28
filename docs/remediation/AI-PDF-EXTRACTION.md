@@ -4,7 +4,7 @@
 
 上传 PDF 仍走既有持久任务、代次/租约、独立 blob Scope、完整源摘要验证和原子发布协议。processor 从已校验的同一文件描述符传给原生 Poppler，不通过历史路径重新打开。`pdfinfo` 核对页数和加密状态，`pdftotext` 提取 UTF-8 文本，按换页符验证实际页数。输出包含 `[Page N]`，检索偏移仍是整个提取文本流的 rune 偏移，不是 PDF 字节或页面坐标。
 
-无文本页经 `pdftoppm` 渲染为最长边 1600 的 PNG，再将实际像素通过 Ollama `/api/chat` 发送到独立 `AI_OCR_MODEL`（默认 `qwen3-vl:4b`）。转录标为 `[Page N OCR]`，模型前后 digest 不一致、协议不完整、模型名错误、生成因长度停止、空转录、无效编码和超限都拒绝整份结果；不发布已经提取的前几页。真实 OCR 仍可能误读或产生幻觉，结构验证不等于识别准确率。
+无文本页经 `pdftoppm` 渲染为最长边 1600 的 PNG，再将实际像素通过 Ollama `/api/chat` 发送到独立 `AI_OCR_MODEL`（新安装默认 `qwen3-vl:2b-instruct`，现有显式设置优先；见[模型选择](AI-MODEL-SELECTION.md)）。转录标为 `[Page N OCR]`，模型前后 digest 不一致、协议不完整、模型名错误、生成因长度停止、空转录、无效编码和超限都拒绝整份结果；不发布已经提取的前几页。真实 OCR 仍可能误读或产生幻觉，结构验证不等于识别准确率。
 
 OCR 请求关闭 stream/think，temperature=0，num_predict=4096，num_ctx=8192；响应复用有界 HTTP client（120 秒、2 MiB、不跟随重定向）。每页转录最多 32 KiB。系统提示要求仅转录，将图片文字视为数据。处理后继续调用独立 embedding 模型，持久化真实向量并提供混合检索。当前 document 记录 embedding digest；OCR digest 仅在每次转录前后核对，尚未保存为可查询的独立提取来源字段，多页处理期间仍禁止运维改写模型 tag。
 

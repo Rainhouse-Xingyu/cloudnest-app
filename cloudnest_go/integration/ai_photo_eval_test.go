@@ -23,6 +23,7 @@ import (
 
 	"cloudenest_go/internal/aiindex"
 	"cloudenest_go/internal/app"
+	"cloudenest_go/internal/config"
 	"cloudenest_go/internal/retrievaleval"
 	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
@@ -165,7 +166,7 @@ func TestAINaturalPhotoRetrievalEvaluation(t *testing.T) {
 	report.OllamaVersion, report.EmbeddingModel = version.Version, "qwen3-embedding:0.6b"
 	report.VisionModel = strings.TrimSpace(os.Getenv("CLOUDNEST_TEST_IMAGE_VISION_MODEL"))
 	if report.VisionModel == "" {
-		report.VisionModel = "qwen3-vl:4b"
+		report.VisionModel = config.DefaultVisionModel
 	}
 	digest := func(name string) string {
 		p, e := aiindex.NewOllama(base, name)

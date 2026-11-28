@@ -20,7 +20,7 @@
 
 `python3 scripts/prepare-ai-photo-corpus.py /tmp/<新的私有目录>` 下载固定原始字节，不下载模型。拒绝重定向、非固定主机、已有目标、摘要或长度变化；网络中断保留已下载文件供核查，换新目录重试。不得将临时下载提交仓库。初次素材探查连续请求收到 Wikimedia 429，随后改成批量元数据请求并对下载间隔五秒；没有修改来源或许可来绕过限制。
 
-设置 `CLOUDNEST_AI_PHOTO_ROOT` 为该目录，`CLOUDNEST_AI_EVAL_REPORT` 为不存在的绝对 JSON 路径，`CLOUDNEST_TEST_AI_MODEL=1`、`CLOUDNEST_TEST_AI_EVAL=1`。使用 `scripts/test-macos-backend.py --go-tags integration,aimodel,aieval --filter '^TestAINaturalPhotoRetrievalEvaluation$'` 启动独立 MySQL/Redis。可显式设置 `CLOUDNEST_TEST_IMAGE_VISION_MODEL=qwen3-vl:2b`，报告保存实际 digest；省略仍使用 4B，不更改生产默认配置。8 GiB 主机串行推理时不同时运行构建或其他推理。
+设置 `CLOUDNEST_AI_PHOTO_ROOT` 为该目录，`CLOUDNEST_AI_EVAL_REPORT` 为不存在的绝对 JSON 路径，`CLOUDNEST_TEST_AI_MODEL=1`、`CLOUDNEST_TEST_AI_EVAL=1`。使用 `scripts/test-macos-backend.py --go-tags integration,aimodel,aieval --filter '^TestAINaturalPhotoRetrievalEvaluation$'` 启动独立 MySQL/Redis。可显式设置 `CLOUDNEST_TEST_IMAGE_VISION_MODEL`，报告保存实际 digest；本节历史执行时省略仍使用4B，后续[模型选择](AI-MODEL-SELECTION.md)将新默认改为显式2b-instruct。8 GiB 主机串行推理时不同时运行构建或其他推理。
 
 普通 CI 只验证冻结清单、许可/摘要/路径边界、标签与 opt-in 测试编译，不伪造本机模型或联网下载成 CI 的质量通过。选取的六个场景仍很小，不代表生产照片分布、并发吞吐、恶意媒体资源峰值、盲测或跨模型质量承诺。此前 4B 的 model_unavailable 原因仍未确认，生产默认模型不因这次 2B 验证改变。
 
@@ -55,4 +55,4 @@
 
 补验使用官方[Poppler 26.11.0 bottle](https://formulae.brew.sh/formula/poppler)，SHA及依赖清单记录于验证JSON；系统Homebrew目录不可写，因此只在私有运行时目录重定位动态库并重新临时签名，未更改系统安装/服务。pdfinfo读取普通PDF成功，加密PDF明确报告密码错误。最终47个AI顶层回归全部通过、零跳过，包65.399s；包括原PDF故障矩阵、手动摘要授权，以及后续单独加入的真实扫描PDF输出上限用例0.53s，证明length不会发布看似完整的转录或留下源租约。此后新增的PDF测试有单独源码hash，未将其倒记为先前真实模型运行覆盖。本机Poppler26.11结果不替代历史Linux26.01故障根因，后者仍未确认。
 
-精确新提交的远端CI发布后另核对。未合并PR、修改生产库或删除旧模型/用户数据；G04剩余质量、G10资源/异常及全部G11仍继续。
+020a47b 精确远端双平台原生与完整后端 CI 均已通过。后续完成[显式模型矩阵与视觉默认选择](AI-MODEL-SELECTION.md)，新安装视觉默认调整独立记录，不倒改上面的历史配置和执行证据。未合并PR、修改生产库或删除旧模型/用户数据；G04剩余质量、G10资源/异常及全部G11仍继续。

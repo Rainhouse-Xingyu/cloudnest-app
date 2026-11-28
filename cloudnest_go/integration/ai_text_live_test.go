@@ -18,6 +18,7 @@ import (
 
 	"cloudenest_go/internal/aiindex"
 	"cloudenest_go/internal/app"
+	"cloudenest_go/internal/config"
 	"cloudenest_go/internal/service/contract"
 	"cloudenest_go/model"
 )
@@ -146,7 +147,14 @@ func runLiveIndexServer(t *testing.T, f *fixture, fileID int64) {
 	listener.Close()
 	command := exec.Command(binary)
 	command.Dir = t.TempDir()
-	command.Env = []string{"MYSQL_DSN=" + f.cfg.MySQLDSN, "REDIS_ADDR=" + f.cfg.RedisAddr, "JWT_SECRET=" + f.cfg.JWTSecret, "JWT_EXPIRE_HOURS=1", "DATA_DIR=" + f.cfg.DataDir, "APP_BIND_ADDR=127.0.0.1", fmt.Sprintf("APP_PORT=%d", port), "AI_OLLAMA_BASE_URL=http://127.0.0.1:11434", "AI_EMBEDDING_MODEL=qwen3-embedding:0.6b", "AI_PDF_BIN_DIR=" + f.cfg.AIPDFBinDir, "AI_OCR_MODEL=qwen3-vl:4b"}
+	visionModel := f.cfg.AIOCRModel
+	if visionModel == "" {
+		visionModel = os.Getenv("CLOUDNEST_TEST_IMAGE_VISION_MODEL")
+	}
+	if visionModel == "" {
+		visionModel = config.DefaultVisionModel
+	}
+	command.Env = []string{"MYSQL_DSN=" + f.cfg.MySQLDSN, "REDIS_ADDR=" + f.cfg.RedisAddr, "JWT_SECRET=" + f.cfg.JWTSecret, "JWT_EXPIRE_HOURS=1", "DATA_DIR=" + f.cfg.DataDir, "APP_BIND_ADDR=127.0.0.1", fmt.Sprintf("APP_PORT=%d", port), "AI_OLLAMA_BASE_URL=http://127.0.0.1:11434", "AI_EMBEDDING_MODEL=qwen3-embedding:0.6b", "AI_PDF_BIN_DIR=" + f.cfg.AIPDFBinDir, "AI_OCR_MODEL=" + visionModel}
 	logFile, err := os.Create(filepath.Join(command.Dir, "server.log"))
 	if err != nil {
 		t.Fatal(err)
@@ -415,6 +423,11 @@ func TestAITextLivePDFAndScannedPagesProduceSearchableRealVectors(t *testing.T) 
 	f, _ := indexFixture(t)
 	f.cfg.AIOllamaBaseURL = "http://127.0.0.1:11434"
 	f.cfg.AIEmbeddingModel = "qwen3-embedding:0.6b"
+	visionModel := os.Getenv("CLOUDNEST_TEST_IMAGE_VISION_MODEL")
+	if visionModel == "" {
+		visionModel = config.DefaultVisionModel
+	}
+	f.cfg.AIOCRModel = visionModel
 	f.cfg.AIPDFBinDir = os.Getenv("CLOUDNEST_TEST_POPPLER_BIN")
 	if f.cfg.AIPDFBinDir == "" {
 		t.Fatal("CLOUDNEST_TEST_POPPLER_BIN required for PDF acceptance")
@@ -431,7 +444,7 @@ func TestAITextLivePDFAndScannedPagesProduceSearchableRealVectors(t *testing.T) 
 		file := f.upload(t, f.alice, tc.name, body)
 		if tc.name == "migration.pdf" {
 			runLiveIndexServer(t, f, file.ID)
-		} else if worked, err := textWorker(t, f, f.cfg.AIOllamaBaseURL).Step(context.Background()); !worked || err != nil {
+		} else if worked, err := textWorkerWithVision(t, f, f.cfg.AIOllamaBaseURL, visionModel).Step(context.Background()); !worked || err != nil {
 			t.Fatal("actual PDF indexing failed", worked, err)
 		}
 		j := readIndex(t, f, file.ID)
@@ -491,7 +504,7 @@ func TestAITextLiveImagesUsePixelsEXIFAndRealSemanticSearch(t *testing.T) {
 	f.cfg.AIEmbeddingModel = "qwen3-embedding:0.6b"
 	visionModel := os.Getenv("CLOUDNEST_TEST_IMAGE_VISION_MODEL")
 	if visionModel == "" {
-		visionModel = "qwen3-vl:4b"
+		visionModel = config.DefaultVisionModel
 	}
 	f.cfg.AIOCRModel = visionModel
 	f.router = fixtureRouter(app.NewContainer(f.cfg, f.db, f.rdb).NewRouter())
@@ -586,7 +599,10 @@ func TestAITextLiveManualOCRUsesSharedPixelsAndPreservesMetadata(t *testing.T) {
 	}
 	f, _ := indexFixture(t)
 	f.cfg.AIOllamaBaseURL = "http://127.0.0.1:11434"
-	f.cfg.AIOCRModel = "qwen3-vl:4b"
+	f.cfg.AIOCRModel = os.Getenv("CLOUDNEST_TEST_IMAGE_VISION_MODEL")
+	if f.cfg.AIOCRModel == "" {
+		f.cfg.AIOCRModel = config.DefaultVisionModel
+	}
 	f.router = fixtureRouter(app.NewContainer(f.cfg, f.db, f.rdb).NewRouter())
 	for _, tc := range []struct {
 		name    string
@@ -617,7 +633,7 @@ func TestAITextLiveManualOCRUsesSharedPixelsAndPreservesMetadata(t *testing.T) {
 			} `json:"exif"`
 		}
 		decode(t, f.json(t, "POST", "/api/ai/ocr", f.alice, map[string]any{"file_id": file.ID, "tags": "manual-test"}, 200), &reply)
-		if reply.Item.FileID != file.ID || reply.HasText != tc.hasText || reply.Model != "qwen3-vl:4b" || len(reply.Digest) != 64 {
+		if reply.Item.FileID != file.ID || reply.HasText != tc.hasText || reply.Model != f.cfg.AIOCRModel || len(reply.Digest) != 64 {
 			t.Fatal("bad real manual OCR provenance", reply)
 		}
 		if tc.hasText {

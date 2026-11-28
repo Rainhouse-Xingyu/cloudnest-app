@@ -177,3 +177,5 @@ MAC-013 P2（照片/Live Photo 接入待审）：新增照片侧栏、每页50�
 审计 fdff5b1 精确远端 CI 已全部通过：双原生任务实际执行三角色、16KiB取消、非UTC、Release/签名/UI构建；完整后端主回归489.101s、网络97.822s、AI58.441s，新游标/准入/CSV分别0.76/0.77/2.81s。原扫描PDF失败用例后续通过1.05s，最初根因仍未确认，原始失败保留。
 
 AI-007 P2（视觉失败诊断代码完成待审）：真实自然图像在旧2B包/runtime组合返回HTTP200但只有推理、done_reason=length，原队列误记model_unavailable并重复重试。现分出终止的vision_output_limit与有限重试的invalid_vision_response，保留旧ErrVisionResponse拒绝契约，手动OCR历史及原生提示同步；四个真实队列/API回归先3失败后通过，不写模型原文或部分索引。显式2b-instruct同语料与票据OCR通过，旧包/默认4B未改；旧4B根因与通用质量没有因此关闭，见[独立照片与诊断](AI-NATURAL-PHOTOS.md)。
+
+AI-007 后续：020a47b 的全部 CI 已核实。补充显式2B/4B Instruct真实[模型矩阵](AI-MODEL-SELECTION.md)，2B固定v1/stress、PDF、手动OCR及新默认三项真实回归通过，4B失败完整保留。新安装视觉默认改为2b-instruct；已有显式设置和生成模型不改，不自动重建。旧4B根因、自然照片尾部相关性、生成helper和聚合资源仍开放。

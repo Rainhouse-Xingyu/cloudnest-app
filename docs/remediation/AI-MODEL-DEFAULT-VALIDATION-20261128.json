@@ -1,0 +1,67 @@
+{
+  "utc": "2026-11-28T14:29:46.451052+00:00",
+  "base_commit": "020a47bc421bb6310914380900d3cc62bf646c74",
+  "production_change": "Only AI_OCR_MODEL missing/empty environment fallback changes; existing explicit OCR and generation model settings preserved.",
+  "new_default": "qwen3-vl:2b-instruct",
+  "go_check_and_unit_race_passed": true,
+  "ai_integration": {
+    "passed": 47,
+    "skipped": 0,
+    "package_seconds": 64.036
+  },
+  "default_real_model": {
+    "model_override_environment_set": false,
+    "passed": 3,
+    "skipped": 0,
+    "package_seconds": 58.476,
+    "pdf_seconds": 13.89,
+    "image_seconds": 25.4,
+    "manual_seconds": 15.84
+  },
+  "opt_in_evaluation_compile_passed": true,
+  "logs": [
+    {
+      "path": "/tmp/cloudnest-g09-new-vision-default-live-20261128.log",
+      "bytes": 5653,
+      "sha256": "d7f38961c231bf87e3726ef93595b0379c11ebf80de5ecc41c70e9d65ee57fc1"
+    },
+    {
+      "path": "/tmp/cloudnest-g09-model-default-go-20261128.log",
+      "bytes": 1500,
+      "sha256": "644ac5cf11e3d22a9dc63bece60bf5bac7072fe59327ef9c40f2a9801f46f677"
+    },
+    {
+      "path": "/tmp/cloudnest-g09-model-default-ai-20261128.log",
+      "bytes": 72983,
+      "sha256": "af2a4b0b1fd0f86a8f7a1f516124ed9ef89a5f1f3b329cba35e4eb7ef46285bc"
+    },
+    {
+      "path": "/tmp/cloudnest-g09-model-default-eval-compile-20261128.log",
+      "bytes": 1506,
+      "sha256": "a50d671257d90f6c165c342bbc71de8f71e84e135485e5830469bd4ca15680b8"
+    }
+  ],
+  "final_source_sha256": {
+    "cloudnest_go/internal/config/config.go": "a6d1b283b98f4b7a67eb3c534e14a2e1af0d5bed340c1063bc19b7f36a2cbb51",
+    "cloudnest_go/integration/ai_photo_eval_test.go": "866d81f66b70a51761f34d015d25cca306053d1c4d7d790dec78dad402d7ecd3",
+    "cloudnest_go/integration/ai_retrieval_eval_test.go": "53529152a5aaace72c8b613f6187af19bf9d6028fb47d8f0a3b33b5b03dd17cf",
+    "cloudnest_go/integration/ai_text_live_test.go": "fcfbf5d9e7df6e6707ca46a115a85adc74bb109ff3754fc28ae2f0a688a25d78",
+    "cloudnest_go/.env.example": "ad87b1702ffb53df457f36a330bf5b859ffbb08baf1402cadefa0c7d988133d2",
+    "scripts/sample-ai-resources.py": "f44d4829a24d6a202bb67be62288a00b43afbb2ad81ace71eed9de9b1b4ad456"
+  },
+  "sampler_probe": {
+    "path": "/tmp/cloudnest-g09-resource-sampler-final-probe-20261128.jsonl",
+    "sha256": "e45224505bc3a8051e7aa5fb4b9ae8f8eb5d427d97b5be5922fdf5b486cff63d",
+    "checks": [
+      "Two actual read-only samples",
+      "Private exclusive mode0600",
+      "Existing destination refused",
+      "Source hash recorded"
+    ]
+  },
+  "limitations": [
+    "No new GUI change or GUI acceptance claimed.",
+    "Actual model matrix compiled base implementation with explicit model selection, before fallback adjustment; post-adjustment real-model default smoke is separately recorded.",
+    "CI must be verified after exact-tree publication."
+  ]
+}
