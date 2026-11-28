@@ -1,12 +1,14 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"cloudenest_go/internal/middleware"
 	"cloudenest_go/internal/service"
+	"cloudenest_go/internal/service/contract"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -24,27 +26,38 @@ type settingUpsertItem struct {
 }
 
 type upsertSettingsRequest struct {
-	Items []settingUpsertItem `json:"items" binding:"required"`
+	Items    []settingUpsertItem `json:"items" binding:"required"`
+	Expected map[string]*string  `json:"expected"`
 }
 
 type updateRateWindowRequest struct {
-	Enabled *bool  `json:"enabled"`
-	Start   string `json:"start"`
-	End     string `json:"end"`
+	Enabled  *bool              `json:"enabled"`
+	Start    string             `json:"start"`
+	End      string             `json:"end"`
+	Expected map[string]*string `json:"expected"`
 }
 
 // GetSettings 返回 system_setting 全量配置。
 func (h *SettingsHandler) GetSettings(c *gin.Context) {
 	isAdmin, _ := c.Get(middleware.ContextIsAdminKey)
 	isAdminBool, _ := isAdmin.(bool)
+	scope := c.Query("scope")
+	if scope != "" && scope != "system" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported settings scope"})
+		return
+	}
 
 	c.Header("Cache-Control", "no-store")
-	rows, err := h.Svc.GetSettings(c.Request.Context(), isAdminBool)
+	rows, err := h.Svc.GetSettings(c.Request.Context(), isAdminBool && scope != "system")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
 
+	if scope == "system" {
+		c.JSON(http.StatusOK, gin.H{"items": rows, "conditional_writes": true})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"items": rows})
 }
 
@@ -76,8 +89,16 @@ func (h *SettingsHandler) UpsertSettings(c *gin.Context) {
 		})
 	}
 
-	err := h.Svc.UpsertSettings(c.Request.Context(), c.GetInt64(middleware.ContextUserIDKey), items, c.ClientIP())
+	err := h.Svc.UpsertSettings(c.Request.Context(), c.GetInt64(middleware.ContextUserIDKey), items, c.ClientIP(), req.Expected)
 	if err != nil {
+		if errors.Is(err, contract.ErrConflict) {
+			c.JSON(http.StatusConflict, gin.H{"error": "settings changed; refresh before saving"})
+			return
+		}
+		if errors.Is(err, contract.ErrInvalidInput) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid expected settings"})
+			return
+		}
 		if err == gorm.ErrInvalidData {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid settings batch"})
 			return
@@ -135,10 +156,11 @@ func (h *SettingsHandler) GetMyRateWindow(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"item": gin.H{
-			"enabled": res.Enabled,
-			"start":   res.Start,
-			"end":     res.End,
-			"source":  res.Source,
+			"enabled":  res.Enabled,
+			"start":    res.Start,
+			"end":      res.End,
+			"source":   res.Source,
+			"expected": res.Expected,
 		},
 	})
 }
@@ -146,6 +168,7 @@ func (h *SettingsHandler) GetMyRateWindow(c *gin.Context) {
 // UpdateMyRateWindow 更新当前用户的高峰时段配置。
 func (h *SettingsHandler) UpdateMyRateWindow(c *gin.Context) {
 	uid := c.GetInt64(middleware.ContextUserIDKey)
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<10)
 
 	var req updateRateWindowRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -166,8 +189,16 @@ func (h *SettingsHandler) UpdateMyRateWindow(c *gin.Context) {
 		}
 	}
 
-	err := h.Svc.UpdateMyRateWindow(c.Request.Context(), uid, enabled, start, end, c.ClientIP())
+	err := h.Svc.UpdateMyRateWindow(c.Request.Context(), uid, enabled, start, end, c.ClientIP(), req.Expected)
 	if err != nil {
+		if errors.Is(err, contract.ErrConflict) {
+			c.JSON(http.StatusConflict, gin.H{"error": "rate window changed; refresh before saving"})
+			return
+		}
+		if errors.Is(err, contract.ErrInvalidInput) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid expected rate window"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "save rate window failed"})
 		return
 	}

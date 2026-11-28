@@ -6,11 +6,18 @@ import (
 	"cloudenest_go/model"
 )
 
+// FileShareListRow adds a name only while the sharer still has read access.
+type FileShareListRow struct {
+	model.Share `gorm:"embedded"`
+	FileName    *string `json:"file_name"`
+}
+
 // FileSearchQuery 定义文件检索参数。
 type FileSearchQuery struct {
 	ParentID  int64
 	Name      string
 	FileType  string
+	MediaKind string
 	StartTime string
 	EndTime   string
 	Page      int
@@ -34,13 +41,28 @@ type FolderZipEntry struct {
 
 // FileOperationLogQuery 定义操作日志查询参数。
 type FileOperationLogQuery struct {
-	Action    string
-	Status    string
-	StartTime string
-	EndTime   string
-	Page      int
-	Limit     int
-	All       int
+	Action     string
+	Status     string
+	StartTime  string
+	EndTime    string
+	Page       int
+	Limit      int
+	All        int
+	SnapshotID int64
+}
+
+type OperationLogCursorQuery struct {
+	FileOperationLogQuery
+	BeforeID int64
+	AfterID  int64
+}
+
+type OperationLogCursorPage struct {
+	Items        []model.OperationLog
+	Total        int64
+	SnapshotID   int64
+	NextBeforeID int64
+	NextAfterID  int64
 }
 
 // UploadCommit reports whether this request's unique candidate can be discarded.
@@ -88,9 +110,10 @@ type FileRepository interface {
 	CompleteUploadPersist(ctx context.Context, uid int64, parentID int64, uploadID string, task model.UploadTask, totalChunks int, storagePath, storageRoot string, mergedSize int64, fileHash, artifactToken string, clientIP string) (UploadCommit, error)
 	CreateShare(ctx context.Context, share model.Share, clientIP string) (model.Share, error)
 	CreateOperationLog(ctx context.Context, userID int64, fileID *int64, action string, status string, detail string, clientIP string) error
-	ListShares(ctx context.Context, uid int64) ([]model.Share, error)
+	ListShares(ctx context.Context, uid int64) ([]FileShareListRow, error)
 	RevokeShare(ctx context.Context, uid int64, code string, clientIP string) error
 	ListOperationLogs(ctx context.Context, uid int64, isAdmin bool, q FileOperationLogQuery) ([]model.OperationLog, int64, error)
+	ListOperationLogCursor(ctx context.Context, uid int64, isAdmin bool, q OperationLogCursorQuery) (OperationLogCursorPage, error)
 	ExportOperationLogs(ctx context.Context, uid int64, isAdmin bool, q FileOperationLogQuery) ([]model.OperationLog, error)
 	FindLivePhotoAutoBindCandidate(ctx context.Context, parentID, ownerID, excludeID int64, baseName string, needVideo bool) (*model.File, error)
 	CreateLivePhotoAutoBindIfAbsent(ctx context.Context, userID int64, imageID int64, videoID int64, clientIP string) error

@@ -146,7 +146,13 @@ func (p *Processor) Process(ctx context.Context, j model.AIIndexJob) (func(*gorm
 		if errors.Is(err, pdfextract.ErrUnavailable) || errors.Is(err, imageprep.ErrDecoderUnavailable) {
 			return nil, failure("extraction_unavailable", true)
 		}
-		if errors.Is(err, ErrModelUnavailable) || errors.Is(err, ErrVisionResponse) || errors.Is(err, ErrEmbedding) || errors.Is(err, pdfextract.ErrOCRRequired) {
+		if errors.Is(err, ErrVisionOutputLimit) {
+			return nil, failure("vision_output_limit", false)
+		}
+		if errors.Is(err, ErrVisionResponse) {
+			return nil, failure("invalid_vision_response", true)
+		}
+		if errors.Is(err, ErrModelUnavailable) || errors.Is(err, ErrEmbedding) || errors.Is(err, pdfextract.ErrOCRRequired) {
 			return nil, failure("model_unavailable", true)
 		}
 		if errors.Is(err, ErrModelChanged) {

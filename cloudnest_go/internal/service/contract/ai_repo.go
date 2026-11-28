@@ -38,6 +38,7 @@ type AISearchRow struct {
 // AIRepository 定义 AI 模块存储访问能力。
 type AIRepository interface {
 	PublishOCR(ctx context.Context, uid int64, source model.File, sourceHash string, tags, description, text string) (model.AiMetadata, error)
+	PublishSummary(ctx context.Context, uid int64, source model.File, sourceHash string, tags, description, text, summary string) (model.AiMetadata, error)
 	ListIndex(ctx context.Context, uid, after int64, limit int) ([]AIIndexStatus, error)
 	IndexStatus(ctx context.Context, uid, id int64) (AIIndexStatus, error)
 	RebuildIndex(ctx context.Context, uid int64, items []AIRebuildItem, ip string) ([]AIRebuildItem, error)
@@ -48,9 +49,6 @@ type AIRepository interface {
 	GetActiveFileByID(ctx context.Context, fileID int64) (model.File, error)
 	GetStorageByID(ctx context.Context, storageID int64) (model.Storage, error)
 	CanAccessFile(ctx context.Context, userID, fileID int64, write bool) (bool, error)
-	GetAIMetadataByFileID(ctx context.Context, fileID int64) (model.AiMetadata, error)
-	CreateAIMetadata(ctx context.Context, row model.AiMetadata) (model.AiMetadata, error)
-	UpdateAIMetadata(ctx context.Context, row model.AiMetadata, tags string, desc string, ocrText string) (model.AiMetadata, error)
 	CreateAITask(ctx context.Context, row model.AiTask) error
 }
 

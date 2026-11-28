@@ -30,9 +30,11 @@ type CreateDeviceRequest struct {
 
 // UpdateDeviceRequest 更新设备请求。
 type UpdateDeviceRequest struct {
-	DeviceName string `json:"device_name"`
-	DeviceIP   string `json:"device_ip"`
-	Status     *int8  `json:"status"`
+	DeviceName string                      `json:"device_name"`
+	DeviceIP   string                      `json:"device_ip"`
+	Status     *int8                       `json:"status"`
+	ClearIP    bool                        `json:"clear_device_ip"`
+	Expected   *contract.FrpDeviceSnapshot `json:"expected"`
 }
 
 // CreateMappingRequest 创建 FRP 映射请求。
@@ -47,11 +49,12 @@ type CreateMappingRequest struct {
 
 // UpdateMappingRequest 更新 FRP 映射请求。
 type UpdateMappingRequest struct {
-	ServerID   *int64  `json:"server_id"`
-	LocalPort  *int    `json:"local_port"`
-	RemotePort *int    `json:"remote_port"`
-	Domain     *string `json:"domain"`
-	Status     *int8   `json:"status"`
+	ServerID   *int64                       `json:"server_id"`
+	LocalPort  *int                         `json:"local_port"`
+	RemotePort *int                         `json:"remote_port"`
+	Domain     *string                      `json:"domain"`
+	Status     *int8                        `json:"status"`
+	Expected   *contract.FrpMappingSnapshot `json:"expected"`
 }
 
 // PreviewConfigRequest 预览 FRPC 配置请求。
@@ -210,6 +213,8 @@ func (h *FrpHandler) UpdateDevice(c *gin.Context) {
 		DeviceName: req.DeviceName,
 		DeviceIP:   req.DeviceIP,
 		Status:     req.Status,
+		ClearIP:    req.ClearIP,
+		Expected:   req.Expected,
 	})
 	if err != nil {
 		h.writeDeviceError(c, err)
@@ -322,6 +327,7 @@ func (h *FrpHandler) UpdateMapping(c *gin.Context) {
 		RemotePort: req.RemotePort,
 		Domain:     req.Domain,
 		Status:     req.Status,
+		Expected:   req.Expected,
 	})
 	if err != nil {
 		h.writeMappingError(c, err)
@@ -739,8 +745,10 @@ func (h *FrpHandler) writeMappingError(c *gin.Context, err error) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "mapping server policy unavailable"})
 	case errors.Is(err, contract.ErrFrpMappingBusy):
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "mapping operation busy; retry later"})
-	case errors.Is(err, contract.ErrFrpMappingConflict), errors.Is(err, contract.ErrConflict):
+	case errors.Is(err, contract.ErrFrpMappingConflict):
 		c.JSON(409, gin.H{"error": "mapping port or domain already exists"})
+	case errors.Is(err, contract.ErrConflict):
+		c.JSON(409, gin.H{"error": "mapping content or policy changed; refresh before editing"})
 	case errors.Is(err, contract.ErrFrpPortExhausted):
 		c.JSON(409, gin.H{"error": "remote port pool exhausted"})
 	case errors.Is(err, contract.ErrFrpDeviceDisabled):
@@ -758,6 +766,8 @@ func (h *FrpHandler) writeDeviceError(c *gin.Context, err error) {
 		c.JSON(403, gin.H{"error": "permission denied"})
 	case errors.Is(err, contract.ErrInvalidInput):
 		c.JSON(400, gin.H{"error": "invalid device fields"})
+	case errors.Is(err, contract.ErrConflict):
+		c.JSON(409, gin.H{"error": "device content changed; refresh before editing"})
 	case errors.Is(err, contract.ErrFrpMappingBusy):
 		c.JSON(503, gin.H{"error": "device operation busy; retry later"})
 	default:

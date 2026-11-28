@@ -15,6 +15,14 @@ type FrpActor struct {
 	ClientIP string
 }
 
+// Optional content baseline for clients that must reject a stale device edit.
+// It adds no schema revision and leaves legacy requests without a baseline valid.
+type FrpDeviceSnapshot struct {
+	Name    string `json:"device_name"`
+	Address string `json:"device_ip"`
+	Status  int8   `json:"status"`
+}
+
 // FrpCreateMappingInput 定义创建映射输入。
 type FrpCreateMappingInput struct {
 	ServerID int64
@@ -34,6 +42,16 @@ type FrpUpdateMappingInput struct {
 	RemotePort *int
 	Domain     *string
 	Status     *int8
+	Expected   *FrpMappingSnapshot
+}
+
+type FrpMappingSnapshot struct {
+	DeviceID   int64  `json:"device_id"`
+	ServerID   int64  `json:"server_id"`
+	LocalPort  int    `json:"local_port"`
+	RemotePort int    `json:"remote_port"`
+	Domain     string `json:"domain"`
+	Status     int8   `json:"status"`
 }
 
 // FrpDeviceDetailMeta 定义设备详情附加信息。
@@ -60,7 +78,7 @@ type FrpRepository interface {
 	ListDevices(ctx context.Context, uid int64, isAdmin bool, statusFilter *int8, retired bool) ([]model.Device, error)
 	GetDeviceByID(ctx context.Context, deviceID int64, retired ...bool) (model.Device, error)
 	GetDeviceDetailMeta(ctx context.Context, deviceID int64) (FrpDeviceDetailMeta, error)
-	UpdateDevice(ctx context.Context, actor FrpActor, deviceID int64, updates map[string]interface{}) (model.Device, error)
+	UpdateDevice(ctx context.Context, actor FrpActor, deviceID int64, updates map[string]interface{}, expected ...FrpDeviceSnapshot) (model.Device, error)
 	DeleteDevice(ctx context.Context, actor FrpActor, deviceID int64) (model.Device, error)
 	CreateMapping(ctx context.Context, req FrpCreateMappingInput) (model.FrpMapping, error)
 	ListMappingsByDeviceID(ctx context.Context, deviceID int64) ([]model.FrpMapping, error)

@@ -1,0 +1,40 @@
+{
+  "scope": "Observed DownloadStream cancellation terminal-result race discovered during workspace regression",
+  "baseline_commit": "9bd004ab7c59bed08dc6bc0a28be3f96a34739b4",
+  "baseline_source_sha256": {
+    "cloudnest_macos/Core/DownloadStream.swift": "a4878ddee1749ae049ca898fac22175dae907ada9b859e961afbe801ad897a15",
+    "cloudnest_macos/Tests/TransferTests.swift": "836b89f7c91bde15129318d6b7ea9861cc554aa974b455c5cfa9cef06ab98245"
+  },
+  "initial_failed_run": {
+    "log_sha256": "490f66c2b61fea9f6064f9b46958a54c9f6361fe693abb217a59157ba19da5d8",
+    "registered": 70,
+    "failed": 1,
+    "seconds": 0.343,
+    "test": "cancellingDownloadReleasesAnUnacknowledgedBlock",
+    "location": "TransferTests.swift:155",
+    "issue": "The cancelled stream completed without its cancellation error"
+  },
+  "pre_fix_followups": {
+    "single_case_recheck_passed": true,
+    "32_iteration_reproduction_run_passed": true,
+    "note": "Nondeterministic failure retained; a passing recheck was not treated as disproof."
+  },
+  "analysis": "Inferred from the terminal-state code and observed failure: cancel sets finished and wakes the delegate, then publishes CancellationError after unlocking; the normal completion callback lacked a finished guard and could publish normal EOF first.",
+  "fix": "didCompleteWithError now returns without publishing when another terminal branch already owns finished. Cancellation owns its waiter and stream result; no error assertion relaxed.",
+  "current_source_sha256": {
+    "cloudnest_macos/Core/DownloadStream.swift": "331d06a3761574535bda6347928afd17f67409a49664fe39a2c55e6b28eaa015",
+    "cloudnest_macos/Tests/TransferTests.swift": "74f9cf0f2164ac3dc8f2cfd21500199bca2cad23de02c43e0193b8cdfe80c986"
+  },
+  "post_fix": {
+    "existing_error_assertion_retained": true,
+    "iterations_per_case": 32,
+    "ordinary_swift": {
+      "registered": 73,
+      "actual_pass": 52,
+      "skipped": 21,
+      "seconds": 0.127
+    },
+    "full_real_tls_backend_seconds": 81.381
+  },
+  "limits": "No claim of exhaustive scheduling, actual GUI cancellation or abrupt power-loss coverage in this regression artifact."
+}

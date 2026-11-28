@@ -1,6 +1,13 @@
 import Foundation
 
-struct FileItem: Decodable, Identifiable, Equatable, Sendable {
+protocol DownloadableFile: Sendable {
+    var id: Int64 { get }
+    var filename: String { get }
+    var size: Int64 { get }
+    var isDirectory: Bool { get }
+}
+
+struct FileItem: Decodable, Identifiable, Equatable, DownloadableFile {
     let id: Int64
     let filename: String
     let parentID: Int64
@@ -9,6 +16,19 @@ struct FileItem: Decodable, Identifiable, Equatable, Sendable {
     let currentVersion: Int
     let updateTime: String
     let fileType: String
+    let userID: Int64?
+    let workspaceID: Int64?
+
+    init(id: Int64, filename: String, parentID: Int64, isFolder: Int, size: Int64,
+         currentVersion: Int, updateTime: String, fileType: String, userID: Int64? = nil, workspaceID: Int64? = nil) {
+        self.id = id; self.filename = filename; self.parentID = parentID; self.isFolder = isFolder; self.size = size
+        self.currentVersion = currentVersion; self.updateTime = updateTime; self.fileType = fileType
+        self.userID = userID; self.workspaceID = workspaceID
+    }
+
+    func canManageCollaborators(userID: Int64?) -> Bool {
+        self.userID != nil && self.userID == userID && workspaceID == nil
+    }
 
     var isDirectory: Bool { isFolder == 1 }
     var modified: Date? {
@@ -24,6 +44,7 @@ struct FileItem: Decodable, Identifiable, Equatable, Sendable {
         case currentVersion = "current_version"
         case updateTime = "update_time"
         case fileType = "file_type"
+        case userID = "user_id", workspaceID = "workspace_id"
     }
 }
 
@@ -60,7 +81,7 @@ extension ServerAPI {
         let query = recycleBin ? [] : [URLQueryItem(name: "parent_id", value: String(parentID))]
         let result: FileList = try await request(origin, path, token: token, query: query, maximumBytes: 8 * 1024 * 1024)
         let items = result.items ?? []
-        guard items.allSatisfy({ $0.id > 0 && $0.parentID >= 0 && $0.size >= 0 }),
+        guard items.allSatisfy({ $0.id > 0 && $0.parentID >= 0 && $0.size >= 0 && ($0.userID.map { $0 > 0 } ?? true) && ($0.workspaceID.map { $0 > 0 } ?? true) }),
               Set(items.map(\.id)).count == items.count else { throw ServerError.invalidResponse }
         return items
     }

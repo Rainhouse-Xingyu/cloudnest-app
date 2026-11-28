@@ -16,12 +16,16 @@ import (
 )
 
 func textWorker(t *testing.T, f *fixture, base string) *indexqueue.Worker {
+	return textWorkerWithVision(t, f, base, "qwen3-vl:4b")
+}
+
+func textWorkerWithVision(t *testing.T, f *fixture, base, visionModel string) *indexqueue.Worker {
 	t.Helper()
 	provider, err := aiindex.NewOllama(base, "qwen3-embedding:0.6b")
 	if err != nil {
 		t.Fatal(err)
 	}
-	vision, err := aiindex.NewOllama(base, "qwen3-vl:4b")
+	vision, err := aiindex.NewOllama(base, visionModel)
 	if err != nil {
 		t.Fatal(err)
 	}

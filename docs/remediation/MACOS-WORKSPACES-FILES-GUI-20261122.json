@@ -1,0 +1,579 @@
+{
+  "passed": true,
+  "scope": "Final native peer workspace file layout, viewer download, editor upload, and post-revocation clearing; membership setup/changes driven by another real API client",
+  "generated_utc": "2026-11-23T06:16:23.722711+00:00",
+  "source_sha256": {
+    "cloudnest_macos/App/AISearchView.swift": "8aaea5c95be1541e11082295e76e9149ee6a6d5a8e74b77dd0021657b04ce10b",
+    "cloudnest_macos/App/CloudNestApp.swift": "a8b735631e797d1b6ceb1332b91739177872862969285d73be64049f72fe62fb",
+    "cloudnest_macos/App/FRPConfigBuilderView.swift": "094b76c020c83a7c767f78f3278819efb46a8a1a7ba0ad0e10c581fa24fe5dfc",
+    "cloudnest_macos/App/FRPDeviceEditor.swift": "987d8699d61f87db95a643a235514ade88c3b21ea95f62df88f7b0756905d02e",
+    "cloudnest_macos/App/FRPEnrollmentView.swift": "27faba187c03280bc50a410a112f3f7834b47f75fab7b7d2093fba902fe18103",
+    "cloudnest_macos/App/FRPMappingEditor.swift": "48514a65fa32bddb86692d78dafc371dbb4541e0d21d241161bd6fd375d7ef75",
+    "cloudnest_macos/App/FRPServersView.swift": "b4813616e9a1c23f9e47e729f5a0edc16c9618e8b89a9d7ba04f7605703f5cc2",
+    "cloudnest_macos/App/FRPView.swift": "38a3f10c21a927773be316aa9f1399b29f7b8ebb0626ad1af832c12eb5b72e75",
+    "cloudnest_macos/App/FileBrowserCommands.swift": "1744b820661ef09fa3836c67397d2975133a4982444807012c12c5112731d4e8",
+    "cloudnest_macos/App/FileBrowserView.swift": "f62e9294bda6daf66b41e1adf55ff802d97ce87b64240bc3cbed99841542e735",
+    "cloudnest_macos/App/FileDestinationSheet.swift": "7e72523670c79d21e4d030c4f62468f0b0dd4b18149931be58050d0e40c99170",
+    "cloudnest_macos/App/FileVersionsSheet.swift": "fa6608dbf44889d430fae4cc9a318b3ebdcd5ce8458104a2d62ad837d84906e7",
+    "cloudnest_macos/App/TransferListView.swift": "a8e26aa331492e166bea32e406507aa5daa2420cf651c7074d50d718712b6181",
+    "cloudnest_macos/App/WorkspaceMembersView.swift": "583bcda7f59459bfe8ad02fca8720cdd904400435a4e9a5878cc177ab389b689",
+    "cloudnest_macos/App/WorkspacesView.swift": "81443c40ecef93f140fa5af0d6a5c5a2b0203c693b578a3967b6099b7b92f522",
+    "cloudnest_macos/Core/AISearchAPI.swift": "d37a7e8c21134d4f620cebbe09163817b57802ec04074d5eba3ac715ce487c6f",
+    "cloudnest_macos/Core/AISearchState.swift": "e6d670b3b5cbdb56a48b251f8c355bd97b7be125f9d7ab03c31447e757a14d8a",
+    "cloudnest_macos/Core/DownloadPlan.swift": "641b33f9f36001a67bcb3ed583c2ff3e61b40ac2683d10fafdaa70c6b24965b1",
+    "cloudnest_macos/Core/DownloadStream.swift": "331d06a3761574535bda6347928afd17f67409a49664fe39a2c55e6b28eaa015",
+    "cloudnest_macos/Core/FRPAPI.swift": "135409db072f5df50959f1ac8b7f8b728ebb13042872de53bc7553f57818fc64",
+    "cloudnest_macos/Core/FRPCommandIntent.swift": "dd701f1a334dd0ba1716b74630d81acae20bb4c6e38ce7190d01fd501461523d",
+    "cloudnest_macos/Core/FRPCommandManager.swift": "c61580e09c7651b7c08732491e0974f6f3a10d65a95bc7606fe5c95aa936ac32",
+    "cloudnest_macos/Core/FRPCommandStore.swift": "513044a6403122a9a85ec3f5e03112e00cab263a4fd76ae69e0d21ee3f95c349",
+    "cloudnest_macos/Core/FRPConfigAPI.swift": "3068e978b0a2050c5880bcc9a6489e2c66c9f920b35d6890d683bcef56b9c71d",
+    "cloudnest_macos/Core/FRPConfigState.swift": "3b577158af7f7fd12135754228951f95f79b815f6ba4f0a7d6d0617a604cf04d",
+    "cloudnest_macos/Core/FRPDeviceAPI.swift": "d8c9eca7db79cec5932eece09dde45cb9ba14c6bb6313423bc40c2c8426aa6c2",
+    "cloudnest_macos/Core/FRPEnrollmentAPI.swift": "97dbf23ad3d8094b0ab41473f45069c1ad7a73b79e431d7ae596e535be0a7b2f",
+    "cloudnest_macos/Core/FRPEnrollmentState.swift": "e1ca8f0410dbdc8949b2a78d287a56388c87b111f308b679395c8fa32342ae0b",
+    "cloudnest_macos/Core/FRPMappingAPI.swift": "7152875360cb32e76b511086077a40e2c08de80d9f87e33250756133688ddb94",
+    "cloudnest_macos/Core/FRPServerAPI.swift": "b1db78ca33b70b9392c67643a956c128bbfc1d7b70028bf67b36f30de82155c7",
+    "cloudnest_macos/Core/FRPServerState.swift": "e84a1bfc4c7fe4f5d0072cac824697c343a17cc054316c7d06ff72b341c129d4",
+    "cloudnest_macos/Core/FRPState.swift": "fb0db2aa72ce94fcc47831d1d5d1b4f5116e0194747960d6ec4c0431e4c41bde",
+    "cloudnest_macos/Core/FileAPI.swift": "f65a045b2e59dba168d72487b16699a875753579a3968141fa739f214600e767",
+    "cloudnest_macos/Core/FileBrowserState.swift": "131d002ab247f6107412ac8216d4625f7a3e2f73f587ed2bdef4e4b6bc92ae9a",
+    "cloudnest_macos/Core/FileVersions.swift": "1b009b2cd68dd555325b667186b757b5307dad6a355fd27ebc955da2474b7483",
+    "cloudnest_macos/Core/LegacyPreviewDirectory.swift": "05b9022f6f528de4bff5c4f9c236518b25271537b5794409384d9e5c0329f608",
+    "cloudnest_macos/Core/PreviewCache.swift": "24e5560809afd2d6065a9994d5355c0c36f62128e2a4a256b29c2bdd2c808904",
+    "cloudnest_macos/Core/ServerAPI.swift": "9571f67d3477c0ccad13da838f9e1a14013ccb1b8ff1d289b68cdfd68dcb74bc",
+    "cloudnest_macos/Core/SessionState.swift": "a3260b4a5aa5a54be01b44dc2b1cad83f10f2289a6c4c1505416a4ac7d9e8d16",
+    "cloudnest_macos/Core/SessionVault.swift": "8aaeafe193e99da59b8a5298fe8d2fa5052c21e8fef67e182927be438d8d7495",
+    "cloudnest_macos/Core/TransferAPI.swift": "757fa9919a3cc5d66d20b380d2470165acc2af63cffac5da3811ec298cf4625b",
+    "cloudnest_macos/Core/TransferDisk.swift": "51ca36fc080604b9a6ece8d0b1302e56904984691c9caa22ee77cdd432ceae84",
+    "cloudnest_macos/Core/TransferManager.swift": "d2a1b943c518cc3fffe7208815da8b9299a1336668a91e9493a375e8255256ff",
+    "cloudnest_macos/Core/TransferRecord.swift": "5deba6f800be9fc2ff2428582f5908e1afbe6c227303661764f2ad1d8374f965",
+    "cloudnest_macos/Core/TransferStore.swift": "66cae8a28ba323c0a90e67eec549356c70c88b843fa9bb352ba0f30c4567e17f",
+    "cloudnest_macos/Core/TransferTelemetry.swift": "95eb7bba18223c173ceeead47cc025fb1fc34617985ab3d80db8ce89d9011345",
+    "cloudnest_macos/Core/WorkspaceAPI.swift": "0f732a18c7135f8bdcd530fda19f131f46504c92db3371d1ca2ed46737b569fd",
+    "cloudnest_macos/Core/WorkspaceState.swift": "e37c41e5b180e58db58cb690cb826b3bfbf75a9a4a9326b2306bab2ff729f97e"
+  },
+  "binary_sha256": "38c55447ec3b85115e35e3f284b8165447aee9c3855c8feb1080865ecfe73aae",
+  "probe_source_sha256": "5fcb00e7bfb791d97595344b2c83d082a36b546b5152cdf635abf2df89fba4ad",
+  "observations": [
+    {
+      "step": "setup",
+      "detail": "Workspace/member/copied preview prepared through real API; not counted as GUI creation. Owner role-management GUI is a separate cohort."
+    },
+    {
+      "step": "viewer-layout",
+      "native_window_subtitle": "只读空间 · 上次读取角色：查看者",
+      "table_headers_and_row_fully_visible": true,
+      "upload_and_new_folder_disabled": true,
+      "workspace_controls_in_system_toolbar": true
+    },
+    {
+      "step": "viewer-download",
+      "native_save_panel": true,
+      "original_filename_unchanged": true,
+      "private_fixture_destination": true,
+      "completed_journal_and_physical_content_verified": true,
+      "bytes": 78,
+      "sha256": "da92a2dbbc61507ddcec740d14b019f98209a972ce40911d8d282e164a4f3811"
+    },
+    {
+      "step": "role-refresh",
+      "another_client_granted_editor": true,
+      "native_workspace_menu_refresh_clicked": true,
+      "subtitle_changed_to_editor": true,
+      "selection_cleared_on_browser_replacement": true,
+      "upload_and_new_folder_enabled": true
+    },
+    {
+      "step": "editor-upload",
+      "actual_open_panel_fixture_selected": true,
+      "uploaded_filename_visible": true,
+      "owner_authenticated_read_verified": true,
+      "file_owner_id": 2,
+      "workspace_id": 3,
+      "bytes": 46,
+      "sha256": "785ba42e19d09b551e7a96a4d7c90afcc2d1de04bd59fb0103727e15372ba59b"
+    },
+    {
+      "step": "revocation",
+      "another_client_removed_member": true,
+      "native_workspace_menu_refresh_clicked": true,
+      "shared_file_page_removed": true,
+      "only_peer_private_workspace_remained": true,
+      "owner_files_preserved": true,
+      "peer_root_http": 403
+    },
+    {
+      "step": "appearance",
+      "light_shared_file_page_checked": true,
+      "dark_list_and_private_empty_file_page_checked": true,
+      "displayed_screenshot_widths": [
+        900,
+        770
+      ],
+      "table_headers_and_toolbar_visible": true,
+      "minimum_640_points_not_proven": true,
+      "detail": "Second resize gesture did not change observed size; no hard minimum or full accessibility/scaling claim is made."
+    },
+    {
+      "step": "exit",
+      "normal_command_q": true,
+      "application_absent_in_following_inventory": true
+    }
+  ],
+  "api_evidence": [
+    {
+      "mode": "setup",
+      "label": "api-prepared-file-cohort",
+      "utc": "2026-11-23T06:02:55.194400+00:00",
+      "spaces": {
+        "owner": [
+          {
+            "id": 3,
+            "name": "Native GUI workspace",
+            "owner_id": 1,
+            "root_file_id": 6,
+            "role": "owner",
+            "create_time": "2026-11-23T06:02:55Z"
+          },
+          {
+            "id": 1,
+            "name": "Legacy UI workspace",
+            "owner_id": 1,
+            "root_file_id": null,
+            "role": "owner",
+            "create_time": "2026-11-23T06:02:48Z"
+          }
+        ],
+        "peer": [
+          {
+            "id": 3,
+            "name": "Native GUI workspace",
+            "owner_id": 1,
+            "root_file_id": 6,
+            "role": "viewer",
+            "create_time": "2026-11-23T06:02:55Z"
+          },
+          {
+            "id": 2,
+            "name": "Peer private workspace",
+            "owner_id": 2,
+            "root_file_id": 5,
+            "role": "owner",
+            "create_time": "2026-11-23T06:02:48Z"
+          }
+        ]
+      },
+      "workspace_id": 3,
+      "root_file_id": 6,
+      "members": [
+        {
+          "user_id": 1,
+          "username": "test-1795413767924273000-0",
+          "role": "owner"
+        },
+        {
+          "user_id": 2,
+          "username": "test-1795413767928116000-1",
+          "role": "viewer"
+        }
+      ],
+      "owner_files": [
+        {
+          "id": 7,
+          "user_id": 1,
+          "filename": "Preview.txt",
+          "parent_id": 6,
+          "workspace_id": 3,
+          "is_folder": 0,
+          "size": 78,
+          "current_version": 1
+        }
+      ],
+      "peer_files": [
+        {
+          "id": 7,
+          "user_id": 1,
+          "filename": "Preview.txt",
+          "parent_id": 6,
+          "workspace_id": 3,
+          "is_folder": 0,
+          "size": 78,
+          "current_version": 1
+        }
+      ],
+      "peer_status": 200,
+      "checks": []
+    },
+    {
+      "mode": "snapshot",
+      "label": "native-viewer-download-verified",
+      "utc": "2026-11-23T06:11:30.686843+00:00",
+      "spaces": {
+        "owner": [
+          {
+            "id": 3,
+            "name": "Native GUI workspace",
+            "owner_id": 1,
+            "root_file_id": 6,
+            "role": "owner",
+            "create_time": "2026-11-23T06:02:55Z"
+          },
+          {
+            "id": 1,
+            "name": "Legacy UI workspace",
+            "owner_id": 1,
+            "root_file_id": null,
+            "role": "owner",
+            "create_time": "2026-11-23T06:02:48Z"
+          }
+        ],
+        "peer": [
+          {
+            "id": 3,
+            "name": "Native GUI workspace",
+            "owner_id": 1,
+            "root_file_id": 6,
+            "role": "viewer",
+            "create_time": "2026-11-23T06:02:55Z"
+          },
+          {
+            "id": 2,
+            "name": "Peer private workspace",
+            "owner_id": 2,
+            "root_file_id": 5,
+            "role": "owner",
+            "create_time": "2026-11-23T06:02:48Z"
+          }
+        ]
+      },
+      "workspace_id": 3,
+      "root_file_id": 6,
+      "members": [
+        {
+          "user_id": 1,
+          "username": "test-1795413767924273000-0",
+          "role": "owner"
+        },
+        {
+          "user_id": 2,
+          "username": "test-1795413767928116000-1",
+          "role": "viewer"
+        }
+      ],
+      "owner_files": [
+        {
+          "id": 7,
+          "user_id": 1,
+          "filename": "Preview.txt",
+          "parent_id": 6,
+          "workspace_id": 3,
+          "is_folder": 0,
+          "size": 78,
+          "current_version": 1
+        }
+      ],
+      "peer_files": [
+        {
+          "id": 7,
+          "user_id": 1,
+          "filename": "Preview.txt",
+          "parent_id": 6,
+          "workspace_id": 3,
+          "is_folder": 0,
+          "size": 78,
+          "current_version": 1
+        }
+      ],
+      "peer_status": 200,
+      "checks": [
+        {
+          "kind": "actual-peer-gui-download",
+          "bytes": 78,
+          "sha256": "da92a2dbbc61507ddcec740d14b019f98209a972ce40911d8d282e164a4f3811",
+          "path": "/tmp/cloudnest-native-ui-workspace-files-66oztu47/Preview.txt"
+        }
+      ]
+    },
+    {
+      "mode": "advance",
+      "label": "control-client-granted-editor",
+      "utc": "2026-11-23T06:11:30.804081+00:00",
+      "spaces": {
+        "owner": [
+          {
+            "id": 3,
+            "name": "Native GUI workspace",
+            "owner_id": 1,
+            "root_file_id": 6,
+            "role": "owner",
+            "create_time": "2026-11-23T06:02:55Z"
+          },
+          {
+            "id": 1,
+            "name": "Legacy UI workspace",
+            "owner_id": 1,
+            "root_file_id": null,
+            "role": "owner",
+            "create_time": "2026-11-23T06:02:48Z"
+          }
+        ],
+        "peer": [
+          {
+            "id": 3,
+            "name": "Native GUI workspace",
+            "owner_id": 1,
+            "root_file_id": 6,
+            "role": "editor",
+            "create_time": "2026-11-23T06:02:55Z"
+          },
+          {
+            "id": 2,
+            "name": "Peer private workspace",
+            "owner_id": 2,
+            "root_file_id": 5,
+            "role": "owner",
+            "create_time": "2026-11-23T06:02:48Z"
+          }
+        ]
+      },
+      "workspace_id": 3,
+      "root_file_id": 6,
+      "members": [
+        {
+          "user_id": 1,
+          "username": "test-1795413767924273000-0",
+          "role": "owner"
+        },
+        {
+          "user_id": 2,
+          "username": "test-1795413767928116000-1",
+          "role": "editor"
+        }
+      ],
+      "owner_files": [
+        {
+          "id": 7,
+          "user_id": 1,
+          "filename": "Preview.txt",
+          "parent_id": 6,
+          "workspace_id": 3,
+          "is_folder": 0,
+          "size": 78,
+          "current_version": 1
+        }
+      ],
+      "peer_files": [
+        {
+          "id": 7,
+          "user_id": 1,
+          "filename": "Preview.txt",
+          "parent_id": 6,
+          "workspace_id": 3,
+          "is_folder": 0,
+          "size": 78,
+          "current_version": 1
+        }
+      ],
+      "peer_status": 200,
+      "checks": []
+    },
+    {
+      "mode": "snapshot",
+      "label": "native-editor-upload-verified",
+      "utc": "2026-11-23T06:12:10.797788+00:00",
+      "spaces": {
+        "owner": [
+          {
+            "id": 3,
+            "name": "Native GUI workspace",
+            "owner_id": 1,
+            "root_file_id": 6,
+            "role": "owner",
+            "create_time": "2026-11-23T06:02:55Z"
+          },
+          {
+            "id": 1,
+            "name": "Legacy UI workspace",
+            "owner_id": 1,
+            "root_file_id": null,
+            "role": "owner",
+            "create_time": "2026-11-23T06:02:48Z"
+          }
+        ],
+        "peer": [
+          {
+            "id": 3,
+            "name": "Native GUI workspace",
+            "owner_id": 1,
+            "root_file_id": 6,
+            "role": "editor",
+            "create_time": "2026-11-23T06:02:55Z"
+          },
+          {
+            "id": 2,
+            "name": "Peer private workspace",
+            "owner_id": 2,
+            "root_file_id": 5,
+            "role": "owner",
+            "create_time": "2026-11-23T06:02:48Z"
+          }
+        ]
+      },
+      "workspace_id": 3,
+      "root_file_id": 6,
+      "members": [
+        {
+          "user_id": 1,
+          "username": "test-1795413767924273000-0",
+          "role": "owner"
+        },
+        {
+          "user_id": 2,
+          "username": "test-1795413767928116000-1",
+          "role": "editor"
+        }
+      ],
+      "owner_files": [
+        {
+          "id": 7,
+          "user_id": 1,
+          "filename": "Preview.txt",
+          "parent_id": 6,
+          "workspace_id": 3,
+          "is_folder": 0,
+          "size": 78,
+          "current_version": 1
+        },
+        {
+          "id": 8,
+          "user_id": 2,
+          "filename": "Upload from Finder.txt",
+          "parent_id": 6,
+          "workspace_id": 3,
+          "is_folder": 0,
+          "size": 46,
+          "current_version": 1
+        }
+      ],
+      "peer_files": [
+        {
+          "id": 7,
+          "user_id": 1,
+          "filename": "Preview.txt",
+          "parent_id": 6,
+          "workspace_id": 3,
+          "is_folder": 0,
+          "size": 78,
+          "current_version": 1
+        },
+        {
+          "id": 8,
+          "user_id": 2,
+          "filename": "Upload from Finder.txt",
+          "parent_id": 6,
+          "workspace_id": 3,
+          "is_folder": 0,
+          "size": 46,
+          "current_version": 1
+        }
+      ],
+      "peer_status": 200,
+      "checks": [
+        {
+          "kind": "actual-peer-gui-upload",
+          "id": 8,
+          "owner_id": 2,
+          "workspace_id": 3,
+          "bytes": 46,
+          "sha256": "785ba42e19d09b551e7a96a4d7c90afcc2d1de04bd59fb0103727e15372ba59b"
+        }
+      ]
+    },
+    {
+      "mode": "revoke",
+      "label": "control-client-revoked-membership",
+      "utc": "2026-11-23T06:12:10.931147+00:00",
+      "spaces": {
+        "owner": [
+          {
+            "id": 3,
+            "name": "Native GUI workspace",
+            "owner_id": 1,
+            "root_file_id": 6,
+            "role": "owner",
+            "create_time": "2026-11-23T06:02:55Z"
+          },
+          {
+            "id": 1,
+            "name": "Legacy UI workspace",
+            "owner_id": 1,
+            "root_file_id": null,
+            "role": "owner",
+            "create_time": "2026-11-23T06:02:48Z"
+          }
+        ],
+        "peer": [
+          {
+            "id": 2,
+            "name": "Peer private workspace",
+            "owner_id": 2,
+            "root_file_id": 5,
+            "role": "owner",
+            "create_time": "2026-11-23T06:02:48Z"
+          }
+        ]
+      },
+      "workspace_id": 3,
+      "root_file_id": 6,
+      "members": [
+        {
+          "user_id": 1,
+          "username": "test-1795413767924273000-0",
+          "role": "owner"
+        }
+      ],
+      "owner_files": [
+        {
+          "id": 7,
+          "user_id": 1,
+          "filename": "Preview.txt",
+          "parent_id": 6,
+          "workspace_id": 3,
+          "is_folder": 0,
+          "size": 78,
+          "current_version": 1
+        },
+        {
+          "id": 8,
+          "user_id": 2,
+          "filename": "Upload from Finder.txt",
+          "parent_id": 6,
+          "workspace_id": 3,
+          "is_folder": 0,
+          "size": 46,
+          "current_version": 1
+        }
+      ],
+      "peer_files": null,
+      "peer_status": 403,
+      "checks": []
+    }
+  ],
+  "cleanup": {
+    "fixture_exec_exit_code": 0,
+    "go_package_seconds": 731.44,
+    "backend_port": 63000,
+    "backend_listener_closed": true
+  },
+  "limitations": [
+    "This is a private loopback TLS cohort with actual production routes and existing native transfer queue.",
+    "No claim of a single all-GUI creation-to-revocation cohort: older creation/copy and current owner member actions have separately fingerprinted reports.",
+    "Original row/header failures and expired continuation cohort remain preserved; member component was unchanged by the later system-toolbar file layout fix.",
+    "Multi-display, full VoiceOver/text scaling, abrupt process loss and full permission/network matrix remain G10."
+  ],
+  "backend_source_sha256": {
+    "cloudnest_go/internal/handler/collaboration_handler.go": "51dc38c67bcac2545c7c7e243893d9daac4a0512cbbb28802a9f07354cefe420",
+    "cloudnest_go/internal/service/contract/collaboration_repo.go": "25a7c4fa3d54897af2f2c81cb7ebf2feb5d3e20d44616bc0ad5ebc1ab35644de",
+    "cloudnest_go/internal/storage/mysql/collaboration_repo.go": "de006b7af9cab038899053f5af01a86c15261de7f79235a7fddbb73dd39c10cf"
+  }
+}

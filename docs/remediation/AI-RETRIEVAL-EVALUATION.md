@@ -4,7 +4,7 @@ G04 的真实链路冒烟检查不能证明检索质量。本基准通过真实�
 
 ## 执行
 
-需要本地 Ollama 的 qwen3-embedding:0.6b、qwen3-vl:4b，以及原生 Poppler。运行只创建全新受守卫检查的 MySQL/Redis 容器，不读取 .env，不操作生产库。
+需要本地 Ollama 的 qwen3-embedding:0.6b、qwen3-vl:2b-instruct，以及原生 Poppler。视觉模型可用 `CLOUDNEST_TEST_IMAGE_VISION_MODEL` 显式选择，报告校验实际名称与digest；历史4B结果不改写。新默认与8GiB实测见[模型选择](AI-MODEL-SELECTION.md)。运行只创建全新受守卫检查的 MySQL/Redis 容器，不读取 .env，不操作生产库。
 
 ```sh
 CLOUDNEST_TEST_POPPLER_BIN=/absolute/native/poppler/bin \

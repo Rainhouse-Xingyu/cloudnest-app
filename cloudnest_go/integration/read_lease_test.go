@@ -325,7 +325,7 @@ func TestReadLeaseForegroundAIRequiresItsOwnScope(t *testing.T) {
 	f := newFixture(t)
 	file := f.upload(t, f.alice, "ai-read-lease.txt", []byte("actual local file"))
 	waitNoReadLeases(t, f, *file.StorageID)
-	svc := service.NewAIService(storageMysql.NewAIRepo(f.db), f.cfg, nil)
+	svc := service.NewAIService(storageMysql.NewAIRepo(f.db), f.cfg)
 	if _, _, err := svc.GetReadableFileAndStorage(context.Background(), f.aliceID, file.ID); !errors.Is(err, blob.ErrReadUnavailable) {
 		t.Fatal("unscoped AI read allowed:", err)
 	}

@@ -1,0 +1,557 @@
+{
+  "passed": true,
+  "generated_utc": "2026-11-21T23:57:53.281333+00:00",
+  "scope": "Serial backend real pixel/EXIF/OCR/semantic/ACL test with explicitly selected 2B model; not native photo GUI or a quality benchmark",
+  "git_head": "af4f3ef7a953035a36ebcff2b1ec627bd723e04d",
+  "exit_code": 0,
+  "elapsed_seconds": 54.683804458000004,
+  "host_memory_bytes": 8589934592,
+  "command": [
+    "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+    "scripts/test-macos-backend.py",
+    "--go-tags",
+    "integration,aimodel",
+    "--filter",
+    "^TestAITextLiveImagesUsePixelsEXIFAndRealSemanticSearch$"
+  ],
+  "vision_model": "qwen3-vl:2b",
+  "samples_interval_seconds": 1,
+  "model_resource_samples": [
+    {
+      "seconds": 0.002,
+      "models": []
+    },
+    {
+      "seconds": 1.009,
+      "models": []
+    },
+    {
+      "seconds": 2.015,
+      "models": []
+    },
+    {
+      "seconds": 3.018,
+      "models": []
+    },
+    {
+      "seconds": 4.022,
+      "models": []
+    },
+    {
+      "seconds": 5.028,
+      "models": []
+    },
+    {
+      "seconds": 6.034,
+      "models": []
+    },
+    {
+      "seconds": 7.041,
+      "models": []
+    },
+    {
+      "seconds": 8.046,
+      "models": []
+    },
+    {
+      "seconds": 9.051,
+      "models": []
+    },
+    {
+      "seconds": 10.057,
+      "models": []
+    },
+    {
+      "seconds": 11.065,
+      "models": []
+    },
+    {
+      "seconds": 12.095,
+      "models": []
+    },
+    {
+      "seconds": 13.116,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 14.125,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 15.132,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 16.14,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 17.147,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 18.156,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 19.168,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 20.198,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 21.22,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 22.227,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 23.235,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 24.246,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 25.254,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 26.262,
+      "models": []
+    },
+    {
+      "seconds": 27.267,
+      "models": [
+        {
+          "name": "qwen3-embedding:0.6b",
+          "digest": "ac6da0dfba84a81fdbfbaf330198c33cd77c4cdfc53e8bc50eb581914a15621d",
+          "size": 1239752376,
+          "size_vram": 1239752376,
+          "context_length": 4096
+        }
+      ]
+    },
+    {
+      "seconds": 28.273,
+      "models": []
+    },
+    {
+      "seconds": 29.279,
+      "models": []
+    },
+    {
+      "seconds": 30.281,
+      "models": []
+    },
+    {
+      "seconds": 31.283,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 32.292,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 33.297,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 34.304,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 35.311,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 36.328,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 37.332,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 38.355,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 39.393,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 40.401,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 41.41,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 42.418,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 43.425,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 44.435,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 45.441,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 46.45,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 47.474,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 48.517,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 49.524,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 50.547,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 51.553,
+      "models": [
+        {
+          "name": "qwen3-vl:2b",
+          "digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+          "size": 2654197512,
+          "size_vram": 2654197512,
+          "context_length": 8192
+        }
+      ]
+    },
+    {
+      "seconds": 52.56,
+      "models": []
+    },
+    {
+      "seconds": 53.567,
+      "models": [
+        {
+          "name": "qwen3-embedding:0.6b",
+          "digest": "ac6da0dfba84a81fdbfbaf330198c33cd77c4cdfc53e8bc50eb581914a15621d",
+          "size": 1239752376,
+          "size_vram": 1239752376,
+          "context_length": 4096
+        }
+      ]
+    }
+  ],
+  "log_sha256": "68b3ea7fab56355d8b66ffac66a9dd469f2e3365fcdbb7d1df6f620bb3b2b3bc",
+  "test_summary_lines": [
+    "    ai_text_live_test.go:567: real image beach-synthetic.png chunks=1 has_ocr=false captured=true vision=qwen3-vl:2b",
+    "    ai_text_live_test.go:567: real image invoice-synthetic.png chunks=1 has_ocr=true captured=false vision=qwen3-vl:2b",
+    "--- PASS: TestAITextLiveImagesUsePixelsEXIFAndRealSemanticSearch (46.18s)",
+    "ok  \tcloudenest_go/integration\t48.104s"
+  ],
+  "limitations": [
+    "Ollama reported allocation is not process RSS or whole-host peak.",
+    "Only two synthetic image fixtures, no concurrency or retrieval-quality claim.",
+    "Sampling adds a small local HTTP observer; other user applications were left running."
+  ],
+  "model_digest": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+  "observer_source_sha256": "986d487dd2e1d0bc8ca4d8d60653b3805d59765250f758dcef016554d979a0ec",
+  "source_fixture_sha256": {
+    "beach-synthetic.png": "46fb75e9a0db7d4dbe339bd25f10829280182f955b75b77190e4ba27f44d1dd2",
+    "invoice-synthetic.png": "651e5ea7e9b0de70197a8d697de442692d2aa1025e3369dce0131e17651c7d1f"
+  },
+  "synthetic_camera_metadata": {
+    "capture_local": "2025-06-15 10:20:30",
+    "offset": "+08:00",
+    "date_filter_query": "去年拍的海边照片",
+    "invoice_capture_time_inferred": false
+  },
+  "asserted_behaviors": [
+    "Pixels processed by actual selected vision model; provenance and nonempty scene/tags",
+    "Beach synthetic EXIF camera clock preserved without timezone shift",
+    "Invoice OCR preserves Laptop, 5999 and 192.0.2.42",
+    "Real semantic results include semantic source for both queries",
+    "Other user receives no photo description/capture metadata",
+    "Recycled beach image no longer appears in date-filtered search"
+  ]
+}

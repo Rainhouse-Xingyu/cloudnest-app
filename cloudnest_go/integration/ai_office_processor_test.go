@@ -61,8 +61,13 @@ func TestAIOfficeExtractionAndModelFailuresStayDistinct(t *testing.T) {
 
 func TestAIOfficeManualSummarySharesParserAndRejectsInvalidPackages(t *testing.T) {
 	f, _ := indexFixture(t)
+	f.cfg.AIOllamaModel = "qwen3-vl:4b" // Explicit legacy model matches this protocol fixture.
 	received := make(chan string, 1)
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/tags" {
+			json.NewEncoder(w).Encode(map[string]any{"models": []any{map[string]string{"name": "qwen3-vl:4b", "digest": strings.Repeat("a", 64)}}})
+			return
+		}
 		if r.URL.Path != "/api/generate" {
 			t.Error("wrong summary endpoint", r.URL.Path)
 		}

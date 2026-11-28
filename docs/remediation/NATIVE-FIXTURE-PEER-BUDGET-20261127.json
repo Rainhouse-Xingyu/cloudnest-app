@@ -1,0 +1,53 @@
+{
+  "utc": "2026-11-27T00:42:04.429988+00:00",
+  "original_commit": "95b85548cca2826582f772c26844465448852b0e",
+  "original_native_run": 45555099328,
+  "failed_job": 139005143424,
+  "failed_utc": "2026-11-25T05:45:32.113199Z",
+  "failed_request": "POST /api/auth/login",
+  "status": 429,
+  "failed_assertion": "RealBackendWorkspaceTests.swift:26: owner.transferIdentity nil",
+  "same_physical_peer_attempts_in_last_minute": 31,
+  "original_backend_run": 45555099293,
+  "original_backend_all_succeeded": true,
+  "original_xcode27_job": 139005142938,
+  "original_xcode27_succeeded": true,
+  "production_app_or_middleware_changed": false,
+  "fixture_peer_identity_synthetic": true,
+  "real_tls_body_io_and_cancellation": true,
+  "redis_counters_deleted": false,
+  "threshold_or_window_relaxed": false,
+  "focused_race_seconds": 5.099,
+  "focused_succeeded": true,
+  "full_native_pending": false,
+  "source_sha256": {
+    "cloudnest_go/integration/macos_peer_test.go": "befb5852627a04cfe024bcc5ef7dee26854574a1593d407523d2d9405372dbb3",
+    "cloudnest_go/integration/macos_client_test.go": "538ac57793f287ddb0c50933de0a6be9ccc8477f3be1baf1eddc0a781cbfcc62",
+    "cloudnest_go/integration/macos_collaboration_test.go": "01a87f525e2cab0f668fed8421061e151c6099d015e34c6befa4bbb1fdd1b631",
+    "cloudnest_go/integration/macos_frp_test.go": "5321f534750ae253077ecb93121753d489041d68027096081546e6058d780008",
+    "cloudnest_go/integration/macos_public_share_test.go": "73d55646e986cf62716627494e20d39afbbfb90277c1755b44be29dca7bb39d8",
+    "cloudnest_go/integration/macos_settings_test.go": "f40a2569b1467b4c3cd8e47fa14373fcbb300ed9b4e99d63a5e450122576a078",
+    "cloudnest_go/integration/macos_shares_test.go": "8e90da901a4700711b2e4252ab3ca7f1e08fe42c6615d08a46dfc6f6a5dd37d2",
+    "cloudnest_go/integration/macos_workspace_test.go": "7e22246604507320786fa56b1c2084fd5854c8fecbec29067a5db95c9d9ecda7",
+    "scripts/test-macos-backend.py": "7d9fafb2cde6f66f58934c818bd53cdfb53a8c806ff0c56b1c1689f2e8666718"
+  },
+  "logs": {
+    "focused": {
+      "sha256": "a4dcb1ad502f51ca9ac96bdf3d349f46b3cee11e4fc10af67be739aa18630bc0",
+      "bytes": 11968
+    },
+    "full-native": {
+      "sha256": "f5d312a3566bfb8bc71b902e568bd358ed0b9237895c02dfdb1a82ae0c86d79a",
+      "bytes": 81657
+    }
+  },
+  "original_ci_failure_lines": [
+    "2026-11-25T05:45:32.1131990Z [GIN] 2026/11/25 - 05:45:32 | 429 | 441.5µs | 127.0.0.1 | POST \"/api/auth/login\"",
+    "2026-11-25T05:45:32.1479940Z         ✘ Test realBackendWorkspaceRolesFilesAndRevocation() recorded an issue at RealBackendWorkspaceTests.swift:26:33: Expectation failed: (owner → CloudNestCore.SessionState).transferIdentity → nil → nil",
+    "2026-11-25T05:45:32.1495570Z --- FAIL: TestMacOSClientWorkspaceAccess (5.25s)",
+    "2026-11-25T05:45:32.1499890Z     --- FAIL: TestMacOSClientWorkspaceAccess/restricted (1.83s)"
+  ],
+  "full_native_succeeded": true,
+  "full_native_race_seconds": 143.183,
+  "previously_failed_workspace_restricted_succeeded": true
+}

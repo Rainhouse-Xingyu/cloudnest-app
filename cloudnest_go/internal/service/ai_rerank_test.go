@@ -90,7 +90,7 @@ func TestHybridRerankPreservesTailAndRevalidatesAfterEveryAttempt(t *testing.T) 
 			if mode == "disabled" {
 				cfg.AIRerankModel = ""
 			}
-			s := NewAIService(repo, cfg, nil)
+			s := NewAIService(repo, cfg)
 			result, err := s.NLSearch(ctx, 1, "invoice", 1, 100)
 			if mode == "cancel" {
 				if !errors.Is(err, context.Canceled) || len(result.Search.Items) != 0 {
@@ -149,7 +149,7 @@ func TestHybridRerankPreservesTailAndRevalidatesAfterEveryAttempt(t *testing.T) 
 func TestHybridRerankParentDeadlineDoesNotReturnPartialResults(t *testing.T) {
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
 	defer cancel()
-	s := NewAIService(hybridFixtureRepo{}, config.Config{AIRerankModel: "rank:test"}, nil)
+	s := NewAIService(hybridFixtureRepo{}, config.Config{AIRerankModel: "rank:test"})
 	result := AINLSearchResult{}
 	err := s.rerankHybrid(ctx, "invoice", []hybridHit{{row: contract.AIHybridRow{Content: "invoice"}}}, &result)
 	if !errors.Is(err, context.DeadlineExceeded) {

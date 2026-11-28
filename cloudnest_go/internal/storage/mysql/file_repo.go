@@ -34,6 +34,7 @@ func NewFileRepo(db *gorm.DB) *FileRepo {
 func (r *FileRepo) SearchFiles(ctx context.Context, uid int64, q contract.FileSearchQuery) ([]model.File, int64, error) {
 	q.Name = strings.TrimSpace(q.Name)
 	q.FileType = strings.ToLower(strings.TrimSpace(q.FileType))
+	q.MediaKind = strings.ToLower(strings.TrimSpace(q.MediaKind))
 	q.StartTime = strings.TrimSpace(q.StartTime)
 	q.EndTime = strings.TrimSpace(q.EndTime)
 	if q.Page <= 0 {
@@ -41,6 +42,9 @@ func (r *FileRepo) SearchFiles(ctx context.Context, uid int64, q contract.FileSe
 	}
 	if q.Limit <= 0 || q.Limit > 200 {
 		q.Limit = 50
+	}
+	if q.MediaKind != "" && q.MediaKind != "image" && q.MediaKind != "live_photo_motion" || q.ParentID < 0 || q.Page > int(^uint(0)>>1)/q.Limit {
+		return nil, 0, contract.ErrInvalidInput
 	}
 
 	dbq := r.db.WithContext(ctx).
@@ -57,6 +61,15 @@ func (r *FileRepo) SearchFiles(ctx context.Context, uid int64, q contract.FileSe
 	}
 	if q.FileType != "" {
 		dbq = dbq.Where("LOWER(f.file_type) = ?", q.FileType)
+	}
+	if q.MediaKind != "" {
+		// Classification is metadata, not proof that bytes can be decoded.
+		// Legacy blank file_type rows still appear using their filename suffix.
+		types := []string{"jpg", "jpeg", "png", "gif", "webp", "heic", "heif", "tif", "tiff", "bmp", "avif"}
+		if q.MediaKind == "live_photo_motion" {
+			types = []string{"mov"}
+		}
+		dbq = dbq.Where("f.is_folder = 0").Where("LOWER(f.file_type) IN ? OR (COALESCE(f.file_type,'') = '' AND LOWER(SUBSTRING_INDEX(f.filename,'.',-1)) IN ?)", types, types)
 	}
 	if q.StartTime != "" {
 		startAt, err := parseFlexibleTimeForFileRepo(q.StartTime)
@@ -80,7 +93,7 @@ func (r *FileRepo) SearchFiles(ctx context.Context, uid int64, q contract.FileSe
 
 	offset := (q.Page - 1) * q.Limit
 	var rows []model.File
-	if err := dbq.Order("f.is_folder DESC, f.filename ASC").Limit(q.Limit).Offset(offset).Find(&rows).Error; err != nil {
+	if err := dbq.Order("f.is_folder DESC, f.filename ASC, f.id ASC").Limit(q.Limit).Offset(offset).Find(&rows).Error; err != nil {
 		return nil, 0, err
 	}
 
@@ -1051,9 +1064,12 @@ func (r *FileRepo) CreateOperationLog(ctx context.Context, userID int64, fileID 
 	return r.db.WithContext(ctx).Create(&row).Error
 }
 
-func (r *FileRepo) ListShares(ctx context.Context, uid int64) ([]model.Share, error) {
-	var shares []model.Share
-	if err := r.db.WithContext(ctx).Where("user_id = ?", uid).Order("create_time DESC").Find(&shares).Error; err != nil {
+func (r *FileRepo) ListShares(ctx context.Context, uid int64) ([]contract.FileShareListRow, error) {
+	var shares []contract.FileShareListRow
+	readable := fileAccessScope(r.db.WithContext(ctx).Table("file f").Select("f.id, f.filename").Where("f.is_deleted=0"), "f", uid, false)
+	if err := r.db.WithContext(ctx).Table("share s").Select("s.*, f.filename AS file_name").
+		Joins("LEFT JOIN (?) AS f ON f.id=s.file_id", readable).
+		Where("s.user_id=?", uid).Order("s.create_time DESC, s.id DESC").Scan(&shares).Error; err != nil {
 		return nil, err
 	}
 	return shares, nil
@@ -1073,29 +1089,9 @@ func (r *FileRepo) RevokeShare(ctx context.Context, uid int64, code, clientIP st
 }
 
 func (r *FileRepo) ListOperationLogs(ctx context.Context, uid int64, isAdmin bool, q contract.FileOperationLogQuery) ([]model.OperationLog, int64, error) {
-	dbq := r.db.WithContext(ctx).Model(&model.OperationLog{})
-	if !(isAdmin && q.All == 1) {
-		dbq = dbq.Where("user_id = ?", uid)
-	}
-	if q.Action != "" {
-		dbq = dbq.Where("action = ?", q.Action)
-	}
-	if q.Status != "" {
-		dbq = dbq.Where("status = ?", q.Status)
-	}
-	if q.StartTime != "" {
-		startAt, err := parseFlexibleTimeForFileRepo(q.StartTime)
-		if err != nil {
-			return nil, 0, fmt.Errorf("invalid start_time")
-		}
-		dbq = dbq.Where("create_time >= ?", startAt)
-	}
-	if q.EndTime != "" {
-		endAt, err := parseFlexibleTimeForFileRepo(q.EndTime)
-		if err != nil {
-			return nil, 0, fmt.Errorf("invalid end_time")
-		}
-		dbq = dbq.Where("create_time <= ?", endAt)
+	dbq, err := operationLogScope(r.db.WithContext(ctx), uid, isAdmin, q)
+	if err != nil {
+		return nil, 0, err
 	}
 
 	var total int64
@@ -1113,29 +1109,9 @@ func (r *FileRepo) ListOperationLogs(ctx context.Context, uid int64, isAdmin boo
 }
 
 func (r *FileRepo) ExportOperationLogs(ctx context.Context, uid int64, isAdmin bool, q contract.FileOperationLogQuery) ([]model.OperationLog, error) {
-	dbq := r.db.WithContext(ctx).Model(&model.OperationLog{})
-	if !(isAdmin && q.All == 1) {
-		dbq = dbq.Where("user_id = ?", uid)
-	}
-	if q.Action != "" {
-		dbq = dbq.Where("action = ?", q.Action)
-	}
-	if q.Status != "" {
-		dbq = dbq.Where("status = ?", q.Status)
-	}
-	if q.StartTime != "" {
-		startAt, err := parseFlexibleTimeForFileRepo(q.StartTime)
-		if err != nil {
-			return nil, fmt.Errorf("invalid start_time")
-		}
-		dbq = dbq.Where("create_time >= ?", startAt)
-	}
-	if q.EndTime != "" {
-		endAt, err := parseFlexibleTimeForFileRepo(q.EndTime)
-		if err != nil {
-			return nil, fmt.Errorf("invalid end_time")
-		}
-		dbq = dbq.Where("create_time <= ?", endAt)
+	dbq, err := operationLogScope(r.db.WithContext(ctx), uid, isAdmin, q)
+	if err != nil {
+		return nil, err
 	}
 
 	var rows []model.OperationLog

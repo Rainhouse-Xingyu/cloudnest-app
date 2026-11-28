@@ -17,8 +17,12 @@ import (
 	"testing"
 	"time"
 
+	"cloudenest_go/internal/app"
 	"cloudenest_go/model"
 )
+
+// Populated only by the opt-in frpnative build; ordinary UI/CI needs no FRP binary.
+var nativeUIFRPAgentSetup func(*testing.T, *fixture, *httptest.Server, string, map[string]any, *func())
 
 // TestMacOSNativeUIFixture serves real disposable routes for the dedicated native
 // UI harness. Normal CI skips this manual, bounded fixture.
@@ -44,13 +48,112 @@ func TestMacOSNativeUIFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	f := newFixture(t)
+	var auditSeed *nativeAuditSeed
+	var advanceAudit sync.Once
+	if os.Getenv("CLOUDNEST_NATIVE_UI_AUDIT") == "1" {
+		admin := model.Role{RoleName: "admin"}
+		if err := f.db.Where("role_name=?", "admin").FirstOrCreate(&admin).Error; err != nil {
+			t.Fatal(err)
+		}
+		if err := f.db.Create(&model.UserRole{UserID: f.aliceID, RoleID: admin.ID}).Error; err != nil {
+			t.Fatal(err)
+		}
+		seed := seedNativeAudit(t, f, false)
+		auditSeed = &seed
+	}
+	if os.Getenv("CLOUDNEST_NATIVE_UI_SETTINGS") == "1" {
+		admin := model.Role{RoleName: "admin"}
+		if err := f.db.Where("role_name=?", "admin").FirstOrCreate(&admin).Error; err != nil {
+			t.Fatal(err)
+		}
+		if err := f.db.Create(&model.UserRole{UserID: f.aliceID, RoleID: admin.ID}).Error; err != nil {
+			t.Fatal(err)
+		}
+		keys := []string{"share_default_expire_hours", "peak_window_enabled", "peak_window_start", "peak_window_end"}
+		preserveSettings(t, f, keys)
+		rateSetting(t, f, keys[0], "24")
+		rateSetting(t, f, keys[1], "0")
+		rateSetting(t, f, keys[2], "08:00")
+		rateSetting(t, f, keys[3], "20:00")
+	}
+	aiLive := os.Getenv("CLOUDNEST_NATIVE_UI_AI") == "1"
+	if aiLive {
+		f.cfg.AIOllamaBaseURL = "http://127.0.0.1:11434"
+		f.cfg.AIEmbeddingModel = "qwen3-embedding:0.6b"
+		f.router = fixtureRouter(app.NewContainer(f.cfg, f.db, f.rdb).NewRouter())
+	}
 	if os.Getenv("CLOUDNEST_NATIVE_UI_LARGE_FILE") == "1" {
 		rateSetting(t, f, "upload_speed_limit_kbps", "10240")
 		rateSetting(t, f, "download_speed_limit_kbps", "10240")
 	}
 	slow := os.Getenv("CLOUDNEST_NATIVE_UI_SLOW_TRANSFERS") == "1"
+	captureEnrollment := os.Getenv("CLOUDNEST_NATIVE_UI_CAPTURE_ENROLLMENT") == "1"
+	tracePublic := os.Getenv("CLOUDNEST_NATIVE_UI_PUBLIC_SHARE_TRACE") == "1"
 	var traceMu sync.Mutex
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if auditSeed != nil && r.URL.Path == "/api/operation-logs" && r.URL.Query().Get("cursor_mode") == "1" && r.URL.Query().Get("action") == auditSeed.Action && r.URL.Query().Get("all") == "0" && r.URL.Query().Get("snapshot_id") == "" {
+			handled := false
+			advanceAudit.Do(func() {
+				handled = true
+				recorder := httptest.NewRecorder()
+				f.router.ServeHTTP(recorder, r)
+				var page auditCursorResponse
+				if err := json.Unmarshal(recorder.Body.Bytes(), &page); err != nil || recorder.Code != 200 || page.Pagination.Total != 55 {
+					t.Error("initial native GUI audit range not captured")
+				}
+				row := model.OperationLog{UserID: &f.aliceID, Action: auditSeed.Action, Status: "success", Detail: "inserted after native first range", CreateTime: auditSeed.Date}
+				if err := f.db.Create(&row).Error; err != nil {
+					t.Error(err)
+				}
+				for key, values := range recorder.Header() {
+					w.Header()[key] = values
+				}
+				w.WriteHeader(recorder.Code)
+				_, _ = w.Write(recorder.Body.Bytes())
+			})
+			if handled {
+				return
+			}
+		}
+		if tracePublic && strings.HasPrefix(r.URL.Path, "/api/public/shares/") {
+			// Observe only presence, never credentials, capability paths, query
+			// values or body bytes. Pass the actual streaming writer through.
+			event := map[string]any{"utc": time.Now().UTC(), "method": r.Method,
+				"download": strings.HasSuffix(r.URL.Path, "/download"), "authorization": r.Header.Get("Authorization") != "",
+				"cookie": r.Header.Get("Cookie") != "", "passcode": r.Header.Get("X-Share-Passcode") != ""}
+			traceMu.Lock()
+			file, err := os.OpenFile(filepath.Join(absolute, "public-share-requests.jsonl"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+			if err == nil {
+				err = json.NewEncoder(file).Encode(event)
+				_ = file.Close()
+			}
+			traceMu.Unlock()
+			if err != nil {
+				t.Error("private public-request observation failed")
+			}
+		}
+		// Opt-in private capability handoff to an actual Agent CLI. The real
+		// handler executes once; neither the token nor the password is logged.
+		if captureEnrollment && r.Method == "POST" && strings.HasPrefix(r.URL.Path, "/api/frp/devices/") && strings.HasSuffix(r.URL.Path, "/enrollment") {
+			receipt := httptest.NewRecorder()
+			f.router.ServeHTTP(receipt, r)
+			if receipt.Code == http.StatusCreated {
+				name := filepath.Join(absolute, fmt.Sprintf("enrollment-receipt-%d.json", time.Now().UnixNano()))
+				file, err := os.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+				if err != nil {
+					t.Error("private enrollment handoff could not be created")
+				} else {
+					if _, err := file.Write(receipt.Body.Bytes()); err != nil {
+						t.Error("private enrollment handoff could not be written")
+					}
+					if err := file.Close(); err != nil {
+						t.Error("private enrollment handoff could not be closed")
+					}
+				}
+			}
+			copyNativeReceipt(w, receipt)
+			return
+		}
 		if strings.HasSuffix(r.URL.Path, "/download") {
 			if _, err := os.Stat(filepath.Join(absolute, "trace-downloads")); err == nil {
 				observed := &nativeUIResponseWriter{ResponseWriter: w}
@@ -133,6 +236,97 @@ func TestMacOSNativeUIFixture(t *testing.T) {
 		"origin": server.URL, "certificate": certificate, "username": user.Username,
 		"password": "disposable-fixture-password", "directory": absolute, "seed_file_id": seed.ID, "upload_source": source,
 		"version_file_id": versioned.ID,
+	}
+	if auditSeed != nil {
+		var peer model.User
+		if err := f.db.First(&peer, f.bobID).Error; err != nil {
+			t.Fatal(err)
+		}
+		manifest["audit_action"] = auditSeed.Action
+		manifest["audit_peer_username"] = peer.Username
+		manifest["audit_owner_id"], manifest["audit_peer_id"] = f.aliceID, f.bobID
+		manifest["audit_first_owner_id"] = auditSeed.OwnerIDs[len(auditSeed.OwnerIDs)-1]
+	}
+	if os.Getenv("CLOUDNEST_NATIVE_UI_PHOTOS") == "1" {
+		media := seedNativeMedia(t, f)
+		var peer model.User
+		if err := f.db.First(&peer, f.bobID).Error; err != nil {
+			t.Fatal(err)
+		}
+		manifest["photo_image_id"], manifest["photo_video_id"], manifest["photo_static_id"], manifest["photo_private_id"] = media.Image.ID, media.Video.ID, media.Static.ID, media.Private.ID
+		manifest["photo_image_sha256"], manifest["photo_video_sha256"], manifest["photo_static_sha256"] = media.ImageHash, media.VideoHash, media.StaticHash
+		manifest["photo_peer_username"], manifest["photo_peer_id"] = peer.Username, peer.ID
+		manifest["photo_generator"] = media.Generator
+	}
+	if os.Getenv("CLOUDNEST_NATIVE_UI_SETTINGS") == "1" {
+		var peer model.User
+		if err := f.db.First(&peer, f.bobID).Error; err != nil {
+			t.Fatal(err)
+		}
+		manifest["settings_peer_username"] = peer.Username
+	}
+	var runtimeCleanup func()
+	defer func() {
+		if runtimeCleanup != nil {
+			runtimeCleanup()
+		}
+	}()
+	if os.Getenv("CLOUDNEST_NATIVE_UI_FRP_AGENT") == "1" {
+		if nativeUIFRPAgentSetup == nil {
+			t.Fatal("live Agent UI requires --go-tags integration,frpnative")
+		}
+		nativeUIFRPAgentSetup(t, f, server, absolute, manifest, &runtimeCleanup)
+	} else if os.Getenv("CLOUDNEST_NATIVE_UI_FRP") == "1" {
+		seed := fixtureNativeFRP(t, f)
+		f.router = fixtureRouter(app.NewContainer(f.cfg, f.db, f.rdb).NewRouter())
+		manifest["frp_device_id"] = seed.Devices[0]
+		manifest["frp_mapping_id"] = seed.Mapping.ID
+		manifest["frp_config_id"] = seed.Config.ID
+		manifest["frp_command_id"] = seed.Command.ID
+	}
+	if os.Getenv("CLOUDNEST_NATIVE_UI_WORKSPACES") == "1" {
+		var peer model.User
+		if err := f.db.First(&peer, f.bobID).Error; err != nil {
+			t.Fatal(err)
+		}
+		legacy := model.Workspace{Name: "Legacy UI workspace", OwnerID: user.ID}
+		if err := f.db.Create(&legacy).Error; err != nil {
+			t.Fatal(err)
+		}
+		if err := f.db.Create(&model.WorkspaceUser{WorkspaceID: legacy.ID, UserID: user.ID, Role: "owner"}).Error; err != nil {
+			t.Fatal(err)
+		}
+		var private struct{ Item model.Workspace }
+		decode(t, f.json(t, "POST", "/api/workspaces", f.bob, map[string]string{"name": "Peer private workspace"}, 200), &private)
+		third := model.User{Username: fmt.Sprintf("native-ui-colleague-%d", user.ID), Password: user.Password, Status: 1}
+		if err := f.db.Create(&third).Error; err != nil {
+			t.Fatal(err)
+		}
+		manifest["workspace_peer_username"], manifest["workspace_peer_id"] = peer.Username, peer.ID
+		manifest["workspace_third_username"], manifest["workspace_third_id"] = third.Username, third.ID
+		manifest["workspace_legacy_id"], manifest["workspace_peer_private_id"] = legacy.ID, private.Item.ID
+	}
+	if aiLive {
+		content := "数据库迁移方案：MySQL 升级前先备份，并验证迁移后的数据一致性。迁移失败时回滚到已验证的备份。"
+		file := f.upload(t, f.alice, "Project Atlas.md", []byte(content))
+		f.upload(t, f.bob, "Private Atlas.md", []byte(content))
+		worker := textWorker(t, f, f.cfg.AIOllamaBaseURL)
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		for {
+			worked, err := worker.Step(ctx)
+			if err != nil {
+				t.Fatal("real UI model indexing required", err)
+			}
+			if !worked {
+				break
+			}
+		}
+		done := make(chan struct{})
+		go func() { defer close(done); worker.Run(ctx) }()
+		defer func() { cancel(); <-done }()
+		manifest["ai_file_id"] = file.ID
+		manifest["ai_model"] = f.cfg.AIEmbeddingModel
 	}
 	if os.Getenv("CLOUDNEST_NATIVE_UI_PERMISSION_ADMIN") == "1" {
 		admin := model.Role{RoleName: "admin"}

@@ -30,7 +30,7 @@ func TestImageAnalysisRejectsInvalidResponsesAndRetagging(t *testing.T) {
 		want                  error
 	}{
 		{"valid no text", valid, "stop", false, nil},
-		{"truncated", valid, "length", false, ErrVisionResponse},
+		{"truncated", valid, "length", false, ErrVisionOutputLimit},
 		{"retagged", valid, "stop", true, ErrModelChanged},
 		{"missing field", `{"description":"scene","tags":[],"text":""}`, "stop", false, ErrVisionResponse},
 		{"null tags", `{"description":"scene","tags":null,"text":"","has_text":false}`, "stop", false, ErrVisionResponse},

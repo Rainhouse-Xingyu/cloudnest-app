@@ -9,6 +9,23 @@ private func transferFixture(name: String = "out.bin", total: Int64 = 0) -> Tran
                    isArchive: false, totalBytes: total)
 }
 
+@Test func downloadPublicationRejectsReplacedPartPath() async throws {
+    let directory = FileManager.default.temporaryDirectory.appending(path: "cloudnest-publish-binding-\(UUID())")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let disk = TransferDisk(), id = UUID(), data = Data("verified original".utf8)
+    try await disk.openTransientDownload(id, directory: directory)
+    try await disk.appendDownload(id, data: data, offset: 0)
+    let part = directory.appending(path: ".cloudnest-\(id).part")
+    try FileManager.default.removeItem(at: part)
+    try Data("unverified replacement".utf8).write(to: part)
+    await #expect(throws: TransferError.invalidCheckpoint) {
+        try await disk.publishVerifiedDownload(id, totalBytes: Int64(data.count), sha256: TransferDisk.hex(SHA256.hash(data: data)), name: "Received.bin", directory: directory)
+    }
+    #expect(!FileManager.default.fileExists(atPath: directory.appending(path: "Received.bin").path))
+    try await disk.discardDownload(id, directory: directory)
+}
+
 @Test func downloadPlansRequireStrongIdentityAndResetOnFullResponse() throws {
     let data = Data("replacement".utf8)
     let hash = SHA256.hash(data: data)
@@ -139,6 +156,12 @@ private final class StreamFixtureProtocol: URLProtocol, @unchecked Sendable {
 private final class StreamFixturePolicy: NSObject, URLSessionTaskDelegate {}
 
 @Test func cancellingDownloadReleasesAnUnacknowledgedBlock() async throws {
+    // Exercise the terminal callback race repeatedly: releasing the blocked
+    // delegate can deliver normal URLSession completion while cancel finishes.
+    for _ in 0..<32 { try await cancelUnacknowledgedStream() }
+}
+
+private func cancelUnacknowledgedStream() async throws {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.protocolClasses = [StreamFixtureProtocol.self]
     let stream = DownloadStream(configuration: configuration, policy: StreamFixturePolicy())

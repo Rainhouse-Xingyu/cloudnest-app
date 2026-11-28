@@ -1,0 +1,829 @@
+{
+  "passed": true,
+  "utc": "2026-11-27T06:08:26.027610+00:00",
+  "base_commit": "fdff5b1824ce718032c915f31a84b9838d35c00b",
+  "app_bundle": "org.cloudnest.macos.native-ui-test.5094c89685304a2e9fff2a0d4b8102db",
+  "source_sha256": {
+    "cloudnest_macos/App/AISearchView.swift": "8aaea5c95be1541e11082295e76e9149ee6a6d5a8e74b77dd0021657b04ce10b",
+    "cloudnest_macos/App/AuditView.swift": "eee15d33f20788df2759f761d8250e9dd687eca4555b66a68e8f25ca30e70518",
+    "cloudnest_macos/App/CloudNestApp.swift": "9e25c1edb42b60184e8d1d8d7dc5e3416ec0b2c985bbc9418681ba12fa491430",
+    "cloudnest_macos/App/FRPConfigBuilderView.swift": "094b76c020c83a7c767f78f3278819efb46a8a1a7ba0ad0e10c581fa24fe5dfc",
+    "cloudnest_macos/App/FRPDeviceEditor.swift": "987d8699d61f87db95a643a235514ade88c3b21ea95f62df88f7b0756905d02e",
+    "cloudnest_macos/App/FRPEnrollmentView.swift": "27faba187c03280bc50a410a112f3f7834b47f75fab7b7d2093fba902fe18103",
+    "cloudnest_macos/App/FRPMappingEditor.swift": "48514a65fa32bddb86692d78dafc371dbb4541e0d21d241161bd6fd375d7ef75",
+    "cloudnest_macos/App/FRPServersView.swift": "b4813616e9a1c23f9e47e729f5a0edc16c9618e8b89a9d7ba04f7605703f5cc2",
+    "cloudnest_macos/App/FRPView.swift": "38a3f10c21a927773be316aa9f1399b29f7b8ebb0626ad1af832c12eb5b72e75",
+    "cloudnest_macos/App/FileBrowserCommands.swift": "1744b820661ef09fa3836c67397d2975133a4982444807012c12c5112731d4e8",
+    "cloudnest_macos/App/FileBrowserView.swift": "8c0393460e24a46fbb0d7d53794ad7ff928813cee508b68d6870f0e9eab70ea7",
+    "cloudnest_macos/App/FileCollaboratorsView.swift": "b331cc4a01f1ff991e152abb2c21a39217d8674f758850e95796463e6b911d8d",
+    "cloudnest_macos/App/FileDestinationSheet.swift": "7e72523670c79d21e4d030c4f62468f0b0dd4b18149931be58050d0e40c99170",
+    "cloudnest_macos/App/FileVersionsSheet.swift": "fa6608dbf44889d430fae4cc9a318b3ebdcd5ce8458104a2d62ad837d84906e7",
+    "cloudnest_macos/App/MediaPreviewSheet.swift": "1d7d600bb436d77286d52663dce29522e5ebd1fdc55d4aa540a8151fc3d36c1a",
+    "cloudnest_macos/App/PhotosView.swift": "3da5eeda7abac9aae5fc4b63bbc3b94b5303eb148c5373ff4ff35aa4ba7ac055",
+    "cloudnest_macos/App/PublicShareView.swift": "ca35395b3dc6fb8e730971eba5f01a74a879ba5ada3eb51e72b0ffe817ceec0f",
+    "cloudnest_macos/App/SettingsView.swift": "05243a5f4948c9dbb14281668bbef5f7ebd05300ad5871f04325e203c49a8067",
+    "cloudnest_macos/App/SharesView.swift": "81c1b87a72845bf8764e44b73b82f711c592d661d08c895098dfa336c65181be",
+    "cloudnest_macos/App/TransferListView.swift": "a8e26aa331492e166bea32e406507aa5daa2420cf651c7074d50d718712b6181",
+    "cloudnest_macos/App/WorkspaceMembersView.swift": "583bcda7f59459bfe8ad02fca8720cdd904400435a4e9a5878cc177ab389b689",
+    "cloudnest_macos/App/WorkspacesView.swift": "81443c40ecef93f140fa5af0d6a5c5a2b0203c693b578a3967b6099b7b92f522",
+    "cloudnest_macos/Core/AISearchAPI.swift": "d37a7e8c21134d4f620cebbe09163817b57802ec04074d5eba3ac715ce487c6f",
+    "cloudnest_macos/Core/AISearchState.swift": "e6d670b3b5cbdb56a48b251f8c355bd97b7be125f9d7ab03c31447e757a14d8a",
+    "cloudnest_macos/Core/AuditAPI.swift": "35b27243deceacc7a02f6f95a77e7ff89f6e007477816280758e17109892fbf5",
+    "cloudnest_macos/Core/AuditCSVDownloader.swift": "b9e490fe4cb119e778fcc86ab2e11178d9e2ed7ce2e8450d803ee6f7dc6cc88c",
+    "cloudnest_macos/Core/AuditState.swift": "c83d5297ce252056bfd339a8ee6554570b1fc3ee0ed2beec7a10882c91b64003",
+    "cloudnest_macos/Core/DownloadPlan.swift": "8ccba8a855bd508ed35f056390d6fba09b0414c9df98b9c0cea4216ab4acc572",
+    "cloudnest_macos/Core/DownloadStream.swift": "331d06a3761574535bda6347928afd17f67409a49664fe39a2c55e6b28eaa015",
+    "cloudnest_macos/Core/FRPAPI.swift": "135409db072f5df50959f1ac8b7f8b728ebb13042872de53bc7553f57818fc64",
+    "cloudnest_macos/Core/FRPCommandIntent.swift": "dd701f1a334dd0ba1716b74630d81acae20bb4c6e38ce7190d01fd501461523d",
+    "cloudnest_macos/Core/FRPCommandManager.swift": "c61580e09c7651b7c08732491e0974f6f3a10d65a95bc7606fe5c95aa936ac32",
+    "cloudnest_macos/Core/FRPCommandStore.swift": "513044a6403122a9a85ec3f5e03112e00cab263a4fd76ae69e0d21ee3f95c349",
+    "cloudnest_macos/Core/FRPConfigAPI.swift": "3068e978b0a2050c5880bcc9a6489e2c66c9f920b35d6890d683bcef56b9c71d",
+    "cloudnest_macos/Core/FRPConfigState.swift": "3b577158af7f7fd12135754228951f95f79b815f6ba4f0a7d6d0617a604cf04d",
+    "cloudnest_macos/Core/FRPDeviceAPI.swift": "d8c9eca7db79cec5932eece09dde45cb9ba14c6bb6313423bc40c2c8426aa6c2",
+    "cloudnest_macos/Core/FRPEnrollmentAPI.swift": "97dbf23ad3d8094b0ab41473f45069c1ad7a73b79e431d7ae596e535be0a7b2f",
+    "cloudnest_macos/Core/FRPEnrollmentState.swift": "e1ca8f0410dbdc8949b2a78d287a56388c87b111f308b679395c8fa32342ae0b",
+    "cloudnest_macos/Core/FRPMappingAPI.swift": "7152875360cb32e76b511086077a40e2c08de80d9f87e33250756133688ddb94",
+    "cloudnest_macos/Core/FRPServerAPI.swift": "b1db78ca33b70b9392c67643a956c128bbfc1d7b70028bf67b36f30de82155c7",
+    "cloudnest_macos/Core/FRPServerState.swift": "e84a1bfc4c7fe4f5d0072cac824697c343a17cc054316c7d06ff72b341c129d4",
+    "cloudnest_macos/Core/FRPState.swift": "fb0db2aa72ce94fcc47831d1d5d1b4f5116e0194747960d6ec4c0431e4c41bde",
+    "cloudnest_macos/Core/FileAPI.swift": "8a5172492810e096c6defb4030a05185c308fa4f1e13c0f3c10424b1bb176ef4",
+    "cloudnest_macos/Core/FileBrowserState.swift": "131d002ab247f6107412ac8216d4625f7a3e2f73f587ed2bdef4e4b6bc92ae9a",
+    "cloudnest_macos/Core/FileCollaborationAPI.swift": "772bafae932f40f805088cc0421187c9301a315a3f477dd3692e88ddbb183add",
+    "cloudnest_macos/Core/FileCollaboratorsState.swift": "d8c6aed02f44502c6b0d1ad9621be7e61392ff7a60f1cf8fc7601f4fc702cb55",
+    "cloudnest_macos/Core/FileVersions.swift": "1b009b2cd68dd555325b667186b757b5307dad6a355fd27ebc955da2474b7483",
+    "cloudnest_macos/Core/LegacyPreviewDirectory.swift": "05b9022f6f528de4bff5c4f9c236518b25271537b5794409384d9e5c0329f608",
+    "cloudnest_macos/Core/LivePhotoAPI.swift": "fdca02b778465fc5342692b53da8acd179bc18f1cd17b43fe72eb5227896c2ff",
+    "cloudnest_macos/Core/LivePhotoState.swift": "e1a6f80d234b6e9ac084900d5aee7e6007cb5974741a49b3c96d058fae2850f3",
+    "cloudnest_macos/Core/MediaPreviewState.swift": "8d54886e3901ae85451c2e5985cb23c4018e9d4cffba223db6b6f514347dac74",
+    "cloudnest_macos/Core/PhotoAPI.swift": "db7e29e6e648600dcb4b4eae0eed835fa0493419208c5bcb5ea329c8b161630c",
+    "cloudnest_macos/Core/PhotoState.swift": "d8ef0079c020d4d9b5d46fd4630454509156447afd607ca7835877b53d71009d",
+    "cloudnest_macos/Core/PreviewCache.swift": "24e5560809afd2d6065a9994d5355c0c36f62128e2a4a256b29c2bdd2c808904",
+    "cloudnest_macos/Core/PublicShareAPI.swift": "3ac1c7617f847d6133947478c58e279591bd7e31bff8838c021e95e35e09afd5",
+    "cloudnest_macos/Core/PublicShareDownloader.swift": "9638bf72d48d44c0b85069699bc4b867c4d9e54729120550fe821b7333285d6f",
+    "cloudnest_macos/Core/PublicShareState.swift": "19e3ff1981093046ad90350ada83a9506d787c029a3788a95a8e23cc3315beed",
+    "cloudnest_macos/Core/ServerAPI.swift": "b7afcfa5a2166ed6b627e31385867f154967425727a4cd846099c1a01aa0eb28",
+    "cloudnest_macos/Core/SessionState.swift": "3b911f0c421dd32bdca63f5a7cdc52fbdc40d4ff06c8fdb046d874a8f767adfd",
+    "cloudnest_macos/Core/SessionVault.swift": "8aaeafe193e99da59b8a5298fe8d2fa5052c21e8fef67e182927be438d8d7495",
+    "cloudnest_macos/Core/SettingsAPI.swift": "38de333fb1ca6b84cc59b70e752bc1e80724850a5d2b20156fce7c1c6b7baf38",
+    "cloudnest_macos/Core/SettingsState.swift": "d250ec30ac0e3aa465a3e5081c0584bf93feba323e489f05a50e73d02646e305",
+    "cloudnest_macos/Core/ShareAPI.swift": "0af15e43d77b6504b3200690adb62628c32f150faf6fe7908b5739c9a9194572",
+    "cloudnest_macos/Core/SharesState.swift": "d0ac55cacb476d0a3d285b1210b9152dc8652023a3f4c71bd3a1a6c61a2d96aa",
+    "cloudnest_macos/Core/TransferAPI.swift": "757fa9919a3cc5d66d20b380d2470165acc2af63cffac5da3811ec298cf4625b",
+    "cloudnest_macos/Core/TransferDisk.swift": "2b06ecd3d35d0bc309206fb535014795b7fcf83092823b3fce60cc49aeef63d9",
+    "cloudnest_macos/Core/TransferManager.swift": "fe89c71c6941f6e0b2fd3c3d0574f61e9a1fa3826eed48d3c755db1eb67ecb04",
+    "cloudnest_macos/Core/TransferRecord.swift": "5deba6f800be9fc2ff2428582f5908e1afbe6c227303661764f2ad1d8374f965",
+    "cloudnest_macos/Core/TransferStore.swift": "66cae8a28ba323c0a90e67eec549356c70c88b843fa9bb352ba0f30c4567e17f",
+    "cloudnest_macos/Core/TransferTelemetry.swift": "95eb7bba18223c173ceeead47cc025fb1fc34617985ab3d80db8ce89d9011345",
+    "cloudnest_macos/Core/WorkspaceAPI.swift": "0f732a18c7135f8bdcd530fda19f131f46504c92db3371d1ca2ed46737b569fd",
+    "cloudnest_macos/Core/WorkspaceState.swift": "e37c41e5b180e58db58cb690cb826b3bfbf75a9a4a9326b2306bab2ff729f97e"
+  },
+  "source_unchanged_through_gui": true,
+  "preparation": [
+    "Disposable MySQL/Redis/TLS, generated synthetic JPEG/MOV/PNG validated by real PHLivePhoto; owner two images and one MOV; peer one private image",
+    "Different image/MOV filenames prevent upload auto-binding, so first association requires native UI action",
+    "Independent API sessions observe values and prepare reader permissions",
+    "After actual native unbind, API recreates pair2 solely for reader permission phase; this is not reported as native rebind"
+  ],
+  "native_actions": [
+    "Owner signed in; gallery shows two actual thumbnails and visible bottom pagination",
+    "System static PNG preview shown; actual private file2254 bytes and SHA verified; close cleaned copy",
+    "Native selected JPEG then MOV, explicit confirmation, bind succeeded and pair1 listed",
+    "Live Photo table header, row, sidebar and footer all visible after viewport fix",
+    "Native pair1 preview loaded two fixed-version files, hashes matched; PHLivePhotoView displayed LIVE badge",
+    "Owner clicked play: actual willBegin status, observed moving red shape, then didEnd status after full playback",
+    "Close cleaned both copies; native confirmation unbound pair1, list0, API confirmed both source files retained",
+    "Native sign out and reader sign in; old owner selection cleared, gallery shows own private plus granted image, no owner PNG",
+    "With image-only read permission, native Live Photo list0",
+    "After API added video-read permission, native refresh shows pair2, native preview and full playback completed",
+    "Reader native unbind rejected with forbidden message and old page cleared; independent API confirms pair2/source files retained",
+    "After API video revocation, native refresh shows0, no action enabled",
+    "Dark gallery and empty pair page observed with visible footers",
+    "Native submitted Private name query, only its own private image displayed",
+    "Command-Q normal exit confirmed by CUA inventory"
+  ],
+  "playback": {
+    "owner_begin_and_end_observed": true,
+    "reader_begin_and_end_observed": true,
+    "actual_motion_frames_observed": true,
+    "system_delegate_full_style_minimum_elapsed_ms": 500,
+    "muted": true,
+    "no_photos_library_import": true
+  },
+  "observations": [
+    {
+      "utc": "2026-11-27T06:01:34.295606+00:00",
+      "label": "final-static-preview",
+      "mode": "verify-static",
+      "photos": {
+        "owner": [
+          {
+            "id": 7,
+            "filename": "Native media 1 static.png",
+            "size": 2254,
+            "current_version": 1
+          },
+          {
+            "id": 5,
+            "filename": "Native media 1 still.jpg",
+            "size": 3587,
+            "current_version": 1
+          }
+        ],
+        "peer": [
+          {
+            "id": 8,
+            "filename": "Private native media 2.jpg",
+            "size": 3587,
+            "current_version": 1
+          }
+        ]
+      },
+      "pairs": {
+        "owner": [],
+        "peer": []
+      },
+      "passed": true,
+      "preview_files": [
+        {
+          "name": "Native media 1 static.png",
+          "bytes": 2254,
+          "sha256": "cfc2e0d5c1906c5ce6067409c8a9e7ef0423783420cfeee90226845cbc90e9b3"
+        }
+      ]
+    },
+    {
+      "utc": "2026-11-27T06:02:43.948136+00:00",
+      "label": "final-owner-live-preview",
+      "mode": "verify-pair",
+      "photos": {
+        "owner": [
+          {
+            "id": 7,
+            "filename": "Native media 1 static.png",
+            "size": 2254,
+            "current_version": 1
+          },
+          {
+            "id": 5,
+            "filename": "Native media 1 still.jpg",
+            "size": 3587,
+            "current_version": 1
+          }
+        ],
+        "peer": [
+          {
+            "id": 8,
+            "filename": "Private native media 2.jpg",
+            "size": 3587,
+            "current_version": 1
+          }
+        ]
+      },
+      "pairs": {
+        "owner": [
+          {
+            "id": 1,
+            "image_id": 5,
+            "video_id": 6
+          }
+        ],
+        "peer": []
+      },
+      "passed": true,
+      "preview_files": [
+        {
+          "name": "Native media 1 still.jpg",
+          "bytes": 3587,
+          "sha256": "16263b25b2cffd890db9770e84f55e259c05ea7bcc069c4b78bd5604c7509754"
+        },
+        {
+          "name": "Native media 1 motion.mov",
+          "bytes": 5634,
+          "sha256": "aa72bb5ee9758facb87817f0cde5a819e74fb75d49e5a2ad3ed630b0189464b4"
+        }
+      ]
+    },
+    {
+      "utc": "2026-11-27T06:03:14.643054+00:00",
+      "label": "owner-live-closed-clean",
+      "mode": "verify-clean",
+      "photos": {
+        "owner": [
+          {
+            "id": 7,
+            "filename": "Native media 1 static.png",
+            "size": 2254,
+            "current_version": 1
+          },
+          {
+            "id": 5,
+            "filename": "Native media 1 still.jpg",
+            "size": 3587,
+            "current_version": 1
+          }
+        ],
+        "peer": [
+          {
+            "id": 8,
+            "filename": "Private native media 2.jpg",
+            "size": 3587,
+            "current_version": 1
+          }
+        ]
+      },
+      "pairs": {
+        "owner": [
+          {
+            "id": 1,
+            "image_id": 5,
+            "video_id": 6
+          }
+        ],
+        "peer": []
+      },
+      "passed": true,
+      "preview_files": []
+    },
+    {
+      "utc": "2026-11-27T06:03:30.427300+00:00",
+      "label": "native-unbound-sources-retained",
+      "mode": "read",
+      "photos": {
+        "owner": [
+          {
+            "id": 7,
+            "filename": "Native media 1 static.png",
+            "size": 2254,
+            "current_version": 1
+          },
+          {
+            "id": 5,
+            "filename": "Native media 1 still.jpg",
+            "size": 3587,
+            "current_version": 1
+          }
+        ],
+        "peer": [
+          {
+            "id": 8,
+            "filename": "Private native media 2.jpg",
+            "size": 3587,
+            "current_version": 1
+          }
+        ]
+      },
+      "pairs": {
+        "owner": [],
+        "peer": []
+      }
+    },
+    {
+      "utc": "2026-11-27T06:04:10.797237+00:00",
+      "label": "both-sources-retained-after-native-unbind",
+      "mode": "read",
+      "photos": {
+        "owner": [
+          {
+            "id": 7,
+            "filename": "Native media 1 static.png",
+            "size": 2254,
+            "current_version": 1
+          },
+          {
+            "id": 5,
+            "filename": "Native media 1 still.jpg",
+            "size": 3587,
+            "current_version": 1
+          }
+        ],
+        "peer": [
+          {
+            "id": 8,
+            "filename": "Private native media 2.jpg",
+            "size": 3587,
+            "current_version": 1
+          }
+        ]
+      },
+      "pairs": {
+        "owner": [],
+        "peer": []
+      },
+      "motions": {
+        "owner": [
+          {
+            "id": 6,
+            "filename": "Native media 1 motion.mov",
+            "size": 5634,
+            "current_version": 1
+          }
+        ],
+        "peer": []
+      }
+    },
+    {
+      "utc": "2026-11-27T06:04:10.947430+00:00",
+      "label": "api-preparation-for-reader-phase",
+      "mode": "prepare-pair",
+      "photos": {
+        "owner": [
+          {
+            "id": 7,
+            "filename": "Native media 1 static.png",
+            "size": 2254,
+            "current_version": 1
+          },
+          {
+            "id": 5,
+            "filename": "Native media 1 still.jpg",
+            "size": 3587,
+            "current_version": 1
+          }
+        ],
+        "peer": [
+          {
+            "id": 8,
+            "filename": "Private native media 2.jpg",
+            "size": 3587,
+            "current_version": 1
+          }
+        ]
+      },
+      "pairs": {
+        "owner": [
+          {
+            "id": 2,
+            "image_id": 5,
+            "video_id": 6
+          }
+        ],
+        "peer": []
+      },
+      "motions": {
+        "owner": [
+          {
+            "id": 6,
+            "filename": "Native media 1 motion.mov",
+            "size": 5634,
+            "current_version": 1
+          }
+        ],
+        "peer": []
+      }
+    },
+    {
+      "utc": "2026-11-27T06:04:11.097780+00:00",
+      "label": "api-granted-image-only",
+      "mode": "grant-image",
+      "photos": {
+        "owner": [
+          {
+            "id": 7,
+            "filename": "Native media 1 static.png",
+            "size": 2254,
+            "current_version": 1
+          },
+          {
+            "id": 5,
+            "filename": "Native media 1 still.jpg",
+            "size": 3587,
+            "current_version": 1
+          }
+        ],
+        "peer": [
+          {
+            "id": 5,
+            "filename": "Native media 1 still.jpg",
+            "size": 3587,
+            "current_version": 1
+          },
+          {
+            "id": 8,
+            "filename": "Private native media 2.jpg",
+            "size": 3587,
+            "current_version": 1
+          }
+        ]
+      },
+      "pairs": {
+        "owner": [
+          {
+            "id": 2,
+            "image_id": 5,
+            "video_id": 6
+          }
+        ],
+        "peer": []
+      },
+      "motions": {
+        "owner": [
+          {
+            "id": 6,
+            "filename": "Native media 1 motion.mov",
+            "size": 5634,
+            "current_version": 1
+          }
+        ],
+        "peer": []
+      }
+    },
+    {
+      "utc": "2026-11-27T06:04:37.512767+00:00",
+      "label": "api-granted-video-read",
+      "mode": "grant-video",
+      "photos": {
+        "owner": [
+          {
+            "id": 7,
+            "filename": "Native media 1 static.png",
+            "size": 2254,
+            "current_version": 1
+          },
+          {
+            "id": 5,
+            "filename": "Native media 1 still.jpg",
+            "size": 3587,
+            "current_version": 1
+          }
+        ],
+        "peer": [
+          {
+            "id": 5,
+            "filename": "Native media 1 still.jpg",
+            "size": 3587,
+            "current_version": 1
+          },
+          {
+            "id": 8,
+            "filename": "Private native media 2.jpg",
+            "size": 3587,
+            "current_version": 1
+          }
+        ]
+      },
+      "pairs": {
+        "owner": [
+          {
+            "id": 2,
+            "image_id": 5,
+            "video_id": 6
+          }
+        ],
+        "peer": [
+          {
+            "id": 2,
+            "image_id": 5,
+            "video_id": 6
+          }
+        ]
+      },
+      "motions": {
+        "owner": [
+          {
+            "id": 6,
+            "filename": "Native media 1 motion.mov",
+            "size": 5634,
+            "current_version": 1
+          }
+        ],
+        "peer": [
+          {
+            "id": 6,
+            "filename": "Native media 1 motion.mov",
+            "size": 5634,
+            "current_version": 1
+          }
+        ]
+      }
+    },
+    {
+      "utc": "2026-11-27T06:05:02.649814+00:00",
+      "label": "reader-live-preview-bytes",
+      "mode": "verify-pair",
+      "photos": {
+        "owner": [
+          {
+            "id": 7,
+            "filename": "Native media 1 static.png",
+            "size": 2254,
+            "current_version": 1
+          },
+          {
+            "id": 5,
+            "filename": "Native media 1 still.jpg",
+            "size": 3587,
+            "current_version": 1
+          }
+        ],
+        "peer": [
+          {
+            "id": 5,
+            "filename": "Native media 1 still.jpg",
+            "size": 3587,
+            "current_version": 1
+          },
+          {
+            "id": 8,
+            "filename": "Private native media 2.jpg",
+            "size": 3587,
+            "current_version": 1
+          }
+        ]
+      },
+      "pairs": {
+        "owner": [
+          {
+            "id": 2,
+            "image_id": 5,
+            "video_id": 6
+          }
+        ],
+        "peer": [
+          {
+            "id": 2,
+            "image_id": 5,
+            "video_id": 6
+          }
+        ]
+      },
+      "motions": {
+        "owner": [
+          {
+            "id": 6,
+            "filename": "Native media 1 motion.mov",
+            "size": 5634,
+            "current_version": 1
+          }
+        ],
+        "peer": [
+          {
+            "id": 6,
+            "filename": "Native media 1 motion.mov",
+            "size": 5634,
+            "current_version": 1
+          }
+        ]
+      },
+      "passed": true,
+      "preview_files": [
+        {
+          "name": "Native media 1 still.jpg",
+          "bytes": 3587,
+          "sha256": "16263b25b2cffd890db9770e84f55e259c05ea7bcc069c4b78bd5604c7509754"
+        },
+        {
+          "name": "Native media 1 motion.mov",
+          "bytes": 5634,
+          "sha256": "aa72bb5ee9758facb87817f0cde5a819e74fb75d49e5a2ad3ed630b0189464b4"
+        }
+      ]
+    },
+    {
+      "utc": "2026-11-27T06:05:27.859625+00:00",
+      "label": "reader-unbind-denied-pair-retained",
+      "mode": "verify-clean",
+      "photos": {
+        "owner": [
+          {
+            "id": 7,
+            "filename": "Native media 1 static.png",
+            "size": 2254,
+            "current_version": 1
+          },
+          {
+            "id": 5,
+            "filename": "Native media 1 still.jpg",
+            "size": 3587,
+            "current_version": 1
+          }
+        ],
+        "peer": [
+          {
+            "id": 5,
+            "filename": "Native media 1 still.jpg",
+            "size": 3587,
+            "current_version": 1
+          },
+          {
+            "id": 8,
+            "filename": "Private native media 2.jpg",
+            "size": 3587,
+            "current_version": 1
+          }
+        ]
+      },
+      "pairs": {
+        "owner": [
+          {
+            "id": 2,
+            "image_id": 5,
+            "video_id": 6
+          }
+        ],
+        "peer": [
+          {
+            "id": 2,
+            "image_id": 5,
+            "video_id": 6
+          }
+        ]
+      },
+      "motions": {
+        "owner": [
+          {
+            "id": 6,
+            "filename": "Native media 1 motion.mov",
+            "size": 5634,
+            "current_version": 1
+          }
+        ],
+        "peer": [
+          {
+            "id": 6,
+            "filename": "Native media 1 motion.mov",
+            "size": 5634,
+            "current_version": 1
+          }
+        ]
+      },
+      "passed": true,
+      "preview_files": []
+    },
+    {
+      "utc": "2026-11-27T06:05:28.015992+00:00",
+      "label": "api-revoked-video-read",
+      "mode": "revoke-video",
+      "photos": {
+        "owner": [
+          {
+            "id": 7,
+            "filename": "Native media 1 static.png",
+            "size": 2254,
+            "current_version": 1
+          },
+          {
+            "id": 5,
+            "filename": "Native media 1 still.jpg",
+            "size": 3587,
+            "current_version": 1
+          }
+        ],
+        "peer": [
+          {
+            "id": 5,
+            "filename": "Native media 1 still.jpg",
+            "size": 3587,
+            "current_version": 1
+          },
+          {
+            "id": 8,
+            "filename": "Private native media 2.jpg",
+            "size": 3587,
+            "current_version": 1
+          }
+        ]
+      },
+      "pairs": {
+        "owner": [
+          {
+            "id": 2,
+            "image_id": 5,
+            "video_id": 6
+          }
+        ],
+        "peer": []
+      },
+      "motions": {
+        "owner": [
+          {
+            "id": 6,
+            "filename": "Native media 1 motion.mov",
+            "size": 5634,
+            "current_version": 1
+          }
+        ],
+        "peer": []
+      }
+    },
+    {
+      "utc": "2026-11-27T06:06:38.285807+00:00",
+      "label": "final-app-closed-no-private-copies",
+      "mode": "verify-clean",
+      "photos": {
+        "owner": [
+          {
+            "id": 7,
+            "filename": "Native media 1 static.png",
+            "size": 2254,
+            "current_version": 1
+          },
+          {
+            "id": 5,
+            "filename": "Native media 1 still.jpg",
+            "size": 3587,
+            "current_version": 1
+          }
+        ],
+        "peer": [
+          {
+            "id": 5,
+            "filename": "Native media 1 still.jpg",
+            "size": 3587,
+            "current_version": 1
+          },
+          {
+            "id": 8,
+            "filename": "Private native media 2.jpg",
+            "size": 3587,
+            "current_version": 1
+          }
+        ]
+      },
+      "pairs": {
+        "owner": [
+          {
+            "id": 2,
+            "image_id": 5,
+            "video_id": 6
+          }
+        ],
+        "peer": []
+      },
+      "motions": {
+        "owner": [
+          {
+            "id": 6,
+            "filename": "Native media 1 motion.mov",
+            "size": 5634,
+            "current_version": 1
+          }
+        ],
+        "peer": []
+      },
+      "passed": true,
+      "preview_files": []
+    }
+  ],
+  "download_requests": [
+    {
+      "etag": "\"sha256-cfc2e0d5c1906c5ce6067409c8a9e7ef0423783420cfeee90226845cbc90e9b3\"",
+      "if_range": "",
+      "path": "/api/files/7/versions/1/download",
+      "range": "bytes=0-",
+      "status": 206,
+      "utc": "2026-11-27T06:01:29.004609Z",
+      "written_bytes": 2254
+    },
+    {
+      "etag": "\"sha256-16263b25b2cffd890db9770e84f55e259c05ea7bcc069c4b78bd5604c7509754\"",
+      "if_range": "",
+      "path": "/api/files/5/versions/1/download",
+      "range": "bytes=0-",
+      "status": 206,
+      "utc": "2026-11-27T06:02:39.249916Z",
+      "written_bytes": 3587
+    },
+    {
+      "etag": "\"sha256-aa72bb5ee9758facb87817f0cde5a819e74fb75d49e5a2ad3ed630b0189464b4\"",
+      "if_range": "",
+      "path": "/api/files/6/versions/1/download",
+      "range": "bytes=0-",
+      "status": 206,
+      "utc": "2026-11-27T06:02:39.252311Z",
+      "written_bytes": 5634
+    },
+    {
+      "etag": "\"sha256-16263b25b2cffd890db9770e84f55e259c05ea7bcc069c4b78bd5604c7509754\"",
+      "if_range": "",
+      "path": "/api/files/5/versions/1/download",
+      "range": "bytes=0-",
+      "status": 206,
+      "utc": "2026-11-27T06:04:50.495848Z",
+      "written_bytes": 3587
+    },
+    {
+      "etag": "\"sha256-aa72bb5ee9758facb87817f0cde5a819e74fb75d49e5a2ad3ed630b0189464b4\"",
+      "if_range": "",
+      "path": "/api/files/6/versions/1/download",
+      "range": "bytes=0-",
+      "status": 206,
+      "utc": "2026-11-27T06:04:50.499624Z",
+      "written_bytes": 5634
+    }
+  ],
+  "all_requests_used_fixed_version1": true,
+  "service": {
+    "exit_code": 0,
+    "fixture_seconds": 353.79,
+    "go_package_seconds": 356.537,
+    "tls_port": 58614,
+    "tls_port_closed": true
+  },
+  "limits": [
+    "900x590-point main window; no new minimum-window/scale/multimonitor acceptance",
+    "No full VoiceOver audit",
+    "Original-download save panel not separately exercised in this GUI cohort; ordinary transfer/download coverage retained",
+    "Permission revocation checked after closing existing preview and refreshing, not remote deletion of already downloaded bytes",
+    "No aggregate-memory, malformed-codec, abrupt-power-loss or multi-volume acceptance"
+  ]
+}

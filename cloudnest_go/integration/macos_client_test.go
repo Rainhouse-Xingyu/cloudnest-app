@@ -38,7 +38,7 @@ func TestMacOSClientSession(t *testing.T) {
 		value, _ := telemetryGates.LoadOrStore(key, &nativeTelemetryGate{done: make(chan struct{})})
 		return value.(*nativeTelemetryGate)
 	}
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newNativeTLSServer(f, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-CloudNest-Test-Stream") == "native-single-stream" {
 			if strings.HasSuffix(r.URL.Path, "/download") {
 				streamingDownloads.Add(1)
@@ -169,7 +169,7 @@ func TestMacOSClientSession(t *testing.T) {
 		f.router.ServeHTTP(w, r)
 	}))
 	defer server.Close()
-	redirectServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	redirectServer := newNativeTLSServer(f, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/auth/login" {
 			t.Error("Swift followed the credential-bearing redirect")
 			w.WriteHeader(http.StatusTeapot)
@@ -189,6 +189,8 @@ func TestMacOSClientSession(t *testing.T) {
 	}
 	decode(t, response, &otherFolder)
 	versioned := fixtureNativeVersionHistory(t, f, "Native version history.bin", bytes.Repeat([]byte{0x31}, 9*1024*1024+173), []byte("Current version for native history\n"))
+	searchFile := f.upload(t, f.alice, "CloudNestSemanticFixtureZX9182.md", []byte("Synthetic native AI search fixture.\n"))
+	searchOther := f.upload(t, f.bob, "CloudNestSemanticFixtureZX9182.md", []byte("Private other-user native AI fixture.\n"))
 	packagePath, err := filepath.Abs("../../cloudnest_macos")
 	if err != nil {
 		t.Fatal(err)
@@ -231,6 +233,8 @@ func TestMacOSClientSession(t *testing.T) {
 				"CLOUDNEST_SWIFT_CERTIFICATE="+certificatePath,
 				"CLOUDNEST_SWIFT_RESTRICTED="+tc.restricted,
 				"CLOUDNEST_SWIFT_VERSION_FILE="+strconv.FormatInt(versioned.ID, 10),
+				"CLOUDNEST_SWIFT_SEARCH_FILE="+strconv.FormatInt(searchFile.ID, 10),
+				"CLOUDNEST_SWIFT_SEARCH_OTHER="+strconv.FormatInt(searchOther.ID, 10),
 				"CLOUDNEST_SWIFT_FORBIDDEN_FILE="+strconv.FormatInt(otherFolder.Item.ID, 10))
 			output, err := command.CombinedOutput()
 			t.Log(string(output))

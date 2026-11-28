@@ -53,13 +53,14 @@ func NewFileService(fileRepo contract.FileRepository) *FileService {
 
 // FileOperationLogQuery 表示操作日志查询参数。
 type FileOperationLogQuery struct {
-	Action    string
-	Status    string
-	StartTime string
-	EndTime   string
-	Page      int
-	Limit     int
-	All       int
+	Action     string
+	Status     string
+	StartTime  string
+	EndTime    string
+	Page       int
+	Limit      int
+	All        int
+	SnapshotID int64
 }
 
 // FileCreateShareResult 表示创建分享结果。
@@ -79,6 +80,7 @@ type FileSearchQuery struct {
 	ParentID  int64
 	Name      string
 	FileType  string
+	MediaKind string
 	StartTime string
 	EndTime   string
 	Page      int
@@ -813,7 +815,7 @@ func (s *FileService) CreateShare(ctx context.Context, uid int64, fileID int64, 
 }
 
 // ListShares 查询当前用户的分享记录。
-func (s *FileService) ListShares(ctx context.Context, uid int64) ([]model.Share, error) {
+func (s *FileService) ListShares(ctx context.Context, uid int64) ([]contract.FileShareListRow, error) {
 	return s.fileRepo.ListShares(ctx, uid)
 }
 
@@ -897,6 +899,7 @@ func (s *FileService) SearchFiles(ctx context.Context, uid int64, q FileSearchQu
 		ParentID:  q.ParentID,
 		Name:      q.Name,
 		FileType:  q.FileType,
+		MediaKind: q.MediaKind,
 		StartTime: q.StartTime,
 		EndTime:   q.EndTime,
 		Page:      q.Page,
@@ -911,13 +914,14 @@ func (s *FileService) SearchFiles(ctx context.Context, uid int64, q FileSearchQu
 // ListOperationLogs 查询操作日志。
 func (s *FileService) ListOperationLogs(ctx context.Context, uid int64, isAdmin bool, q FileOperationLogQuery) (FileOperationLogListResult, error) {
 	rows, total, err := s.fileRepo.ListOperationLogs(ctx, uid, isAdmin, contract.FileOperationLogQuery{
-		Action:    q.Action,
-		Status:    q.Status,
-		StartTime: q.StartTime,
-		EndTime:   q.EndTime,
-		Page:      q.Page,
-		Limit:     q.Limit,
-		All:       q.All,
+		Action:     q.Action,
+		Status:     q.Status,
+		StartTime:  q.StartTime,
+		EndTime:    q.EndTime,
+		Page:       q.Page,
+		Limit:      q.Limit,
+		All:        q.All,
+		SnapshotID: q.SnapshotID,
 	})
 	if err != nil {
 		return FileOperationLogListResult{}, err
@@ -928,13 +932,14 @@ func (s *FileService) ListOperationLogs(ctx context.Context, uid int64, isAdmin 
 // ExportOperationLogs 导出操作日志查询（返回行数据，由 handler 输出 CSV）。
 func (s *FileService) ExportOperationLogs(ctx context.Context, uid int64, isAdmin bool, q FileOperationLogQuery) ([]model.OperationLog, error) {
 	return s.fileRepo.ExportOperationLogs(ctx, uid, isAdmin, contract.FileOperationLogQuery{
-		Action:    q.Action,
-		Status:    q.Status,
-		StartTime: q.StartTime,
-		EndTime:   q.EndTime,
-		Page:      q.Page,
-		Limit:     q.Limit,
-		All:       q.All,
+		Action:     q.Action,
+		Status:     q.Status,
+		StartTime:  q.StartTime,
+		EndTime:    q.EndTime,
+		Page:       q.Page,
+		Limit:      q.Limit,
+		All:        q.All,
+		SnapshotID: q.SnapshotID,
 	})
 }
 

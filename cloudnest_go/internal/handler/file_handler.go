@@ -3,7 +3,6 @@ package handler
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -80,19 +79,24 @@ type CreateShareRequest struct {
 }
 
 type OperationLogQuery struct {
-	Action    string `form:"action"`
-	Status    string `form:"status"`
-	StartTime string `form:"start_time"`
-	EndTime   string `form:"end_time"`
-	Page      int    `form:"page"`
-	Limit     int    `form:"limit"`
-	All       int    `form:"all"`
+	Action     string `form:"action"`
+	Status     string `form:"status"`
+	StartTime  string `form:"start_time"`
+	EndTime    string `form:"end_time"`
+	Page       int    `form:"page"`
+	Limit      int    `form:"limit"`
+	All        int    `form:"all"`
+	CursorMode int    `form:"cursor_mode"`
+	BeforeID   int64  `form:"before_id"`
+	AfterID    int64  `form:"after_id"`
+	SnapshotID int64  `form:"snapshot_id"`
 }
 
 type FileSearchQuery struct {
 	ParentID  int64  `form:"parent_id"`
 	Name      string `form:"name"`
 	FileType  string `form:"file_type"`
+	MediaKind string `form:"media_kind"`
 	StartTime string `form:"start_time"`
 	EndTime   string `form:"end_time"`
 	Page      int    `form:"page"`
@@ -736,6 +740,7 @@ func (h *FileHandler) SearchFiles(c *gin.Context) {
 	}
 	q.Name = strings.TrimSpace(q.Name)
 	q.FileType = strings.ToLower(strings.TrimSpace(q.FileType))
+	q.MediaKind = strings.ToLower(strings.TrimSpace(q.MediaKind))
 	q.StartTime = strings.TrimSpace(q.StartTime)
 	q.EndTime = strings.TrimSpace(q.EndTime)
 	if q.Page <= 0 {
@@ -744,11 +749,16 @@ func (h *FileHandler) SearchFiles(c *gin.Context) {
 	if q.Limit <= 0 || q.Limit > 200 {
 		q.Limit = 50
 	}
+	if q.MediaKind != "" && q.MediaKind != "image" && q.MediaKind != "live_photo_motion" || q.ParentID < 0 || q.Page > int(^uint(0)>>1)/q.Limit {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid file search scope or page"})
+		return
+	}
 
 	res, err := h.Svc.SearchFiles(c.Request.Context(), uid, service.FileSearchQuery{
 		ParentID:  q.ParentID,
 		Name:      q.Name,
 		FileType:  q.FileType,
+		MediaKind: q.MediaKind,
 		StartTime: q.StartTime,
 		EndTime:   q.EndTime,
 		Page:      q.Page,
@@ -768,8 +778,10 @@ func (h *FileHandler) SearchFiles(c *gin.Context) {
 		return
 	}
 
+	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, gin.H{
-		"items": res.Items,
+		"items":      res.Items,
+		"media_kind": q.MediaKind,
 		"pagination": gin.H{
 			"page":  q.Page,
 			"limit": q.Limit,
@@ -920,12 +932,12 @@ func (h *FileHandler) ListShares(c *gin.Context) {
 	}
 
 	type shareItem struct {
-		model.Share
+		contract.FileShareListRow
 		RequiresPasscode bool `json:"requires_passcode"`
 	}
 	items := make([]shareItem, 0, len(shares))
 	for _, share := range shares {
-		items = append(items, shareItem{Share: share, RequiresPasscode: share.PasscodeHash != ""})
+		items = append(items, shareItem{FileShareListRow: share, RequiresPasscode: share.PasscodeHash != ""})
 	}
 	c.Header("Cache-Control", privateDownloadCache)
 	c.JSON(http.StatusOK, gin.H{"items": items})
@@ -933,6 +945,7 @@ func (h *FileHandler) ListShares(c *gin.Context) {
 
 // ListOperationLogs 查询操作日志，默认仅返回当前用户，管理员可通过 all=1 查看全部。
 func (h *FileHandler) ListOperationLogs(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
 	uid := c.GetInt64(middleware.ContextUserIDKey)
 	isAdmin, _ := c.Get(middleware.ContextIsAdminKey)
 	isAdminBool, _ := isAdmin.(bool)
@@ -952,15 +965,47 @@ func (h *FileHandler) ListOperationLogs(c *gin.Context) {
 	if q.Limit <= 0 || q.Limit > 200 {
 		q.Limit = 50
 	}
+	if q.CursorMode < 0 || q.CursorMode > 1 || q.SnapshotID < 0 || q.Page > int(^uint(0)>>1)/q.Limit {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid audit pagination"})
+		return
+	}
+	if q.CursorMode == 1 {
+		if q.All == 1 && !isAdminBool {
+			c.JSON(http.StatusForbidden, gin.H{"error": "admin only for all=1"})
+			return
+		}
+		res, err := h.Svc.ListOperationLogCursor(c.Request.Context(), uid, isAdminBool, contract.OperationLogCursorQuery{
+			FileOperationLogQuery: contract.FileOperationLogQuery{Action: q.Action, Status: q.Status, StartTime: q.StartTime, EndTime: q.EndTime, Limit: q.Limit, All: q.All, SnapshotID: q.SnapshotID},
+			BeforeID:              q.BeforeID, AfterID: q.AfterID,
+		})
+		if err != nil {
+			if errors.Is(err, contract.ErrInvalidInput) || strings.Contains(err.Error(), "invalid start_time") || strings.Contains(err.Error(), "invalid end_time") {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid audit cursor or dates"})
+			} else {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "audit query failed"})
+			}
+			return
+		}
+		scope := "self"
+		if isAdminBool && q.All == 1 {
+			scope = "all"
+		}
+		c.Header("Cache-Control", "no-store")
+		c.JSON(http.StatusOK, gin.H{"items": res.Items, "scope": scope, "user_id": uid,
+			"pagination": gin.H{"limit": q.Limit, "total": res.Total},
+			"cursor":     gin.H{"snapshot_id": res.SnapshotID, "next_before_id": res.NextBeforeID, "next_after_id": res.NextAfterID}})
+		return
+	}
 
 	res, err := h.Svc.ListOperationLogs(c.Request.Context(), uid, isAdminBool, service.FileOperationLogQuery{
-		Action:    q.Action,
-		Status:    q.Status,
-		StartTime: q.StartTime,
-		EndTime:   q.EndTime,
-		Page:      q.Page,
-		Limit:     q.Limit,
-		All:       q.All,
+		Action:     q.Action,
+		Status:     q.Status,
+		StartTime:  q.StartTime,
+		EndTime:    q.EndTime,
+		Page:       q.Page,
+		Limit:      q.Limit,
+		All:        q.All,
+		SnapshotID: q.SnapshotID,
 	})
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "invalid start_time") {
@@ -983,78 +1028,6 @@ func (h *FileHandler) ListOperationLogs(c *gin.Context) {
 			"total": res.Total,
 		},
 	})
-}
-
-// ExportOperationLogs 导出操作日志为 CSV，便于汇报或排查问题。
-func (h *FileHandler) ExportOperationLogs(c *gin.Context) {
-	uid := c.GetInt64(middleware.ContextUserIDKey)
-	isAdmin, _ := c.Get(middleware.ContextIsAdminKey)
-	isAdminBool, _ := isAdmin.(bool)
-
-	var q OperationLogQuery
-	if err := c.ShouldBindQuery(&q); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query"})
-		return
-	}
-	q.Action = strings.TrimSpace(q.Action)
-	q.Status = strings.TrimSpace(q.Status)
-	q.StartTime = strings.TrimSpace(q.StartTime)
-	q.EndTime = strings.TrimSpace(q.EndTime)
-
-	maxExportRows := 5000
-	if q.Limit <= 0 || q.Limit > maxExportRows {
-		q.Limit = maxExportRows
-	}
-
-	rows, err := h.Svc.ExportOperationLogs(c.Request.Context(), uid, isAdminBool, service.FileOperationLogQuery{
-		Action:    q.Action,
-		Status:    q.Status,
-		StartTime: q.StartTime,
-		EndTime:   q.EndTime,
-		Limit:     q.Limit,
-		All:       q.All,
-	})
-	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "invalid start_time") {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid start_time"})
-			return
-		}
-		if strings.Contains(strings.ToLower(err.Error()), "invalid end_time") {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid end_time"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-		return
-	}
-
-	fileName := fmt.Sprintf("operation_logs_%s.csv", time.Now().Format("20060102150405"))
-	c.Header("Content-Type", "text/csv; charset=utf-8")
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fileName))
-
-	w := csv.NewWriter(c.Writer)
-	defer w.Flush()
-
-	_ = w.Write([]string{"id", "user_id", "file_id", "action", "status", "detail", "client_ip", "create_time"})
-	for _, row := range rows {
-		userID := ""
-		fileID := ""
-		if row.UserID != nil {
-			userID = strconv.FormatInt(*row.UserID, 10)
-		}
-		if row.FileID != nil {
-			fileID = strconv.FormatInt(*row.FileID, 10)
-		}
-		_ = w.Write([]string{
-			strconv.FormatInt(row.ID, 10),
-			userID,
-			fileID,
-			row.Action,
-			row.Status,
-			row.Detail,
-			row.ClientIP,
-			row.CreateTime.Format("2006-01-02 15:04:05"),
-		})
-	}
 }
 
 // RevokeShare 撤销分享链接，撤销后链接不可访问。

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -28,21 +29,25 @@ type CreateWorkspaceRequest struct {
 
 // AddWorkspaceMemberRequest 邀请空间成员请求。
 type AddWorkspaceMemberRequest struct {
-	UserID   *int64 `json:"user_id"`
-	Username string `json:"username"`
-	Role     string `json:"role" binding:"required"`
+	UserID     *int64 `json:"user_id"`
+	Username   string `json:"username"`
+	Role       string `json:"role" binding:"required"`
+	CreateOnly bool   `json:"create_only"`
 }
 
 // UpdateWorkspaceMemberRoleRequest 更新空间成员角色请求。
 type UpdateWorkspaceMemberRoleRequest struct {
-	Role string `json:"role" binding:"required"`
+	Role         string  `json:"role" binding:"required"`
+	ExpectedRole *string `json:"expected_role"`
 }
 
 // GrantFilePermissionRequest 授予文件协作权限请求。
 type GrantFilePermissionRequest struct {
-	UserID     *int64 `json:"user_id"`
-	Username   string `json:"username"`
-	Permission string `json:"permission" binding:"required"`
+	UserID             *int64  `json:"user_id"`
+	Username           string  `json:"username"`
+	Permission         string  `json:"permission" binding:"required"`
+	CreateOnly         bool    `json:"create_only"`
+	ExpectedPermission *string `json:"expected_permission"`
 }
 
 // CreateFileVersionRequest 创建文件版本请求。
@@ -127,6 +132,7 @@ func (h *CollaborationHandler) AddWorkspaceMember(c *gin.Context) {
 	}
 	h.changeWorkspaceMember(c, contract.WorkspaceMemberChange{
 		WorkspaceID: workspaceID, ActorID: uid, TargetID: target.ID, Role: role, ClientIP: c.ClientIP(),
+		CreateOnly: req.CreateOnly,
 	}, "member updated")
 }
 
@@ -184,6 +190,7 @@ func (h *CollaborationHandler) UpdateWorkspaceMemberRole(c *gin.Context) {
 	}
 	h.changeWorkspaceMember(c, contract.WorkspaceMemberChange{
 		WorkspaceID: workspaceID, ActorID: uid, TargetID: targetUserID, Role: role, ClientIP: c.ClientIP(), UpdateOnly: true,
+		ExpectedRole: req.ExpectedRole,
 	}, "member role updated")
 }
 
@@ -201,8 +208,19 @@ func (h *CollaborationHandler) RemoveWorkspaceMember(c *gin.Context) {
 		return
 	}
 
+	var req struct {
+		ExpectedRole *string `json:"expected_role"`
+	}
+	if c.Request.Body != nil && c.Request.Body != http.NoBody && c.Request.ContentLength != 0 {
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+			return
+		}
+	}
 	h.changeWorkspaceMember(c, contract.WorkspaceMemberChange{
 		WorkspaceID: workspaceID, ActorID: uid, TargetID: targetUserID, ClientIP: c.ClientIP(),
+		ExpectedRole: req.ExpectedRole,
 	}, "member removed")
 }
 
@@ -220,6 +238,8 @@ func writeWorkspaceMemberError(c *gin.Context, err error) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
 	case errors.Is(err, contract.ErrInvalidInput):
 		c.JSON(http.StatusBadRequest, gin.H{"error": "role should be admin/member/viewer/editor"})
+	case errors.Is(err, contract.ErrConflict):
+		c.JSON(http.StatusConflict, gin.H{"error": "workspace membership changed; refresh before editing"})
 	case errors.Is(err, gorm.ErrRecordNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"error": "workspace member or target user not found"})
 	default:
@@ -237,6 +257,7 @@ func (h *CollaborationHandler) GrantFilePermission(c *gin.Context) {
 	}
 
 	var req GrantFilePermissionRequest
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
 		return
@@ -271,7 +292,10 @@ func (h *CollaborationHandler) GrantFilePermission(c *gin.Context) {
 		return
 	}
 
-	if err := h.Svc.ChangeFilePermission(c.Request.Context(), uid, fileID, targetUser.ID, req.Permission, c.ClientIP()); err != nil {
+	if err := h.Svc.ChangeFilePermission(c.Request.Context(), contract.FilePermissionChange{
+		ActorID: uid, FileID: fileID, TargetID: targetUser.ID, Permission: req.Permission, ClientIP: c.ClientIP(),
+		CreateOnly: req.CreateOnly, ExpectedPermission: req.ExpectedPermission,
+	}); err != nil {
 		writeFilePermissionError(c, err)
 		return
 	}
@@ -320,7 +344,17 @@ func (h *CollaborationHandler) RevokeFilePermission(c *gin.Context) {
 		return
 	}
 
-	if err := h.Svc.ChangeFilePermission(c.Request.Context(), uid, fileID, targetUserID, "", c.ClientIP()); err != nil {
+	var req struct {
+		ExpectedPermission *string `json:"expected_permission"`
+	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+	if err := h.Svc.ChangeFilePermission(c.Request.Context(), contract.FilePermissionChange{
+		ActorID: uid, FileID: fileID, TargetID: targetUserID, ClientIP: c.ClientIP(), ExpectedPermission: req.ExpectedPermission,
+	}); err != nil {
 		writeFilePermissionError(c, err)
 		return
 	}
@@ -329,6 +363,10 @@ func (h *CollaborationHandler) RevokeFilePermission(c *gin.Context) {
 
 func writeFilePermissionError(c *gin.Context, err error) {
 	switch {
+	case errors.Is(err, contract.ErrInvalidInput):
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid file permission condition"})
+	case errors.Is(err, contract.ErrConflict):
+		c.JSON(http.StatusConflict, gin.H{"error": "file permission changed; refresh before retrying"})
 	case errors.Is(err, contract.ErrForbidden):
 		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
 	case errors.Is(err, gorm.ErrRecordNotFound):

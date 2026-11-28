@@ -68,6 +68,15 @@ type WorkspaceMemberChange struct {
 	WorkspaceID, ActorID, TargetID int64
 	Role, ClientIP                 string
 	UpdateOnly                     bool
+	CreateOnly                     bool
+	ExpectedRole                   *string
+}
+
+type FilePermissionChange struct {
+	ActorID, FileID, TargetID int64
+	Permission, ClientIP      string
+	CreateOnly                bool
+	ExpectedPermission        *string
 }
 
 func ValidWorkspaceMemberRole(role string) bool {
@@ -90,7 +99,7 @@ type CollaborationRepository interface {
 	ListWorkspaceMembers(ctx context.Context, workspaceID int64) ([]CollaborationWorkspaceMemberRow, error)
 	GetActiveFileByID(ctx context.Context, fileID int64) (model.File, error)
 	CanAccessFile(ctx context.Context, userID, fileID int64, write bool) (bool, error)
-	ChangeFilePermission(ctx context.Context, actorID, fileID, targetUserID int64, permission, clientIP string) error
+	ChangeFilePermission(ctx context.Context, change FilePermissionChange) error
 	ListFilePermissions(ctx context.Context, fileID int64) ([]CollaborationFilePermissionRow, error)
 	CreateFileVersion(ctx context.Context, req CollaborationCreateFileVersionInput) (model.FileVersion, error)
 	RestoreFileVersion(ctx context.Context, uid, fileID int64, version, baseVersion int, clientIP string) (model.FileVersion, error)

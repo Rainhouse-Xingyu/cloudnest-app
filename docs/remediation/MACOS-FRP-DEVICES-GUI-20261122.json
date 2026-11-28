@@ -1,0 +1,608 @@
+{
+  "passed": true,
+  "generated_utc": "2026-11-22T14:51:45.163037+00:00",
+  "scope": "Actual native device create/edit/conflict/address-clear/retirement/archive metadata with isolated TLS Go/MySQL/Redis APIs",
+  "git_parent": "95da9603529c4b7ac150ae48f4bcd098a2eb4ec4",
+  "git_dirty": true,
+  "source_sha256": {
+    "cloudnest_macos/App/AISearchView.swift": "8aaea5c95be1541e11082295e76e9149ee6a6d5a8e74b77dd0021657b04ce10b",
+    "cloudnest_macos/App/CloudNestApp.swift": "c1694632300b821cbe663059dcdbe853c8f1019aece324191ae7a6dd22bfc7c3",
+    "cloudnest_macos/App/FRPConfigBuilderView.swift": "094b76c020c83a7c767f78f3278819efb46a8a1a7ba0ad0e10c581fa24fe5dfc",
+    "cloudnest_macos/App/FRPDeviceEditor.swift": "987d8699d61f87db95a643a235514ade88c3b21ea95f62df88f7b0756905d02e",
+    "cloudnest_macos/App/FRPServersView.swift": "b4813616e9a1c23f9e47e729f5a0edc16c9618e8b89a9d7ba04f7605703f5cc2",
+    "cloudnest_macos/App/FRPView.swift": "0e63676ec92ade9063f8bdc368b4014cb88d597c7ad6e2799b0b3aeaa399caba",
+    "cloudnest_macos/App/FileBrowserCommands.swift": "1744b820661ef09fa3836c67397d2975133a4982444807012c12c5112731d4e8",
+    "cloudnest_macos/App/FileBrowserView.swift": "4f946fbffb7d08c5cd8642cd500d0cee6dfc73933e97c99d5040f26b0aca3e11",
+    "cloudnest_macos/App/FileDestinationSheet.swift": "e687c0269882fd072479942c7a73c96790796ffdcaa6a176657b59c669b51a7d",
+    "cloudnest_macos/App/FileVersionsSheet.swift": "17fe6e46888249269a57f5172de163e8aeb6a7a56b6ecb188c5608f39099920a",
+    "cloudnest_macos/App/TransferListView.swift": "a8e26aa331492e166bea32e406507aa5daa2420cf651c7074d50d718712b6181",
+    "cloudnest_macos/Core/AISearchAPI.swift": "d37a7e8c21134d4f620cebbe09163817b57802ec04074d5eba3ac715ce487c6f",
+    "cloudnest_macos/Core/AISearchState.swift": "e6d670b3b5cbdb56a48b251f8c355bd97b7be125f9d7ab03c31447e757a14d8a",
+    "cloudnest_macos/Core/DownloadPlan.swift": "641b33f9f36001a67bcb3ed583c2ff3e61b40ac2683d10fafdaa70c6b24965b1",
+    "cloudnest_macos/Core/DownloadStream.swift": "a4878ddee1749ae049ca898fac22175dae907ada9b859e961afbe801ad897a15",
+    "cloudnest_macos/Core/FRPAPI.swift": "135409db072f5df50959f1ac8b7f8b728ebb13042872de53bc7553f57818fc64",
+    "cloudnest_macos/Core/FRPCommandIntent.swift": "dd701f1a334dd0ba1716b74630d81acae20bb4c6e38ce7190d01fd501461523d",
+    "cloudnest_macos/Core/FRPCommandManager.swift": "c61580e09c7651b7c08732491e0974f6f3a10d65a95bc7606fe5c95aa936ac32",
+    "cloudnest_macos/Core/FRPCommandStore.swift": "513044a6403122a9a85ec3f5e03112e00cab263a4fd76ae69e0d21ee3f95c349",
+    "cloudnest_macos/Core/FRPConfigAPI.swift": "3068e978b0a2050c5880bcc9a6489e2c66c9f920b35d6890d683bcef56b9c71d",
+    "cloudnest_macos/Core/FRPConfigState.swift": "3b577158af7f7fd12135754228951f95f79b815f6ba4f0a7d6d0617a604cf04d",
+    "cloudnest_macos/Core/FRPDeviceAPI.swift": "d8c9eca7db79cec5932eece09dde45cb9ba14c6bb6313423bc40c2c8426aa6c2",
+    "cloudnest_macos/Core/FRPServerAPI.swift": "b1db78ca33b70b9392c67643a956c128bbfc1d7b70028bf67b36f30de82155c7",
+    "cloudnest_macos/Core/FRPServerState.swift": "e84a1bfc4c7fe4f5d0072cac824697c343a17cc054316c7d06ff72b341c129d4",
+    "cloudnest_macos/Core/FRPState.swift": "fb0db2aa72ce94fcc47831d1d5d1b4f5116e0194747960d6ec4c0431e4c41bde",
+    "cloudnest_macos/Core/FileAPI.swift": "f65a045b2e59dba168d72487b16699a875753579a3968141fa739f214600e767",
+    "cloudnest_macos/Core/FileBrowserState.swift": "312b325d054c4b34aa867320570321a010c17359b6bf5413c51253cd767c3380",
+    "cloudnest_macos/Core/FileVersions.swift": "1b009b2cd68dd555325b667186b757b5307dad6a355fd27ebc955da2474b7483",
+    "cloudnest_macos/Core/LegacyPreviewDirectory.swift": "05b9022f6f528de4bff5c4f9c236518b25271537b5794409384d9e5c0329f608",
+    "cloudnest_macos/Core/PreviewCache.swift": "24e5560809afd2d6065a9994d5355c0c36f62128e2a4a256b29c2bdd2c808904",
+    "cloudnest_macos/Core/ServerAPI.swift": "b23f553f42f3fbd7ea4d91b1839621d25d13ee0d01fa619af8573e3d4ab320db",
+    "cloudnest_macos/Core/SessionState.swift": "9344316e4646a0e8acb23304db83b4dd742a01239e24fb3df76ece3ceb92eb9c",
+    "cloudnest_macos/Core/SessionVault.swift": "8aaeafe193e99da59b8a5298fe8d2fa5052c21e8fef67e182927be438d8d7495",
+    "cloudnest_macos/Core/TransferAPI.swift": "757fa9919a3cc5d66d20b380d2470165acc2af63cffac5da3811ec298cf4625b",
+    "cloudnest_macos/Core/TransferDisk.swift": "51ca36fc080604b9a6ece8d0b1302e56904984691c9caa22ee77cdd432ceae84",
+    "cloudnest_macos/Core/TransferManager.swift": "d2a1b943c518cc3fffe7208815da8b9299a1336668a91e9493a375e8255256ff",
+    "cloudnest_macos/Core/TransferRecord.swift": "5deba6f800be9fc2ff2428582f5908e1afbe6c227303661764f2ad1d8374f965",
+    "cloudnest_macos/Core/TransferStore.swift": "66cae8a28ba323c0a90e67eec549356c70c88b843fa9bb352ba0f30c4567e17f",
+    "cloudnest_macos/Core/TransferTelemetry.swift": "95eb7bba18223c173ceeead47cc025fb1fc34617985ab3d80db8ce89d9011345"
+  },
+  "backend_source_sha256": {
+    "cloudnest_go/internal/handler/frp_handler.go": "f0d851952cd5bd387ddba96c14f859d8810bbfdf2e681aab7e6b25c5595f93ca",
+    "cloudnest_go/internal/service/contract/frp_repo.go": "910014fdc2dd6ee6e533994dc98a4979b6fb55f94a0ca1ebb2d00c8ddda7085d",
+    "cloudnest_go/internal/service/frp_service.go": "349ed78b7d540968d1cdb5e7e8b1c2d7c6dbe808591a596116431a07b3e41171",
+    "cloudnest_go/internal/storage/mysql/frp_device.go": "c62a931cdebd31aa1e17484a6d6eecf60aeacc8406bbb5cf929af7089f41aae5"
+  },
+  "binary_sha256": "a64a743bba098280f5ebbf1c609ca4b996f8aca533c2fb9b888595daefbd05ac",
+  "probe_source_sha256": "95d3824f40470c8534499f1de1a67264bbe61f8b77b461d599cc6dd6de8c2f55",
+  "observations": [
+    {
+      "step": "create",
+      "name": "Native GUI device",
+      "id": 4,
+      "address": "198.51.100.44",
+      "status": 1,
+      "native_confirmation_clicked": true
+    },
+    {
+      "step": "conflict",
+      "mechanism": "A second actual API client changed the device while its native editor retained the original baseline",
+      "native_rejection_visible": true,
+      "save_disabled": true,
+      "server_new_value_unchanged": true
+    },
+    {
+      "step": "clear-address",
+      "explicit_clear_confirmation_visible": true,
+      "native_confirmation_clicked": true,
+      "address": "",
+      "status": 0
+    },
+    {
+      "step": "retire-seeded-device",
+      "id": 1,
+      "native_context_menu": true,
+      "confirmation_identifies_id_and_retention": true,
+      "removed_from_active": true,
+      "retired_archive_native_display": {
+        "mapping_count": 1,
+        "latest_config_time": "2026-11-22T14:44:28Z"
+      }
+    },
+    {
+      "step": "retire-new-device",
+      "id": 4,
+      "native_confirmation_clicked": true,
+      "removed_from_active": true,
+      "retired_archive_native_display": {
+        "mapping_count": 0,
+        "latest_config_time": null
+      }
+    },
+    {
+      "step": "appearance",
+      "light_workspace_pixels": [
+        1800,
+        1180
+      ],
+      "dark_workspace_pixels": [
+        1280,
+        1180
+      ],
+      "scale": 2,
+      "archive_sheet_pixels": [
+        1000,
+        630
+      ],
+      "description": "Retired-only rows have archive detail actions; no edit or runtime control actions; labels/close visible in dark 640-point workspace."
+    },
+    {
+      "step": "exit",
+      "actual_archive_close_clicked": true,
+      "normal_command_q": true,
+      "app_absent_in_following_cua_inventory": true
+    }
+  ],
+  "api_evidence": [
+    {
+      "phase": "before-native-device-writes",
+      "utc": "2026-11-22T14:45:43.595790+00:00",
+      "origin": "https://127.0.0.1:58275",
+      "target_id": null,
+      "active": [
+        {
+          "retired_at": null,
+          "id": 2,
+          "user_id": 1,
+          "device_name": "mapping fixture",
+          "device_ip": "",
+          "status": 1,
+          "create_time": "2026-11-22T14:44:28Z"
+        },
+        {
+          "retired_at": null,
+          "id": 1,
+          "user_id": 1,
+          "device_name": "Native FRP acceptance",
+          "device_ip": "",
+          "status": 1,
+          "create_time": "2026-11-22T14:44:28Z"
+        }
+      ],
+      "retired": [],
+      "archives": {},
+      "source_config_metadata": [
+        {
+          "id": 1,
+          "device_id": 1,
+          "server_id": 1,
+          "server_revision_id": 1,
+          "create_time": "2026-11-22T14:44:28Z"
+        }
+      ],
+      "source_mapping_metadata": [
+        {
+          "server_id": 1,
+          "id": 1,
+          "device_id": 1,
+          "local_port": 8080,
+          "remote_port": 32000,
+          "domain": "",
+          "status": 1,
+          "create_time": "2026-11-22T14:44:28Z"
+        }
+      ]
+    },
+    {
+      "phase": "native-created-device",
+      "utc": "2026-11-22T14:47:09.241740+00:00",
+      "origin": "https://127.0.0.1:58275",
+      "target_id": 4,
+      "active": [
+        {
+          "retired_at": null,
+          "id": 4,
+          "user_id": 1,
+          "device_name": "Native GUI device",
+          "device_ip": "198.51.100.44",
+          "status": 1,
+          "create_time": "2026-11-22T14:47:03Z"
+        },
+        {
+          "retired_at": null,
+          "id": 2,
+          "user_id": 1,
+          "device_name": "mapping fixture",
+          "device_ip": "",
+          "status": 1,
+          "create_time": "2026-11-22T14:44:28Z"
+        },
+        {
+          "retired_at": null,
+          "id": 1,
+          "user_id": 1,
+          "device_name": "Native FRP acceptance",
+          "device_ip": "",
+          "status": 1,
+          "create_time": "2026-11-22T14:44:28Z"
+        }
+      ],
+      "retired": [],
+      "archives": {},
+      "source_config_metadata": [
+        {
+          "id": 1,
+          "device_id": 1,
+          "server_id": 1,
+          "server_revision_id": 1,
+          "create_time": "2026-11-22T14:44:28Z"
+        }
+      ],
+      "source_mapping_metadata": [
+        {
+          "server_id": 1,
+          "id": 1,
+          "device_id": 1,
+          "local_port": 8080,
+          "remote_port": 32000,
+          "domain": "",
+          "status": 1,
+          "create_time": "2026-11-22T14:44:28Z"
+        }
+      ]
+    },
+    {
+      "phase": "second-client-content-changed",
+      "utc": "2026-11-22T14:47:18.562825+00:00",
+      "origin": "https://127.0.0.1:58275",
+      "target_id": 4,
+      "active": [
+        {
+          "retired_at": null,
+          "id": 4,
+          "user_id": 1,
+          "device_name": "Concurrent device edit",
+          "device_ip": "198.51.100.44",
+          "status": 1,
+          "create_time": "2026-11-22T14:47:03Z"
+        },
+        {
+          "retired_at": null,
+          "id": 2,
+          "user_id": 1,
+          "device_name": "mapping fixture",
+          "device_ip": "",
+          "status": 1,
+          "create_time": "2026-11-22T14:44:28Z"
+        },
+        {
+          "retired_at": null,
+          "id": 1,
+          "user_id": 1,
+          "device_name": "Native FRP acceptance",
+          "device_ip": "",
+          "status": 1,
+          "create_time": "2026-11-22T14:44:28Z"
+        }
+      ],
+      "retired": [],
+      "archives": {},
+      "source_config_metadata": [
+        {
+          "id": 1,
+          "device_id": 1,
+          "server_id": 1,
+          "server_revision_id": 1,
+          "create_time": "2026-11-22T14:44:28Z"
+        }
+      ],
+      "source_mapping_metadata": [
+        {
+          "server_id": 1,
+          "id": 1,
+          "device_id": 1,
+          "local_port": 8080,
+          "remote_port": 32000,
+          "domain": "",
+          "status": 1,
+          "create_time": "2026-11-22T14:44:28Z"
+        }
+      ]
+    },
+    {
+      "phase": "native-stale-edit-rejected",
+      "utc": "2026-11-22T14:47:35.151894+00:00",
+      "origin": "https://127.0.0.1:58275",
+      "target_id": 4,
+      "active": [
+        {
+          "retired_at": null,
+          "id": 4,
+          "user_id": 1,
+          "device_name": "Concurrent device edit",
+          "device_ip": "198.51.100.44",
+          "status": 1,
+          "create_time": "2026-11-22T14:47:03Z"
+        },
+        {
+          "retired_at": null,
+          "id": 2,
+          "user_id": 1,
+          "device_name": "mapping fixture",
+          "device_ip": "",
+          "status": 1,
+          "create_time": "2026-11-22T14:44:28Z"
+        },
+        {
+          "retired_at": null,
+          "id": 1,
+          "user_id": 1,
+          "device_name": "Native FRP acceptance",
+          "device_ip": "",
+          "status": 1,
+          "create_time": "2026-11-22T14:44:28Z"
+        }
+      ],
+      "retired": [],
+      "archives": {},
+      "source_config_metadata": [
+        {
+          "id": 1,
+          "device_id": 1,
+          "server_id": 1,
+          "server_revision_id": 1,
+          "create_time": "2026-11-22T14:44:28Z"
+        }
+      ],
+      "source_mapping_metadata": [
+        {
+          "server_id": 1,
+          "id": 1,
+          "device_id": 1,
+          "local_port": 8080,
+          "remote_port": 32000,
+          "domain": "",
+          "status": 1,
+          "create_time": "2026-11-22T14:44:28Z"
+        }
+      ]
+    },
+    {
+      "phase": "native-cleared-address-and-disabled",
+      "utc": "2026-11-22T14:48:11.687013+00:00",
+      "origin": "https://127.0.0.1:58275",
+      "target_id": 4,
+      "active": [
+        {
+          "retired_at": null,
+          "id": 4,
+          "user_id": 1,
+          "device_name": "Concurrent device edit",
+          "device_ip": "",
+          "status": 0,
+          "create_time": "2026-11-22T14:47:03Z"
+        },
+        {
+          "retired_at": null,
+          "id": 2,
+          "user_id": 1,
+          "device_name": "mapping fixture",
+          "device_ip": "",
+          "status": 1,
+          "create_time": "2026-11-22T14:44:28Z"
+        },
+        {
+          "retired_at": null,
+          "id": 1,
+          "user_id": 1,
+          "device_name": "Native FRP acceptance",
+          "device_ip": "",
+          "status": 1,
+          "create_time": "2026-11-22T14:44:28Z"
+        }
+      ],
+      "retired": [],
+      "archives": {},
+      "source_config_metadata": [
+        {
+          "id": 1,
+          "device_id": 1,
+          "server_id": 1,
+          "server_revision_id": 1,
+          "create_time": "2026-11-22T14:44:28Z"
+        }
+      ],
+      "source_mapping_metadata": [
+        {
+          "server_id": 1,
+          "id": 1,
+          "device_id": 1,
+          "local_port": 8080,
+          "remote_port": 32000,
+          "domain": "",
+          "status": 1,
+          "create_time": "2026-11-22T14:44:28Z"
+        }
+      ]
+    },
+    {
+      "phase": "native-retired-seeded-history-device",
+      "utc": "2026-11-22T14:48:35.342537+00:00",
+      "origin": "https://127.0.0.1:58275",
+      "target_id": 4,
+      "active": [
+        {
+          "retired_at": null,
+          "id": 4,
+          "user_id": 1,
+          "device_name": "Concurrent device edit",
+          "device_ip": "",
+          "status": 0,
+          "create_time": "2026-11-22T14:47:03Z"
+        },
+        {
+          "retired_at": null,
+          "id": 2,
+          "user_id": 1,
+          "device_name": "mapping fixture",
+          "device_ip": "",
+          "status": 1,
+          "create_time": "2026-11-22T14:44:28Z"
+        }
+      ],
+      "retired": [
+        {
+          "retired_at": "2026-11-22T14:48:31.136473Z",
+          "id": 1,
+          "user_id": 1,
+          "device_name": "Native FRP acceptance",
+          "device_ip": "",
+          "status": 0,
+          "create_time": "2026-11-22T14:44:28Z"
+        }
+      ],
+      "archives": {
+        "1": {
+          "device": {
+            "retired_at": "2026-11-22T14:48:31.136473Z",
+            "id": 1,
+            "user_id": 1,
+            "device_name": "Native FRP acceptance",
+            "device_ip": "",
+            "status": 0,
+            "create_time": "2026-11-22T14:44:28Z"
+          },
+          "latest_config_time": "2026-11-22T14:44:28Z",
+          "mapping_count": 1
+        }
+      },
+      "source_config_metadata": null,
+      "source_mapping_metadata": null
+    },
+    {
+      "phase": "native-retired-new-device",
+      "utc": "2026-11-22T14:49:28.926695+00:00",
+      "origin": "https://127.0.0.1:58275",
+      "target_id": 4,
+      "active": [
+        {
+          "retired_at": null,
+          "id": 2,
+          "user_id": 1,
+          "device_name": "mapping fixture",
+          "device_ip": "",
+          "status": 1,
+          "create_time": "2026-11-22T14:44:28Z"
+        }
+      ],
+      "retired": [
+        {
+          "retired_at": "2026-11-22T14:49:24.636941Z",
+          "id": 4,
+          "user_id": 1,
+          "device_name": "Concurrent device edit",
+          "device_ip": "",
+          "status": 0,
+          "create_time": "2026-11-22T14:47:03Z"
+        },
+        {
+          "retired_at": "2026-11-22T14:48:31.136473Z",
+          "id": 1,
+          "user_id": 1,
+          "device_name": "Native FRP acceptance",
+          "device_ip": "",
+          "status": 0,
+          "create_time": "2026-11-22T14:44:28Z"
+        }
+      ],
+      "archives": {
+        "4": {
+          "device": {
+            "retired_at": "2026-11-22T14:49:24.636941Z",
+            "id": 4,
+            "user_id": 1,
+            "device_name": "Concurrent device edit",
+            "device_ip": "",
+            "status": 0,
+            "create_time": "2026-11-22T14:47:03Z"
+          },
+          "latest_config_time": null,
+          "mapping_count": 0
+        },
+        "1": {
+          "device": {
+            "retired_at": "2026-11-22T14:48:31.136473Z",
+            "id": 1,
+            "user_id": 1,
+            "device_name": "Native FRP acceptance",
+            "device_ip": "",
+            "status": 0,
+            "create_time": "2026-11-22T14:44:28Z"
+          },
+          "latest_config_time": "2026-11-22T14:44:28Z",
+          "mapping_count": 1
+        }
+      },
+      "source_config_metadata": null,
+      "source_mapping_metadata": null
+    },
+    {
+      "phase": "final-device-archive-state",
+      "utc": "2026-11-22T14:51:45.078867+00:00",
+      "origin": "https://127.0.0.1:58275",
+      "target_id": 4,
+      "active": [
+        {
+          "retired_at": null,
+          "id": 2,
+          "user_id": 1,
+          "device_name": "mapping fixture",
+          "device_ip": "",
+          "status": 1,
+          "create_time": "2026-11-22T14:44:28Z"
+        }
+      ],
+      "retired": [
+        {
+          "retired_at": "2026-11-22T14:49:24.636941Z",
+          "id": 4,
+          "user_id": 1,
+          "device_name": "Concurrent device edit",
+          "device_ip": "",
+          "status": 0,
+          "create_time": "2026-11-22T14:47:03Z"
+        },
+        {
+          "retired_at": "2026-11-22T14:48:31.136473Z",
+          "id": 1,
+          "user_id": 1,
+          "device_name": "Native FRP acceptance",
+          "device_ip": "",
+          "status": 0,
+          "create_time": "2026-11-22T14:44:28Z"
+        }
+      ],
+      "archives": {
+        "4": {
+          "device": {
+            "retired_at": "2026-11-22T14:49:24.636941Z",
+            "id": 4,
+            "user_id": 1,
+            "device_name": "Concurrent device edit",
+            "device_ip": "",
+            "status": 0,
+            "create_time": "2026-11-22T14:47:03Z"
+          },
+          "latest_config_time": null,
+          "mapping_count": 0
+        },
+        "1": {
+          "device": {
+            "retired_at": "2026-11-22T14:48:31.136473Z",
+            "id": 1,
+            "user_id": 1,
+            "device_name": "Native FRP acceptance",
+            "device_ip": "",
+            "status": 0,
+            "create_time": "2026-11-22T14:44:28Z"
+          },
+          "latest_config_time": "2026-11-22T14:44:28Z",
+          "mapping_count": 1
+        }
+      },
+      "source_config_metadata": null,
+      "source_mapping_metadata": null
+    }
+  ],
+  "limitations": [
+    "No actual Agent/frps in this metadata cohort; no claim that retirement itself proves an offline tunnel stopped.",
+    "Full retention/revocation/queue cancellation is proved separately by backend retirement integration tests; this GUI verifies public retained metadata.",
+    "New optional baseline compares device field content, not a monotonic schema revision; legacy requests without baseline retain prior behavior.",
+    "Device creation has no persistent idempotency journal; ambiguous responses require refresh/reconciliation.",
+    "Native edit/detail buttons are aggregated into List rows by CUA; screenshot coordinates were used; no full VoiceOver/minimum-height audit claimed.",
+    "The newly visible sampled-config label has no positive-runtime GUI sample in this metadata cohort."
+  ],
+  "fixture_cleanup": {
+    "exec_exit_code": 0,
+    "backend_port_closed": 58275,
+    "observed_utc": "2026-11-22T14:52:05.924447+00:00"
+  }
+}

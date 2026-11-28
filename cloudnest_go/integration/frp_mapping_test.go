@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"cloudenest_go/internal/app"
 	"cloudenest_go/internal/service/contract"
 	repo "cloudenest_go/internal/storage/mysql"
 	"cloudenest_go/internal/store"
@@ -20,6 +21,75 @@ import (
 	driver "github.com/go-sql-driver/mysql"
 	"gorm.io/gorm"
 )
+
+func TestFRPMappingConditionalEditsKeepScopeAndAllocateTransitions(t *testing.T) {
+	f, r, devices, servers := scopedFixture(t)
+	f.router = fixtureRouter(app.NewContainer(f.cfg, f.db, f.rdb).NewRouter())
+	var created struct{ Item model.FrpMapping }
+	decode(t, f.json(t, "POST", "/api/frp/mappings", f.alice, map[string]any{"device_id": devices[0], "server_id": servers[0].ID, "local_port": 8080}, 200), &created)
+	path := fmt.Sprintf("/api/frp/mappings/%d", created.Item.ID)
+	baseline := func(m model.FrpMapping) contract.FrpMappingSnapshot {
+		return contract.FrpMappingSnapshot{DeviceID: m.DeviceID, ServerID: m.ServerID, LocalPort: m.LocalPort, RemotePort: m.RemotePort, Domain: m.Domain, Status: m.Status}
+	}
+	f.json(t, "PUT", path, f.bob, map[string]any{"local_port": 8081, "expected": baseline(created.Item)}, 403)
+	var current struct{ Item model.FrpMapping }
+	decode(t, f.json(t, "PUT", path, f.alice, map[string]any{"local_port": 8081}, 200), &current)
+	f.json(t, "PUT", path, f.alice, map[string]any{"local_port": 8090, "expected": baseline(created.Item)}, 409)
+	f.json(t, "PUT", path, f.alice, map[string]any{"server_id": servers[1].ID, "local_port": 8090}, 400)
+	wrong := baseline(current.Item)
+	wrong.DeviceID = devices[1]
+	f.json(t, "PUT", path, f.alice, map[string]any{"local_port": 8090, "expected": wrong}, 409)
+	countAudits := func() int64 {
+		t.Helper()
+		var count int64
+		if err := f.db.Model(&model.OperationLog{}).Where("action=? AND detail=?", "frp_mapping_update", fmt.Sprintf("mapping_id=%d device_id=%d", created.Item.ID, devices[0])).Count(&count).Error; err != nil {
+			t.Fatal(err)
+		}
+		return count
+	}
+	before := countAudits()
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	var group sync.WaitGroup
+	for _, port := range []int{8082, 8083} {
+		group.Go(func() {
+			<-start
+			b := baseline(current.Item)
+			_, err := r.UpdateMapping(context.Background(), contract.FrpUpdateMappingInput{FrpActor: contract.FrpActor{UserID: f.aliceID}, MappingID: created.Item.ID, LocalPort: &port, Expected: &b})
+			results <- err
+		})
+	}
+	close(start)
+	group.Wait()
+	close(results)
+	ok, conflict := 0, 0
+	for err := range results {
+		if err == nil {
+			ok++
+		} else if errors.Is(err, contract.ErrConflict) {
+			conflict++
+		} else {
+			t.Fatal(err)
+		}
+	}
+	if ok != 1 || conflict != 1 || countAudits() != before+1 {
+		t.Fatal("mapping conditional edit was not atomic", ok, conflict)
+	}
+	winning, err := r.GetMappingByID(context.Background(), created.Item.ID)
+	if err != nil || winning.ServerID != servers[0].ID || winning.DeviceID != devices[0] || winning.LocalPort != 8082 && winning.LocalPort != 8083 {
+		t.Fatal("mapping scope or winning content changed", err)
+	}
+	var domain struct{ Item model.FrpMapping }
+	decode(t, f.json(t, "PUT", path, f.alice, map[string]any{"domain": "HTTPS://Mapping-Conditional.Example.", "remote_port": 0, "expected": baseline(winning)}, 200), &domain)
+	if domain.Item.Domain != "https://mapping-conditional.example" || domain.Item.RemotePort != 0 {
+		t.Fatal("modern domain normalization or non-TCP port changed")
+	}
+	var tcp struct{ Item model.FrpMapping }
+	decode(t, f.json(t, "PUT", path, f.alice, map[string]any{"domain": "", "expected": baseline(domain.Item)}, 200), &tcp)
+	if tcp.Item.Domain != "" || tcp.Item.RemotePort < servers[0].TCPStart || tcp.Item.RemotePort > servers[0].TCPEnd {
+		t.Fatal("HTTP/S to TCP did not allocate in the current server policy")
+	}
+}
 
 func mappingDevice(t *testing.T, f *fixture, uid int64) int64 {
 	t.Helper()

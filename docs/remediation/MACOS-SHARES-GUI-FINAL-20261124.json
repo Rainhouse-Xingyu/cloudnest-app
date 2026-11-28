@@ -1,0 +1,269 @@
+{
+  "schema": 1,
+  "passed": true,
+  "scope": "Native share creation, owner list, explicit copy action/notice and revocation, plus separate anonymous HTTP checks. Recipient native UI and native anonymous download are not covered.",
+  "date_local": "2026-11-24",
+  "base_commit": "9948d102e20d46cc587430c30935d1f91e2f602e",
+  "source_sha256": {
+    "cloudnest_macos/App/AISearchView.swift": "8aaea5c95be1541e11082295e76e9149ee6a6d5a8e74b77dd0021657b04ce10b",
+    "cloudnest_macos/App/CloudNestApp.swift": "0e1d3cebefca9c514736b91db2e4212416bf36d38b2e678b78b8f8d85fc61a55",
+    "cloudnest_macos/App/FRPConfigBuilderView.swift": "094b76c020c83a7c767f78f3278819efb46a8a1a7ba0ad0e10c581fa24fe5dfc",
+    "cloudnest_macos/App/FRPDeviceEditor.swift": "987d8699d61f87db95a643a235514ade88c3b21ea95f62df88f7b0756905d02e",
+    "cloudnest_macos/App/FRPEnrollmentView.swift": "27faba187c03280bc50a410a112f3f7834b47f75fab7b7d2093fba902fe18103",
+    "cloudnest_macos/App/FRPMappingEditor.swift": "48514a65fa32bddb86692d78dafc371dbb4541e0d21d241161bd6fd375d7ef75",
+    "cloudnest_macos/App/FRPServersView.swift": "b4813616e9a1c23f9e47e729f5a0edc16c9618e8b89a9d7ba04f7605703f5cc2",
+    "cloudnest_macos/App/FRPView.swift": "38a3f10c21a927773be316aa9f1399b29f7b8ebb0626ad1af832c12eb5b72e75",
+    "cloudnest_macos/App/FileBrowserCommands.swift": "1744b820661ef09fa3836c67397d2975133a4982444807012c12c5112731d4e8",
+    "cloudnest_macos/App/FileBrowserView.swift": "8c0393460e24a46fbb0d7d53794ad7ff928813cee508b68d6870f0e9eab70ea7",
+    "cloudnest_macos/App/FileCollaboratorsView.swift": "b331cc4a01f1ff991e152abb2c21a39217d8674f758850e95796463e6b911d8d",
+    "cloudnest_macos/App/FileDestinationSheet.swift": "7e72523670c79d21e4d030c4f62468f0b0dd4b18149931be58050d0e40c99170",
+    "cloudnest_macos/App/FileVersionsSheet.swift": "fa6608dbf44889d430fae4cc9a318b3ebdcd5ce8458104a2d62ad837d84906e7",
+    "cloudnest_macos/App/SharesView.swift": "8d6d6e94d2bc8ab3dfc0d78f70f1deef93f346a218c8d118095e55867f46a25b",
+    "cloudnest_macos/App/TransferListView.swift": "a8e26aa331492e166bea32e406507aa5daa2420cf651c7074d50d718712b6181",
+    "cloudnest_macos/App/WorkspaceMembersView.swift": "583bcda7f59459bfe8ad02fca8720cdd904400435a4e9a5878cc177ab389b689",
+    "cloudnest_macos/App/WorkspacesView.swift": "81443c40ecef93f140fa5af0d6a5c5a2b0203c693b578a3967b6099b7b92f522",
+    "cloudnest_macos/Core/AISearchAPI.swift": "d37a7e8c21134d4f620cebbe09163817b57802ec04074d5eba3ac715ce487c6f",
+    "cloudnest_macos/Core/AISearchState.swift": "e6d670b3b5cbdb56a48b251f8c355bd97b7be125f9d7ab03c31447e757a14d8a",
+    "cloudnest_macos/Core/DownloadPlan.swift": "641b33f9f36001a67bcb3ed583c2ff3e61b40ac2683d10fafdaa70c6b24965b1",
+    "cloudnest_macos/Core/DownloadStream.swift": "331d06a3761574535bda6347928afd17f67409a49664fe39a2c55e6b28eaa015",
+    "cloudnest_macos/Core/FRPAPI.swift": "135409db072f5df50959f1ac8b7f8b728ebb13042872de53bc7553f57818fc64",
+    "cloudnest_macos/Core/FRPCommandIntent.swift": "dd701f1a334dd0ba1716b74630d81acae20bb4c6e38ce7190d01fd501461523d",
+    "cloudnest_macos/Core/FRPCommandManager.swift": "c61580e09c7651b7c08732491e0974f6f3a10d65a95bc7606fe5c95aa936ac32",
+    "cloudnest_macos/Core/FRPCommandStore.swift": "513044a6403122a9a85ec3f5e03112e00cab263a4fd76ae69e0d21ee3f95c349",
+    "cloudnest_macos/Core/FRPConfigAPI.swift": "3068e978b0a2050c5880bcc9a6489e2c66c9f920b35d6890d683bcef56b9c71d",
+    "cloudnest_macos/Core/FRPConfigState.swift": "3b577158af7f7fd12135754228951f95f79b815f6ba4f0a7d6d0617a604cf04d",
+    "cloudnest_macos/Core/FRPDeviceAPI.swift": "d8c9eca7db79cec5932eece09dde45cb9ba14c6bb6313423bc40c2c8426aa6c2",
+    "cloudnest_macos/Core/FRPEnrollmentAPI.swift": "97dbf23ad3d8094b0ab41473f45069c1ad7a73b79e431d7ae596e535be0a7b2f",
+    "cloudnest_macos/Core/FRPEnrollmentState.swift": "e1ca8f0410dbdc8949b2a78d287a56388c87b111f308b679395c8fa32342ae0b",
+    "cloudnest_macos/Core/FRPMappingAPI.swift": "7152875360cb32e76b511086077a40e2c08de80d9f87e33250756133688ddb94",
+    "cloudnest_macos/Core/FRPServerAPI.swift": "b1db78ca33b70b9392c67643a956c128bbfc1d7b70028bf67b36f30de82155c7",
+    "cloudnest_macos/Core/FRPServerState.swift": "e84a1bfc4c7fe4f5d0072cac824697c343a17cc054316c7d06ff72b341c129d4",
+    "cloudnest_macos/Core/FRPState.swift": "fb0db2aa72ce94fcc47831d1d5d1b4f5116e0194747960d6ec4c0431e4c41bde",
+    "cloudnest_macos/Core/FileAPI.swift": "8a5172492810e096c6defb4030a05185c308fa4f1e13c0f3c10424b1bb176ef4",
+    "cloudnest_macos/Core/FileBrowserState.swift": "131d002ab247f6107412ac8216d4625f7a3e2f73f587ed2bdef4e4b6bc92ae9a",
+    "cloudnest_macos/Core/FileCollaborationAPI.swift": "772bafae932f40f805088cc0421187c9301a315a3f477dd3692e88ddbb183add",
+    "cloudnest_macos/Core/FileCollaboratorsState.swift": "d8c6aed02f44502c6b0d1ad9621be7e61392ff7a60f1cf8fc7601f4fc702cb55",
+    "cloudnest_macos/Core/FileVersions.swift": "1b009b2cd68dd555325b667186b757b5307dad6a355fd27ebc955da2474b7483",
+    "cloudnest_macos/Core/LegacyPreviewDirectory.swift": "05b9022f6f528de4bff5c4f9c236518b25271537b5794409384d9e5c0329f608",
+    "cloudnest_macos/Core/PreviewCache.swift": "24e5560809afd2d6065a9994d5355c0c36f62128e2a4a256b29c2bdd2c808904",
+    "cloudnest_macos/Core/ServerAPI.swift": "9571f67d3477c0ccad13da838f9e1a14013ccb1b8ff1d289b68cdfd68dcb74bc",
+    "cloudnest_macos/Core/SessionState.swift": "de9d2b09bcf0e2ed53126733353d063c4dc7fe78b3c06931345e2e7373bf13d3",
+    "cloudnest_macos/Core/SessionVault.swift": "8aaeafe193e99da59b8a5298fe8d2fa5052c21e8fef67e182927be438d8d7495",
+    "cloudnest_macos/Core/ShareAPI.swift": "0af15e43d77b6504b3200690adb62628c32f150faf6fe7908b5739c9a9194572",
+    "cloudnest_macos/Core/SharesState.swift": "d0ac55cacb476d0a3d285b1210b9152dc8652023a3f4c71bd3a1a6c61a2d96aa",
+    "cloudnest_macos/Core/TransferAPI.swift": "757fa9919a3cc5d66d20b380d2470165acc2af63cffac5da3811ec298cf4625b",
+    "cloudnest_macos/Core/TransferDisk.swift": "51ca36fc080604b9a6ece8d0b1302e56904984691c9caa22ee77cdd432ceae84",
+    "cloudnest_macos/Core/TransferManager.swift": "d2a1b943c518cc3fffe7208815da8b9299a1336668a91e9493a375e8255256ff",
+    "cloudnest_macos/Core/TransferRecord.swift": "5deba6f800be9fc2ff2428582f5908e1afbe6c227303661764f2ad1d8374f965",
+    "cloudnest_macos/Core/TransferStore.swift": "66cae8a28ba323c0a90e67eec549356c70c88b843fa9bb352ba0f30c4567e17f",
+    "cloudnest_macos/Core/TransferTelemetry.swift": "95eb7bba18223c173ceeead47cc025fb1fc34617985ab3d80db8ce89d9011345",
+    "cloudnest_macos/Core/WorkspaceAPI.swift": "0f732a18c7135f8bdcd530fda19f131f46504c92db3371d1ca2ed46737b569fd",
+    "cloudnest_macos/Core/WorkspaceState.swift": "e37c41e5b180e58db58cb690cb826b3bfbf75a9a4a9326b2306bab2ff729f97e",
+    "cloudnest_go/internal/handler/file_handler.go": "b2274ebfefd090d488303c48d3257b219e1dbbb383c85f1b57e1c91ee545fa9d",
+    "cloudnest_go/internal/service/contract/file_repo.go": "1fe897c4d275aeae1e4cdfa8a82966d356554e0b06de8256913b7bf2ef0c1b04",
+    "cloudnest_go/internal/service/file_service.go": "f9145097f9b45e660e8481ff4070b9a3f3cbcdd20e1b28713f11b79a10a36930",
+    "cloudnest_go/internal/storage/mysql/file_repo.go": "0cb84ff08aca9130c100eef4a28d103f5dae3e31f369df240e5d374741d818a1"
+  },
+  "fixture": {
+    "directory": "/tmp/cloudnest-native-ui-shares-final-pu9hx8ti",
+    "origin": "https://127.0.0.1:49807",
+    "app": "/tmp/cloudnest-native-ui-shares-final-pu9hx8ti/CloudNest Shares UI.app",
+    "compiled_app_reuse": "Compiled in the initial cohort from the same frozen App/Core sources, copied and re-signed only to bind the new private manifest and unique bundle identity. Source fingerprints match current files before and after GUI.",
+    "backend_session": 96657,
+    "backend_exit_code": 0,
+    "go_package_seconds": 229.545,
+    "api_port_closed": true,
+    "app_normal_quit_confirmed_in_cua_inventory": true,
+    "preparation": "Real disposable Go/MySQL/Redis/TLS fixture seeds Preview.txt and existing file fixtures. No share was API-created for GUI preparation; observer saw an empty initial list."
+  },
+  "checks": [
+    {
+      "name": "Protected link creation",
+      "passed": true,
+      "detail": "File toolbar -> shares -> creation form. Set 1 hour, 1 download and synthetic passcode; confirmation stated exactly those limits. Native success showed expiry/protection/limit, never raw code or passcode."
+    },
+    {
+      "name": "Explicit copy control",
+      "passed": true,
+      "detail": "Clicked copy and saw successful AppKit copy notice. Clipboard contents were not independently pasted/read; no broader clipboard interoperability claim."
+    },
+    {
+      "name": "Independent anonymous protected access",
+      "passed": true,
+      "detail": "Observer uses no user JWT for public endpoints, passcode only in HTTPS X-Share-Passcode. Missing/wrong code 403 without filename; metadata 200 consumed zero downloads; first download 78 bytes with verified digest; second 410 quota exhausted. These are separate HTTP checks, not native recipient/download GUI."
+    },
+    {
+      "name": "Owner quota refresh",
+      "passed": true,
+      "detail": "Closing creation sheet refreshed native list to count=1, max=1 and quota-exhausted text."
+    },
+    {
+      "name": "Unprotected unlimited link creation",
+      "passed": true,
+      "detail": "New native form reset defaults. Set zero expiry and quota, unchecked protection. Confirmation and receipt stated no automatic expiry, unlimited downloads and no passcode. Separate anonymous metadata read returned 200."
+    },
+    {
+      "name": "Global list and appearance",
+      "passed": true,
+      "detail": "Closed file sheet, opened sidebar Share page. Both filenames, creation/expiry/protection/counts/actions visible in light and dark. No minimum-width, VoiceOver or display scaling claim."
+    },
+    {
+      "name": "Native revocation",
+      "passed": true,
+      "detail": "Native confirmations identified the two creation times; revoked the protected row first, leaving only unlimited row, then revoked remaining row to empty state. Observer confirmed one previously captured second-link capability returns anonymous 404 and original file remains. First-link post-revocation HTTP 404 was not separately observed because that capability was not retained; both row removals and native success were observed."
+    },
+    {
+      "name": "Cleanup",
+      "passed": true,
+      "detail": "Cmd-Q and subsequent inventory confirmed app absent. Own stop file ended backend normally with exit 0; API port closed."
+    }
+  ],
+  "events": [
+    {
+      "mode": "snapshot",
+      "label": "fresh-before-native-creation",
+      "utc": "2026-11-24T14:26:48.794084+00:00",
+      "shares": [],
+      "checks": []
+    },
+    {
+      "mode": "read",
+      "label": "native-protected-created-independent-anonymous-read",
+      "utc": "2026-11-24T14:28:12.898446+00:00",
+      "shares": [
+        {
+          "id": 1,
+          "file_id": 1,
+          "user_id": 1,
+          "file_name": "Preview.txt",
+          "expire_time": "2026-11-24T15:27:59Z",
+          "create_time": "2026-11-24T14:27:59Z",
+          "requires_passcode": true,
+          "max_downloads": 1,
+          "download_count": 0,
+          "code_sha256": "cc62211507499a4f36a20db6719450d343153851414322928931aa967dcdd444"
+        }
+      ],
+      "checks": [
+        {
+          "kind": "independent-anonymous-metadata",
+          "missing_or_wrong": 403,
+          "correct": 200,
+          "download_count": 0
+        }
+      ]
+    },
+    {
+      "mode": "download",
+      "label": "native-protected-independent-download-exhaustion",
+      "utc": "2026-11-24T14:28:13.156816+00:00",
+      "shares": [
+        {
+          "id": 1,
+          "file_id": 1,
+          "user_id": 1,
+          "file_name": "Preview.txt",
+          "expire_time": "2026-11-24T15:27:59Z",
+          "create_time": "2026-11-24T14:27:59Z",
+          "requires_passcode": true,
+          "max_downloads": 1,
+          "download_count": 1,
+          "code_sha256": "cc62211507499a4f36a20db6719450d343153851414322928931aa967dcdd444"
+        }
+      ],
+      "checks": [
+        {
+          "kind": "independent-anonymous-download",
+          "status": 200,
+          "bytes": 78,
+          "sha256": "da92a2dbbc61507ddcec740d14b019f98209a972ce40911d8d282e164a4f3811",
+          "second_status": 410
+        }
+      ]
+    },
+    {
+      "mode": "snapshot",
+      "label": "native-unprotected-unlimited-created",
+      "utc": "2026-11-24T14:28:51.556671+00:00",
+      "shares": [
+        {
+          "id": 2,
+          "file_id": 1,
+          "user_id": 1,
+          "file_name": "Preview.txt",
+          "expire_time": null,
+          "create_time": "2026-11-24T14:28:39Z",
+          "requires_passcode": false,
+          "max_downloads": 0,
+          "download_count": 0,
+          "code_sha256": "e89ed6c6614df50dc41bf7861665586d2e776a4ca7e5fd18835585903b15477d"
+        },
+        {
+          "id": 1,
+          "file_id": 1,
+          "user_id": 1,
+          "file_name": "Preview.txt",
+          "expire_time": "2026-11-24T15:27:59Z",
+          "create_time": "2026-11-24T14:27:59Z",
+          "requires_passcode": true,
+          "max_downloads": 1,
+          "download_count": 1,
+          "code_sha256": "cc62211507499a4f36a20db6719450d343153851414322928931aa967dcdd444"
+        }
+      ],
+      "checks": [
+        {
+          "kind": "independent-unprotected-unlimited-metadata",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "mode": "snapshot",
+      "label": "native-protected-revoked-unprotected-retained",
+      "utc": "2026-11-24T14:29:51.611972+00:00",
+      "shares": [
+        {
+          "id": 2,
+          "file_id": 1,
+          "user_id": 1,
+          "file_name": "Preview.txt",
+          "expire_time": null,
+          "create_time": "2026-11-24T14:28:39Z",
+          "requires_passcode": false,
+          "max_downloads": 0,
+          "download_count": 0,
+          "code_sha256": "e89ed6c6614df50dc41bf7861665586d2e776a4ca7e5fd18835585903b15477d"
+        }
+      ],
+      "checks": [
+        {
+          "kind": "independent-unprotected-unlimited-metadata",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "mode": "verify-revoked",
+      "label": "native-both-revoked-anonymous-404",
+      "utc": "2026-11-24T14:30:04.011202+00:00",
+      "shares": [],
+      "checks": [
+        {
+          "kind": "independent-captured-link-revoked",
+          "links_checked": 1,
+          "status": 404,
+          "owner_file_retained": true
+        }
+      ]
+    }
+  ],
+  "input_observations": [
+    "Two initial typeText password attempts returned 401; same known disposable credential set with documented AX setValue then signed in successfully. No password/server implementation changed; this input automation difference is retained."
+  ],
+  "limitations": [
+    "Recipient native opening/anonymous streaming, public link paste interoperability, share list server pagination, persistent creation intent and full fault/accessibility matrices remain open.",
+    "First multi-day interrupted GUI attempt has a separate passed=false report. Fresh-service startup initially failed because local Go standard-library sources were missing; official pinned toolchain restored and verified before the final backend started.",
+    "Current remote backend CI is not green: original PDF failure remains open and latest head hit the independently corrected thumbnail test synchronization issue."
+  ]
+}

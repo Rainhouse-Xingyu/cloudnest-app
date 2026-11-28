@@ -1,0 +1,419 @@
+{
+  "passed": false,
+  "generated_utc": "2026-11-23T05:55:47.849765+00:00",
+  "scope": "Second native workspace cohort; row layout fixed, functional progress preserved, file header clipping and expired fixture remain incomplete",
+  "git_parent": "9bd004ab7c59bed08dc6bc0a28be3f96a34739b4",
+  "git_dirty": true,
+  "source_sha256": {
+    "cloudnest_macos/App/AISearchView.swift": "8aaea5c95be1541e11082295e76e9149ee6a6d5a8e74b77dd0021657b04ce10b",
+    "cloudnest_macos/App/CloudNestApp.swift": "a8b735631e797d1b6ceb1332b91739177872862969285d73be64049f72fe62fb",
+    "cloudnest_macos/App/FRPConfigBuilderView.swift": "094b76c020c83a7c767f78f3278819efb46a8a1a7ba0ad0e10c581fa24fe5dfc",
+    "cloudnest_macos/App/FRPDeviceEditor.swift": "987d8699d61f87db95a643a235514ade88c3b21ea95f62df88f7b0756905d02e",
+    "cloudnest_macos/App/FRPEnrollmentView.swift": "27faba187c03280bc50a410a112f3f7834b47f75fab7b7d2093fba902fe18103",
+    "cloudnest_macos/App/FRPMappingEditor.swift": "48514a65fa32bddb86692d78dafc371dbb4541e0d21d241161bd6fd375d7ef75",
+    "cloudnest_macos/App/FRPServersView.swift": "b4813616e9a1c23f9e47e729f5a0edc16c9618e8b89a9d7ba04f7605703f5cc2",
+    "cloudnest_macos/App/FRPView.swift": "38a3f10c21a927773be316aa9f1399b29f7b8ebb0626ad1af832c12eb5b72e75",
+    "cloudnest_macos/App/FileBrowserCommands.swift": "1744b820661ef09fa3836c67397d2975133a4982444807012c12c5112731d4e8",
+    "cloudnest_macos/App/FileBrowserView.swift": "bbd9b8c29b6d1612e39aeab6fd1ff81995cf6a24a68aac6c54a8ba42e111d274",
+    "cloudnest_macos/App/FileDestinationSheet.swift": "7e72523670c79d21e4d030c4f62468f0b0dd4b18149931be58050d0e40c99170",
+    "cloudnest_macos/App/FileVersionsSheet.swift": "fa6608dbf44889d430fae4cc9a318b3ebdcd5ce8458104a2d62ad837d84906e7",
+    "cloudnest_macos/App/TransferListView.swift": "a8e26aa331492e166bea32e406507aa5daa2420cf651c7074d50d718712b6181",
+    "cloudnest_macos/App/WorkspaceMembersView.swift": "7e4df10f95e7120637a60ab3492cbd31ed1686e48cf9fd567996a94a84d8d754",
+    "cloudnest_macos/App/WorkspacesView.swift": "96b149553ea8fd8dabea3bdd17202a293e7b721f42afa8d0e49125cc836cda78",
+    "cloudnest_macos/Core/AISearchAPI.swift": "d37a7e8c21134d4f620cebbe09163817b57802ec04074d5eba3ac715ce487c6f",
+    "cloudnest_macos/Core/AISearchState.swift": "e6d670b3b5cbdb56a48b251f8c355bd97b7be125f9d7ab03c31447e757a14d8a",
+    "cloudnest_macos/Core/DownloadPlan.swift": "641b33f9f36001a67bcb3ed583c2ff3e61b40ac2683d10fafdaa70c6b24965b1",
+    "cloudnest_macos/Core/DownloadStream.swift": "331d06a3761574535bda6347928afd17f67409a49664fe39a2c55e6b28eaa015",
+    "cloudnest_macos/Core/FRPAPI.swift": "135409db072f5df50959f1ac8b7f8b728ebb13042872de53bc7553f57818fc64",
+    "cloudnest_macos/Core/FRPCommandIntent.swift": "dd701f1a334dd0ba1716b74630d81acae20bb4c6e38ce7190d01fd501461523d",
+    "cloudnest_macos/Core/FRPCommandManager.swift": "c61580e09c7651b7c08732491e0974f6f3a10d65a95bc7606fe5c95aa936ac32",
+    "cloudnest_macos/Core/FRPCommandStore.swift": "513044a6403122a9a85ec3f5e03112e00cab263a4fd76ae69e0d21ee3f95c349",
+    "cloudnest_macos/Core/FRPConfigAPI.swift": "3068e978b0a2050c5880bcc9a6489e2c66c9f920b35d6890d683bcef56b9c71d",
+    "cloudnest_macos/Core/FRPConfigState.swift": "3b577158af7f7fd12135754228951f95f79b815f6ba4f0a7d6d0617a604cf04d",
+    "cloudnest_macos/Core/FRPDeviceAPI.swift": "d8c9eca7db79cec5932eece09dde45cb9ba14c6bb6313423bc40c2c8426aa6c2",
+    "cloudnest_macos/Core/FRPEnrollmentAPI.swift": "97dbf23ad3d8094b0ab41473f45069c1ad7a73b79e431d7ae596e535be0a7b2f",
+    "cloudnest_macos/Core/FRPEnrollmentState.swift": "e1ca8f0410dbdc8949b2a78d287a56388c87b111f308b679395c8fa32342ae0b",
+    "cloudnest_macos/Core/FRPMappingAPI.swift": "7152875360cb32e76b511086077a40e2c08de80d9f87e33250756133688ddb94",
+    "cloudnest_macos/Core/FRPServerAPI.swift": "b1db78ca33b70b9392c67643a956c128bbfc1d7b70028bf67b36f30de82155c7",
+    "cloudnest_macos/Core/FRPServerState.swift": "e84a1bfc4c7fe4f5d0072cac824697c343a17cc054316c7d06ff72b341c129d4",
+    "cloudnest_macos/Core/FRPState.swift": "fb0db2aa72ce94fcc47831d1d5d1b4f5116e0194747960d6ec4c0431e4c41bde",
+    "cloudnest_macos/Core/FileAPI.swift": "f65a045b2e59dba168d72487b16699a875753579a3968141fa739f214600e767",
+    "cloudnest_macos/Core/FileBrowserState.swift": "131d002ab247f6107412ac8216d4625f7a3e2f73f587ed2bdef4e4b6bc92ae9a",
+    "cloudnest_macos/Core/FileVersions.swift": "1b009b2cd68dd555325b667186b757b5307dad6a355fd27ebc955da2474b7483",
+    "cloudnest_macos/Core/LegacyPreviewDirectory.swift": "05b9022f6f528de4bff5c4f9c236518b25271537b5794409384d9e5c0329f608",
+    "cloudnest_macos/Core/PreviewCache.swift": "24e5560809afd2d6065a9994d5355c0c36f62128e2a4a256b29c2bdd2c808904",
+    "cloudnest_macos/Core/ServerAPI.swift": "9571f67d3477c0ccad13da838f9e1a14013ccb1b8ff1d289b68cdfd68dcb74bc",
+    "cloudnest_macos/Core/SessionState.swift": "a3260b4a5aa5a54be01b44dc2b1cad83f10f2289a6c4c1505416a4ac7d9e8d16",
+    "cloudnest_macos/Core/SessionVault.swift": "8aaeafe193e99da59b8a5298fe8d2fa5052c21e8fef67e182927be438d8d7495",
+    "cloudnest_macos/Core/TransferAPI.swift": "757fa9919a3cc5d66d20b380d2470165acc2af63cffac5da3811ec298cf4625b",
+    "cloudnest_macos/Core/TransferDisk.swift": "51ca36fc080604b9a6ece8d0b1302e56904984691c9caa22ee77cdd432ceae84",
+    "cloudnest_macos/Core/TransferManager.swift": "d2a1b943c518cc3fffe7208815da8b9299a1336668a91e9493a375e8255256ff",
+    "cloudnest_macos/Core/TransferRecord.swift": "5deba6f800be9fc2ff2428582f5908e1afbe6c227303661764f2ad1d8374f965",
+    "cloudnest_macos/Core/TransferStore.swift": "66cae8a28ba323c0a90e67eec549356c70c88b843fa9bb352ba0f30c4567e17f",
+    "cloudnest_macos/Core/TransferTelemetry.swift": "95eb7bba18223c173ceeead47cc025fb1fc34617985ab3d80db8ce89d9011345",
+    "cloudnest_macos/Core/WorkspaceAPI.swift": "0f732a18c7135f8bdcd530fda19f131f46504c92db3371d1ca2ed46737b569fd",
+    "cloudnest_macos/Core/WorkspaceState.swift": "e37c41e5b180e58db58cb690cb826b3bfbf75a9a4a9326b2306bab2ff729f97e"
+  },
+  "binary_sha256": {
+    "owner": "67338d4e7f42bb166482d91fa32073ee0b1f2159750635d3639aed150ec7e974",
+    "peer": "b7dbde23b63d92b7aeba243685619c9975345ee7fd48387c1a420ad0d1950626"
+  },
+  "observations": [
+    "Native create workspace 3/root 6 and viewer membership confirmed; full new row actions were visible and accessible after the lazy-row fix. Legacy root remained explicitly unavailable.",
+    "Native copy picker copied Preview.txt from personal scope to workspace root 6; server file 7 has workspace_id 3.",
+    "Independent real peer account saw its own private workspace plus the shared viewer space. Upload and new-folder controls disabled; source file readable.",
+    "Actual viewer download completed with 78 verified bytes and SHA-256 da92a2dbbc61507ddcec740d14b019f98209a972ce40911d8d282e164a4f3811. Save-panel tool input appended to the default prefix, producing PreviewPeer downloaded.txt. Observer first expected Peer downloaded.txt and failed; it then verified the actual visible filename and existing completed journal without renaming or rewriting the file.",
+    "File page top informational text and table headers were visibly clipped. This cohort does not pass layout acceptance.",
+    "Native role editor retained viewer baseline; a separate actual API client advanced membership to editor. The native administrator confirmation was displayed but NOT submitted.",
+    "Continuation resumed approximately four hours later. Exact fixture exec 19328 returned terminal exit 1 and log shows twenty-minute expiry. Confirmation cancelled, editor/member views closed, both apps quit normally and were absent in following inventory. No native 409/role save/removal/upload result is claimed."
+  ],
+  "api_evidence": [
+    {
+      "label": "native-workspace-and-viewer-created",
+      "utc": "2026-11-23T01:35:31.541579+00:00",
+      "spaces": {
+        "owner": [
+          {
+            "id": 3,
+            "name": "Native GUI workspace",
+            "owner_id": 1,
+            "root_file_id": 6,
+            "role": "owner",
+            "create_time": "2026-11-23T01:35:03Z"
+          },
+          {
+            "id": 1,
+            "name": "Legacy UI workspace",
+            "owner_id": 1,
+            "root_file_id": null,
+            "role": "owner",
+            "create_time": "2026-11-23T01:32:56Z"
+          }
+        ],
+        "peer": [
+          {
+            "id": 3,
+            "name": "Native GUI workspace",
+            "owner_id": 1,
+            "root_file_id": 6,
+            "role": "viewer",
+            "create_time": "2026-11-23T01:35:03Z"
+          },
+          {
+            "id": 2,
+            "name": "Peer private workspace",
+            "owner_id": 2,
+            "root_file_id": 5,
+            "role": "owner",
+            "create_time": "2026-11-23T01:32:56Z"
+          }
+        ]
+      },
+      "workspace": {
+        "id": 3,
+        "name": "Native GUI workspace",
+        "owner_id": 1,
+        "root_file_id": 6,
+        "role": "owner",
+        "create_time": "2026-11-23T01:35:03Z"
+      },
+      "members": [
+        {
+          "user_id": 1,
+          "username": "test-1795397576538699000-0",
+          "role": "owner"
+        },
+        {
+          "user_id": 2,
+          "username": "test-1795397576543105000-1",
+          "role": "viewer"
+        }
+      ],
+      "owner_files": [],
+      "peer_files": [],
+      "peer_file_list_status": 200,
+      "checks": []
+    },
+    {
+      "label": "native-personal-file-copied-into-workspace",
+      "utc": "2026-11-23T01:36:15.095723+00:00",
+      "spaces": {
+        "owner": [
+          {
+            "id": 3,
+            "name": "Native GUI workspace",
+            "owner_id": 1,
+            "root_file_id": 6,
+            "role": "owner",
+            "create_time": "2026-11-23T01:35:03Z"
+          },
+          {
+            "id": 1,
+            "name": "Legacy UI workspace",
+            "owner_id": 1,
+            "root_file_id": null,
+            "role": "owner",
+            "create_time": "2026-11-23T01:32:56Z"
+          }
+        ],
+        "peer": [
+          {
+            "id": 3,
+            "name": "Native GUI workspace",
+            "owner_id": 1,
+            "root_file_id": 6,
+            "role": "viewer",
+            "create_time": "2026-11-23T01:35:03Z"
+          },
+          {
+            "id": 2,
+            "name": "Peer private workspace",
+            "owner_id": 2,
+            "root_file_id": 5,
+            "role": "owner",
+            "create_time": "2026-11-23T01:32:56Z"
+          }
+        ]
+      },
+      "workspace": {
+        "id": 3,
+        "name": "Native GUI workspace",
+        "owner_id": 1,
+        "root_file_id": 6,
+        "role": "owner",
+        "create_time": "2026-11-23T01:35:03Z"
+      },
+      "members": [
+        {
+          "user_id": 1,
+          "username": "test-1795397576538699000-0",
+          "role": "owner"
+        },
+        {
+          "user_id": 2,
+          "username": "test-1795397576543105000-1",
+          "role": "viewer"
+        }
+      ],
+      "owner_files": [
+        {
+          "id": 7,
+          "user_id": 1,
+          "filename": "Preview.txt",
+          "parent_id": 6,
+          "workspace_id": 3,
+          "is_folder": 0,
+          "size": 78,
+          "current_version": 1
+        }
+      ],
+      "peer_files": [
+        {
+          "id": 7,
+          "user_id": 1,
+          "filename": "Preview.txt",
+          "parent_id": 6,
+          "workspace_id": 3,
+          "is_folder": 0,
+          "size": 78,
+          "current_version": 1
+        }
+      ],
+      "peer_file_list_status": 200,
+      "checks": []
+    },
+    {
+      "label": "native-viewer-download-actual-name",
+      "utc": "2026-11-23T01:38:38.663947+00:00",
+      "spaces": {
+        "owner": [
+          {
+            "id": 3,
+            "name": "Native GUI workspace",
+            "owner_id": 1,
+            "root_file_id": 6,
+            "role": "owner",
+            "create_time": "2026-11-23T01:35:03Z"
+          },
+          {
+            "id": 1,
+            "name": "Legacy UI workspace",
+            "owner_id": 1,
+            "root_file_id": null,
+            "role": "owner",
+            "create_time": "2026-11-23T01:32:56Z"
+          }
+        ],
+        "peer": [
+          {
+            "id": 3,
+            "name": "Native GUI workspace",
+            "owner_id": 1,
+            "root_file_id": 6,
+            "role": "viewer",
+            "create_time": "2026-11-23T01:35:03Z"
+          },
+          {
+            "id": 2,
+            "name": "Peer private workspace",
+            "owner_id": 2,
+            "root_file_id": 5,
+            "role": "owner",
+            "create_time": "2026-11-23T01:32:56Z"
+          }
+        ]
+      },
+      "workspace": {
+        "id": 3,
+        "name": "Native GUI workspace",
+        "owner_id": 1,
+        "root_file_id": 6,
+        "role": "owner",
+        "create_time": "2026-11-23T01:35:03Z"
+      },
+      "members": [
+        {
+          "user_id": 1,
+          "username": "test-1795397576538699000-0",
+          "role": "owner"
+        },
+        {
+          "user_id": 2,
+          "username": "test-1795397576543105000-1",
+          "role": "viewer"
+        }
+      ],
+      "owner_files": [
+        {
+          "id": 7,
+          "user_id": 1,
+          "filename": "Preview.txt",
+          "parent_id": 6,
+          "workspace_id": 3,
+          "is_folder": 0,
+          "size": 78,
+          "current_version": 1
+        }
+      ],
+      "peer_files": [
+        {
+          "id": 7,
+          "user_id": 1,
+          "filename": "Preview.txt",
+          "parent_id": 6,
+          "workspace_id": 3,
+          "is_folder": 0,
+          "size": 78,
+          "current_version": 1
+        }
+      ],
+      "peer_file_list_status": 200,
+      "checks": [
+        {
+          "kind": "actual-peer-gui-download",
+          "path": "/tmp/cloudnest-native-ui-workspaces-final-49yfuh7j/PreviewPeer downloaded.txt",
+          "bytes": 78,
+          "sha256": "da92a2dbbc61507ddcec740d14b019f98209a972ce40911d8d282e164a4f3811"
+        }
+      ]
+    },
+    {
+      "label": "second-client-advanced-viewer-to-editor",
+      "utc": "2026-11-23T01:39:04.319737+00:00",
+      "spaces": {
+        "owner": [
+          {
+            "id": 3,
+            "name": "Native GUI workspace",
+            "owner_id": 1,
+            "root_file_id": 6,
+            "role": "owner",
+            "create_time": "2026-11-23T01:35:03Z"
+          },
+          {
+            "id": 1,
+            "name": "Legacy UI workspace",
+            "owner_id": 1,
+            "root_file_id": null,
+            "role": "owner",
+            "create_time": "2026-11-23T01:32:56Z"
+          }
+        ],
+        "peer": [
+          {
+            "id": 3,
+            "name": "Native GUI workspace",
+            "owner_id": 1,
+            "root_file_id": 6,
+            "role": "viewer",
+            "create_time": "2026-11-23T01:35:03Z"
+          },
+          {
+            "id": 2,
+            "name": "Peer private workspace",
+            "owner_id": 2,
+            "root_file_id": 5,
+            "role": "owner",
+            "create_time": "2026-11-23T01:32:56Z"
+          }
+        ]
+      },
+      "workspace": {
+        "id": 3,
+        "name": "Native GUI workspace",
+        "owner_id": 1,
+        "root_file_id": 6,
+        "role": "owner",
+        "create_time": "2026-11-23T01:35:03Z"
+      },
+      "members": [
+        {
+          "user_id": 1,
+          "username": "test-1795397576538699000-0",
+          "role": "owner"
+        },
+        {
+          "user_id": 2,
+          "username": "test-1795397576543105000-1",
+          "role": "editor"
+        }
+      ],
+      "owner_files": [
+        {
+          "id": 7,
+          "user_id": 1,
+          "filename": "Preview.txt",
+          "parent_id": 6,
+          "workspace_id": 3,
+          "is_folder": 0,
+          "size": 78,
+          "current_version": 1
+        }
+      ],
+      "peer_files": [
+        {
+          "id": 7,
+          "user_id": 1,
+          "filename": "Preview.txt",
+          "parent_id": 6,
+          "workspace_id": 3,
+          "is_folder": 0,
+          "size": 78,
+          "current_version": 1
+        }
+      ],
+      "peer_file_list_status": 200,
+      "checks": [],
+      "sampling_note": "Workspace listings sampled before the second-client mutation; members and files sampled afterwards."
+    }
+  ],
+  "cleanup": {
+    "fixture_exec_exit_code": 1,
+    "expired": true,
+    "go_package_seconds": 1202.108,
+    "backend_port": 62064,
+    "backend_listener_closed": true,
+    "both_apps_exited": true
+  },
+  "next": "Fix top content placement using native safe-area insets; run short separate role-management and peer-file cohorts. Existing production Core flow remains covered by real automated integration."
+}

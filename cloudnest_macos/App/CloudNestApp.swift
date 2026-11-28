@@ -4,24 +4,30 @@ import SwiftUI
 struct CloudNestApp: App {
     @State private var session: SessionState
     @State private var transfers: TransferManager
+    @State private var frpCommands: FRPCommandManager
 
     init() {
         let session = SessionState(api: ServerAPI(), vault: KeychainSessionVault(service: "org.cloudnest.macos.session"))
         _session = State(initialValue: session)
         _transfers = State(initialValue: TransferManager(session: session))
+        _frpCommands = State(initialValue: FRPCommandManager(session: session))
     }
 
     var body: some Scene {
         WindowGroup("CloudNest", id: "workspace") {
-            WorkspaceWindow(session: session, transfers: transfers)
+            WorkspaceWindow(session: session, transfers: transfers, frpCommands: frpCommands)
                 .frame(minWidth: 640, minHeight: 440)
                 .task {
                     await session.restore()
                     await transfers.restore()
+                    await frpCommands.restore()
                 }
         }
         .defaultSize(width: 900, height: 590)
-        .onChange(of: session.transferIdentity) { Task { await transfers.synchronizeIdentity() } }
+        .onChange(of: session.transferIdentity) {
+            frpCommands.synchronizeIdentity()
+            Task { await transfers.synchronizeIdentity() }
+        }
         .commands {
             FileBrowserCommands()
             CommandMenu("服务器") {
@@ -42,16 +48,30 @@ struct CloudNestApp: App {
 
 private enum Page: String, CaseIterable, Identifiable {
     case files = "我的文件"
+    case photos = "照片"
     case recycleBin = "回收站"
     case transfers = "传输"
+    case ai = "AI 检索"
+    case frp = "远程连接"
+    case workspaces = "协作空间"
+    case shares = "分享"
+    case settings = "设置"
+    case audit = "操作审计"
     case connection = "服务器连接"
     case account = "账户"
     var id: Self { self }
     var icon: String {
         switch self {
         case .files: "folder"
+        case .photos: "photo.on.rectangle"
         case .recycleBin: "trash"
         case .transfers: "arrow.up.arrow.down"
+        case .ai: "sparkle.magnifyingglass"
+        case .frp: "point.3.connected.trianglepath.dotted"
+        case .workspaces: "person.2"
+        case .shares: "link"
+        case .settings: "gearshape"
+        case .audit: "list.bullet.rectangle"
         case .connection: "network"
         case .account: "person.crop.circle"
         }
@@ -61,6 +81,7 @@ private enum Page: String, CaseIterable, Identifiable {
 struct WorkspaceWindow: View {
     let session: SessionState
     let transfers: TransferManager
+    let frpCommands: FRPCommandManager
     @State private var selection: Page? = .files
 
     var body: some View {
@@ -82,11 +103,28 @@ struct WorkspaceWindow: View {
                     case .files:
                         FileBrowserView(session: session, transfers: transfers, recycleBin: false)
                             .id(session.account?.id)
+                    case .photos:
+                        PhotosView(session:session,transfers:transfers).id(session.transferIdentity)
                     case .recycleBin:
                         FileBrowserView(session: session, transfers: transfers, recycleBin: true)
                             .id(session.account?.id)
                     case .transfers:
                         TransferListView(transfers: transfers)
+                    case .ai:
+                        AISearchView(session: session, transfers: transfers)
+                            .id(session.transferIdentity)
+                    case .frp:
+                        FRPView(session: session, commands: frpCommands)
+                            .id(session.transferIdentity)
+                    case .workspaces:
+                        WorkspacesView(session: session, transfers: transfers)
+                            .id(session.transferIdentity)
+                    case .shares:
+                        SharesView(session: session).id(session.transferIdentity)
+                    case .settings:
+                        SettingsView(session: session).id(session.transferIdentity)
+                    case .audit:
+                        AuditView(session: session).id(session.transferIdentity)
                     case .connection:
                         ConnectionDetails(session: session)
                     case .account:
@@ -142,6 +180,7 @@ private struct SignInView: View {
     @State private var server = ""
     @State private var username = ""
     @State private var password = ""
+    @State private var showingShare = false
     @ScaledMetric(relativeTo: .body) private var formHeight: CGFloat = 168
 
     var body: some View {
@@ -163,6 +202,7 @@ private struct SignInView: View {
                     .foregroundStyle(.secondary)
             }
             HStack {
+                Button("打开分享链接…") { showingShare = true }.disabled(session.busy)
                 Spacer()
                 if session.busy { ProgressView().controlSize(.small) }
                 Button("登录", action: signIn)
@@ -174,6 +214,7 @@ private struct SignInView: View {
         .frame(maxWidth: 410)
         .padding(28)
         .onAppear { server = session.origin?.url.absoluteString ?? lastServer }
+        .sheet(isPresented: $showingShare) { PublicShareView(client: session.publicShareClient) }
     }
 
     private func signIn() {

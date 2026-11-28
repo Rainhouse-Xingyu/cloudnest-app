@@ -19,6 +19,7 @@ final class SessionState {
     private let vault: any SessionVault
 
     var hasSavedSession: Bool { saved != nil }
+    var publicShareClient: PublicShareClient { PublicShareClient(api: api) }
 
     init(api: ServerAPI, vault: any SessionVault) {
         self.api = api
@@ -151,6 +152,248 @@ final class SessionState {
         try await withSession { origin, token in
             try await api.restoreVersion(origin, token: token, fileID: fileID, version: version, baseVersion: baseVersion)
         }
+    }
+
+    func searchAI(question: String, page: Int) async throws -> AISearchResponse {
+        try await withSession { origin, token in
+            try await api.searchAI(origin, token: token, question: question, page: page)
+        }
+    }
+
+    func indexAI(after: Int64) async throws -> AIIndexPage {
+        try await withSession { origin, token in
+            try await api.indexAI(origin, token: token, after: after)
+        }
+    }
+
+    func rebuildAI(_ item: AIIndexItem) async throws {
+        try await withSession { origin, token in
+            try await api.rebuildAI(origin, token: token, item: item)
+        }
+    }
+
+    func frpDevices(retired: Bool = false) async throws -> [FRPDevice] {
+        try await withSession { origin, token in try await api.frpDevices(origin, token: token, retired: retired) }
+    }
+
+    func writeFRPDevice(original: FRPDevice?, name: String, address: String, enabled: Bool, expectedIdentity: TransferIdentity?) async throws -> FRPDevice {
+        try requireTransferIdentity(expectedIdentity)
+        return try await withSession { origin, token in try await api.writeFRPDevice(origin, token: token, original: original, name: name, address: address, enabled: enabled) }
+    }
+
+    func retireFRPDevice(id: Int64, expectedIdentity: TransferIdentity?) async throws {
+        try requireTransferIdentity(expectedIdentity)
+        try await withSession { origin, token in try await api.retireFRPDevice(origin, token: token, id: id) }
+    }
+
+    func frpDeviceArchive(id: Int64) async throws -> FRPDeviceArchive {
+        try await withSession { origin, token in try await api.frpDeviceArchive(origin, token: token, id: id) }
+    }
+
+    func frpMappings(deviceID: Int64) async throws -> [FRPMapping] {
+        try await withSession { origin, token in try await api.frpMappings(origin, token: token, deviceID: deviceID) }
+    }
+
+    func writeFRPMapping(original: FRPMapping?, deviceID: Int64, serverID: Int64, localPort: Int, remotePort: Int?, domain: String, enabled: Bool, expectedIdentity: TransferIdentity?) async throws -> FRPMapping {
+        try requireTransferIdentity(expectedIdentity)
+        return try await withSession { origin, token in
+            try await api.writeFRPMapping(origin, token: token, original: original, deviceID: deviceID,
+                serverID: serverID, localPort: localPort, remotePort: remotePort, domain: domain, enabled: enabled)
+        }
+    }
+
+    func deleteFRPMapping(id: Int64, expectedIdentity: TransferIdentity?) async throws {
+        try requireTransferIdentity(expectedIdentity)
+        try await withSession { origin, token in try await api.deleteFRPMapping(origin, token: token, id: id) }
+    }
+
+    func frpStatus(deviceID: Int64) async throws -> FRPStatus {
+        try await withSession { origin, token in try await api.frpStatus(origin, token: token, deviceID: deviceID) }
+    }
+
+    func frpConfigs(deviceID: Int64) async throws -> [FRPConfig] {
+        try await withSession { origin, token in try await api.frpConfigs(origin, token: token, deviceID: deviceID) }
+    }
+
+    func frpCommands(deviceID: Int64) async throws -> [FRPCommand] {
+        try await withSession { origin, token in try await api.frpCommands(origin, token: token, deviceID: deviceID) }
+    }
+
+    func enqueueFRPCommand(_ intent: FRPCommandIntent) async throws -> FRPCommand {
+        try requireTransferIdentity(intent.identity)
+        return try await withSession { origin, token in try await api.enqueueFRPCommand(origin, token: token, intent: intent) }
+    }
+
+
+    func frpServers(afterID: Int64 = 0) async throws -> FRPServerPage {
+        try await withSession { origin, token in try await api.frpServers(origin, token: token, afterID: afterID) }
+    }
+
+    func frpServer(id: Int64) async throws -> FRPServer {
+        try await withSession { origin, token in try await api.frpServer(origin, token: token, id: id) }
+    }
+
+    func writeFRPServer(id: Int64?, input: FRPServerInput, expectedIdentity: TransferIdentity?) async throws -> FRPServer {
+        try requireTransferIdentity(expectedIdentity)
+        return try await withSession { origin, token in try await api.writeFRPServer(origin, token: token, id: id, input: input) }
+    }
+
+    func previewFRPConfig(_ selection: FRPConfigSelection, expectedIdentity: TransferIdentity?) async throws -> String {
+        try requireTransferIdentity(expectedIdentity)
+        return try await withSession { origin, token in try await api.previewFRPConfig(origin, token: token, selection: selection) }
+    }
+
+    func saveFRPConfig(_ selection: FRPConfigSelection, expectedIdentity: TransferIdentity?) async throws -> FRPConfig {
+        try requireTransferIdentity(expectedIdentity)
+        return try await withSession { origin, token in try await api.saveFRPConfig(origin, token: token, selection: selection) }
+    }
+
+    func rollbackFRPConfig(configID: Int64, deviceID: Int64, expectedIdentity: TransferIdentity?) async throws -> FRPConfig {
+        try requireTransferIdentity(expectedIdentity)
+        return try await withSession { origin, token in try await api.rollbackFRPConfig(origin, token: token, configID: configID, deviceID: deviceID) }
+    }
+
+    func issueFRPEnrollment(deviceID: Int64, password: String, expectedIdentity: TransferIdentity?) async throws -> FRPEnrollment {
+        try requireTransferIdentity(expectedIdentity)
+        return try await withSession { origin, token in try await api.issueFRPEnrollment(origin, token: token, deviceID: deviceID, password: password) }
+    }
+
+    func revokeFRPCredential(deviceID: Int64, password: String, expectedIdentity: TransferIdentity?) async throws {
+        try requireTransferIdentity(expectedIdentity)
+        try await withSession { origin, token in try await api.revokeFRPCredential(origin, token: token, deviceID: deviceID, password: password) }
+    }
+
+    func workspaces() async throws -> [Workspace] {
+        try await withSession { origin, token in try await api.workspaces(origin, token: token) }
+    }
+
+    func createWorkspace(name: String, expectedIdentity: TransferIdentity?) async throws -> Workspace {
+        try requireTransferIdentity(expectedIdentity)
+        guard let ownerID = expectedIdentity?.userID else { throw ServerError.unauthorized }
+        return try await withSession { origin, token in try await api.createWorkspace(origin, token: token, name: name, expectedOwnerID: ownerID) }
+    }
+
+    func workspaceMembers(workspaceID: Int64) async throws -> [WorkspaceMember] {
+        try await withSession { origin, token in try await api.workspaceMembers(origin, token: token, workspaceID: workspaceID) }
+    }
+
+    func addWorkspaceMember(workspaceID: Int64, username: String, role: WorkspaceRole, expectedIdentity: TransferIdentity?) async throws {
+        try requireTransferIdentity(expectedIdentity)
+        try await withSession { origin, token in try await api.addWorkspaceMember(origin, token: token, workspaceID: workspaceID, username: username, role: role) }
+    }
+
+    func changeWorkspaceMember(workspaceID: Int64, original: WorkspaceMember, role: WorkspaceRole?, expectedIdentity: TransferIdentity?) async throws {
+        try requireTransferIdentity(expectedIdentity)
+        try await withSession { origin, token in try await api.changeWorkspaceMember(origin, token: token, workspaceID: workspaceID, original: original, role: role) }
+    }
+
+    func fileCollaborators(fileID: Int64) async throws -> [FileCollaborator] {
+        try await withSession { origin, token in try await api.fileCollaborators(origin, token: token, fileID: fileID) }
+    }
+
+    func addFileCollaborator(file: FileItem, username: String, permission: FilePermission, expectedIdentity: TransferIdentity?) async throws {
+        try requireTransferIdentity(expectedIdentity)
+        guard file.canManageCollaborators(userID: expectedIdentity?.userID) else { throw ServerError.forbidden }
+        try await withSession { origin, token in try await api.addFileCollaborator(origin, token: token, fileID: file.id, username: username, permission: permission) }
+    }
+
+    func changeFileCollaborator(file: FileItem, original: FileCollaborator, permission: FilePermission?, expectedIdentity: TransferIdentity?) async throws {
+        try requireTransferIdentity(expectedIdentity)
+        guard file.canManageCollaborators(userID: expectedIdentity?.userID) else { throw ServerError.forbidden }
+        try await withSession { origin, token in try await api.changeFileCollaborator(origin, token: token, fileID: file.id, original: original, permission: permission) }
+    }
+
+    func shares() async throws -> [ShareLink] {
+        guard let ownerID = transferIdentity?.userID else { throw ServerError.unauthorized }
+        return try await withSession { origin, token in try await api.shares(origin, token: token, expectedOwnerID: ownerID) }
+    }
+
+    func systemSettings() async throws -> SystemSettingsSnapshot {
+        try await withSession { origin, token in try await api.systemSettings(origin, token: token) }
+    }
+
+    func photos(query: PhotoQuery, page: Int) async throws -> PhotoPage {
+        try await withSession { origin, token in try await api.photos(origin,token:token,query:query,page:page) }
+    }
+
+    func livePhotos(page: Int) async throws -> LivePhotoPage {
+        try await withSession { origin, token in try await api.livePhotos(origin,token:token,page:page) }
+    }
+    func livePhoto(id: Int64) async throws -> LivePhotoPair {
+        try await withSession { origin, token in try await api.livePhoto(origin,token:token,id:id) }
+    }
+    func bindLivePhoto(imageID: Int64, videoID: Int64, expectedIdentity: TransferIdentity?) async throws -> LivePhotoPair {
+        try requireTransferIdentity(expectedIdentity)
+        return try await withSession { origin, token in try await api.bindLivePhoto(origin,token:token,imageID:imageID,videoID:videoID) }
+    }
+    func unbindLivePhoto(id: Int64, expectedIdentity: TransferIdentity?) async throws {
+        try requireTransferIdentity(expectedIdentity)
+        try await withSession { origin, token in try await api.unbindLivePhoto(origin,token:token,id:id) }
+    }
+    func motionCandidates(query: PhotoQuery, page: Int) async throws -> MotionCandidatePage {
+        try await withSession { origin, token in try await api.motionCandidates(origin,token:token,query:query,page:page) }
+    }
+
+    func photoThumbnail(fileID: Int64) async throws -> Data {
+        try await withSession { origin, token in try await api.photoThumbnail(origin,token:token,fileID:fileID) }
+    }
+
+    func auditPage(query: AuditQuery, snapshotID: Int64 = 0, beforeID: Int64 = 0, afterID: Int64 = 0) async throws -> AuditPage {
+        guard let userID = transferIdentity?.userID else { throw ServerError.unauthorized }
+        guard !query.all || account?.isAdmin == true else { throw ServerError.forbidden }
+        return try await withSession { origin, token in try await api.auditPage(origin,token:token,userID:userID,query:query,snapshotID:snapshotID,beforeID:beforeID,afterID:afterID) }
+    }
+
+    func auditExportResponse(selection: AuditExportSelection, expectedIdentity: TransferIdentity?) async throws -> AuditExportStream {
+        try requireTransferIdentity(expectedIdentity)
+        guard let expectedIdentity, let saved, let origin else { throw ServerError.unauthorized }
+        guard !selection.query.all || account?.isAdmin == true else { throw ServerError.forbidden }
+        var opened: AuditExportStream?
+        do {
+            let result = try await api.auditExportResponse(origin,token:saved.token,userID:expectedIdentity.userID,selection:selection)
+            opened = result
+            try Task.checkCancellation()
+            guard self.saved == saved else { throw CancellationError() }
+            try requireTransferIdentity(expectedIdentity)
+            guard !selection.query.all || account?.isAdmin == true else { throw ServerError.forbidden }
+            return result
+        } catch {
+            opened?.stream.cancel()
+            guard self.saved == saved else { throw CancellationError() }
+            if error as? ServerError == .unauthorized { invalidateSession() }
+            throw error
+        }
+    }
+
+    func rateWindow() async throws -> UserRateWindow {
+        guard let userID = transferIdentity?.userID else { throw ServerError.unauthorized }
+        return try await withSession { origin, token in try await api.rateWindow(origin, token: token, userID: userID) }
+    }
+
+    func saveSystemSetting(key: SystemSettingKey, value: String, original: String?, expectedIdentity: TransferIdentity?) async throws {
+        try requireTransferIdentity(expectedIdentity)
+        guard account?.isAdmin == true else { throw ServerError.forbidden }
+        try await withSession { origin, token in try await api.saveSystemSetting(origin, token: token, key: key, value: value, original: original) }
+    }
+
+    func saveRateWindow(original: UserRateWindow, enabled: Bool, start: String, end: String, expectedIdentity: TransferIdentity?) async throws {
+        try requireTransferIdentity(expectedIdentity)
+        guard let userID = expectedIdentity?.userID else { throw ServerError.unauthorized }
+        try await withSession { origin, token in try await api.saveRateWindow(origin, token: token, userID: userID, original: original, enabled: enabled, start: start, end: end) }
+    }
+
+    func createShare(file: FileItem, expireHours: Int, passcode: String, maxDownloads: Int64, expectedIdentity: TransferIdentity?) async throws -> CreatedShare {
+        try requireTransferIdentity(expectedIdentity)
+        guard file.workspaceID == nil else { throw ServerError.forbidden }
+        return try await withSession { origin, token in
+            try await api.createShare(origin, token: token, fileID: file.id, expireHours: expireHours, passcode: passcode, maxDownloads: maxDownloads)
+        }
+    }
+
+    func revokeShare(_ share: ShareLink, expectedIdentity: TransferIdentity?) async throws {
+        try requireTransferIdentity(expectedIdentity)
+        guard share.ownerID == expectedIdentity?.userID else { throw ServerError.forbidden }
+        try await withSession { origin, token in try await api.revokeShare(origin, token: token, code: share.code) }
     }
 
     private func withSession<T: Sendable>(_ operation: (ServerOrigin, String) async throws -> T) async throws -> T {
