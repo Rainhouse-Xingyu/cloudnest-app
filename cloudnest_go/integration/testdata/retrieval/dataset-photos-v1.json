@@ -1,0 +1,271 @@
+{
+  "version": 1,
+  "description": "Six independently photographed natural scenes, seven uploads including one private near-duplicate. Fixed visible labels, not a blind external test. Original metadata is stripped; calendar labels are explicitly synthetic.",
+  "sources": [
+    {
+      "id": "beach-a",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Waikiki_Beach,_Hawaii.jpg",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/c/cf/Waikiki_Beach%2C_Hawaii.jpg",
+      "sha256": "34290e655970bd35b889284a14c8a2403dfa414e824f68c83d8ccdacb4e2451d",
+      "bytes": 538289,
+      "width": 2049,
+      "height": 832,
+      "author": "Julianibarra",
+      "license": "CC0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "observations": "Blue ocean, breaking waves, swimmers/surfboards and dark rocks; narrow sand at left. No forest interior or city skyline."
+    },
+    {
+      "id": "beach-b",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Ruby_Beach_2_Jon_Preston_(23104527056).jpg",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/b/b9/Ruby_Beach_2_Jon_Preston_%2823104527056%29.jpg",
+      "sha256": "d85cee0e5fa2c6bf9662056482eb098c8458daaa97d273169d23fcc649033916",
+      "bytes": 1371165,
+      "width": 2048,
+      "height": 1360,
+      "author": "Jon Preston / Olympic National Park (NPS)",
+      "license": "Public domain",
+      "license_url": "https://commons.wikimedia.org/wiki/File:Ruby_Beach_2_Jon_Preston_(23104527056).jpg",
+      "observations": "Rocky beach, sea stacks, waves and driftwood, with trees framing the coastline. Woodland is present but no forest stream or enormous trunk enclosed by a boardwalk."
+    },
+    {
+      "id": "forest-a",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Forest_nature.jpg",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/9/9b/Forest_nature.jpg",
+      "sha256": "ee825733911502a2eecaf903f90be5d29a062c78216a41bea668f9d93bf5c8e0",
+      "bytes": 947194,
+      "width": 2048,
+      "height": 1536,
+      "author": "Paolo Neo",
+      "license": "Public domain",
+      "license_url": "https://commons.wikimedia.org/wiki/File:Forest_nature.jpg",
+      "observations": "Forest interior with slender trunks, leaf-covered ground, rocks and a visible small stream."
+    },
+    {
+      "id": "forest-b",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Redwoods_in_CA_-_53645819332.jpg",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/4/49/Redwoods_in_CA_-_53645819332.jpg",
+      "sha256": "37813778d45704a60ca10d14a5d820f27c1d784ac31cb954dd6572caaf36a16d",
+      "bytes": 3621714,
+      "width": 2048,
+      "height": 1536,
+      "author": "jhvanwa / Jeff Hollett",
+      "license": "CC0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "observations": "Close view of an enormous tree trunk with surrounding woodland and a wooden boardwalk/railing. No visible stream or coastline."
+    },
+    {
+      "id": "mountain-a",
+      "page_url": "https://commons.wikimedia.org/wiki/File:MRSR.Mt.Rainier.jpg",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/c/c3/MRSR.Mt.Rainier.jpg",
+      "sha256": "3aff43a2e271b306967a8ffde10eac8df54270547fdfd811fc538613ec1b7402",
+      "bytes": 1916518,
+      "width": 2592,
+      "height": 1944,
+      "author": "Bobtalbot61",
+      "license": "Public domain",
+      "license_url": "https://commons.wikimedia.org/wiki/File:MRSR.Mt.Rainier.jpg",
+      "observations": "Distant snow-covered mountain peaks, blue sky, clouds and wooded foreground hills."
+    },
+    {
+      "id": "city-a",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Seattle_Skyline_WSB.jpg",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/b/be/Seattle_Skyline_WSB.jpg",
+      "sha256": "90831c7fe2dc60ed66b0d2f05a5a1134205c40547f450e6d9f31fead41606867",
+      "bytes": 1977386,
+      "width": 1920,
+      "height": 1080,
+      "author": "CommunistSquared",
+      "license": "CC0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "observations": "Dense city skyline of tall buildings, port infrastructure, roads and some visible signs. No snow-covered mountain or forest interior."
+    }
+  ],
+  "documents": [
+    {
+      "id": "photo-sea-last",
+      "source": "beach-a",
+      "owner": "alice",
+      "capture": "previous_year"
+    },
+    {
+      "id": "photo-coast-current",
+      "source": "beach-b",
+      "owner": "alice",
+      "capture": "current_year"
+    },
+    {
+      "id": "photo-stream-last",
+      "source": "forest-a",
+      "owner": "alice",
+      "capture": "previous_year"
+    },
+    {
+      "id": "photo-tree-shared",
+      "source": "forest-b",
+      "owner": "bob",
+      "share_read": true
+    },
+    {
+      "id": "photo-snow",
+      "source": "mountain-a",
+      "owner": "alice"
+    },
+    {
+      "id": "photo-skyline",
+      "source": "city-a",
+      "owner": "alice"
+    },
+    {
+      "id": "photo-private-sea",
+      "source": "beach-a",
+      "owner": "bob",
+      "capture": "current_year"
+    }
+  ],
+  "queries": [
+    {
+      "id": "coast-dev",
+      "family": "coast",
+      "split": "dev",
+      "question": "海边照片",
+      "relevant": [
+        "photo-sea-last",
+        "photo-coast-current"
+      ]
+    },
+    {
+      "id": "coast-held",
+      "family": "coast",
+      "split": "heldout",
+      "question": "海浪与礁石的海岸照片",
+      "relevant": [
+        "photo-sea-last",
+        "photo-coast-current"
+      ]
+    },
+    {
+      "id": "calendar-dev",
+      "family": "calendar",
+      "split": "dev",
+      "question": "去年拍的海边照片",
+      "relevant": [
+        "photo-sea-last"
+      ]
+    },
+    {
+      "id": "calendar-held",
+      "family": "calendar",
+      "split": "heldout",
+      "question": "去年的海岸旅行照片",
+      "relevant": [
+        "photo-sea-last"
+      ]
+    },
+    {
+      "id": "stream-dev",
+      "family": "stream",
+      "split": "dev",
+      "question": "森林里有小溪的照片",
+      "relevant": [
+        "photo-stream-last"
+      ]
+    },
+    {
+      "id": "stream-held",
+      "family": "stream",
+      "split": "heldout",
+      "question": "林间溪流经过石头和落叶的照片",
+      "relevant": [
+        "photo-stream-last"
+      ]
+    },
+    {
+      "id": "trunk-dev",
+      "family": "trunk",
+      "split": "dev",
+      "question": "巨大的树干和木栈道的照片",
+      "relevant": [
+        "photo-tree-shared"
+      ]
+    },
+    {
+      "id": "trunk-held",
+      "family": "trunk",
+      "split": "heldout",
+      "question": "木栏杆围住粗大树干的照片",
+      "relevant": [
+        "photo-tree-shared"
+      ]
+    },
+    {
+      "id": "snow-dev",
+      "family": "snow",
+      "split": "dev",
+      "question": "积雪覆盖的山峰照片",
+      "relevant": [
+        "photo-snow"
+      ]
+    },
+    {
+      "id": "snow-held",
+      "family": "snow",
+      "split": "heldout",
+      "question": "蓝天白云下的雪山风景",
+      "relevant": [
+        "photo-snow"
+      ]
+    },
+    {
+      "id": "skyline-dev",
+      "family": "skyline",
+      "split": "dev",
+      "question": "城市高楼天际线照片",
+      "relevant": [
+        "photo-skyline"
+      ]
+    },
+    {
+      "id": "skyline-held",
+      "family": "skyline",
+      "split": "heldout",
+      "question": "密集摩天大楼和港口的城市照片",
+      "relevant": [
+        "photo-skyline"
+      ]
+    },
+    {
+      "id": "absent-cat",
+      "family": "negative",
+      "split": "dev",
+      "question": "室内沙发上睡觉的猫照片",
+      "relevant": []
+    },
+    {
+      "id": "absent-city-date",
+      "family": "negative",
+      "split": "dev",
+      "question": "去年拍摄的城市高楼照片",
+      "relevant": []
+    },
+    {
+      "id": "absent-football",
+      "family": "negative",
+      "split": "heldout",
+      "question": "足球场上比赛的运动员照片",
+      "relevant": []
+    },
+    {
+      "id": "absent-snow-date",
+      "family": "negative",
+      "split": "heldout",
+      "question": "今年拍摄的雪山照片",
+      "relevant": []
+    }
+  ],
+  "quality_gates": {
+    "positive_macro_recall_at_5": 0.9,
+    "positive_mrr_at_10": 0.8,
+    "negative_empty_rate": 1
+  }
+}

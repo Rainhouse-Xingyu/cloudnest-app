@@ -35,6 +35,10 @@ Live Photo 列表/详情/绑定回执在每个源资源中增加 current_version
 
 [最终 GUI](MACOS-PHOTOS-GUI-FINAL-20261127.json)在新私有服务与新源码指纹下通过：照片分页/Live Photo表头与行完整可见；原生PNG预览2254字节与SHA一致，JPEG/MOV关联写入、系统LIVE标记、播放开始/移动画面/播放结束均实际观察。两资源3587/5634字节分别回读校验，关闭后无副本。原生解绑清空列表且两源保留；读取者仅图片可读时列表为空，另行API授予视频读取后原生刷新/播放成功，原生解绑403且旧页清理；API撤权后刷新0项。深浅色、Private名称筛选和正常退出通过，服务356.537s结束、端口关闭。API为读取者阶段重建pair2与调整权限均明确标为准备，不冒充原生动作。五个GUI下载请求全部使用固定版本1。72个App/Core文件前后不变。首轮失败见[原始报告](MACOS-PHOTOS-GUI-INITIAL-20261127.json)，源码与日志哈希见[验证记录](MACOS-PHOTOS-VALIDATION-20261127.json)；照片批次远端CI发布后单独核对。
 
+提交 `886a0ee98e7b89e6c5c5852ac59773eff3aa0e3c` 的[双平台原生 CI](https://github.com/Rainhouse-Xingyu/cloudnest-app/actions/runs/45950367260)与[后端 CI](https://github.com/Rainhouse-Xingyu/cloudnest-app/actions/runs/45950367402)均已全部通过，逐项读取实际日志：macOS 26 完整原生 164.955s、非 UTC 12.133s、照片 25.29s；Xcode 27 完整 202.188s、非 UTC 9.597s、照片 55.84s。两平台均实际得到完整 320×240 PHLivePhoto、六角色通过、206/256 字节后父取消，固定版本请求计数 4/3/1 且没有 latest。Release、签名及独立 UI harness 构建均通过；CI 没有代替上面的真实 GUI 观察。
+
+后端完整集成 498.072s、真实传输网络 97.893s、AI 故障回归 58.746s；新增媒体/旧类型权限分页 9.56s、Live Photo 保留历史迁移 1.96s，Linux HEIF、Agent/systemd、Keychain 和漏洞检查全部通过。最初扫描 PDF 的故障状态不符用例本次 1.06s 通过，原失败原因仍未确认，不把后续通过改写成已定位的产品修复。
+
 复现：
 
 ```sh

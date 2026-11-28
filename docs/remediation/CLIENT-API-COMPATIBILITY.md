@@ -119,3 +119,7 @@ G03 ZIP 保持普通/批量内嵌/公开分享结构和下载路由，但损坏�
 ## 2026-11-27 照片分类与配对版本
 
 `GET /api/files/search` 新可选 media_kind=image/live_photo_motion，并回显 media_kind；未指定保持旧检索，既有 file_type 与新分类取交集。照片/动态候选只含活动非目录且当前可读文件，旧空 file_type 按后缀分类，不迁移表。排序补同名ID次序，非法分类/负目录/溢出页400。Live Photo的原资源字段保留，补 current_version 供固定版本预览，并限制分页乘法溢出。旧客户端可忽略新增字段；新照片界面要求新分类回显/资源版本，不把旧服务器忽略参数当作支持。无新schema，真实旧检索/空类型/权限/绑定/迁移回归通过，见 [照片协议](MACOS-PHOTOS.md)。
+
+## 2026-11-28 视觉失败诊断
+
+索引状态的字段、HTTP状态和代次协议保持不变，error_code增加两个固定值：vision_output_limit表示提供方明确以length结束的未完成输出，任务终止为failed，调整模型/配置后由所有者按既有generation CAS显式重建；invalid_vision_response表示无效视觉结果，按既有次数上限退避重试。真正服务不可达仍为model_unavailable。原生将两者映射为具体说明，error_code仍为字符串；没有将推理或部分内容作为成功索引返回。手动OCR失败历史可记录vision_output_limit，其HTTP错误仍兼容原ErrVisionResponse路径。无schema变化，不改写历史任务或自动重建成功文件；详细证据与模型差异见[独立照片评估](AI-NATURAL-PHOTOS.md)。

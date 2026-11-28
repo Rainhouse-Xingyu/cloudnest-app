@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"image/png"
 	"net/http"
 	"strings"
@@ -12,6 +13,11 @@ import (
 )
 
 var ErrVisionResponse = errors.New("invalid vision transcription response")
+
+// A complete HTTP response can still contain truncated generation. Preserve
+// compatibility with callers that reject ErrVisionResponse, while allowing the
+// durable queue to avoid repeating the same bounded, incomplete generation.
+var ErrVisionOutputLimit = fmt.Errorf("%w: output token limit", ErrVisionResponse)
 
 // Shared by manual image analysis, PDF/queued OCR and reranking across routers.
 // Refuse excess work instead of retaining arbitrarily many base64 payloads.
@@ -78,6 +84,9 @@ func (o *Ollama) TranscribeWithDigest(ctx context.Context, image []byte) (string
 		return "", "", err
 	}
 	text := strings.TrimSpace(response.Message.Content)
+	if response.Model == o.model && response.Done && response.Message.Role == "assistant" && response.Reason == "length" {
+		return "", "", ErrVisionOutputLimit
+	}
 	if response.Model != o.model || !response.Done || response.Reason != "stop" || response.Message.Role != "assistant" || !utf8.ValidString(text) || strings.IndexByte(text, 0) >= 0 || text == "" || len(text) > 32<<10 {
 		return "", "", ErrVisionResponse
 	}

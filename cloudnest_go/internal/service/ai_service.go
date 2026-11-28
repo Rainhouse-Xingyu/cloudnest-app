@@ -202,6 +202,8 @@ func (s *AIService) OCR(ctx context.Context, uid int64, req AIOCRInput) (AIOCRRe
 			code = "extraction_busy"
 		case errors.Is(err, aiindex.ErrModelChanged):
 			code = "model_changed"
+		case errors.Is(err, aiindex.ErrVisionOutputLimit):
+			code = "vision_output_limit"
 		case errors.Is(err, aiindex.ErrVisionResponse), errors.Is(err, aiindex.ErrEmbedding):
 			code = "invalid_model_response"
 		}

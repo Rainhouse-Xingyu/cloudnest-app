@@ -1,6 +1,6 @@
 # macOS 扩展功能
 
-G09 在 `codex/g09-macos-extensions` 上继续 G08，保持独立[草稿 PR #10](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/10)，不合并前置分支。当前已接入 AI 检索/索引、[FRP 管理](MACOS-FRP.md)、[设备管理与退役](MACOS-FRP-DEVICES.md)、[映射编辑](MACOS-FRP-MAPPINGS.md)、[Agent 注册/撤销](MACOS-FRP-ENROLLMENT.md)、[服务器版本编辑](MACOS-FRP-SERVERS.md)、[配置流程](MACOS-FRP-CONFIGS.md)、[持久命令回执恢复](MACOS-FRP-COMMANDS.md)、[协作空间](MACOS-WORKSPACES.md)、[单文件协作者](MACOS-FILE-COLLABORATORS.md)及[分享管理](MACOS-SHARES.md)。整个 G09、G10、G11 仍进行中/待做；原生接收分享、设置及扩展 AI 继续实施。
+G09 在 `codex/g09-macos-extensions` 上继续 G08，保持独立[草稿 PR #10](https://github.com/Rainhouse-Xingyu/cloudnest-app/pull/10)，不合并前置分支。当前已接入 AI 检索/索引、[FRP 管理](MACOS-FRP.md)、[设备管理与退役](MACOS-FRP-DEVICES.md)、[映射编辑](MACOS-FRP-MAPPINGS.md)、[Agent 注册/撤销](MACOS-FRP-ENROLLMENT.md)、[服务器版本编辑](MACOS-FRP-SERVERS.md)、[配置流程](MACOS-FRP-CONFIGS.md)、[持久命令回执恢复](MACOS-FRP-COMMANDS.md)、[协作空间](MACOS-WORKSPACES.md)、[单文件协作者](MACOS-FILE-COLLABORATORS.md)、[分享管理](MACOS-SHARES.md)、[匿名接收](MACOS-PUBLIC-SHARES.md)、[设置](MACOS-SETTINGS.md)、[审计](MACOS-AUDIT.md)及[照片/Live Photo](MACOS-PHOTOS.md)。[自然照片质量评估与诊断](AI-NATURAL-PHOTOS.md)已有真实结果，尾部误匹配、模型部署兼容性、文件体验完整核对及G10/G11剩余工作继续，不把单一数据集门槛通过当成整个Goal完成。
 
 ## AI 检索与索引
 
@@ -39,7 +39,7 @@ CLOUDNEST_TEST_AI_MODEL=1 python3 scripts/test-macos-backend.py --filter '^TestM
 
 ## 后续范围
 
-继续接入 FRP 设备/映射/服务器编辑、凭据注册、配置预览/生成/回滚，协作空间/成员和文件授权、分享创建/限制/撤销、用户/系统设置。AI 照片/视觉端到端、多页并发变化、真实模型中断及更多辅助功能/文字缩放验收继续补齐。G10 保留历史迁移、备份恢复、磁盘治理、异常/压力和发布门槛，G11 保留全部交付材料。指定 G01/G02 正式 Review 仍按用户要求留到整个 Goal 完成后读取。
+上述FRP编辑/注册/配置、协作、分享/接收、设置、审计和照片原生流程已按下列各批源码指纹分别验证。继续处理AI尾部相关性/独立分布、默认模型与部署兼容性、文件体验完整核对、多页并发变化和更多辅助功能/文字缩放。G10保留历史迁移、备份恢复、磁盘治理、异常/压力和发布门槛，G11保留全部交付材料。指定G01/G02正式Review仍按用户要求留到整个Goal完成后读取。
 
 2026-11-21 后续：af4f3ef 的 macOS 26/Xcode 27 与完整后端 CI 全部通过。已新增原生命令持久意图、确认和原键重试；实际 Agent/官方 frpc/frps 的三隧道与五操作 GUI、真实 TLS 丢回执恢复均有独立证据，见[命令说明](MACOS-FRP-COMMANDS.md)。同日恢复并实际评估视觉模型，2B 的两组合成图片场景通过，4B 失败保留，见[模型资源复测](MACOS-FRP.md#ai-模型资源复测)。新提交 CI 另按精确 SHA 核对，未完成范围不变。
 
@@ -68,3 +68,5 @@ CLOUDNEST_TEST_AI_MODEL=1 python3 scripts/test-macos-backend.py --filter '^TestM
 2026-11-27（UTC）审计批次：[原生操作审计](MACOS-AUDIT.md)新增真实范围/筛选、固定 50 条 ID 双向分页与有界 CSV 保存。实际插入期间保持旧 55 条、刷新 56；管理员全部 61/failed 11、普通 4；两份实际 CSV 均核对账户、内容与 SHA-256。104 注册/78 实际/26 跳过 Swift（0.125s）、三角色/游标/导出专项 race 15.277s、双架构 Release/签名及 GUI 通过；服务正常结束 200.113s。取消测试暴露旧进度残留，先复现再清零，最终要求当前导出在途后取消且三秒释放；原始失败保留。前批 8236cee 双平台原生/完整后端 CI 已全通过。扩展 AI、照片/Live Photo、最小窗口/辅助功能与所有 G10/G11 继续。
 
 2026-11-27（UTC）照片批次：[原生照片与Live Photo](MACOS-PHOTOS.md)接入真实媒体分类、每页50项、四缩略图上界、固定版本校验预览、原生关联/解绑和PHLivePhotoView实际播放。普通Swift113注册/86实际/27跳过（0.161s），完整原生race161.352s、Go全量检查/单元race/八目标和Universal Release通过。源码与真实GUI绑定：初次裁剪失败保留；修正有界视口后完整两账户GUI含静态/动态预览、源字节核验/关闭清理、关联/解绑保留、部分权限/只读拒绝/撤权、筛选和深浅色，正常结束356.537s。JPEG/MOV来自独立合成像素与有效配对元数据，实际系统完整加载，不使用用户图库或模型伪响应。fdff5b1审计双平台原生/完整后端CI全部通过。扩展AI质量、文件体验完整核对与完整G10/G11仍继续。
+
+2026-11-28（UTC）AI扩展批次：[独立自然照片](AI-NATURAL-PHOTOS.md)的冻结清单、真实上传/worker/视觉/embedding/搜索、共享与撤权、回收、实际重建及降级均完成本轮验证；显式2b-instruct新包与旧包分别记录，不改生产默认。固定门槛通过仍有七条尾部误匹配，完整质量保持开放。真实旧包只返回推理且length终止的失败保留，输出上限现在终止并等待显式重建，无效结果有限重试，API/原生提示区分模型不可达。四项回归先复现后修复，Go/Swift/八目标/双架构Release及签名通过；自然图318.25s与票据/EXIF30.31s为独立真实模型证据，原生新文字未冒称新GUI验收。照片886a0ee全部CI已核实；新提交CI另核对。

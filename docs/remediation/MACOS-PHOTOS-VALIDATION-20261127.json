@@ -448,5 +448,60 @@
     "Multi-volume/abrupt-power-loss stability",
     "Extended AI photo quality",
     "Original-download save panel in this particular GUI cohort"
-  ]
+  ],
+  "ci_verified": {
+    "commit": "886a0ee98e7b89e6c5c5852ac59773eff3aa0e3c",
+    "native_run": 45950367260,
+    "backend_run": 45950367402,
+    "all_jobs_success": true,
+    "macos26": {
+      "job": 140344545585,
+      "full_native_seconds": 164.955,
+      "non_utc_seconds": 12.133,
+      "photos_seconds": 25.29
+    },
+    "xcode27": {
+      "job": 140344545455,
+      "full_native_seconds": 202.188,
+      "non_utc_seconds": 9.597,
+      "photos_seconds": 55.84
+    },
+    "native_both_observed": {
+      "roles": [
+        "owner",
+        "cancelled",
+        "image-reader",
+        "pair-reader",
+        "revoked",
+        "restricted"
+      ],
+      "partial_status": 206,
+      "partial_bytes": 256,
+      "parent_cancelled": true,
+      "fixed_version_request_counts": [
+        4,
+        3,
+        1
+      ],
+      "latest_downloads": 0,
+      "ph_live_photo_width": 320,
+      "ph_live_photo_height": 240
+    },
+    "backend": {
+      "job": 140344545935,
+      "integration_seconds": 498.072,
+      "network_seconds": 97.893,
+      "ai_seconds": 58.746,
+      "media_search_seconds": 9.56,
+      "live_photo_history_migration_seconds": 1.96,
+      "original_scanned_pdf_outage_case_seconds": 1.06,
+      "original_pdf_failure_root_cause": "unconfirmed"
+    },
+    "other_jobs": [
+      140344545638,
+      140344545885,
+      140344545908,
+      140344545957
+    ]
+  }
 }

@@ -75,6 +75,9 @@ func (o *Ollama) AnalyzeImage(ctx context.Context, image []byte) (ImageAnalysis,
 		}
 		return result, "", err
 	}
+	if response.Model == o.model && response.Done && response.Message.Role == "assistant" && response.Reason == "length" {
+		return result, "", ErrVisionOutputLimit
+	}
 	if response.Model != o.model || !response.Done || response.Reason != "stop" || response.Message.Role != "assistant" {
 		return result, "", ErrVisionResponse
 	}

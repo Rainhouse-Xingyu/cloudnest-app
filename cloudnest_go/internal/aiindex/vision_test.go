@@ -26,7 +26,7 @@ func TestVisionRejectsMalformedTruncatedAndChangedModel(t *testing.T) {
 		change  bool
 		want    error
 	}{
-		{"truncated", `{"model":"vision:test","done":true,"done_reason":"length","message":{"role":"assistant","content":"partial"}}`, false, ErrVisionResponse},
+		{"truncated", `{"model":"vision:test","done":true,"done_reason":"length","message":{"role":"assistant","content":"partial"}}`, false, ErrVisionOutputLimit},
 		{"wrong model", `{"model":"another:test","done":true,"done_reason":"stop","message":{"role":"assistant","content":"text"}}`, false, ErrVisionResponse},
 		{"unfinished", `{"model":"vision:test","done":false,"done_reason":"stop","message":{"role":"assistant","content":"text"}}`, false, ErrVisionResponse},
 		{"empty", `{"model":"vision:test","done":true,"done_reason":"stop","message":{"role":"assistant","content":" "}}`, false, ErrVisionResponse},

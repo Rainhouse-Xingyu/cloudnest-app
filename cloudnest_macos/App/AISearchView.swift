@@ -196,6 +196,8 @@ struct AISearchView: View {
 
     private func indexError(_ value: String) -> String {
         ["model_unavailable": "模型暂不可用，请稍后刷新状态。", "extraction_busy": "提取服务繁忙，等待重试。",
+         "vision_output_limit": "模型输出达到上限，未生成完整结果；调整模型后可重建。",
+         "invalid_vision_response": "模型没有返回完整有效的分析，等待重试。",
          "extraction_limit": "文件超过当前提取限制。", "unsupported_type": "暂不支持此文件类型的正文索引。",
          "source_integrity": "文件完整性校验失败，请检查原文件。", "attempts_exhausted": "已达到自动重试次数，可核对后手动重建。"] [value]
             ?? "处理诊断：\(value)"

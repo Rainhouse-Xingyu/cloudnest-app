@@ -1,0 +1,1230 @@
+{
+  "dataset_name": "photos-v1",
+  "evaluation_split": "all",
+  "query_policy": "production defaults; qwen3-task-instruction-calendar-separated-v1",
+  "min_cosine": 0.4,
+  "min_lexical_coverage": 0.25,
+  "version": 1,
+  "started": "2026-11-28T09:00:13.908596+08:00",
+  "finished": "2026-11-27T18:04:14.0373-07:00",
+  "completed": true,
+  "passed": true,
+  "commit": "886a0ee98e7b89e6c5c5852ac59773eff3aa0e3c",
+  "working_diff_sha256": "50f9af4ea820295f511fbb495dd5579171cc519c41648e14db945e6744fd33eb",
+  "harness_sha256": "6aa3a4ade6cab8999ea6b0c91c71959093b7196503a12767b48d0ed24f562032",
+  "manifest_sha256": "df42938c7f032ec6afecff297d0033d1b511c6e6bbc209296f8b2a0214e1b515",
+  "go_version": "go1.26.11",
+  "platform": "darwin/arm64",
+  "ollama_version": "0.40.17",
+  "embedding_model": "qwen3-embedding:0.6b",
+  "embedding_digest": "ac6da0dfba84a81fdbfbaf330198c33cd77c4cdfc53e8bc50eb581914a15621d",
+  "vision_model": "qwen3-vl:2b-instruct",
+  "vision_digest": "afc393e3572c07db0bc84aa460d928a16c75f3fbb9ca9e0dccc4fbd2dafb573e",
+  "quality_gates": {
+    "positive_macro_recall_at_5": 0.9,
+    "positive_mrr_at_10": 0.8,
+    "negative_empty_rate": 1
+  },
+  "documents": null,
+  "queries": [
+    {
+      "query": {
+        "id": "coast-dev",
+        "family": "coast",
+        "split": "dev",
+        "question": "海边照片",
+        "relevant": [
+          "photo-sea-last",
+          "photo-coast-current"
+        ]
+      },
+      "response": {
+        "items": [
+          {
+            "id": 1,
+            "document": "photo-sea-last",
+            "score": 0.01639344262295082,
+            "semantic_score": 0.4974998165859551,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\nA wide, sunny view of a vibrant blue ocean with numerous surfers and waves. The water is a deep blue with white foam from the waves, and the sky is a clear light blue with a few small clouds. In the distance, a large sh"
+          },
+          {
+            "id": 2,
+            "document": "photo-coast-current",
+            "score": 0.016129032258064516,
+            "semantic_score": 0.4850620513894313,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\nThis is a view of a misty, overcast coastal scene, likely a beach in a temperate rainforest. The foreground is dominated by dark trees and lush green undergrowth. The beach is dark sand, and several large rock formation"
+          }
+        ],
+        "pagination": {
+          "total": 2
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false,
+          "rerank": {
+            "status": "disabled",
+            "evaluated_count": 0,
+            "window_size": 20,
+            "window_limited": false
+          }
+        }
+      },
+      "latency_ms": 1386,
+      "metrics": {
+        "recall_at_1": 0.5,
+        "recall_at_3": 1,
+        "recall_at_5": 1,
+        "precision_at_5": 0.4,
+        "mrr_at_10": 1
+      }
+    },
+    {
+      "query": {
+        "id": "coast-held",
+        "family": "coast",
+        "split": "heldout",
+        "question": "海浪与礁石的海岸照片",
+        "relevant": [
+          "photo-sea-last",
+          "photo-coast-current"
+        ]
+      },
+      "response": {
+        "items": [
+          {
+            "id": 2,
+            "document": "photo-coast-current",
+            "score": 0.01639344262295082,
+            "semantic_score": 0.5883979536834103,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "the distant land is obscured by fog.\n[Visual tags]\n海滩,森林,岩石,海浪,雾,树,海,海浪,海,岩石,海,海浪"
+          },
+          {
+            "id": 1,
+            "document": "photo-sea-last",
+            "score": 0.016129032258064516,
+            "semantic_score": 0.5649694289470619,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "nd features a dark, rocky shoreline.\n[Visual tags]\n海洋,冲浪,天空,海浪,岩石,阳光,海面,船只,天空,波浪"
+          }
+        ],
+        "pagination": {
+          "total": 2
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false,
+          "rerank": {
+            "status": "disabled",
+            "evaluated_count": 0,
+            "window_size": 20,
+            "window_limited": false
+          }
+        }
+      },
+      "latency_ms": 455,
+      "metrics": {
+        "recall_at_1": 0.5,
+        "recall_at_3": 1,
+        "recall_at_5": 1,
+        "precision_at_5": 0.4,
+        "mrr_at_10": 1
+      }
+    },
+    {
+      "query": {
+        "id": "calendar-dev",
+        "family": "calendar",
+        "split": "dev",
+        "question": "去年拍的海边照片",
+        "relevant": [
+          "photo-sea-last"
+        ]
+      },
+      "response": {
+        "items": [
+          {
+            "id": 1,
+            "document": "photo-sea-last",
+            "score": 0.01639344262295082,
+            "semantic_score": 0.4974998165859551,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\nA wide, sunny view of a vibrant blue ocean with numerous surfers and waves. The water is a deep blue with white foam from the waves, and the sky is a clear light blue with a few small clouds. In the distance, a large sh"
+          }
+        ],
+        "pagination": {
+          "total": 1
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [
+            "capture_time_uses_exif_camera_local_calendar"
+          ],
+          "window_limited": false,
+          "rerank": {
+            "status": "disabled",
+            "evaluated_count": 0,
+            "window_size": 20,
+            "window_limited": false
+          }
+        }
+      },
+      "latency_ms": 321,
+      "metrics": {
+        "recall_at_1": 1,
+        "recall_at_3": 1,
+        "recall_at_5": 1,
+        "precision_at_5": 0.2,
+        "mrr_at_10": 1
+      }
+    },
+    {
+      "query": {
+        "id": "calendar-held",
+        "family": "calendar",
+        "split": "heldout",
+        "question": "去年的海岸旅行照片",
+        "relevant": [
+          "photo-sea-last"
+        ]
+      },
+      "response": {
+        "items": [
+          {
+            "id": 1,
+            "document": "photo-sea-last",
+            "score": 0.01639344262295082,
+            "semantic_score": 0.47071341216413387,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\nA wide, sunny view of a vibrant blue ocean with numerous surfers and waves. The water is a deep blue with white foam from the waves, and the sky is a clear light blue with a few small clouds. In the distance, a large sh"
+          }
+        ],
+        "pagination": {
+          "total": 1
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [
+            "capture_time_uses_exif_camera_local_calendar"
+          ],
+          "window_limited": false,
+          "rerank": {
+            "status": "disabled",
+            "evaluated_count": 0,
+            "window_size": 20,
+            "window_limited": false
+          }
+        }
+      },
+      "latency_ms": 116,
+      "metrics": {
+        "recall_at_1": 1,
+        "recall_at_3": 1,
+        "recall_at_5": 1,
+        "precision_at_5": 0.2,
+        "mrr_at_10": 1
+      }
+    },
+    {
+      "query": {
+        "id": "stream-dev",
+        "family": "stream",
+        "split": "dev",
+        "question": "森林里有小溪的照片",
+        "relevant": [
+          "photo-stream-last"
+        ]
+      },
+      "response": {
+        "items": [
+          {
+            "id": 3,
+            "document": "photo-stream-last",
+            "score": 0.01639344262295082,
+            "semantic_score": 0.5955892857875502,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": ", with sunlight filtering through the canopy.\n[Visual tags]\n森林,溪流,落叶,岩石,树木,自然,秋天,林间小径,自然景观,林地"
+          },
+          {
+            "id": 5,
+            "document": "photo-snow",
+            "score": 0.016129032258064516,
+            "semantic_score": 0.41853432160614373,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\nA scenic view of a large, snow-capped mountain range under a clear blue sky, with clouds partially covering the peaks. In the foreground, there is a dense forest of green trees and bushes, with some white flowers visibl"
+          },
+          {
+            "id": 4,
+            "document": "photo-tree-shared",
+            "score": 0.015873015873015872,
+            "semantic_score": 0.412943027651335,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\n一个巨大的红杉树，其粗壮的树干上布满纹理，周围环绕着森林。树干前方有一条木制步道，步道上设有护栏。背景中可以看到更多的树木和一些绿色植物。\n[Visual tags]\n红杉树,森林,木制步道,树干,护栏,自然景观,树木,森林步道,树皮纹理,绿色植物"
+          }
+        ],
+        "pagination": {
+          "total": 3
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false,
+          "rerank": {
+            "status": "disabled",
+            "evaluated_count": 0,
+            "window_size": 20,
+            "window_limited": false
+          }
+        }
+      },
+      "latency_ms": 152,
+      "metrics": {
+        "recall_at_1": 1,
+        "recall_at_3": 1,
+        "recall_at_5": 1,
+        "precision_at_5": 0.2,
+        "mrr_at_10": 1
+      }
+    },
+    {
+      "query": {
+        "id": "stream-held",
+        "family": "stream",
+        "split": "heldout",
+        "question": "林间溪流经过石头和落叶的照片",
+        "relevant": [
+          "photo-stream-last"
+        ]
+      },
+      "response": {
+        "items": [
+          {
+            "id": 3,
+            "document": "photo-stream-last",
+            "score": 0.01639344262295082,
+            "semantic_score": 0.673940864328827,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "ring through the canopy.\n[Visual tags]\n森林,溪流,落叶,岩石,树木,自然,秋天,林间小径,自然景观,林地"
+          },
+          {
+            "id": 4,
+            "document": "photo-tree-shared",
+            "score": 0.016129032258064516,
+            "semantic_score": 0.4692801891393239,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\n一个巨大的红杉树，其粗壮的树干上布满纹理，周围环绕着森林。树干前方有一条木制步道，步道上设有护栏。背景中可以看到更多的树木和一些绿色植物。\n[Visual tags]\n红杉树,森林,木制步道,树干,护栏,自然景观,树木,森林步道,树皮纹理,绿色植物"
+          },
+          {
+            "id": 2,
+            "document": "photo-coast-current",
+            "score": 0.015873015873015872,
+            "semantic_score": 0.40341822305237995,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\nThis is a view of a misty, overcast coastal scene, likely a beach in a temperate rainforest. The foreground is dominated by dark trees and lush green undergrowth. The beach is dark sand, and several large rock formation"
+          }
+        ],
+        "pagination": {
+          "total": 3
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false,
+          "rerank": {
+            "status": "disabled",
+            "evaluated_count": 0,
+            "window_size": 20,
+            "window_limited": false
+          }
+        }
+      },
+      "latency_ms": 153,
+      "metrics": {
+        "recall_at_1": 1,
+        "recall_at_3": 1,
+        "recall_at_5": 1,
+        "precision_at_5": 0.2,
+        "mrr_at_10": 1
+      }
+    },
+    {
+      "query": {
+        "id": "trunk-dev",
+        "family": "trunk",
+        "split": "dev",
+        "question": "巨大的树干和木栈道的照片",
+        "relevant": [
+          "photo-tree-shared"
+        ]
+      },
+      "response": {
+        "items": [
+          {
+            "id": 4,
+            "document": "photo-tree-shared",
+            "score": 0.03278688524590164,
+            "semantic_score": 0.6718979875772852,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "[Visual description]\n一个巨大的红杉树，其粗壮的树干上布满纹理，周围环绕着森林。树干前方有一条木制步道，步道上设有护栏。背景中可以看到更多的树木和一些绿色植物。\n[Visual tags]\n红杉树,森林,木制步道,树干,护栏,自然景观,树木,森林步道,树皮纹理,绿色植物"
+          },
+          {
+            "id": 2,
+            "document": "photo-coast-current",
+            "score": 0.016129032258064516,
+            "semantic_score": 0.43835875565678845,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\nThis is a view of a misty, overcast coastal scene, likely a beach in a temperate rainforest. The foreground is dominated by dark trees and lush green undergrowth. The beach is dark sand, and several large rock formation"
+          },
+          {
+            "id": 5,
+            "document": "photo-snow",
+            "score": 0.015873015873015872,
+            "semantic_score": 0.40082969612064984,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\nA scenic view of a large, snow-capped mountain range under a clear blue sky, with clouds partially covering the peaks. In the foreground, there is a dense forest of green trees and bushes, with some white flowers visibl"
+          }
+        ],
+        "pagination": {
+          "total": 3
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false,
+          "rerank": {
+            "status": "disabled",
+            "evaluated_count": 0,
+            "window_size": 20,
+            "window_limited": false
+          }
+        }
+      },
+      "latency_ms": 91,
+      "metrics": {
+        "recall_at_1": 1,
+        "recall_at_3": 1,
+        "recall_at_5": 1,
+        "precision_at_5": 0.2,
+        "mrr_at_10": 1
+      }
+    },
+    {
+      "query": {
+        "id": "trunk-held",
+        "family": "trunk",
+        "split": "heldout",
+        "question": "木栏杆围住粗大树干的照片",
+        "relevant": [
+          "photo-tree-shared"
+        ]
+      },
+      "response": {
+        "items": [
+          {
+            "id": 4,
+            "document": "photo-tree-shared",
+            "score": 0.01639344262295082,
+            "semantic_score": 0.610386537081972,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\n一个巨大的红杉树，其粗壮的树干上布满纹理，周围环绕着森林。树干前方有一条木制步道，步道上设有护栏。背景中可以看到更多的树木和一些绿色植物。\n[Visual tags]\n红杉树,森林,木制步道,树干,护栏,自然景观,树木,森林步道,树皮纹理,绿色植物"
+          }
+        ],
+        "pagination": {
+          "total": 1
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false,
+          "rerank": {
+            "status": "disabled",
+            "evaluated_count": 0,
+            "window_size": 20,
+            "window_limited": false
+          }
+        }
+      },
+      "latency_ms": 88,
+      "metrics": {
+        "recall_at_1": 1,
+        "recall_at_3": 1,
+        "recall_at_5": 1,
+        "precision_at_5": 0.2,
+        "mrr_at_10": 1
+      }
+    },
+    {
+      "query": {
+        "id": "snow-dev",
+        "family": "snow",
+        "split": "dev",
+        "question": "积雪覆盖的山峰照片",
+        "relevant": [
+          "photo-snow"
+        ]
+      },
+      "response": {
+        "items": [
+          {
+            "id": 5,
+            "document": "photo-snow",
+            "score": 0.01639344262295082,
+            "semantic_score": 0.5847906671213333,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\nA scenic view of a large, snow-capped mountain range under a clear blue sky, with clouds partially covering the peaks. In the foreground, there is a dense forest of green trees and bushes, with some white flowers visibl"
+          }
+        ],
+        "pagination": {
+          "total": 1
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false,
+          "rerank": {
+            "status": "disabled",
+            "evaluated_count": 0,
+            "window_size": 20,
+            "window_limited": false
+          }
+        }
+      },
+      "latency_ms": 122,
+      "metrics": {
+        "recall_at_1": 1,
+        "recall_at_3": 1,
+        "recall_at_5": 1,
+        "precision_at_5": 0.2,
+        "mrr_at_10": 1
+      }
+    },
+    {
+      "query": {
+        "id": "snow-held",
+        "family": "snow",
+        "split": "heldout",
+        "question": "蓝天白云下的雪山风景",
+        "relevant": [
+          "photo-snow"
+        ]
+      },
+      "response": {
+        "items": [
+          {
+            "id": 5,
+            "document": "photo-snow",
+            "score": 0.01639344262295082,
+            "semantic_score": 0.6109179570739148,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\nA scenic view of a large, snow-capped mountain range under a clear blue sky, with clouds partially covering the peaks. In the foreground, there is a dense forest of green trees and bushes, with some white flowers visibl"
+          },
+          {
+            "id": 1,
+            "document": "photo-sea-last",
+            "score": 0.016129032258064516,
+            "semantic_score": 0.4277119388089821,
+            "match_sources": [
+              "semantic"
+            ],
+            "snippet": "[Visual description]\nA wide, sunny view of a vibrant blue ocean with numerous surfers and waves. The water is a deep blue with white foam from the waves, and the sky is a clear light blue with a few small clouds. In the distance, a large sh"
+          }
+        ],
+        "pagination": {
+          "total": 2
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false,
+          "rerank": {
+            "status": "disabled",
+            "evaluated_count": 0,
+            "window_size": 20,
+            "window_limited": false
+          }
+        }
+      },
+      "latency_ms": 121,
+      "metrics": {
+        "recall_at_1": 1,
+        "recall_at_3": 1,
+        "recall_at_5": 1,
+        "precision_at_5": 0.2,
+        "mrr_at_10": 1
+      }
+    },
+    {
+      "query": {
+        "id": "skyline-dev",
+        "family": "skyline",
+        "split": "dev",
+        "question": "城市高楼天际线照片",
+        "relevant": [
+          "photo-skyline"
+        ]
+      },
+      "response": {
+        "items": [
+          {
+            "id": 6,
+            "document": "photo-skyline",
+            "score": 0.03278688524590164,
+            "semantic_score": 0.6047399225886957,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "[Visual description]\n这是一张从低角度拍摄的城市景观，展示了西雅图的天际线。前景是繁忙的港口，有集装箱、卡车和起重机。天空中布满了云彩，部分区域是蓝色的。在远处的天际线中，可以看到许多高楼大厦，其中一些是现代化的摩天大楼，而另一些则具有独特的建筑风格。在港口和城市之间，可以看到一个大型的、带有拱形结构的建筑，可能是体育场或展览馆。\n[Visual tags]\n城市景观,港口,摩天大楼,天空,云,集装箱,卡车,起重机,建筑,交通,商业区\n[Visible t"
+          }
+        ],
+        "pagination": {
+          "total": 1
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false,
+          "rerank": {
+            "status": "disabled",
+            "evaluated_count": 0,
+            "window_size": 20,
+            "window_limited": false
+          }
+        }
+      },
+      "latency_ms": 74,
+      "metrics": {
+        "recall_at_1": 1,
+        "recall_at_3": 1,
+        "recall_at_5": 1,
+        "precision_at_5": 0.2,
+        "mrr_at_10": 1
+      }
+    },
+    {
+      "query": {
+        "id": "skyline-held",
+        "family": "skyline",
+        "split": "heldout",
+        "question": "密集摩天大楼和港口的城市照片",
+        "relevant": [
+          "photo-skyline"
+        ]
+      },
+      "response": {
+        "items": [
+          {
+            "id": 6,
+            "document": "photo-skyline",
+            "score": 0.03278688524590164,
+            "semantic_score": 0.7057231799995435,
+            "match_sources": [
+              "keyword",
+              "semantic"
+            ],
+            "snippet": "，有集装箱、卡车和起重机。天空中布满了云彩，部分区域是蓝色的。在远处的天际线中，可以看到许多高楼大厦，其中一些是现代化的摩天大楼，而另一些则具有独特的建筑风格。在港口和城市之间，可以看到一个大型的、带有拱形结构的建筑，可能是体育场或展览馆。\n[Visual tags]\n城市景观,港口,摩天大楼,天空,云,集装箱,卡车,起重机,建筑,交通,商业区\n[Visible text OCR]\n25\nMatson\nTOYOTA"
+          }
+        ],
+        "pagination": {
+          "total": 1
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false,
+          "rerank": {
+            "status": "disabled",
+            "evaluated_count": 0,
+            "window_size": 20,
+            "window_limited": false
+          }
+        }
+      },
+      "latency_ms": 66,
+      "metrics": {
+        "recall_at_1": 1,
+        "recall_at_3": 1,
+        "recall_at_5": 1,
+        "precision_at_5": 0.2,
+        "mrr_at_10": 1
+      }
+    },
+    {
+      "query": {
+        "id": "absent-cat",
+        "family": "negative",
+        "split": "dev",
+        "question": "室内沙发上睡觉的猫照片",
+        "relevant": []
+      },
+      "response": {
+        "items": [],
+        "pagination": {
+          "total": 0
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false,
+          "rerank": {
+            "status": "disabled",
+            "evaluated_count": 0,
+            "window_size": 20,
+            "window_limited": false
+          }
+        }
+      },
+      "latency_ms": 159
+    },
+    {
+      "query": {
+        "id": "absent-city-date",
+        "family": "negative",
+        "split": "dev",
+        "question": "去年拍摄的城市高楼照片",
+        "relevant": []
+      },
+      "response": {
+        "items": [],
+        "pagination": {
+          "total": 0
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [
+            "capture_time_uses_exif_camera_local_calendar"
+          ],
+          "window_limited": false,
+          "rerank": {
+            "status": "disabled",
+            "evaluated_count": 0,
+            "window_size": 20,
+            "window_limited": false
+          }
+        }
+      },
+      "latency_ms": 175
+    },
+    {
+      "query": {
+        "id": "absent-football",
+        "family": "negative",
+        "split": "heldout",
+        "question": "足球场上比赛的运动员照片",
+        "relevant": []
+      },
+      "response": {
+        "items": [],
+        "pagination": {
+          "total": 0
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [],
+          "window_limited": false,
+          "rerank": {
+            "status": "disabled",
+            "evaluated_count": 0,
+            "window_size": 20,
+            "window_limited": false
+          }
+        }
+      },
+      "latency_ms": 160
+    },
+    {
+      "query": {
+        "id": "absent-snow-date",
+        "family": "negative",
+        "split": "heldout",
+        "question": "今年拍摄的雪山照片",
+        "relevant": []
+      },
+      "response": {
+        "items": [],
+        "pagination": {
+          "total": 0
+        },
+        "retrieval": {
+          "mode": "hybrid",
+          "warnings": [
+            "capture_time_uses_exif_camera_local_calendar"
+          ],
+          "window_limited": false,
+          "rerank": {
+            "status": "disabled",
+            "evaluated_count": 0,
+            "window_size": 20,
+            "window_limited": false
+          }
+        }
+      },
+      "latency_ms": 110
+    }
+  ],
+  "summaries": {
+    "all": {
+      "positive_count": 12,
+      "negative_count": 4,
+      "negative_empty_count": 4,
+      "negative_empty_rate": 1,
+      "positive_macro": {
+        "recall_at_1": 0.9166666666666666,
+        "recall_at_3": 1,
+        "recall_at_5": 1,
+        "precision_at_5": 0.2333333333333334,
+        "mrr_at_10": 1
+      }
+    },
+    "dev": {
+      "positive_count": 6,
+      "negative_count": 2,
+      "negative_empty_count": 2,
+      "negative_empty_rate": 1,
+      "positive_macro": {
+        "recall_at_1": 0.9166666666666666,
+        "recall_at_3": 1,
+        "recall_at_5": 1,
+        "precision_at_5": 0.2333333333333333,
+        "mrr_at_10": 1
+      }
+    },
+    "family/calendar": {
+      "positive_count": 2,
+      "negative_count": 0,
+      "negative_empty_count": 0,
+      "negative_empty_rate": 0,
+      "positive_macro": {
+        "recall_at_1": 1,
+        "recall_at_3": 1,
+        "recall_at_5": 1,
+        "precision_at_5": 0.2,
+        "mrr_at_10": 1
+      }
+    },
+    "family/coast": {
+      "positive_count": 2,
+      "negative_count": 0,
+      "negative_empty_count": 0,
+      "negative_empty_rate": 0,
+      "positive_macro": {
+        "recall_at_1": 0.5,
+        "recall_at_3": 1,
+        "recall_at_5": 1,
+        "precision_at_5": 0.4,
+        "mrr_at_10": 1
+      }
+    },
+    "family/negative": {
+      "positive_count": 0,
+      "negative_count": 4,
+      "negative_empty_count": 4,
+      "negative_empty_rate": 1,
+      "positive_macro": {
+        "recall_at_1": 0,
+        "recall_at_3": 0,
+        "recall_at_5": 0,
+        "precision_at_5": 0,
+        "mrr_at_10": 0
+      }
+    },
+    "family/skyline": {
+      "positive_count": 2,
+      "negative_count": 0,
+      "negative_empty_count": 0,
+      "negative_empty_rate": 0,
+      "positive_macro": {
+        "recall_at_1": 1,
+        "recall_at_3": 1,
+        "recall_at_5": 1,
+        "precision_at_5": 0.2,
+        "mrr_at_10": 1
+      }
+    },
+    "family/snow": {
+      "positive_count": 2,
+      "negative_count": 0,
+      "negative_empty_count": 0,
+      "negative_empty_rate": 0,
+      "positive_macro": {
+        "recall_at_1": 1,
+        "recall_at_3": 1,
+        "recall_at_5": 1,
+        "precision_at_5": 0.2,
+        "mrr_at_10": 1
+      }
+    },
+    "family/stream": {
+      "positive_count": 2,
+      "negative_count": 0,
+      "negative_empty_count": 0,
+      "negative_empty_rate": 0,
+      "positive_macro": {
+        "recall_at_1": 1,
+        "recall_at_3": 1,
+        "recall_at_5": 1,
+        "precision_at_5": 0.2,
+        "mrr_at_10": 1
+      }
+    },
+    "family/trunk": {
+      "positive_count": 2,
+      "negative_count": 0,
+      "negative_empty_count": 0,
+      "negative_empty_rate": 0,
+      "positive_macro": {
+        "recall_at_1": 1,
+        "recall_at_3": 1,
+        "recall_at_5": 1,
+        "precision_at_5": 0.2,
+        "mrr_at_10": 1
+      }
+    },
+    "heldout": {
+      "positive_count": 6,
+      "negative_count": 2,
+      "negative_empty_count": 2,
+      "negative_empty_rate": 1,
+      "positive_macro": {
+        "recall_at_1": 0.9166666666666666,
+        "recall_at_3": 1,
+        "recall_at_5": 1,
+        "precision_at_5": 0.2333333333333333,
+        "mrr_at_10": 1
+      }
+    }
+  },
+  "boundaries": {
+    "all_quality_queries_authorized": true,
+    "cross_user_calendar": true,
+    "model_outage_disclosed_and_authorized": true,
+    "real_image_rebuild_fences_old_generation": true,
+    "recycle_and_unknown_capture": true,
+    "revocation": true,
+    "shared_read": true
+  },
+  "limitations": [
+    "Six selected independent natural photographs, not production generalization or a blind external test.",
+    "Seven uploads include one private near-duplicate; it is not counted as an independent photograph.",
+    "Original metadata stripped via JPEG decode/PNG encode; synthetic capture dates do not describe the original photographs.",
+    "All labels fixed by visual inspection before inference. Source observations and attributions are never indexed.",
+    "A single serial worker and local warm disk on this host; not a concurrency, cold-disk or model-memory SLA."
+  ],
+  "sources": [
+    {
+      "id": "beach-a",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Waikiki_Beach,_Hawaii.jpg",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/c/cf/Waikiki_Beach%2C_Hawaii.jpg",
+      "author": "Julianibarra",
+      "license": "CC0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "sha256": "34290e655970bd35b889284a14c8a2403dfa414e824f68c83d8ccdacb4e2451d",
+      "bytes": 538289,
+      "width": 2049,
+      "height": 832,
+      "observations": "Blue ocean, breaking waves, swimmers/surfboards and dark rocks; narrow sand at left. No forest interior or city skyline."
+    },
+    {
+      "id": "beach-b",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Ruby_Beach_2_Jon_Preston_(23104527056).jpg",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/b/b9/Ruby_Beach_2_Jon_Preston_%2823104527056%29.jpg",
+      "author": "Jon Preston / Olympic National Park (NPS)",
+      "license": "Public domain",
+      "license_url": "https://commons.wikimedia.org/wiki/File:Ruby_Beach_2_Jon_Preston_(23104527056).jpg",
+      "sha256": "d85cee0e5fa2c6bf9662056482eb098c8458daaa97d273169d23fcc649033916",
+      "bytes": 1371165,
+      "width": 2048,
+      "height": 1360,
+      "observations": "Rocky beach, sea stacks, waves and driftwood, with trees framing the coastline. Woodland is present but no forest stream or enormous trunk enclosed by a boardwalk."
+    },
+    {
+      "id": "forest-a",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Forest_nature.jpg",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/9/9b/Forest_nature.jpg",
+      "author": "Paolo Neo",
+      "license": "Public domain",
+      "license_url": "https://commons.wikimedia.org/wiki/File:Forest_nature.jpg",
+      "sha256": "ee825733911502a2eecaf903f90be5d29a062c78216a41bea668f9d93bf5c8e0",
+      "bytes": 947194,
+      "width": 2048,
+      "height": 1536,
+      "observations": "Forest interior with slender trunks, leaf-covered ground, rocks and a visible small stream."
+    },
+    {
+      "id": "forest-b",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Redwoods_in_CA_-_53645819332.jpg",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/4/49/Redwoods_in_CA_-_53645819332.jpg",
+      "author": "jhvanwa / Jeff Hollett",
+      "license": "CC0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "sha256": "37813778d45704a60ca10d14a5d820f27c1d784ac31cb954dd6572caaf36a16d",
+      "bytes": 3621714,
+      "width": 2048,
+      "height": 1536,
+      "observations": "Close view of an enormous tree trunk with surrounding woodland and a wooden boardwalk/railing. No visible stream or coastline."
+    },
+    {
+      "id": "mountain-a",
+      "page_url": "https://commons.wikimedia.org/wiki/File:MRSR.Mt.Rainier.jpg",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/c/c3/MRSR.Mt.Rainier.jpg",
+      "author": "Bobtalbot61",
+      "license": "Public domain",
+      "license_url": "https://commons.wikimedia.org/wiki/File:MRSR.Mt.Rainier.jpg",
+      "sha256": "3aff43a2e271b306967a8ffde10eac8df54270547fdfd811fc538613ec1b7402",
+      "bytes": 1916518,
+      "width": 2592,
+      "height": 1944,
+      "observations": "Distant snow-covered mountain peaks, blue sky, clouds and wooded foreground hills."
+    },
+    {
+      "id": "city-a",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Seattle_Skyline_WSB.jpg",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/b/be/Seattle_Skyline_WSB.jpg",
+      "author": "CommunistSquared",
+      "license": "CC0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "sha256": "90831c7fe2dc60ed66b0d2f05a5a1134205c40547f450e6d9f31fead41606867",
+      "bytes": 1977386,
+      "width": 1920,
+      "height": 1080,
+      "observations": "Dense city skyline of tall buildings, port infrastructure, roads and some visible signs. No snow-covered mountain or forest interior."
+    }
+  ],
+  "photos": [
+    {
+      "id": "photo-sea-last",
+      "source": "beach-a",
+      "original_sha256": "34290e655970bd35b889284a14c8a2403dfa414e824f68c83d8ccdacb4e2451d",
+      "upload_sha256": "0dbfd2ebc5de8802dcc0a034500a94e05aa81d409f65f04babe8d7454e5c52e5",
+      "index": {
+        "extraction_kind": "image",
+        "vision_model": "qwen3-vl:2b-instruct",
+        "vision_digest": "afc393e3572c07db0bc84aa460d928a16c75f3fbb9ca9e0dccc4fbd2dafb573e",
+        "has_ocr": false,
+        "capture_offset": "+08:00",
+        "visual_description": "A wide, sunny view of a vibrant blue ocean with numerous surfers and waves. The water is a deep blue with white foam from the waves, and the sky is a clear light blue with a few small clouds. In the distance, a large ship is visible on the horizon. The foreground features a dark, rocky shoreline.",
+        "visual_tags": "海洋,冲浪,天空,海浪,岩石,阳光,海面,船只,天空,波浪",
+        "file_id": 1,
+        "generation": 1,
+        "source_hash": "0dbfd2ebc5de8802dcc0a034500a94e05aa81d409f65f04babe8d7454e5c52e5",
+        "pipeline": "content-v1",
+        "embedding_model": "qwen3-embedding:0.6b",
+        "model_digest": "ac6da0dfba84a81fdbfbaf330198c33cd77c4cdfc53e8bc50eb581914a15621d",
+        "dimensions": 1024,
+        "chunk_count": 1,
+        "text_bytes": 402,
+        "indexed_at": "2026-11-28T01:00:33.62277Z"
+      },
+      "status": "done",
+      "capture_local": "2025-06-15 10:20:30",
+      "latency_ms": 19269
+    },
+    {
+      "id": "photo-coast-current",
+      "source": "beach-b",
+      "original_sha256": "d85cee0e5fa2c6bf9662056482eb098c8458daaa97d273169d23fcc649033916",
+      "upload_sha256": "ea0d71ec3efbc4f09608e07036cd22e104fe052606afb9f5b6958a0febeb86e5",
+      "index": {
+        "extraction_kind": "image",
+        "vision_model": "qwen3-vl:2b-instruct",
+        "vision_digest": "afc393e3572c07db0bc84aa460d928a16c75f3fbb9ca9e0dccc4fbd2dafb573e",
+        "has_ocr": false,
+        "capture_offset": "+08:00",
+        "visual_description": "This is a view of a misty, overcast coastal scene, likely a beach in a temperate rainforest. The foreground is dominated by dark trees and lush green undergrowth. The beach is dark sand, and several large rock formations, including sea stacks, are visible in the water. A large pile of driftwood is on the shore. The ocean is choppy with waves breaking on the shore, and the distant land is obscured by fog.",
+        "visual_tags": "海滩,森林,岩石,海浪,雾,树,海,海浪,海,岩石,海,海浪",
+        "file_id": 2,
+        "generation": 1,
+        "source_hash": "ea0d71ec3efbc4f09608e07036cd22e104fe052606afb9f5b6958a0febeb86e5",
+        "pipeline": "content-v1",
+        "embedding_model": "qwen3-embedding:0.6b",
+        "model_digest": "ac6da0dfba84a81fdbfbaf330198c33cd77c4cdfc53e8bc50eb581914a15621d",
+        "dimensions": 1024,
+        "chunk_count": 1,
+        "text_bytes": 511,
+        "indexed_at": "2026-11-28T01:01:02.137625Z"
+      },
+      "status": "done",
+      "capture_local": "2026-06-15 10:20:30",
+      "latency_ms": 28499
+    },
+    {
+      "id": "photo-stream-last",
+      "source": "forest-a",
+      "original_sha256": "ee825733911502a2eecaf903f90be5d29a062c78216a41bea668f9d93bf5c8e0",
+      "upload_sha256": "e3f9da7980bbe085d281c7a644da3c4ece747e237f380cc5711e2588a4be326a",
+      "index": {
+        "extraction_kind": "image",
+        "vision_model": "qwen3-vl:2b-instruct",
+        "vision_digest": "afc393e3572c07db0bc84aa460d928a16c75f3fbb9ca9e0dccc4fbd2dafb573e",
+        "has_ocr": false,
+        "capture_offset": "+08:00",
+        "visual_description": "A forest scene with a small, rocky stream flowing through a wooded area. The ground is covered with fallen leaves, rocks, and branches. The trees are mostly tall and slender, with some having yellow and green leaves, suggesting it is autumn. The light is diffused, with sunlight filtering through the canopy.",
+        "visual_tags": "森林,溪流,落叶,岩石,树木,自然,秋天,林间小径,自然景观,林地",
+        "file_id": 3,
+        "generation": 1,
+        "source_hash": "e3f9da7980bbe085d281c7a644da3c4ece747e237f380cc5711e2588a4be326a",
+        "pipeline": "content-v1",
+        "embedding_model": "qwen3-embedding:0.6b",
+        "model_digest": "ac6da0dfba84a81fdbfbaf330198c33cd77c4cdfc53e8bc50eb581914a15621d",
+        "dimensions": 1024,
+        "chunk_count": 1,
+        "text_bytes": 425,
+        "indexed_at": "2026-11-28T01:01:34.318562Z"
+      },
+      "status": "done",
+      "capture_local": "2025-06-15 10:20:30",
+      "latency_ms": 32174
+    },
+    {
+      "id": "photo-tree-shared",
+      "source": "forest-b",
+      "original_sha256": "37813778d45704a60ca10d14a5d820f27c1d784ac31cb954dd6572caaf36a16d",
+      "upload_sha256": "285f3aa2018a95742297d432203e845604c0e7f55b9eab9495ddcc07f754abad",
+      "index": {
+        "extraction_kind": "image",
+        "vision_model": "qwen3-vl:2b-instruct",
+        "vision_digest": "afc393e3572c07db0bc84aa460d928a16c75f3fbb9ca9e0dccc4fbd2dafb573e",
+        "has_ocr": false,
+        "capture_offset": "",
+        "visual_description": "一个巨大的红杉树，其粗壮的树干上布满纹理，周围环绕着森林。树干前方有一条木制步道，步道上设有护栏。背景中可以看到更多的树木和一些绿色植物。",
+        "visual_tags": "红杉树,森林,木制步道,树干,护栏,自然景观,树木,森林步道,树皮纹理,绿色植物",
+        "file_id": 4,
+        "generation": 1,
+        "source_hash": "285f3aa2018a95742297d432203e845604c0e7f55b9eab9495ddcc07f754abad",
+        "pipeline": "content-v1",
+        "embedding_model": "qwen3-embedding:0.6b",
+        "model_digest": "ac6da0dfba84a81fdbfbaf330198c33cd77c4cdfc53e8bc50eb581914a15621d",
+        "dimensions": 1024,
+        "chunk_count": 1,
+        "text_bytes": 345,
+        "indexed_at": "2026-11-28T01:02:08.428718Z"
+      },
+      "status": "done",
+      "latency_ms": 34110
+    },
+    {
+      "id": "photo-snow",
+      "source": "mountain-a",
+      "original_sha256": "3aff43a2e271b306967a8ffde10eac8df54270547fdfd811fc538613ec1b7402",
+      "upload_sha256": "f29480e7ae7dc012e86722ae2cd9a3d34c3b2260972ea6a4a94ba129c9b46946",
+      "index": {
+        "extraction_kind": "image",
+        "vision_model": "qwen3-vl:2b-instruct",
+        "vision_digest": "afc393e3572c07db0bc84aa460d928a16c75f3fbb9ca9e0dccc4fbd2dafb573e",
+        "has_ocr": false,
+        "capture_offset": "",
+        "visual_description": "A scenic view of a large, snow-capped mountain range under a clear blue sky, with clouds partially covering the peaks. In the foreground, there is a dense forest of green trees and bushes, with some white flowers visible in the lower part of the image.",
+        "visual_tags": "mountain,snow,forest,tree,sky,cloud,nature,landscape,green,mountain range",
+        "file_id": 5,
+        "generation": 1,
+        "source_hash": "f29480e7ae7dc012e86722ae2cd9a3d34c3b2260972ea6a4a94ba129c9b46946",
+        "pipeline": "content-v1",
+        "embedding_model": "qwen3-embedding:0.6b",
+        "model_digest": "ac6da0dfba84a81fdbfbaf330198c33cd77c4cdfc53e8bc50eb581914a15621d",
+        "dimensions": 1024,
+        "chunk_count": 1,
+        "text_bytes": 361,
+        "indexed_at": "2026-11-28T01:02:43.19636Z"
+      },
+      "status": "done",
+      "latency_ms": 34747
+    },
+    {
+      "id": "photo-skyline",
+      "source": "city-a",
+      "original_sha256": "90831c7fe2dc60ed66b0d2f05a5a1134205c40547f450e6d9f31fead41606867",
+      "upload_sha256": "5d5b7d8f88f71f347df0eada9fd132ad58d8b1e6920b4afe20566c802906c78a",
+      "index": {
+        "extraction_kind": "image",
+        "vision_model": "qwen3-vl:2b-instruct",
+        "vision_digest": "afc393e3572c07db0bc84aa460d928a16c75f3fbb9ca9e0dccc4fbd2dafb573e",
+        "has_ocr": true,
+        "capture_offset": "",
+        "visual_description": "这是一张从低角度拍摄的城市景观，展示了西雅图的天际线。前景是繁忙的港口，有集装箱、卡车和起重机。天空中布满了云彩，部分区域是蓝色的。在远处的天际线中，可以看到许多高楼大厦，其中一些是现代化的摩天大楼，而另一些则具有独特的建筑风格。在港口和城市之间，可以看到一个大型的、带有拱形结构的建筑，可能是体育场或展览馆。",
+        "visual_tags": "城市景观,港口,摩天大楼,天空,云,集装箱,卡车,起重机,建筑,交通,商业区",
+        "file_id": 6,
+        "generation": 1,
+        "source_hash": "5d5b7d8f88f71f347df0eada9fd132ad58d8b1e6920b4afe20566c802906c78a",
+        "pipeline": "content-v1",
+        "embedding_model": "qwen3-embedding:0.6b",
+        "model_digest": "ac6da0dfba84a81fdbfbaf330198c33cd77c4cdfc53e8bc50eb581914a15621d",
+        "dimensions": 1024,
+        "chunk_count": 1,
+        "text_bytes": 631,
+        "indexed_at": "2026-11-28T01:03:11.229255Z"
+      },
+      "status": "done",
+      "latency_ms": 28092
+    },
+    {
+      "id": "photo-private-sea",
+      "source": "beach-a",
+      "original_sha256": "34290e655970bd35b889284a14c8a2403dfa414e824f68c83d8ccdacb4e2451d",
+      "upload_sha256": "a2c9ca6cd5aa8a8833319d5b969fd11095c58f40fa28f07b4606fd877ff1160f",
+      "index": {
+        "extraction_kind": "image",
+        "vision_model": "qwen3-vl:2b-instruct",
+        "vision_digest": "afc393e3572c07db0bc84aa460d928a16c75f3fbb9ca9e0dccc4fbd2dafb573e",
+        "has_ocr": false,
+        "capture_offset": "+08:00",
+        "visual_description": "A wide, sunny view of a vibrant blue ocean with numerous surfers and waves. The water is a deep blue with white foam from the waves, and the sky is a clear light blue with a few small clouds. In the distance, a large ship is visible on the horizon. The foreground features a dark, rocky shoreline.",
+        "visual_tags": "海洋,冲浪,天空,海浪,岩石,阳光,海面,船只,天空,波浪",
+        "file_id": 7,
+        "generation": 1,
+        "source_hash": "a2c9ca6cd5aa8a8833319d5b969fd11095c58f40fa28f07b4606fd877ff1160f",
+        "pipeline": "content-v1",
+        "embedding_model": "qwen3-embedding:0.6b",
+        "model_digest": "ac6da0dfba84a81fdbfbaf330198c33cd77c4cdfc53e8bc50eb581914a15621d",
+        "dimensions": 1024,
+        "chunk_count": 1,
+        "text_bytes": 402,
+        "indexed_at": "2026-11-28T01:03:38.542797Z"
+      },
+      "status": "done",
+      "capture_local": "2026-06-15 10:20:30",
+      "latency_ms": 27275
+    }
+  ],
+  "rebuild_generation": 2
+}

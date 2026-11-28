@@ -1,0 +1,32 @@
+{
+  "started": "2026-11-28T00:49:28.580403Z",
+  "finished": "2026-11-28T00:51:21.747504Z",
+  "model": "qwen3-vl:2b",
+  "prepared_sha256": "78ef2e3eda7274d1be35abfcd1cad26a2fa669d36c3fd4028cd33bf1a92e2443",
+  "prepared_bytes": 1440459,
+  "http_status": 200,
+  "error": "invalid vision transcription response",
+  "raw_report_sha256": "95112b50c336802a9f8b4c998a99677c361cb3cc4520d721719bce33d2d10497",
+  "response": {
+    "model": "qwen3-vl:2b",
+    "created_at": "2026-11-28T00:51:21.684208Z",
+    "done": true,
+    "done_reason": "length",
+    "total_duration": 110240398958,
+    "load_duration": 7489218292,
+    "prompt_eval_count": 1216,
+    "prompt_eval_cached_count": 0,
+    "prompt_eval_duration": 5660770000,
+    "eval_count": 4096,
+    "eval_duration": 96888015000
+  },
+  "message_summary": {
+    "role": "assistant",
+    "content_characters": 0,
+    "thinking_characters": 4125,
+    "repetition_observed": true,
+    "note": "No final JSON content. Private raw capture shows a repeated list of scene words until the generation cap; raw reasoning is not published."
+  },
+  "request_source_sha256": "20637bb16cf63fd46d0c1ef4671d400ffd2b771ba2373258f056b4021414f27f",
+  "request_think": false
+}

@@ -23,3 +23,9 @@ Alice 可读自己的文件及 Bob 显式共享的迁移文件；Bob 的另外�
 六条无答案问题特意邻近现有主题：打印机发票、上月已签房屋租约、Oracle 迁移、Keycloak/OAuth2、去年雪山照片、库中没有的指定 IP。这些用于暴露误匹配，不能因失败改成正例。图片/Office/PDF 仍复用 v1，本扩展不是独立视觉测试；所有问题对实现者可见，也不是盲测。首次实际执行失败：正例两组 R@5/MRR=1，负例空结果只有 0/3、1/3，另一次重排超时；标签未改，详见 AI-RERANK 与 TESTING。
 
 运行时加 `CLOUDNEST_AI_EVAL_DATASET=stress-v2`；省略仍为 v1。评估器只允许这两个固定名称，报告记录 dataset_name 和实际清单哈希。
+
+## 独立自然照片 photos-v1（2026-11-27，执行前冻结）
+
+`dataset-photos-v1.json` 由独立 opt-in `TestAINaturalPhotoRetrievalEvaluation` 使用，不扩展旧评估器的两个名称。六个独立原始拍摄输入、七份上传（含私有近似副本）、16条固定查询，dev/heldout各六正例两负例，沿用原质量门槛。清单SHA-256为 `df42938c7f032ec6afecff297d0033d1b511c6e6bbc209296f8b2a0214e1b515`；人工观察与许可均在首次模型运行前固定，不作为索引输入。
+
+原始JPEG不提交Git。`scripts/prepare-ai-photo-corpus.py` 从清单精确地址下载到新的私有目录并核对长度/哈希；评估器先剥离原始元数据，以中性名上传PNG，仅对明确项添加合成EXIF。来源、许可、复现环境、模型digest、首次失败、显式Instruct成功和七条尾部误匹配均见 `docs/remediation/AI-NATURAL-PHOTOS.md`。通过一组小型门槛不代表盲测或生产通用质量完成。
